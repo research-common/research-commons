@@ -101,6 +101,8 @@ check "refusal explains curation needs an owner" \
 mkcoll "$W/c-noaddr.json" '{"maintainers": [{"agent": "nokey"}]}'
 check "maintainer without an addr refused" "$(rc m publish collection "$W/c-noaddr.json" "x")" "1"
 check "refusal names the maintainer slot" "$(grep -c 'maintainers\[0\] needs an addr' "$W/err.txt")" "1"
+check "refusal hints at the unsigned-draft workaround" \
+  "$(grep -c 'unattributable until that address actually' "$W/err.txt")" "1"
 
 mkcoll "$W/c-badmember.json" '{"members": [{"id": "not-an-id"}]}'
 check "malformed member id refused" "$(rc m publish collection "$W/c-badmember.json" "x")" "1"

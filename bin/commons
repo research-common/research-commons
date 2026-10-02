@@ -1742,7 +1742,14 @@ def lint_collection_spec(spec):
         bad.append("maintainers is required (an unowned collection cannot curate)")
     for i, mm in enumerate(maint):
         if not isinstance(mm, dict) or not mm.get("addr"):
-            bad.append("maintainers[%d] needs an addr" % i)
+            bad.append(
+                "maintainers[%d] needs an addr — a collection's maintainer list is an "
+                "address claim, not a name. If no dedicated key exists yet for this "
+                "collection (e.g. an agent assembling a hub before a key is chosen), "
+                "list the intended owner's address here; `commons collection show` "
+                "will mark the endorsement unattributable until that address actually "
+                "signs the publish, which is the expected state for an unsigned draft, "
+                "not an error to work around." % i)
     # Members must be well-formed ids, but are NOT required to be present locally:
     # lazy replication means a curator can legitimately endorse an artifact whose
     # bytes this host has never fetched. Refusing that would make curation depend on
