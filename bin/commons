@@ -1249,10 +1249,10 @@ def build_verification(tier, criteria, params):
         if not criteria:
             sys.exit("error: tier T2 requires --criteria <rubric text|sk-id> (rubric before claim)")
     elif tier == "T3":
+        # Silent on purpose (#26): this runs before the publish gates, so a warning
+        # here would claim "published" ahead of a refusal. cmd_publish reports the
+        # default criteria once the manifest is final.
         criteria = criteria or DEFAULT_T3_CRITERIA
-        if criteria == DEFAULT_T3_CRITERIA:
-            print("warning: T3 artifact published with default attestation criteria; "
-                  "pass --criteria to describe the capture", file=sys.stderr)
     if criteria: v["criteria"] = criteria
     if params: v["params"] = params
     return v
@@ -2194,6 +2194,15 @@ def cmd_publish(a):
               "Suggested: CC-BY-4.0 for reports/syntheses/wiki, Apache-2.0 for "
               "workflows/skills; see docs/LICENSING-artifacts.md." % a.type,
               file=sys.stderr)
+    fv = m.get("verification") or {}
+    if (not inherit_verification and fv.get("tier") == "T3"
+            and fv.get("criteria") == DEFAULT_T3_CRITERIA):
+        # After every gate and both no-op early returns (#26): the artifact really is
+        # about to be published. Checks the FINAL manifest, so criteria carried forward
+        # from an attested republish don't trigger it; an inherited verification block
+        # was not chosen by this invocation, so it isn't re-flagged either.
+        print("warning: T3 artifact published with default attestation criteria; "
+              "pass --criteria to describe the capture", file=sys.stderr)
     entry = {"agent": a.agent, "action": "republish" if existed else "publish",
              "id": aid, "sha256": digest, "tier": tier or "method"}
     if ingest_unchecked:

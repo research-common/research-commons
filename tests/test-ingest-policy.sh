@@ -73,6 +73,7 @@ printf 'slot,usd\n3,0.02\n'                                                     
 printf 'slot,usd\n4,0.03\n'                                                         > "$W/clean3.csv"
 printf 'slot,usd\n5,0.04\n'                                                         > "$W/clean4.csv"
 printf 'slot,usd\n6,0.05\n'                                                         > "$W/clean5.csv"
+printf 'slot,usd\n7,0.06\n'                                                         > "$W/t3-criteria.csv"
 tar -cf "$W/bundle.tar" -C "$W" clean.csv 2>/dev/null
 
 POLICY='{"forbidden_keys":["account_id","provider_id","provider_key","job_id"]}'
@@ -102,6 +103,9 @@ check "  both offending names are named" \
 check "  the refusal names the collection whose policy it was" \
   "$(grep -c "ingest policy of $CL" "$W/err.txt")" "1"
 check "  and says there is no override" "$(grep -c 'no override' "$W/err.txt")" "1"
+# #26: a refused T3 publish must not open with "T3 artifact published …".
+check "  a refused T3 publish does not claim it was published" \
+  "$(grep -c 'T3 artifact published with default attestation criteria' "$W/err.txt")" "0"
 check "CSV header: a forbidden key refuses" \
   "$(rc c publish dataset "$W/leak.csv" "raw ledger csv" --license CC0-1.0 --obtainability open --link "part-of:$CL")" "1"
 check "  both CSV header cells are named as such" "$(grep -c 'CSV header cell' "$W/err.txt")" "2"
@@ -193,6 +197,15 @@ head_ "what the policy must NOT refuse"
 
 check "clean data in the same collection publishes" \
   "$(rc c publish dataset "$W/clean.csv" "measured yield" --license CC0-1.0 --obtainability open --link "part-of:$CL")" "0"
+check "  a T3 publish that lands still warns about default criteria, once (#26)" \
+  "$(grep -c 'T3 artifact published with default attestation criteria' "$W/err.txt")" "1"
+T3WARN='T3 artifact published with default attestation criteria'
+rc c publish dataset "$W/clean.csv" "measured yield" --license CC0-1.0 --obtainability open --link "part-of:$CL" >/dev/null
+check "  re-publishing the same bytes is a no-op and does not warn again" \
+  "$(grep -c "$T3WARN" "$W/err.txt")" "0"
+check "  explicit --criteria publishes without the warning" \
+  "$(rc c publish dataset "$W/t3-criteria.csv" "with criteria" --license CC0-1.0 --obtainability open --criteria 'one-off export of slot table')" "0"
+check "    (no default-criteria warning)" "$(grep -c "$T3WARN" "$W/err.txt")" "0"
 # The topic decides, so the same bytes are fine anywhere that has not declared them unsafe.
 check "the same leak with no part-of link is unchanged from today" \
   "$(rc c publish dataset "$W/leak.jsonl" "unclaimed ledger" --license CC0-1.0 --obtainability open)" "0"

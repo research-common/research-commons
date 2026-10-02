@@ -28,6 +28,12 @@ manifest/ledger format version — `commons --version` prints both).
   signed publish event. They now print `curated-in (UNSIGNED — editorial list, not
   attributable)` in that case, matching the `curated by: (no verified signed publish
   event ...)` line already printed above it. Display only (#23).
+- `publish` no longer prints `warning: T3 artifact published with default attestation
+  criteria` before the credential scan, the ingest-policy gate and the spec lint run. A
+  refused publish used to open its stderr with "published". The warning now prints only
+  for a publish that actually lands, checked against the final manifest. A no-op
+  re-publish of bytes already held doesn't print it, and neither does a `--force` that
+  inherits a recorded verification block (#26).
 
 ## [0.2.0-alpha.1] - 2026-10-01
 
