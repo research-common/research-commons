@@ -66,10 +66,11 @@ A proposal, not a schedule — final go/no-go is the project owner's call:
    this) to the new version string.
 3. Commit, push, open a PR, get it merged to `main` (this repo is PR-first per `AGENTS.md`/
    `CONTRIBUTING.md` — never commit directly to `main`).
-4. Tag the **merge commit** on `main` (not the release-prep branch tip):
+4. Tag the release PR's **squash commit** on `main` (not the release-prep branch tip, which
+   never lands on `main`):
    ```bash
    git switch main && git pull --ff-only
-   git tag -a v0.2.0-alpha.1 <merge-sha> -m "v0.2.0-alpha.1: first tagged release"
+   git tag -a v0.2.0-alpha.1 <squash-sha> -m "v0.2.0-alpha.1: first tagged release"
    git push origin v0.2.0-alpha.1
    ```
    Tags are `v`-prefixed (`v0.2.0-alpha.1`), matching the CHANGELOG's un-prefixed section

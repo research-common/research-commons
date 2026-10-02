@@ -48,6 +48,26 @@ contribution necessarily reads on, and only patents you can license.
 4. **Documentation in the same change.** If you alter a command's behaviour,
    update `README.md` and the relevant `docs/` file in the same commit.
 
+## How pull requests land
+
+**Every PR is squash-merged.** `main` gets one commit per PR, titled with the PR title
+and carrying the PR description as its body. Merge commits and rebase-merges are turned
+off, and `main` requires linear history and signed commits.
+
+What that means for you:
+
+- **Write the PR title and description as the commit message.** They're what stays in
+  history. The commits on your branch don't, so don't spend effort tidying them;
+  fixups, merges from `main` and review-round commits are fine.
+- **Credit is kept.** The squash commit is authored as you, and maintainers check
+  before merging that anyone else who committed to the branch gets a `Co-authored-by:`
+  trailer. Put your `Signed-off-by:` (DCO) line in the PR description too, because the
+  squash commit's body comes from the description, not from your commits.
+- **Signatures.** GitHub signs the squash commit itself, so `main` stays verified even
+  if your own commits aren't signed.
+- **One logical change per PR.** Squashing means a PR is the smallest unit `git bisect`
+  or `git revert` can work with. Split unrelated changes into separate PRs.
+
 ## Ground rules that are load-bearing
 
 These come from real incidents. They are not style preferences.
