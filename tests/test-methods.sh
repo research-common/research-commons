@@ -130,12 +130,15 @@ mkcoll "$W/cl.json" "[{\"id\":\"$SK\",\"role\":\"method\"},{\"id\":\"$RP_A\",\"r
 CL=$(c publish collection "$W/cl.json" "Demo analyses" 2>/dev/null)
 check "category collection publishes" "$(echo "$CL" | grep -c '^cl-')" "1"
 c collection show "$CL" > "$W/show.txt"
-check "method section rendered" "$(grep -c 'method (ENDORSED): 1' "$W/show.txt")" "1"
-check "instances section rendered" "$(grep -c 'instances (ENDORSED): 1' "$W/show.txt")" "1"
+# This collection is published unsigned, so since #23 the sections say UNSIGNED, not
+# ENDORSED (the signed-publisher wording is covered in test-collections.sh / test-signing.sh).
+check "method section rendered" "$(grep -c 'method (UNSIGNED): 1' "$W/show.txt")" "1"
+check "instances section rendered" "$(grep -c 'instances (UNSIGNED): 1' "$W/show.txt")" "1"
+check "unsigned collection is not labelled ENDORSED" "$(grep -c 'ENDORSED' "$W/show.txt")" "0"
 check "method row carries applied-by" "$(grep -c "$SK.*applied by 1" "$W/show.txt")" "1"
 check "method row carries category + rubric" "$(grep -c "category:demo.*rubric:2" "$W/show.txt")" "1"
 check "instance row shows applies target" "$(grep -c "$RP_A.*applies $SK" "$W/show.txt")" "1"
-check "endorsed total still 2" "$(grep -c 'curated-in (ENDORSED — signed editorial list): 2' "$W/show.txt")" "1"
+check "curated total still 2" "$(grep -c 'curated-in (UNSIGNED — editorial list, not attributable): 2' "$W/show.txt")" "1"
 
 # An unendorsed instance that applied the method is the maintainer's review queue.
 printf '# Report: instance B\n' > "$W/ib.md"
@@ -180,7 +183,7 @@ check "role method on an absent skill still publishes (lazy replication)" \
 mkcoll "$W/cl5.json" "[{\"id\":\"$RP_A\",\"role\":\"report\"}]"
 CL5=$(c publish collection "$W/cl5.json" "Plain collection" 2>/dev/null)
 c collection show "$CL5" > "$W/show.txt"
-check "no method member: no method section" "$(grep -c 'method (ENDORSED)' "$W/show.txt")" "0"
+check "no method member: no method section" "$(grep -c '^  method (' "$W/show.txt")" "0"
 check "no method member: no applies annotation" "$(grep -c 'applies ' "$W/show.txt")" "0"
 check "no method member: legacy role line intact" "$(grep -c "$RP_A.*\[role report\]$" "$W/show.txt")" "1"
 
