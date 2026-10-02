@@ -49,6 +49,9 @@ manifest/ledger format version — `commons --version` prints both).
   for a publish that actually lands, checked against the final manifest. A no-op
   re-publish of bytes already held doesn't print it, and neither does a `--force` that
   inherits a recorded verification block (#26).
+- `collection show` labelled an instance applying a method revision two or more `supersedes`
+  hops behind the collection's method member as `(different method)`. It now walks the chain and
+  prints `(superseded)` or `(superseded ×N)`. Display only (#8).
 
 ## [0.2.0-alpha.1] - 2026-10-01
 
