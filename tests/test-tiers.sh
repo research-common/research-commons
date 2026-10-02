@@ -183,6 +183,75 @@ check "fsck detects tamper" "$(rc c fsck)" "1"
 cp -f "$W/blob.bak" "$BLOB_PATH"; chmod 444 "$BLOB_PATH"
 check "restored blob → verify PASS again" "$(rc c verify "$OUT0")" "0"
 
+head_ "successor workflow reproducing identical bytes (issue #22)"
+# v2 of the aggregation workflow: changes the computation for one output ('agg'),
+# but the suite above already minted a SEPARATE single-output workflow, so build a
+# fresh two-output pair here to exercise "one output changes, one stays identical".
+python3 - "$W/wf-succ-v1.json" "$DS" <<'PY'
+import json, sys
+spec = {
+  "interpreter": "bash",
+  "inputs": {"REWARDS": sys.argv[2]},
+  "attachments": {"agg.py": (
+      "import csv, json, sys\n"
+      "rows = list(csv.DictReader(open(sys.argv[1])))\n"
+      "n = len(rows)\n"
+      "json.dump({'n': n}, open(sys.argv[2], 'w'), sort_keys=True)\n"
+      "json.dump({'stable': True}, open(sys.argv[3], 'w'), sort_keys=True)\n")},
+  "steps": ["python3 agg.py \"$IN_REWARDS\" \"$OUT_DIR/a.json\" \"$OUT_DIR/b.json\""],
+  "outputs": {"out_a": "a.json", "out_b": "b.json"},
+  "env": {"TZ": "UTC", "LC_ALL": "C", "PYTHONHASHSEED": "0"},
+  "timeout": 60,
+}
+json.dump(spec, open(sys.argv[1], "w"), indent=2, sort_keys=True)
+PY
+WFSUCC1=$(c publish workflow "$W/wf-succ-v1.json" "successor demo v1" -t demo)
+SUCC_OUT=$(c run "$WFSUCC1" --publish --publish-type synthesis --title "succ v1 run")
+SUCC_A=$(echo "$SUCC_OUT" | awk '$2=="out_a"{print $1}')
+SUCC_B=$(echo "$SUCC_OUT" | awk '$2=="out_b"{print $1}')
+
+# v2: out_a's computation changes (adds a field); out_b's body is byte-identical.
+python3 - "$W/wf-succ-v2.json" "$DS" <<'PY'
+import json, sys
+spec = {
+  "interpreter": "bash",
+  "inputs": {"REWARDS": sys.argv[2]},
+  "attachments": {"agg.py": (
+      "import csv, json, sys\n"
+      "rows = list(csv.DictReader(open(sys.argv[1])))\n"
+      "n = len(rows)\n"
+      "json.dump({'n': n, 'v2': True}, open(sys.argv[2], 'w'), sort_keys=True)\n"
+      "json.dump({'stable': True}, open(sys.argv[3], 'w'), sort_keys=True)\n")},
+  "steps": ["python3 agg.py \"$IN_REWARDS\" \"$OUT_DIR/a.json\" \"$OUT_DIR/b.json\""],
+  "outputs": {"out_a": "a.json", "out_b": "b.json"},
+  "env": {"TZ": "UTC", "LC_ALL": "C", "PYTHONHASHSEED": "0"},
+  "timeout": 60,
+}
+json.dump(spec, open(sys.argv[1], "w"), indent=2, sort_keys=True)
+PY
+WFSUCC2=$(c publish workflow "$W/wf-succ-v2.json" "successor demo v2" -t demo --link "supersedes:$WFSUCC1")
+SUCC_OUT2=$(c run "$WFSUCC2" --publish --publish-type synthesis --title "succ v2 run")
+check "v2's changed output gets a new id" \
+  "$([ "$(echo "$SUCC_OUT2" | awk '$2=="out_a"{print $1}')" != "$SUCC_A" ] && echo yes)" "yes"
+check "v2's unchanged output reuses the SAME id" \
+  "$(echo "$SUCC_OUT2" | awk -v id="$SUCC_B" '$2=="out_b" && $1==id {print "yes"}')" "yes"
+check "run --publish reports the successor reproduction" \
+  "$(echo "$SUCC_OUT2" | grep -c "also reproduced by $WFSUCC2")" "1"
+check "ledger records reproduced-by-workflow" \
+  "$(c log -n 5 | grep -c 'reproduced-by-workflow')" "1"
+check "ledger entry names the successor workflow" \
+  "$(c log -n 5 | grep 'reproduced-by-workflow' | grep -c "\"workflow\": \"$WFSUCC2\"")" "1"
+check "ledger entry names the recorded (original) workflow" \
+  "$(c log -n 5 | grep 'reproduced-by-workflow' | grep -c "\"recorded_workflow\": \"$WFSUCC1\"")" "1"
+check "manifest's own provenance.workflow is unchanged (first-writer-wins)" \
+  "$(c get "$SUCC_B" | python3 -c 'import json,sys;print(json.load(sys.stdin)["provenance"]["workflow"]["id"])')" "$WFSUCC1"
+check "verify surfaces the successor reproduction" \
+  "$(rc c verify "$SUCC_B")" "0"
+check "verify PASS names the successor" \
+  "$(grep -c "also reproduced by: $WFSUCC2" "$W/out.txt")" "1"
+check "status annotates the shared-output node" \
+  "$(c status "$SUCC_B" | grep -c "also reproduced by $WFSUCC2")" "1"
+
 head_ "comparators publish as untiered methods"
 CMP=$(c publish skill "$REPO/comparators/json-numeric-epsilon.py" "json-numeric-epsilon" \
         -d "T1 comparator: JSON with float tolerance" -t comparator)
@@ -194,7 +263,7 @@ check "skill gets no verification block" \
   "$(c get "$CMP" | python3 -c 'import json,sys;print("verification" in json.load(sys.stdin))')" "False"
 check "workflow gets no verification block" \
   "$(c get "$WF0" | python3 -c 'import json,sys;print("verification" in json.load(sys.stdin))')" "False"
-check "method ledger line says method" "$(c log -n 100 | grep -c '"tier": "method"')" "3"
+check "method ledger line says method" "$(c log -n 100 | grep -c '"tier": "method"')" "5"
 check "method shows as — in list" "$(c list --type skill | grep -c '—')" "2"
 check "explicit tier on a method still honoured" \
   "$(c publish skill "$REPO/comparators/sorted-set-equality.py" "forced tier" --tier T0 --force >/dev/null; c get "$CMP_SET" | python3 -c 'import json,sys;print(json.load(sys.stdin)["verification"]["tier"])')" "T0"
