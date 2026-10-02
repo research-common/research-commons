@@ -9,6 +9,11 @@ manifest/ledger format version — `commons --version` prints both).
 
 ## [Unreleased]
 
+### Changed
+- The `maintainers[i] needs an addr` collection lint now explains the expected path for a
+  collection assembled before its owner's key signs it: list the intended owner's address and
+  `collection show` marks the list unattributable until that address signs (#24).
+
 ### Fixed
 - **Ingest policy bypassed by a `part-of` claim against a superseded collection (safety fix,
   #11).** The gate read only the collection named, so a policy added by superseding never
