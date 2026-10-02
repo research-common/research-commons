@@ -18,6 +18,16 @@ manifest/ledger format version — `commons --version` prints both).
   unattested T3 with no provenance (#18).
 - The dataset `--license`/`--obtainability` publish warnings check the final manifest, so a
   `--force` that keeps a recorded licence no longer claims it has none (#18).
+- `commons status` no longer labels an unattested T3 artifact as bare `T3 attested`
+  (header, per-node row, and chain-grade line). It now says `T3 attested by 0x…`
+  when an attester is on file, or `T3 self-reported (no attester)` when it is not —
+  matching what `commons verify` already reported (`attester : NONE`). Display only:
+  no tier, chain grade, or exit code changed (#23).
+- `commons collection show` and the generated collection HTML page no longer print
+  `curated-in (ENDORSED — signed editorial list)` for a collection with no verified
+  signed publish event. They now print `curated-in (UNSIGNED — editorial list, not
+  attributable)` in that case, matching the `curated by: (no verified signed publish
+  event ...)` line already printed above it. Display only (#23).
 
 ## [0.2.0-alpha.1] - 2026-10-01
 

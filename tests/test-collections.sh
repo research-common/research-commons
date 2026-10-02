@@ -129,6 +129,23 @@ check "curator attribution shown" \
   "$([ "$(grep -ci "curated by: $MADDR" "$W/out.txt")" -ge 1 ] && echo yes)" "yes"
 check "curator recognised as a maintainer" "$(grep -c '— maintainer' "$W/out.txt")" "1"
 
+# Display label must not overstate an unsigned collection (issue #23): the header
+# used to say "ENDORSED — signed editorial list" unconditionally, directly
+# contradicting the "curated by: (no verified signed publish event ...)" line
+# printed right above it for a collection with no verified signed publish event.
+unset COMMONS_SIGNING_KEY
+mkcoll "$W/c-unsigned.json" "{\"members\": [{\"id\": \"$DS\", \"role\": \"primary-dataset\"}]}"
+CLUNSIGNED=$(COMMONS_SIGNING_KEY= "$COMMONS" publish collection "$W/c-unsigned.json" "Unsigned Collection" --force 2>/dev/null)
+check "unsigned collection published" "$([ -n "$CLUNSIGNED" ] && echo yes)" "yes"
+check "unsigned collection show succeeds" "$(rc "$COMMONS" collection show "$CLUNSIGNED")" "0"
+check "unsigned collection: curated-by says unattributable" \
+  "$(grep -c 'no verified signed publish event' "$W/out.txt")" "1"
+check "unsigned collection: header is NOT the ENDORSED/signed claim" \
+  "$(grep -c 'curated-in (ENDORSED' "$W/out.txt")" "0"
+check "unsigned collection: header says UNSIGNED instead" \
+  "$(grep -c 'curated-in (UNSIGNED — editorial list, not attributable): 1' "$W/out.txt")" "1"
+check "unsigned collection display fix does not change the exit code" "$(rc "$COMMONS" collection show "$CLUNSIGNED")" "0"
+
 head_ "a non-collection is refused, a missing member is reported"
 check "collection show on a dataset refused" "$(rc m collection show "$DS")" "1"
 check "refusal names the real type" "$(grep -c 'is a dataset, not a collection' "$W/err.txt")" "1"

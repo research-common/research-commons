@@ -857,6 +857,26 @@ def tier_label(t):
     return t if name == t else "%s %s" % (t, name)
 
 
+def t3_attestation_note(m):
+    """Display-only suffix naming whether a T3 artifact is actually attested.
+
+    TIER_NAME says T3 == "attested" unconditionally, which is correct as a tier NAME
+    (what T3 claims to be) but overstates any specific T3 artifact that has no
+    attester: `verify` already distinguishes this (`attester : NONE`), but `status`
+    — the view readers actually look at for the evidence chain — printed the bare
+    tier name regardless, implying a signature exists when none does (issue #23).
+    Checks only whether an attester is on record, not whether that attestation is
+    still valid (stale/invalid): a full crypto verify per chain node would be
+    needless cost for a status rollup, and `commons verify` already owns that
+    check. This label never implies more than "something is or isn't on file" and
+    moves no tier, grade, or exit code.
+    """
+    att = (m.get("verification") or {}).get("attested_by")
+    if att and att.get("addr"):
+        return "attested by %s" % att["addr"]
+    return "self-reported (no attester)"
+
+
 # ---------------- index ----------------
 def db_conn():
     con = sqlite3.connect(DB)
@@ -4821,9 +4841,13 @@ def cmd_status(a):
         warn_anchor_drift()
         sys.exit(_status_exit(grade))
 
-    print("%s  %s  [%s]" % (root["id"], root.get("title", ""),
-                            "method — pinned by content hash" if is_method(root)
-                            else tier_label(tier_of(root))))
+    _root_tier = tier_of(root)
+    if not is_method(root) and _root_tier == "T3":
+        _root_badge = "T3 %s" % t3_attestation_note(root)
+    else:
+        _root_badge = ("method — pinned by content hash" if is_method(root)
+                       else tier_label(_root_tier))
+    print("%s  %s  [%s]" % (root["id"], root.get("title", ""), _root_badge))
     print("evidence chain (provenance + %s links, depth cap %d):"
           % ("/".join(sorted(EVIDENCE_RELS)), a.depth))
     for depth, aid, rel, m, note in rows:
@@ -4833,7 +4857,14 @@ def cmd_status(a):
             continue
         meth = is_method(m)
         t = tier_of(m)
-        tcol, tname = (tier_display(m), "method") if meth else (t, TIER_NAME[t])
+        if meth:
+            tcol, tname = tier_display(m), "method"
+        elif t == "T3":
+            # The tier name alone ("attested") implies a signature exists; say
+            # whether one actually does (issue #23), display-only.
+            tcol, tname = t, t3_attestation_note(m)
+        else:
+            tcol, tname = t, TIER_NAME[t]
         if tcol == tname: tname = ""  # don't print "unverified unverified"
         crit = (m.get("verification") or {}).get("criteria")
         extra = note or ("— " + crit if crit and not meth and t in ("T1", "T2", "T3") else "")
@@ -4853,7 +4884,15 @@ def cmd_status(a):
     if grade is None:
         print("chain grade: n/a  (method artifact — pinned by content hash, not tiered)")
         sys.exit(_status_exit(grade))
-    print("chain grade: %s%s" % (tier_label(grade),
+    if grade == "T3":
+        # The weakest link sets the grade; if it's T3, say whether THAT node is
+        # attested rather than leaving the reader to assume "T3" alone means signed.
+        weakest_m = load_manifest(worst_node, missing_ok=True)
+        grade_label = ("T3 %s" % t3_attestation_note(weakest_m)) if weakest_m is not None \
+            else tier_label(grade)
+    else:
+        grade_label = tier_label(grade)
+    print("chain grade: %s%s" % (grade_label,
                                  "" if worst_node == root["id"] else "  (weakest: %s)" % worst_node))
     # Availability is reported next to the grade and never inside it (see
     # _chain_availability). A strong grade over data only we hold is still a true grade;
@@ -5468,6 +5507,12 @@ def cmd_collection_show(a):
     else:
         print("curated by: (no verified signed publish event — endorsements "
               "unattributable)")
+    # The header below used to say "ENDORSED — signed editorial list"
+    # unconditionally, directly contradicting the "curated by" line above on an
+    # unsigned collection (issue #23). Same signal this function already computed;
+    # display-only, no change to membership or any exit code.
+    curated_header = ("curated-in (ENDORSED — signed editorial list)" if fp
+                      else "curated-in (UNSIGNED — editorial list, not attributable)")
     print("maintainers: %s" % (", ".join(
         "%s%s" % (x.get("agent") or "?", " <%s>" % x["addr"] if x.get("addr") else "")
         for x in maints if isinstance(x, dict)) or "(none)"))
@@ -5527,15 +5572,16 @@ def cmd_collection_show(a):
         if entry["id"] in declared_ids: extra += "  (also self-declared — mutual)"
         print("  " + _member_line(mm, extra))
 
+    _curated_tag = "ENDORSED" if fp else "UNSIGNED"
     print("")
-    print("curated-in (ENDORSED — signed editorial list): %d" % len(members))
+    print("%s: %d" % (curated_header, len(members)))
     if not members: print("  (none)")
     if method_entries:
         instances = [x for x in members if (x.get("role") or "") == ROLE_INSTANCE]
         other = [x for x in members if x not in method_entries and x not in instances]
-        print("  method (ENDORSED): %d" % len(method_entries))
+        print("  method (%s): %d" % (_curated_tag, len(method_entries)))
         for entry in method_entries: _render_entry(entry)
-        print("  instances (ENDORSED): %d" % len(instances))
+        print("  instances (%s): %d" % (_curated_tag, len(instances)))
         if not instances: print("    (none yet — see `wanted:` below)")
         for entry in instances: _render_entry(entry)
         if other:
@@ -7541,7 +7587,14 @@ def _site_collection_page(m):
     declared_ids = {x["id"] for x in declared}
     curated_ids = {x["id"] for x in members}
 
-    body.append("<h2>curated-in (ENDORSED — signed editorial list): %d</h2>" % len(members))
+    # Mirrors cmd_collection_show's "curated by" check (issue #23): the fixed
+    # "ENDORSED — signed" header used to print even when there is no verified
+    # signed publish event for this collection, contradicting the collection's own
+    # attribution. Display-only; membership and task state are unaffected.
+    fp = first_publisher(m["id"])
+    curated_tag = "ENDORSED — signed editorial list" if fp \
+        else "UNSIGNED — editorial list, not attributable"
+    body.append("<h2>curated-in (%s): %d</h2>" % (curated_tag, len(members)))
     if not members:
         body.append("<p class=\"note\">(none)</p>")
     else:

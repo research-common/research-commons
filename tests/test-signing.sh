@@ -436,10 +436,26 @@ head_ "T3 attester identity (attested-by-whom)"
 AT=$(c publish dataset "$W/clean.csv" "attested capture" --license MIT \
       --tier T3 --criteria "GET /demo at a fixed instant" --force 2>/dev/null)
 check "unattested T3 reports NONE" "$(c verify "$AT" 2>&1 | grep -c 'attester : NONE')" "1"
+# `status` display labels (issue #23): the evidence-chain view used to say the bare
+# tier name ("T3 attested") for every T3 node, even with no attester on file, which
+# overstates a self-reported artifact and disagrees with `verify`'s own "attester :
+# NONE" right above. Display only: no tier, grade, or exit code should move.
+check "status on an unattested T3: no bare 'attested' claim in the header" \
+  "$(c status "$AT" 2>&1 | grep -c '\[T3 attested\]')" "0"
+check "status on an unattested T3: header says self-reported, no attester" \
+  "$(c status "$AT" 2>&1 | grep -c '\[T3 self-reported (no attester)\]')" "1"
+check "status on an unattested T3: chain-grade line matches the header, not a bare 'attested'" \
+  "$(c status "$AT" 2>&1 | grep -c '^chain grade: T3 self-reported (no attester)$')" "1"
+check "status on an unattested T3: exit code unchanged (T2/T3 == not-machine-verifiable)" \
+  "$(rc c status "$AT")" "3"
 check "attest succeeds" "$(rc c attest "$AT" --observed 2026-07-01T00:00:00Z)" "0"
 check "attester recorded" \
   "$(c get "$AT" | python3 -c 'import json,sys;print(json.load(sys.stdin)["verification"]["attested_by"]["addr"])')" "$ME"
 check "attestation verifies" "$(c verify "$AT" 2>&1 | grep -c 'attester : VALID')" "1"
+check "status on an attested T3: header names the attester address" \
+  "$(c status "$AT" 2>&1 | grep -c "\[T3 attested by $ME\]")" "1"
+check "status on an attested T3: chain-grade line names the attester too" \
+  "$(c status "$AT" 2>&1 | grep -c "^chain grade: T3 attested by $ME\$")" "1"
 check "verify still exits 3 (judgement is not machine work)" "$(rc c verify "$AT")" "3"
 check "re-attest refused without --force" "$(rc c attest "$AT")" "1"
 check "attest logged" "$(c log -n 3 | grep -c '\"attest\"')" "1"
