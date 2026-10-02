@@ -160,6 +160,24 @@ c collection show "$CL2" > "$W/show.txt"
 check "instance on a superseded version marked (superseded), not wrong" "$(grep -c "$RP_A.*applies $SK (superseded)" "$W/show.txt")" "1"
 check "instance on an unrelated method marked (different method)" "$(grep -c "$RP_C.*applies $SK_TOP (different method)" "$W/show.txt")" "1"
 
+# Two-hop supersede chain (issue #8 point 1): a prereg on the ORIGINAL version, now
+# two revisions back, must read as superseded, not as a different method entirely.
+# Independent method chain (SK_X1..3) so counts asserted earlier/later for $SK are
+# untouched.
+mkbundle "$W/mx1" "$W/mx1.tar" "$RUBRIC"; tar -C "$W/mx1" -cf "$W/mx1.tar" .
+SK_X1=$(c publish skill "$W/mx1.tar" "Method: x-chain v1" -t methodology -t category:demo 2>/dev/null)
+mkbundle "$W/mx2" "$W/mx2.tar" "$RUBRIC"; printf 'v2\n' >> "$W/mx2/SKILL.md"; tar -C "$W/mx2" -cf "$W/mx2.tar" .
+SK_X2=$(c publish skill "$W/mx2.tar" "Method: x-chain v2" -t methodology -t category:demo --link supersedes:"$SK_X1" 2>/dev/null)
+mkbundle "$W/mx3" "$W/mx3.tar" "$RUBRIC"; printf 'v3\n' >> "$W/mx3/SKILL.md"; tar -C "$W/mx3" -cf "$W/mx3.tar" .
+SK_X3=$(c publish skill "$W/mx3.tar" "Method: x-chain v3" -t methodology -t category:demo --link supersedes:"$SK_X2" 2>/dev/null)
+printf '# Report: instance D\n' > "$W/id.md"
+RP_D=$(c publish report "$W/id.md" "Report: instance D (two hops back)" --link applies:"$SK_X1" 2>/dev/null)
+mkcoll "$W/cl3b.json" "[{\"id\":\"$SK_X3\",\"role\":\"method\"},{\"id\":\"$RP_D\",\"role\":\"instance\"}]"
+CL3=$(c publish collection "$W/cl3b.json" "Demo analyses v3 (x-chain)" 2>/dev/null)
+c collection show "$CL3" > "$W/show.txt"
+check "instance two hops back marked (superseded x2), not different method" \
+  "$(grep -c "$RP_D.*applies $SK_X1 (superseded ×2)" "$W/show.txt")" "1"
+
 # Guards on the role itself.
 mkcoll "$W/cl3.json" "[{\"id\":\"$RP_A\",\"role\":\"method\"}]"
 check "role method on a non-skill refused" "$(rc c publish collection "$W/cl3.json" "Bad")" "1"

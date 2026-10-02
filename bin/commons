@@ -5964,6 +5964,34 @@ def cmd_collection_show(a):
     applied_by = applied_by_index() if method_entries else {}
     superseders_all = superseders_map() if method_entries else {}
 
+    def _supersede_hops(t, limit=64):
+        """Hop count from `t` to the nearest id in `method_ids` along `supersedes`
+        links (BFS over `superseders_all`, dst -> ids that supersede it), or None
+        if no method id is reachable. Issue #8 point 1: a one-hop lookup
+        (`t in superseders_all.get(x)`) mislabels a two-or-more-hop predecessor as
+        "different method" instead of "superseded", which reads as a methodological
+        error rather than a stale-but-correct citation. Walking the full chain fixes
+        the common case (collection revised more than once) without changing what
+        VERIFICATION means — `applies:` targets are still exact, individual ids;
+        this only changes how the review-surface label is computed.
+        """
+        if t in method_ids:
+            return 0
+        seen, frontier, hops = {t}, [t], 0
+        for _ in range(limit):
+            nxt = []
+            for x in frontier:
+                for s in superseders_all.get(x, []):
+                    if s in method_ids:
+                        return hops + 1
+                    if s not in seen:
+                        seen.add(s)
+                        nxt.append(s)
+            if not nxt:
+                return None
+            frontier, hops = nxt, hops + 1
+        return None
+
     def _applies_note(mm):
         """' applies sk-…' + markers for an instance row (method view only)."""
         tgts = applies_targets(mm)
@@ -5973,12 +6001,13 @@ def cmd_collection_show(a):
         for t in tgts:
             mark = ""
             if t not in method_ids:
-                mark = " (different method)"
                 # Open question 2 of the note: an instance that applied a version the
                 # collection has since superseded is CORRECT about what it did; say
-                # only that the version is old.
-                if any(s in method_ids for s in superseders_all.get(t, [])):
-                    mark = " (superseded)"
+                # only that the version is old, however many revisions back it was.
+                hops = _supersede_hops(t)
+                mark = (" (superseded ×%d)" % hops if hops and hops > 1
+                        else " (superseded)" if hops == 1
+                        else " (different method)")
             parts.append("%s%s" % (t, mark))
         return "  applies %s" % ", ".join(parts)
 
