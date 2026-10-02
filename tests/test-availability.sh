@@ -140,6 +140,63 @@ c publish dataset "$W/r.csv" "internal telemetry (retitled)" \
 check "obtainability survives a --force republish" \
   "$(c get "$REST" | field availability.obtainability)" "restricted"
 
+# ---------------------------------------------------- --force republish preserves (#18)
+head_ "--force republish keeps what it was not told to change"
+
+# The remediation fsck/push print ("Re-publish with --license/--obtainability") is a
+# --force republish. On a workflow-derived dataset it used to drop provenance, links,
+# description and created, and reset T0 to an unattested T3. (The workflow must
+# transform its input: a byte copy would collapse onto the input's own id.)
+printf 'g,h\n11,12\n' > "$W/f-in.csv"
+FIN=$(c publish dataset "$W/f-in.csv" "force input" --license CC0-1.0 --obtainability open 2>/dev/null)
+cat > "$W/wf-force.json" <<JSON
+{"inputs": {"D": "$FIN"},
+ "attachments": {"up.py": "import sys\nopen(sys.argv[2], 'w').write(open(sys.argv[1]).read().upper())\n"},
+ "steps": ["python3 up.py \"\$IN_D\" \"\$OUT_DIR/derived.csv\""],
+ "outputs": {"out": "derived.csv"},
+ "env": {"TZ": "UTC", "LC_ALL": "C", "PYTHONHASHSEED": "0"}, "timeout": 60}
+JSON
+WFF=$(c publish workflow "$W/wf-force.json" "copy for force test" --license Apache-2.0 2>/dev/null)
+DER=$(c run "$WFF" --publish --publish-type dataset 2>/dev/null | awk '{print $1}')
+c get "$DER" > "$W/der-before.json"
+c export "$DER" -o "$W/der.csv" >/dev/null
+check "licence-only --force on a derived dataset succeeds" "$(rc c publish dataset "$W/der.csv" \
+  "derived, now licensed" --license CC-BY-4.0 --obtainability open --force)" "0"
+check "no spurious unlicensed/undeclared/default-criteria warning" \
+  "$(grep -c 'without --license\|without --obtainability\|default attestation' "$W/err.txt")" "0"
+c get "$DER" > "$W/der-after.json"
+check "tier stays T0" "$(field verification.tier < "$W/der-after.json")" "T0"
+check "verify still PASSes" "$(rc c verify "$DER")" "0"
+check "only title/licence/availability (and filename) changed" "$(python3 -c '
+import json, sys
+b, a = (json.load(open(p)) for p in sys.argv[1:])
+b["content"].pop("filename"); a["content"].pop("filename")
+print(",".join(sorted(k for k in set(a) | set(b) if a.get(k) != b.get(k))))
+' "$W/der-before.json" "$W/der-after.json")" "availability,license,title"
+check "new licence recorded" "$(field license < "$W/der-after.json")" "CC-BY-4.0"
+check "provenance.run.env survives" "$(field provenance.run.env.TZ < "$W/der-after.json")" "UTC"
+
+# Re-running the workflow is first-writer-wins, so it could never repair a damaged
+# manifest; with the fix there is nothing to repair. Check it still reports a no-op.
+check "re-run after the republish is a no-op" \
+  "$(c run "$WFF" --publish --publish-type dataset 2>/dev/null | grep -c 'already published; unchanged')" "1"
+
+# Explicit flags still win: --tag/-d replace, omitted --link leaves links alone.
+c publish dataset "$W/der.csv" "retagged" -t wind -d "new description" --force >/dev/null 2>&1
+check "--tag replaces tags" "$(c get "$DER" | python3 -c 'import json,sys;print(json.load(sys.stdin)["tags"])')" "['wind']"
+check "-d replaces description" "$(c get "$DER" | field description)" "new description"
+check "links untouched when --link omitted" \
+  "$(c get "$DER" | python3 -c 'import json,sys;print([l["rel"] for l in json.load(sys.stdin)["links"]])')" "['derives']"
+
+# A silent downgrade is refused, naming both escape hatches; an explicit --tier is honoured.
+check "--criteria without --tier cannot silently downgrade T0" \
+  "$(rc c publish dataset "$W/der.csv" "x" --criteria "hand capture" --force)" "1"
+check "refusal names --tier" "$(grep -c -- '--tier T0 to keep it' "$W/err.txt")" "1"
+check "refused attempt left tier alone" "$(c get "$DER" | field verification.tier)" "T0"
+check "explicit --tier T3 is honoured" \
+  "$(c publish dataset "$W/der.csv" "x" --tier T3 --criteria "hand capture" --force >/dev/null 2>&1; c get "$DER" | field verification.tier)" "T3"
+check "  ...and keeps the recorded provenance" "$(c get "$DER" | field provenance.workflow.id)" "$WFF"
+
 # ------------------------------------------------------------------------ surfacing
 head_ "availability is visible where artifacts are read"
 

@@ -9,6 +9,16 @@ manifest/ledger format version — `commons --version` prints both).
 
 ## [Unreleased]
 
+### Fixed
+- `publish --force` on an existing id now starts from the existing manifest: description,
+  tags, links, `provenance` (inputs, workflow, run env/exec/finished), `created` and the
+  verification block are kept unless their flag is passed. A `--force` that would lower the
+  tier without an explicit `--tier` is refused. Previously the `fsck`/`push` remediation
+  ("re-publish with --license/--obtainability") turned a verified T0 derivation into an
+  unattested T3 with no provenance (#18).
+- The dataset `--license`/`--obtainability` publish warnings check the final manifest, so a
+  `--force` that keeps a recorded licence no longer claims it has none (#18).
+
 ## [0.2.0-alpha.1] - 2026-10-01
 
 First tagged release. Predates this tag, the project shipped ~21 commits of untagged history

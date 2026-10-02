@@ -948,6 +948,14 @@ therefore does not by itself show a content disagreement. The ingest gate checks
 `content.sha256` and that the id derives from that hash; on merge, `links` and `tags`
 union, while conflicts in other shared fields abort (`ingest` is a local stamp).
 
+`publish --force` over an id you already hold edits its manifest in place, starting from
+the existing one: a field changes only when its flag is passed (`-d`, `-t`, `--link`,
+`--input`, `--workflow`, `--license`, `--obtainability`; the title is positional and always
+replaced). `provenance.run` and `created` are always kept, and the verification block is
+kept unless `--tier`, `--workflow`, `--criteria` or `--param` is given. A `--force` that
+would lower the tier without an explicit `--tier` is refused. There is no syntax yet to
+clear a tag or link list; an omitted flag means "unchanged".
+
 ## Determinism checklist for workflow authors
 
 Pin `TZ=UTC LC_ALL=C PYTHONHASHSEED=0` in spec `env`; sort all output

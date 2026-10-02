@@ -10,7 +10,7 @@ Artifact types: dataset skill workflow wiki bibliography report synthesis
 Verification tiers: T0 bitwise · T1 tolerance · T2 judged · T3 attested
 See README.md. Registry root: env COMMONS_ROOT or repo default.
 """
-import argparse, calendar, difflib, hashlib, json, math, os, re, shlex, shutil, sqlite3, subprocess, sys, tempfile, time
+import argparse, calendar, copy, difflib, hashlib, json, math, os, re, shlex, shutil, sqlite3, subprocess, sys, tempfile, time
 from urllib.parse import urlsplit
 
 # ROOT = the registry/data root (relocatable via COMMONS_ROOT, e.g. for tests).
@@ -1951,8 +1951,35 @@ def cmd_publish(a):
     license_id = validate_license(a.license)
     obtainability, obt_source = validate_obtainability(
         getattr(a, "obtainability", None), getattr(a, "source", None), a.type)
-    tier = resolve_tier(a, bool(a.workflow), a.type)
-    verification = build_verification(tier, a.criteria, parse_params(a.param))
+    # A --force republish of bytes already held starts from the existing manifest
+    # (#18): look it up now, read-only (hash only; the blob is still stored after every
+    # gate below), so the tier/verification decision can see what is already recorded.
+    prior = None
+    if a.force:
+        prior = load_manifest("%s-%s" % (TYPES[a.type], sha256_file(a.file)[:8]),
+                              missing_ok=True)
+    inherit_verification = bool(
+        prior is not None and prior.get("verification")
+        and a.tier is None and not a.workflow and a.criteria is None and not a.param)
+    if inherit_verification:
+        # Same bytes, same id: the recorded verification (tier, criteria, params,
+        # attestation) is still a true statement about them. Re-deriving it from type
+        # defaults is what turned a verified T0 derivation into an unattested T3.
+        verification = copy.deepcopy(prior["verification"])
+        tier = verification.get("tier")
+    else:
+        tier = resolve_tier(a, bool(a.workflow), a.type)
+        if (prior is not None and a.tier is None and a.type not in METHOD_TYPES
+                and (prior.get("verification") or {}).get("tier") in TIER_RANK
+                and TIER_RANK.get(tier, 99) > TIER_RANK[tier_of(prior)]):
+            # Only a silent DOWNGRADE is refused; restating --workflow on a T3 dataset
+            # is an explicit upgrade and goes through.
+            sys.exit("error: this --force would downgrade %s from tier %s to %s without "
+                     "--tier.\n"
+                     "       Pass --tier %s to keep it, or --tier %s to change it "
+                     "deliberately." % (prior["id"], tier_of(prior), tier,
+                                        tier_of(prior), tier))
+        verification = build_verification(tier, a.criteria, parse_params(a.param))
     judgement = parse_judgement(getattr(a, "judgement", None))
     if judgement and tier != "T2":
         sys.exit("error: --judgement is a T2 (judged) verdict vector; this artifact is tier %s"
@@ -1998,19 +2025,6 @@ def cmd_publish(a):
     if a.type == "skill":
         rubric = _lint_skill_bundle(a)
     _lint_applies_links(a)
-    if a.type == "dataset" and not license_id:
-        print("warning: dataset published without --license. Required before pushing to "
-              "a shared remote (SPDX id or proprietary-internal).", file=sys.stderr)
-    if a.type == "dataset" and not obtainability:
-        # Deliberately a warning at publish and a refusal at push, mirroring --license:
-        # local experimentation stays frictionless, and the gate lands where
-        # "destined for someone else" actually becomes true. Silence must not read as
-        # `open` — an unstated default is the silent-wrong-answer shape this whole
-        # change exists to remove.
-        print("warning: dataset published without --obtainability. Undeclared is NOT "
-              "assumed open;\n"
-              "         state open|licensed-obtainable|restricted (required before "
-              "pushing to a shared remote).", file=sys.stderr)
     digest = store_blob(a.file)
     aid = "%s-%s" % (TYPES[a.type], digest[:8])
     existed = os.path.exists(manifest_path(aid))
@@ -2100,16 +2114,48 @@ def cmd_publish(a):
             m.setdefault("verification", verification or {"tier": tier})["attested_by"] = old_att
             print("note: preserved existing attestation by %s" % old_att.get("addr"),
                   file=sys.stderr)
-        # Same reasoning for the recorded execution environment.
-        old_exec = ((old.get("provenance") or {}).get("run") or {}).get("exec")
-        if old_exec and not ((m.get("provenance") or {}).get("run") or {}).get("exec"):
-            m.setdefault("provenance", {}).setdefault("run", {})["exec"] = old_exec
+        # Same reasoning for provenance, field by field (#18): what this invocation did
+        # not restate is carried forward. `run` (env, exec, finished) has no publish
+        # flag at all, so it can only ever be carried; `inputs`/`workflow` are replaced
+        # only when --input/--workflow are given.
+        old_prov = old.get("provenance") or {}
+        for key, supplied in (("inputs", a.input), ("workflow", a.workflow)):
+            if not supplied and old_prov.get(key):
+                m.setdefault("provenance", {})[key] = copy.deepcopy(old_prov[key])
+        old_run = old_prov.get("run") or {}
+        new_run = m.setdefault("provenance", {}).setdefault("run", {})
+        for key, val in old_run.items():
+            new_run.setdefault(key, copy.deepcopy(val))
+        if not new_run: del m["provenance"]["run"]
+        if not m["provenance"]: del m["provenance"]
+        # Editorial metadata: an omitted flag means "unchanged", not "empty".
+        if a.description is None: m["description"] = old.get("description", "")
+        if a.tag is None: m["tags"] = list(old.get("tags") or [])
+        if a.link is None: m["links"] = copy.deepcopy(old.get("links") or [])
+        # The id's first publish time; the republish itself is the ledger entry's ts.
+        if old.get("created"): m["created"] = old["created"]
         if old.get("license") and not m.get("license"):
             m["license"] = old["license"]
         # Same carry-forward reasoning: a metadata overwrite that omits --obtainability
         # must not silently downgrade a stated disclosure back to undeclared.
         if old.get("availability") and not m.get("availability"):
             m["availability"] = old["availability"]
+    # Dataset disclosure warnings check the FINAL manifest, after the --force
+    # carry-forward and after the no-op early returns, for the same reason as the
+    # advisory below: a republish that keeps a stated licence must not claim it lacks one.
+    if a.type == "dataset" and not m.get("license"):
+        print("warning: dataset published without --license. Required before pushing to "
+              "a shared remote (SPDX id or proprietary-internal).", file=sys.stderr)
+    if a.type == "dataset" and not availability_of(m):
+        # Deliberately a warning at publish and a refusal at push, mirroring --license:
+        # local experimentation stays frictionless, and the gate lands where
+        # "destined for someone else" actually becomes true. Silence must not read as
+        # `open` — an unstated default is the silent-wrong-answer shape this whole
+        # change exists to remove.
+        print("warning: dataset published without --obtainability. Undeclared is NOT "
+              "assumed open;\n"
+              "         state open|licensed-obtainable|restricted (required before "
+              "pushing to a shared remote).", file=sys.stderr)
     if a.type in LICENSE_ADVISORY_TYPES and not m.get("license"):
         # Advisory only, never a push refusal (that gate stays dataset-only, §1.3 of
         # the licence-defaults report): the default rule of copyright everywhere is

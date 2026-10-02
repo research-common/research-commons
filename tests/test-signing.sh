@@ -91,7 +91,12 @@ check "publish succeeds" "$(echo "$DS" | grep -c '^ds-')" "1"
 check "ledger entry carries addr" "$(tail -1 "$(mylog)" | python3 -c 'import json,sys;print(json.load(sys.stdin)["addr"])')" "$ME"
 check "ledger entry carries sig" "$(tail -1 "$(mylog)" | python3 -c 'import json,sys;print(json.load(sys.stdin)["sig"][:2])')" "0x"
 check "license recorded" "$(c get "$DS" | python3 -c 'import json,sys;print(json.load(sys.stdin)["license"])')" "CC0-1.0"
-check "dataset without license warns" "$(c publish dataset "$W/d.csv" "x" --force 2>&1 | grep -c 'without --license')" "1"
+# A --force republish that omits --license keeps the recorded one (carry-forward), so it
+# must NOT claim the dataset is unlicensed: the warning reads the final manifest (#18).
+check "force republish keeping a licence does not warn" "$(c publish dataset "$W/d.csv" "x" --force 2>&1 | grep -c 'without --license')" "0"
+check "  ...and the licence is still recorded" "$(c get "$DS" | python3 -c 'import json,sys;print(json.load(sys.stdin)["license"])')" "CC0-1.0"
+printf 'avs,claimed\nbeta,1\n' > "$W/d-unlic.csv"
+check "dataset without license warns" "$(c publish dataset "$W/d-unlic.csv" "x" 2>&1 | grep -c 'without --license')" "1"
 
 head_ "publish-time license advisory (non-dataset types)"
 printf '# Report\n\nSome findings.\n' > "$W/adv-report.md"
