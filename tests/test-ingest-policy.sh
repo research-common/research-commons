@@ -333,7 +333,7 @@ HCL=$(h publish collection "$W/c-policy.json" "Collection: with a policy" --lice
 BASE=$( cd "$HUB" && git rev-parse HEAD )
 hrc() { ( cd "$HUB" && COMMONS_ROOT="$HUB" "$COMMONS" "$@" ) >"$W/out.txt" 2>"$W/err.txt"; echo $?; }
 check "a consistent hub passes" "$(hrc hub check)" "0"
-check "  and says it checked the flag" "$(grep -c 'ingest policy flag matches the spec' "$W/out.txt")" "1"
+check "  and says it checked the flag" "$(grep -c 'collection manifest hints match the spec' "$W/out.txt")" "1"
 
 # Stripping the flag is the one route that makes a contributor's gate fail open, and the
 # hub is the only place holding both halves, so this is where it must be caught.

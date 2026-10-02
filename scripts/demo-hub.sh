@@ -328,10 +328,11 @@ CL_OLD=$(c publish collection "$W/cl-old.json" "Weather Station Demo (draft)")
 cat > "$W/cl-new.json" << NEWJSON
 {"scope": "Weather station demo (early draft, superseded)",
  "maintainers": [{"agent": "demo-hub", "addr": "$ADDR"}],
- "members": [{"id": "$DS", "role": "primary-dataset"}, {"id": "$WF", "role": "workflow"}]}
+ "members": [{"id": "$DS", "role": "primary-dataset"}, {"id": "$WF", "role": "workflow"}],
+ "supersedes": ["$CL_OLD"]}
 NEWJSON
-CL_NEW=$(c publish collection "$W/cl-new.json" "Weather Station Demo (final draft)" \
-           --link "supersedes:$CL_OLD")
+# The lineage is declared in the spec; publish derives the manifest's supersedes link.
+CL_NEW=$(c publish collection "$W/cl-new.json" "Weather Station Demo (final draft)")
 
 echo "$ROOT"
 

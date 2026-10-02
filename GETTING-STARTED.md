@@ -78,8 +78,9 @@ commons publish collection collection.json "Collection: <topic>" --license CC-BY
 commons collection show cl-xxxxxxxx
 ```
 
-Ids are content hashes, so every edit gives a new id. To revise, republish with
-`--link supersedes:cl-old`.
+Ids are content hashes, so every edit gives a new id. To revise, add
+`"supersedes": ["cl-old"]` to the spec and publish it (or use `commons collection add-member`,
+which does both).
 
 ## 6. Check and publish the hub
 

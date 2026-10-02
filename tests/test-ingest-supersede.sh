@@ -58,13 +58,15 @@ c peer add "$ADDR" --agent-id lead --trust full --note me >/dev/null 2>&1
 # count. Only being a maintainer of the collection being superseded does.
 c peer add "$OADDR" --agent-id outsider --trust full --note outsider >/dev/null 2>&1
 
-mkcoll() {  # mkcoll <outfile> <scope> <maintainer-addr> <ingest-json-or-empty>
+mkcoll() {  # mkcoll <outfile> <scope> <maintainer-addr> <ingest-json-or-empty> [supersedes-id]
   python3 - "$@" <<'PY'
 import json, sys
 out, scope, addr, ing = sys.argv[1:5]
 spec = {"scope": scope, "maintainers": [{"agent": "m", "addr": addr}], "members": []}
 if ing:
     spec["ingest"] = json.loads(ing)
+if len(sys.argv) > 5 and sys.argv[5]:
+    spec["supersedes"] = [sys.argv[5]]   # the lineage lives in the spec (#39)
 json.dump(spec, open(out, "w"), indent=2)
 PY
 }
@@ -74,7 +76,7 @@ PY
 # counter: this runs as $(pubcoll ...), in a subshell a counter would not survive.)
 pubcoll() {
   local f; f=$(mktemp "$W/coll-XXXXXX")
-  mkcoll "$f" "$1 (rev ${f##*-})" "$ADDR" "$2"
+  mkcoll "$f" "$1 (rev ${f##*-})" "$ADDR" "$2" "${3:-}"
   c publish collection "$f" "C: $1" --license CC-BY-4.0 ${3:+--link supersedes:$3} 2>/dev/null | tail -1
 }
 blob_of() { c get "$1" 2>/dev/null | python3 -c 'import json,sys;print(json.load(sys.stdin)["content"]["sha256"])'; }
@@ -146,7 +148,7 @@ check "part-of v3 itself enforces only v3's (empty) policy" "$(pubds "$(csv ts,a
 # ---------------------------------------------------------------- maintainer-signed only
 head_ "a successor not signed by a maintainer is ignored, in both directions"
 N1=$(pubcoll "outsider target" "$ACCT")
-mkcoll "$W/outsider.json" "outsider target" "$OADDR" '{"forbidden_keys":["usd"]}'
+mkcoll "$W/outsider.json" "outsider target" "$OADDR" '{"forbidden_keys":["usd"]}' "$N1"
 N2=$(COMMONS_SIGNING_KEY="$OKEY" COMMONS_AGENT=outsider \
      c publish collection "$W/outsider.json" "C: outsider" --license CC-BY-4.0 \
      --link "supersedes:$N1" 2>/dev/null | tail -1)
@@ -282,7 +284,7 @@ done < "$COMMONS_ROOT/junk.list"
 
 head_ "a maintainer's successor with no verified signature: unchecked, not dropped"
 Y1=$(pubcoll "unsigned successor" "")
-mkcoll "$W/y2.json" "unsigned successor (v2)" "$ADDR" "$ACCT"
+mkcoll "$W/y2.json" "unsigned successor (v2)" "$ADDR" "$ACCT" "$Y1"
 # Published with no signing key: an unsigned entry, exactly what a maintainer without
 # COMMONS_SIGNING_KEY set leaves behind. The policy must not be lost silently.
 Y2=$(env -u COMMONS_SIGNING_KEY "$COMMONS" publish collection "$W/y2.json" "C: unsigned v2" \
@@ -298,7 +300,7 @@ check "--allow-unchecked-ingest publishes" "$(pubds "$(csv ts,unsigned2)" "$Y1" 
 check "  warning which version was not applied" \
   "$(grep -c "$Y1: ingest policy NOT applied (--allow-unchecked-ingest) for $Y2" "$W/err.txt")" "1"
 Z1=$(pubcoll "unsigned, no policy" "")
-mkcoll "$W/z2.json" "unsigned, no policy (v2)" "$ADDR" ""
+mkcoll "$W/z2.json" "unsigned, no policy (v2)" "$ADDR" "" "$Z1"
 Z2=$(env -u COMMONS_SIGNING_KEY "$COMMONS" publish collection "$W/z2.json" "C: unsigned z2" \
      --license CC-BY-4.0 --link "supersedes:$Z1" 2>/dev/null | tail -1)
 check "an unsigned successor with no policy does not refuse" "$(pubds "$(csv ts,account_id,z)" "$Z1")" "0"
@@ -347,8 +349,8 @@ h hub init "$HUB" --name "hub" >/dev/null 2>&1
 hgit config user.email t@example.com; hgit config user.name t
 h peer add "$ADDR" --agent-id lead --trust full --note me >/dev/null 2>&1
 mkcoll "$W/h1.json" "hub lineage" "$ADDR" ""
-mkcoll "$W/h2.json" "hub lineage" "$ADDR" "$ACCT"
 H1=$(h publish collection "$W/h1.json" "C: hub v1" --license CC-BY-4.0 2>/dev/null | tail -1)
+mkcoll "$W/h2.json" "hub lineage" "$ADDR" "$ACCT" "$H1"
 H2=$(h publish collection "$W/h2.json" "C: hub v2" --license CC-BY-4.0 --link "supersedes:$H1" 2>/dev/null | tail -1)
 # Explicit paths only. The original repro used `git add -A`, which also staged a stray
 # leak.csv at the hub root, so `hub check` failed on "non-data path changed" — the right
@@ -406,7 +408,7 @@ mv "$W/stash-h2" "$HUB/store/sha256/${HB:0:2}/$HB"
 # A PR adding a non-maintainer "successor" changes nothing: it is not maintainer-signed,
 # and at base it does not exist at all.
 BASE2=$(hgit rev-parse HEAD)
-mkcoll "$W/h-out.json" "hub lineage" "$OADDR" ""
+mkcoll "$W/h-out.json" "hub lineage" "$OADDR" "" "$H2"
 HO=$(cd "$HUB" && COMMONS_ROOT="$HUB" COMMONS_SIGNING_KEY="$OKEY" COMMONS_AGENT=outsider \
      "$COMMONS" publish collection "$W/h-out.json" "C: outsider" --license CC-BY-4.0 \
      --link "supersedes:$H2" 2>/dev/null | tail -1)

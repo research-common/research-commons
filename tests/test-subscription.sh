@@ -58,30 +58,32 @@ SELF=$(pub publish report "$LAB/self.txt" claimant --link "part-of:$COLLECTION")
 
 MADDR="0x$(printf 'b%.0s' $(seq 40))"
 OADDR="0x$(printf 'c%.0s' $(seq 40))"
-mkcollection(){
-  python3 - "$1" "$2" "$3" "$MADDR" <<'PYCOLL'
+mkcollection(){  # mkcollection <out> <scope> <member> [supersedes-id]
+  python3 - "$1" "$2" "$3" "$MADDR" "${4:-}" <<'PYCOLL'
 import json, sys
-json.dump({"scope": sys.argv[2],
-           "maintainers": [{"addr": sys.argv[4], "agent": "maintainer"}],
-           "members": [{"id": sys.argv[3], "role": "source"}]},
-          open(sys.argv[1], "w"), sort_keys=True)
+spec = {"scope": sys.argv[2],
+        "maintainers": [{"addr": sys.argv[4], "agent": "maintainer"}],
+        "members": [{"id": sys.argv[3], "role": "source"}]}
+if sys.argv[5]:
+    spec["supersedes"] = [sys.argv[5]]   # the lineage lives in the spec (#39)
+json.dump(spec, open(sys.argv[1], "w"), sort_keys=True)
 PYCOLL
 }
 mkcollection "$LAB/c-old-maint.json" "maintainer old" "$CURATED"
 OLD_M=$(pub publish collection "$LAB/c-old-maint.json" "maintainer old")
-mkcollection "$LAB/c-new-maint.json" "maintainer new" "$OTHER"
+mkcollection "$LAB/c-new-maint.json" "maintainer new" "$OTHER" "$OLD_M"
 NEW_M=$(pub publish collection "$LAB/c-new-maint.json" "maintainer new" --link "supersedes:$OLD_M")
 mkcollection "$LAB/c-old-outsider.json" "outsider old" "$CURATED"
 OLD_O=$(pub publish collection "$LAB/c-old-outsider.json" "outsider old")
-mkcollection "$LAB/c-new-outsider.json" "outsider takeover" "$OTHER"
+mkcollection "$LAB/c-new-outsider.json" "outsider takeover" "$OTHER" "$OLD_O"
 NEW_O=$(pub publish collection "$LAB/c-new-outsider.json" "outsider takeover" --link "supersedes:$OLD_O")
 mkcollection "$LAB/c-old-none.json" "none old" "$CURATED"
 OLD_N=$(pub publish collection "$LAB/c-old-none.json" "none old")
-mkcollection "$LAB/c-new-none.json" "none new" "$OTHER"
+mkcollection "$LAB/c-new-none.json" "none new" "$OTHER" "$OLD_N"
 NEW_N=$(pub publish collection "$LAB/c-new-none.json" "none new" --link "supersedes:$OLD_N")
 mkcollection "$LAB/c-old-any.json" "any old" "$CURATED"
 OLD_A=$(pub publish collection "$LAB/c-old-any.json" "any old")
-mkcollection "$LAB/c-new-any.json" "any outsider" "$OTHER"
+mkcollection "$LAB/c-new-any.json" "any outsider" "$OTHER" "$OLD_A"
 NEW_A=$(pub publish collection "$LAB/c-new-any.json" "any outsider" --link "supersedes:$OLD_A")
 mkdir -p "$PUB/registry/ledger"
 python3 - "$PUB/registry/ledger" "$MADDR" "$OADDR"   "$OLD_M" "$NEW_M" "$OLD_O" "$NEW_O" "$OLD_N" "$NEW_N" "$OLD_A" "$NEW_A" <<'PYLEDGERS'

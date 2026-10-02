@@ -295,7 +295,7 @@ check "duplicate-scope advisory does not move the exit code" "$(rc m collection 
 
 # Now build the actual retirement case: a new collection that supersedes $CL, with
 # the same scope text (the live fixture is byte-identical scope across the pair).
-mkcoll "$W/c-super.json" '{"open_questions": ["Is the sample representative?", "successor fixture"]}'
+mkcoll "$W/c-super.json" '{"open_questions": ["Is the sample representative?", "successor fixture"], "supersedes": ["'"$CL"'"]}'
 CLSUP=$(m publish collection "$W/c-super.json" "Successor" --link "supersedes:$CL" 2>/dev/null)
 m reindex >/dev/null 2>&1
 check "successor collection publishes" "$(echo "$CLSUP" | grep -c '^cl-')" "1"
@@ -462,9 +462,9 @@ check "a live collection is not treated as retired" \
 # settling an editorial dispute. Refuse and list them instead.
 mkcoll "$W/c-fork.json" '{"scope": "fork-base fixture"}'
 FORKCL=$(m publish collection "$W/c-fork.json" "Fork base" 2>/dev/null)
-mkcoll "$W/c-forkA.json" '{"scope": "fork-base fixture, branch A"}'
+mkcoll "$W/c-forkA.json" '{"scope": "fork-base fixture, branch A", "supersedes": ["'"$FORKCL"'"]}'
 FORKA=$(m publish collection "$W/c-forkA.json" "Fork A" --link "supersedes:$FORKCL" 2>/dev/null)
-mkcoll "$W/c-forkB.json" '{"scope": "fork-base fixture, branch B"}'
+mkcoll "$W/c-forkB.json" '{"scope": "fork-base fixture, branch B", "supersedes": ["'"$FORKCL"'"]}'
 FORKB=$(m publish collection "$W/c-forkB.json" "Fork B" --link "supersedes:$FORKCL" 2>/dev/null)
 m reindex >/dev/null 2>&1
 check "a forked base is refused" "$(rc m collection add-member "$FORKCL" "$LATE")" "1"
@@ -495,17 +495,29 @@ ORDCL=$(m publish collection "$W/c-order.json" "Order fixture" 2>/dev/null)
 ORDNEW=$(m collection add-member "$ORDCL" "$LATE" --role instance 2>/dev/null)
 m cat "$ORDCL" > "$W/ord-old.json" 2>/dev/null
 m cat "$ORDNEW" > "$W/ord-new.json" 2>/dev/null
-check "every key except members is byte-identical in value" \
+# `supersedes` is the other key add-member writes (#39): the lineage lives in the spec.
+check "every key except members and supersedes is byte-identical in value" \
   "$(python3 -c '
 import json, sys
 a = json.load(open(sys.argv[1])); b = json.load(open(sys.argv[2]))
-print({k: v for k, v in a.items() if k != "members"} == {k: v for k, v in b.items() if k != "members"})' \
+skip = ("members", "supersedes")
+print({k: v for k, v in a.items() if k not in skip} == {k: v for k, v in b.items() if k not in skip})' \
   "$W/ord-old.json" "$W/ord-new.json")" "True"
-check "key order is preserved, not sorted" \
+check "  and supersedes names exactly the version it was built on" \
+  "$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["supersedes"])' "$W/ord-new.json")" "['$ORDCL']"
+check "key order is preserved, not sorted (supersedes appended when new)" \
   "$(python3 -c '
 import json, sys
 a = json.load(open(sys.argv[1])); b = json.load(open(sys.argv[2]))
-print(list(a.keys()) == list(b.keys()))' "$W/ord-old.json" "$W/ord-new.json")" "True"
+print(list(a.keys()) + ["supersedes"] == list(b.keys()))' "$W/ord-old.json" "$W/ord-new.json")" "True"
+ORDNEW2=$(m collection add-member "$ORDNEW" "$WK" --role instance 2>/dev/null)
+m cat "$ORDNEW2" > "$W/ord-new2.json" 2>/dev/null
+check "  and kept in place on the next update, not moved" \
+  "$(python3 -c '
+import json, sys
+a = json.load(open(sys.argv[1])); b = json.load(open(sys.argv[2]))
+print(list(a.keys()) == list(b.keys()) and b["supersedes"] == [sys.argv[3]])' \
+  "$W/ord-new.json" "$W/ord-new2.json" "$ORDNEW")" "True"
 check "  and that order was genuinely unsorted (guard the guard)" \
   "$(python3 -c '
 import json, sys
@@ -530,7 +542,7 @@ head_ "add-member: an unrecognised role warns, because a typo is a silent re-fil
 # Roles are free text and only `method`/`instance` are interpreted, so a misspelling is
 # not an error — it files the member under a bucket the maintainer did not mean. Warn,
 # never refuse: a genuinely new role has to be addable.
-TYPOCL=$(m collection add-member "$ORDNEW" "$WK" --role primry-dataset 2>"$W/am-err.txt")
+TYPOCL=$(m collection add-member "$ORDNEW2" "$WF" --role primry-dataset 2>"$W/am-err.txt")
 check "an unseen role warns" "$(grep -c "role 'primry-dataset' appears nowhere else" "$W/am-err.txt")" "1"
 check "  the warning lists the roles actually in use" \
   "$(grep -c 'roles in use: instance, primary-dataset' "$W/am-err.txt")" "1"
@@ -544,22 +556,29 @@ check "the interpreted roles never warn, even as the first member" \
   "$(grep -c 'appears nowhere else' "$W/am-err.txt")" "0"
 
 head_ "add-member: a change that reproduces an existing version is refused"
-# r1 -> r2 -> r1 reproduces the first version's exact bytes. `publish` would then report
-# "already published … manifest unchanged" and exit 0, while the live head stayed on r2 — a
-# success message over a state the operator did not get, which is the same silent-wrong-state
-# shape the retired-base guard exists for.
+# r1 -> r2 -> r1 used to reproduce the first version's exact bytes, and `publish` reported
+# "already published … manifest unchanged" with exit 0 while the live head stayed on r2. Since
+# #39 each version names its predecessor in its spec, so a flip-back is new content and
+# simply publishes. A reproduction is still possible by redoing a change from a base that
+# already has that exact successor (`--allow-retired-base`), and that must still be refused
+# rather than reported as success.
 mkcoll "$W/c-flip.json" '{"scope": "flip-back fixture", "members": []}'
 FLIP1=$(m publish collection "$W/c-flip.json" "Flip fixture" 2>/dev/null)
 FLIP2=$(m collection add-member "$FLIP1" "$LATE" --role instance 2>/dev/null)
 FLIP3=$(m collection add-member "$FLIP2" "$LATE" --role other-role 2>/dev/null)
-check "flipping the role back is refused rather than reported as success" \
-  "$(rc m collection add-member "$FLIP3" "$LATE" --role instance)" "1"
+check "flipping the role back publishes a new version (it names a different predecessor)" \
+  "$(rc m collection add-member "$FLIP3" "$LATE" --role instance)" "0"
+FLIP4=$(tail -1 "$W/out.txt")
+check "  distinct from the version with the same members" \
+  "$([ -n "$FLIP4" ] && [ "$FLIP4" != "$FLIP2" ] && echo yes)" "yes"
+check "  and it is the live version" \
+  "$(m list --type collection --tips-only 2>/dev/null | grep -cE "$FLIP2|$FLIP3|$FLIP4")" "1"
+check "redoing that change from the retired base is refused rather than reported as success" \
+  "$(rc m collection add-member "$FLIP3" "$LATE" --role instance --allow-retired-base)" "1"
 check "  the refusal names the version it would reproduce" \
-  "$(grep -c "reproduces $FLIP2" "$W/err.txt")" "1"
-check "  and names the version that would stay live" \
-  "$(grep -c "leaving $FLIP3 as the live version" "$W/err.txt")" "1"
-check "  a role change to something genuinely new still works" \
-  "$(rc m collection add-member "$FLIP3" "$LATE" --role third-role)" "0"
+  "$(grep -c "reproduces $FLIP4" "$W/err.txt")" "1"
+check "  and says the publish would change nothing" \
+  "$(grep -c "would change nothing. Add to $FLIP4" "$W/err.txt")" "1"
 
 head_ "the newcomer path works end to end"
 # list collections -> show one -> queue it -> claim. This is the documented front door,

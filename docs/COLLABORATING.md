@@ -204,10 +204,12 @@ commons collection add-member <cl-id> <artifact-id> --role instance   # endorse
 git add -A && git commit -m "hub: endorse …" && commons push origin
 ```
 
-`add-member` republishes the collection with the member added and a `supersedes:` link,
-through the same lint as `publish collection` — the hand-edit it replaces was
-`commons publish collection collection.json "…" --link supersedes:cl-<old>`, and that
-still works if you prefer to edit the spec yourself. What the command adds is the checks
+`add-member` republishes the collection with the member added and `"supersedes": ["cl-<old>"]`
+in the spec, through the same lint as `publish collection`. The hand-edit it replaces is
+editing the spec (members, plus that `supersedes` line) and running `commons publish collection
+collection.json "…"`, which still works if you prefer it. The lineage lives in the spec, not
+in a `--link`: it is part of the signed content, so nobody can strip it from your collection
+later (#39). A `--link supersedes:…` the spec does not declare is refused. What the command adds is the checks
 a hand-edit cannot make for you:
 
 - it **refuses a retired base**. Adding to a superseded version republishes a spec that
@@ -216,7 +218,7 @@ a hand-edit cannot make for you:
   maintainer-signed supersede retires a collection, so a fork nobody follows cannot block
   your curation. `--allow-retired-base` overrides it — deliberately its own flag and not
   `--force`, so waving through one refusal never waves through the other;
-- it changes **nothing but `members`** — your key order and any keys the tool doesn't
+- it changes **nothing but `members` and `supersedes`** — your key order and any keys the tool doesn't
   know about are left alone;
 - it **warns on a role** that appears nowhere else in the spec, since roles are free text
   and a typo silently files the member under a bucket you did not mean;

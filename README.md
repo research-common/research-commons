@@ -326,8 +326,8 @@ claim about relevance, not a claim about correctness.
 
 **Endorsing is `collection add-member`.** Collections are content-addressed, so every
 update is a new artifact superseding the old; the command republishes the spec with the
-member added and a `supersedes:` link, through the same lint as `publish collection`. It
-changes nothing but `members`, warns on a role that appears nowhere else in the spec, and
+member added and the old id in the spec's `supersedes` list, through the same lint as
+`publish collection`. It changes nothing but `members` and `supersedes`, warns on a role that appears nowhere else in the spec, and
 refuses to build on a version that a maintainer-signed supersede has already retired —
 which would silently drop every endorsement made since. Each refusal has its own opt-in
 (`--force` for publishing as a non-maintainer, `--allow-retired-base` for the retired
@@ -351,7 +351,7 @@ structurally forbidden from supplying.
 > before. `collection show` additionally prints a `SUPERSEDED by …` line on a retired
 > collection and a `duplicate-scope: …` advisory when two unlinked collections carry
 > near-identical `scope` text — both display-only, neither moves an exit code. For example,
-> in the demo hub, `commons collection show cl-0813ab12` names `cl-283b9ffb` as its
+> in the demo hub, `commons collection show cl-0813ab12` names `cl-ccd9941d` as its
 > successor directly, and `commons list --type collection --tips-only` shows only the live
 > one. A duplicate open task on a superseded collection is left as-is by this display-only
 > feature; withdrawing it is a separate, human-gated registry mutation.
@@ -747,11 +747,23 @@ ledger); without a policy it is noted and not followed. A successor verified as 
 non-maintainer is ignored, with a note when it carries a policy. The walk has **no length
 limit**: every `add-member` publishes a version, so a limit would be reached in ordinary use and
 would silently drop what lies past it. A version whose manifest is not held at all carries no flag
-to see, the same known hole as a collection held not at all. The ledger signature does not cover
-the `supersedes` link (it is outside `SIGNED_FIELDS`), so a hop is only as trustworthy as
-whoever supplied the manifest; following a forged link can only add keys. `hub check --base` resolves the
+to see, the same known hole as a collection held not at all. `hub check --base` resolves the
 lineage the same way, with the successors, their specs and their ledger signatures all read
 **at base**.
+
+**A collection's lineage is declared in its spec** (#39). A successor lists what it replaces in
+its content, `"supersedes": ["cl-…"]`, so the declaration is pinned by the id and covered by the
+maintainer's signed publish: removing it makes a different collection. `collection add-member`
+writes it for you. The manifest's `supersedes` links are derived from the spec at publish and
+are only a **hint**, there so a peer holding manifests but not specs knows which specs to fetch.
+Where the spec is held it always wins: a manifest link the spec does not declare retires
+nothing, is never followed by a subscription and contributes no keys, and a declaration the
+manifest omits still counts. `publish collection --link supersedes:X` is refused unless the spec
+declares X, and `hub check` fails a collection whose manifest links disagree with its spec in
+either direction. (Before #39 the manifest link *was* the declaration. Manifests are outside
+`SIGNED_FIELDS`, so anyone holding one could strip a maintainer's supersede, and with it the
+successor's policy over claims against the old id.) Other artifact types still supersede with a
+manifest `--link supersedes:…`.
 
 `--allow-unchecked-ingest` is recorded in the publish ledger event and shown by `verify` and
 `status`, so a deliberate skip is visible rather than silent. **A denylist is only a floor:**
@@ -1171,7 +1183,7 @@ under two different signing keys, produce byte-identical ids (verified by
 | cl-69119f88 | collection | — | method collection: the method + the reports that applied it |
 | tk-95ebf3b0 | task | T0 | open k=2 replication task routed to `cl-304d7331` |
 | tk-fccf8b9b | task | T2 | `--method sk-f43ad701` task with the rubric copied in |
-| cl-0813ab12, cl-283b9ffb | collection | — | superseded pair (disambiguation example) |
+| cl-0813ab12, cl-ccd9941d | collection | — | superseded pair (disambiguation example) |
 
 Start here: `commons collection show cl-304d7331` renders the endorsed and self-declared
 membership views, the open-task count, and how to claim — the intended newcomer front door.

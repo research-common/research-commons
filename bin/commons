@@ -1803,6 +1803,30 @@ def lint_collection_spec(spec):
     # caught here rather than silently enforcing nothing. A policy that looks present and
     # protects nothing is worse than an absent one: the maintainer stops worrying.
     bad += lint_ingest_block(spec.get("ingest"))
+    bad += lint_spec_supersedes(spec)
+    return bad
+
+
+def lint_spec_supersedes(spec):
+    """Validate a collection spec's `supersedes` list (#39). Returns a list of problems.
+
+    The list is what makes a supersede count, so a malformed one must be refused here: a
+    typo'd id would otherwise publish as a well-formed collection that silently replaces
+    nothing, and the old version's claimants would never see the new policy.
+    """
+    if SPEC_SUPERSEDES not in spec:
+        return []
+    raw, bad = spec[SPEC_SUPERSEDES], []
+    if not isinstance(raw, list):
+        return ["%s must be a list of collection ids (cl-xxxxxxxx)" % SPEC_SUPERSEDES]
+    for i, x in enumerate(raw):
+        if not isinstance(x, str) or not re.fullmatch(r"%s-[0-9a-f]{8}" % TYPES["collection"], x):
+            bad.append("%s[%d] %r is not a collection id (cl-xxxxxxxx)" % (SPEC_SUPERSEDES, i, x))
+        # An unheld id is fine (lazy replication), same as members: the old version need
+        # not be on this host for its successor to declare it.
+    ids = [x for x in raw if isinstance(x, str)]
+    if len(set(ids)) != len(ids):
+        bad.append("%s lists an id more than once" % SPEC_SUPERSEDES)
     return bad
 
 
@@ -1993,6 +2017,41 @@ def _apply_task_method(a):
     a.file = out
 
 
+def _collection_supersede_link_problems(links, spec_sup):
+    """A collection's `--link supersedes:X` must be declared in its spec (#39).
+
+    The spec's `supersedes` list is the declaration; the manifest link is derived from it.
+    Accepting a link the spec does not carry would publish a hint every reader ignores, and
+    the publisher would believe they had superseded something. Say so before the bytes are
+    pinned, with the fix.
+    """
+    asked = []
+    for spec in links or []:
+        rel, _, dst = spec.partition(":")
+        if rel == "supersedes" and dst:
+            asked.append(dst)
+    missing = [x for x in asked if x not in spec_sup]
+    if not missing:
+        return []
+    return ["--link supersedes:%s is not declared in the spec. A collection's lineage lives in "
+            "its content, so add it there:\n      \"%s\": %s\n    (the manifest link is "
+            "then added for you; issue #39)" % (", supersedes:".join(missing), SPEC_SUPERSEDES,
+                                                json.dumps(list(dict.fromkeys(
+                                                    spec_sup + missing))))]
+
+
+def _derive_supersede_hints(m, spec_sup):
+    """Make a collection manifest's `supersedes` links exactly its spec's declaration.
+
+    Same rule as the ingest-policy flag: derived from the bytes, never from a flag, so the
+    manifest cannot advertise a lineage the content does not declare, or omit one it does.
+    Other links are left alone, in order.
+    """
+    others = [l for l in (m.get("links") or [])
+              if not (isinstance(l, dict) and l.get("rel") == "supersedes")]
+    m["links"] = others + [{"rel": "supersedes", "id": x} for x in spec_sup]
+
+
 def cmd_publish(a):
     ensure_dirs()
     if a.type not in TYPES: sys.exit("error: type must be one of: " + " ".join(TYPES))
@@ -2041,6 +2100,7 @@ def cmd_publish(a):
     # artifact claims membership in may declare field names they refuse to accept.
     ingest_unchecked = run_ingest_policy_gate(a)
     declares_ingest_policy = False
+    spec_sup = None   # a collection's declared lineage; None for every other type
     if a.type in ("task", "collection", "peer-announce"):
         try:
             with open(a.file) as f: spec = json.load(f)
@@ -2051,6 +2111,8 @@ def cmd_publish(a):
         elif a.type == "collection":
             problems = lint_collection_spec(spec)
             declares_ingest_policy = spec_has_ingest_policy(spec)
+            spec_sup = spec_supersedes(spec)
+            problems += _collection_supersede_link_problems(a.link, spec_sup)
         else:
             if not signing_key_path():
                 sys.exit("error: peer-announce must be signed — set COMMONS_SIGNING_KEY")
@@ -2120,6 +2182,8 @@ def cmd_publish(a):
         wm = load_manifest(a.workflow)
         prov["workflow"] = {"id": a.workflow, "sha256": wm["content"]["sha256"]}
     if prov: m["provenance"] = prov
+    if spec_sup is not None:
+        _derive_supersede_hints(m, spec_sup)
     _guard_manifest_collision(aid, m)
     if existed and not a.force:
         old = load_manifest(aid)
@@ -2184,6 +2248,10 @@ def cmd_publish(a):
         if a.description is None: m["description"] = old.get("description", "")
         if a.tag is None: m["tags"] = list(old.get("tags") or [])
         if a.link is None: m["links"] = copy.deepcopy(old.get("links") or [])
+        if spec_sup is not None:
+            # Re-derived after the carry-forward too: a --force republish can change a
+            # collection's other links but never its lineage, which is the spec's (#39).
+            _derive_supersede_hints(m, spec_sup)
         # The id's first publish time; the republish itself is the ledger entry's ts.
         if old.get("created"): m["created"] = old["created"]
         if old.get("license") and not m.get("license"):
@@ -2470,13 +2538,20 @@ def superseders_map():
     (L5502-ish) already does the analogous set-build for announce tips; this is
     the same idea applied to the general browse path, at the same read-only cost
     (one manifest scan) regardless of how many rows call it.
+
+    Collections count by their spec's declared `supersedes` where the spec is held, and by
+    the manifest hint only where it is not (`local_supersedes`, issue #39).
     """
     out = {}
     for m2 in iter_manifests():
-        for link in m2.get("links") or []:
-            if isinstance(link, dict) and link.get("rel") == "supersedes" and link.get("id"):
-                out.setdefault(link["id"], []).append(m2["id"])
+        for dst in local_supersedes(m2):
+            out.setdefault(dst, []).append(m2["id"])
     return {k: sorted(v) for k, v in out.items()}
+
+
+def local_supersedes(m):
+    """Ids m supersedes, read with whatever this root holds (`declared_supersedes`)."""
+    return declared_supersedes(m, held_collection_spec(m))[0]
 
 
 def verified_agent_of(m):
@@ -4208,10 +4283,9 @@ def claim_freshness_warnings(m, st):
     if input_ids:
         superseded_by = {}
         for cand in iter_manifests():
-            for link in cand.get("links") or []:
-                if (isinstance(link, dict) and link.get("rel") == "supersedes"
-                        and link.get("id") in input_ids):
-                    superseded_by.setdefault(link["id"], []).append(cand["id"])
+            for dst in local_supersedes(cand):
+                if dst in input_ids:
+                    superseded_by.setdefault(dst, []).append(cand["id"])
         for iid in sorted(superseded_by):
             warnings.append(
                 "input %s has a newer artifact (%s) — a superseded input may not be "
@@ -5043,6 +5117,75 @@ def spec_has_ingest_policy(spec):
     return bool(isinstance(ing, dict) and (ing.get("forbidden_keys") or []))
 
 
+# A collection's lineage is declared IN ITS SPEC (issue #39), the same way its ingest
+# policy is. Collections are content-addressed, so a `supersedes` list in the spec is
+# pinned by the id and covered by every signed publish of that id: removing it makes a
+# different collection. The manifest's `supersedes` links are only a HINT, derived from
+# the spec at publish, so that a peer holding manifests but not specs (lazy replication)
+# knows which specs to fetch. Before #39 the manifest link WAS the declaration, and a
+# manifest is outside SIGNED_FIELDS, so anyone holding one could strip a maintainer's
+# supersede and with it the successor's policy over claims against the old id.
+#
+# THE SPEC ALWAYS WINS where it is held: a hint the spec does not declare is ignored, and
+# a declaration the manifest omits still counts. Only where the spec is not held does the
+# hint stand in, and every gate that relies on it already fails closed on an unheld spec.
+SPEC_SUPERSEDES = "supersedes"
+
+
+def spec_supersedes(spec):
+    """The collection ids a collection spec declares it supersedes, in order, deduped.
+
+    Shape-tolerant on purpose (lint is where a malformed list is refused): this is read on
+    peers' specs by every lineage query, and one bad spec must not take a gate down.
+    """
+    raw = spec.get(SPEC_SUPERSEDES) if isinstance(spec, dict) else None
+    if not isinstance(raw, list):
+        return []
+    return list(dict.fromkeys(x for x in raw if isinstance(x, str) and x))
+
+
+def manifest_supersedes(m):
+    """Ids a manifest's links say it supersedes. For a collection, a hint only."""
+    links = m.get("links") if isinstance(m, dict) else None
+    return list(dict.fromkeys(
+        l["id"] for l in (links if isinstance(links, list) else [])
+        if isinstance(l, dict) and l.get("rel") == "supersedes"
+        and isinstance(l.get("id"), str) and l["id"]))
+
+
+def declared_supersedes(m, spec=None):
+    """(ids m supersedes, source) for any manifest. The one definition every reader uses.
+
+    source is "spec" for a collection whose spec is passed in (the authority), "hint" for a
+    collection whose spec is not held (the manifest stands in, unverified), and "links"
+    for every other type, whose lineage still lives in manifest links (#39 is about the
+    collections an ingest policy is inherited through).
+    """
+    if isinstance(m, dict) and m.get("type") == "collection":
+        if isinstance(spec, dict):
+            return spec_supersedes(spec), "spec"
+        return manifest_supersedes(m), "hint"
+    return manifest_supersedes(m), "links"
+
+
+def held_collection_spec(m):
+    """A collection manifest's spec from the local store, or None if not held/readable."""
+    if not isinstance(m, dict) or m.get("type") != "collection":
+        return None
+    d = _manifest_digest(m)
+    if not d:
+        return None
+    p = blob_read_path(d)
+    if not os.path.exists(p):
+        return None
+    try:
+        with open(p) as f:
+            spec = json.load(f)
+    except (OSError, ValueError):
+        return None
+    return spec if isinstance(spec, dict) else None
+
+
 def _spec_forbidden_keys(spec):
     ing = spec.get("ingest") if isinstance(spec, dict) else None
     keys = ing.get("forbidden_keys") if isinstance(ing, dict) else None
@@ -5088,22 +5231,54 @@ class _LineageReader:
 
     def __init__(self):
         self._sup = None
+        self._ignored = None
         self._pubs = None
         self._signers = {}
 
+    def spec(self, m):
+        """m's spec as a dict, or None when not held or not readable."""
+        raw = self.blob(_manifest_digest(m))
+        if raw is None:
+            return None
+        try:
+            spec = json.loads(raw)
+        except ValueError:
+            return None
+        return spec if isinstance(spec, dict) else None
+
+    def _index_supersedes(self):
+        if self._sup is not None:
+            return
+        self._sup, self._ignored = {}, {}
+        for m in self._collection_manifests():
+            mid = m.get("id")
+            if not isinstance(mid, str):
+                continue
+            spec = self.spec(m)
+            ids, _src = declared_supersedes(m, spec)
+            for dst in ids:
+                self._sup.setdefault(dst, set()).add(mid)
+            if spec is not None:
+                # A manifest hint its own spec does not declare: ignored (#39), and
+                # remembered so the resolver can say so rather than drop it silently.
+                for dst in manifest_supersedes(m):
+                    if dst not in ids:
+                        self._ignored.setdefault(dst, set()).add(mid)
+
     def superseders(self, cid):
-        """Collections whose manifest links `supersedes:cid`, WHOEVER signed them."""
-        if self._sup is None:
-            self._sup = {}
-            for m in self._collection_manifests():
-                mid, links = m.get("id"), m.get("links")
-                if not isinstance(mid, str) or not isinstance(links, list):
-                    continue
-                for link in links:
-                    if isinstance(link, dict) and link.get("rel") == "supersedes" \
-                            and isinstance(link.get("id"), str) and link["id"]:
-                        self._sup.setdefault(link["id"], set()).add(mid)
+        """Collections that supersede `cid`, WHOEVER signed them.
+
+        Declared by the successor's spec where it is held (`declared_supersedes`); where it
+        is not, the successor's manifest link stands in, and the resolver fails closed on
+        the unheld spec as it always has.
+        """
+        self._index_supersedes()
         return sorted(self._sup.get(cid, ()))
+
+    def ignored_hints(self, cid):
+        """Collections whose manifest links `supersedes:cid` but whose spec does not."""
+        self._index_supersedes()
+        return sorted(self._ignored.get(cid, ()))
 
     def _publishes(self):
         if self._pubs is None:
@@ -5318,13 +5493,15 @@ def resolve_ingest_policy(cid, reader):
       - A successor verified as signed by someone who is NOT a maintainer is ignored, as
         it must be, with a note when it carries a policy.
 
-    Trust in a hop is bounded by the manifest. The ledger signature covers SIGNED_FIELDS
-    (action, agent, id, sha256, ts), and the `supersedes` link is not among them. So a
-    maintainer-signed publish proves the maintainer published those bytes as that id. It
-    does not prove they declared the link. A party holding the manifest could add a
-    `supersedes` link to a maintainer's unrelated collection. Following such a link can
-    only ADD keys, so the union stays fail-safe, but the lineage reported is only as
-    trustworthy as whoever supplied the manifests.
+    A hop is declared by the successor's SPEC (`spec_supersedes`, issue #39). The spec is
+    content-addressed and the publish signature covers its hash, so a maintainer-signed
+    publish proves the maintainer declared the hop, and nobody can remove the declaration
+    without making a different collection. Before #39 the hop lived in the manifest's
+    links, outside SIGNED_FIELDS, and stripping it silently dropped the successor's keys.
+    A manifest link the successor's held spec does not declare is ignored (with a note
+    when the successor carries a policy). Where the successor's spec is not held, its
+    manifest link is the only signal, and the successor itself is then flagged-but-unheld
+    or verified-unheld: both fail closed below.
 
     The known hole, the same one the single-collection gate has: a version whose MANIFEST
     is not held at all carries no flag to see. If `cid` itself is not held, or past an
@@ -5426,6 +5603,12 @@ def resolve_ingest_policy(cid, reader):
                     (s, "supersedes %s and declares an ingest policy, but is not signed by "
                         "a maintainer of %s, so it is ignored (if a maintainer's key "
                         "rotated, the spec's maintainers list needs the new key)" % (n, n)))
+        for s in reader.ignored_hints(n):
+            if reader.has_policy(s):
+                res["notes"].append(
+                    (s, "its manifest links supersedes:%s but its spec does not declare it, "
+                        "so it is not part of %s's lineage (only the spec's %r list "
+                        "counts)" % (n, n, SPEC_SUPERSEDES)))
         if n == cid:
             res["superseded"] = signed
         elif not signed:
@@ -5873,6 +6056,11 @@ def cmd_collection_add_member(a):
         members.append(entry)
         change = "added" + (" as %s" % role if role else "")
     spec["members"] = members
+    # The new version declares what it replaces IN ITS CONTENT (#39): that is what makes the
+    # supersede count, for subscribers and for the ingest policy a claimant on the old id is
+    # held to. Only the immediate predecessor: older versions stay reachable through it.
+    # Assigning keeps the key's position when an earlier version already had one.
+    spec[SPEC_SUPERSEDES] = [a.id]
     # Warn (never refuse) when the member isn't held: lazy replication makes
     # endorsing a not-yet-fetched artifact legal, same as lint_collection_spec.
     if load_manifest(member, missing_ok=True) is None:
@@ -5893,8 +6081,8 @@ def cmd_collection_add_member(a):
     try:
         with os.fdopen(fd, "w") as f:
             # No sort_keys: the blob necessarily changes (a new member is new content and
-            # so a new id), but nothing except `members` should. Python preserves object
-            # order on load, so dumping unsorted keeps the maintainer's own key order and
+            # so a new id), but nothing except `members` and `supersedes` should. Python
+            # preserves object order on load, so dumping unsorted keeps the maintainer's own key order and
             # keeps the diff between two versions of a spec readable. Assigning back to
             # the existing `members` key also leaves it in its original position.
             json.dump(spec, f, indent=2)
@@ -5904,20 +6092,21 @@ def cmd_collection_add_member(a):
         for l in old.get("links") or []:
             if isinstance(l, dict) and l.get("rel") and l.get("id") and l["rel"] != "supersedes":
                 links.append("%s:%s" % (l["rel"], l["id"]))
-        # A role flip-back (r1 -> r2 -> r1) reproduces an earlier version's exact bytes, so
-        # `publish` would report "already published … manifest unchanged" and exit 0 while
-        # the live head stayed on r2 — a success message over a state the operator did not
-        # get. Collections are content-addressed, so the resulting id is knowable here.
+        # A change that reproduces an existing version's exact bytes would make `publish`
+        # report "already published … manifest unchanged" and exit 0 — a success message
+        # over a state the operator did not get. Since #39 each version names its
+        # predecessor in its spec, so a role flip-back (r1 -> r2 -> r1) is new content; what
+        # still reproduces is redoing a change already made from this same base (reachable
+        # with --allow-retired-base). Collections are content-addressed, so the resulting
+        # id is knowable here.
         newid = "%s-%s" % (TYPES["collection"], sha256_file(path)[:8])
         if newid != a.id and load_manifest(newid, missing_ok=True) is not None:
-            sys.exit("error: that change reproduces %s, which already exists here — most "
-                     "likely a role\n"
-                     "       change back to what an earlier version already said. "
-                     "Publishing would be a\n"
-                     "       no-op reported as success, leaving %s as the live version. "
-                     "Add to %s\n"
-                     "       instead, or supersede it deliberately with `publish "
-                     "collection`." % (newid, a.id, a.id))
+            sys.exit("error: that change reproduces %s, which already exists here: the same "
+                     "change was\n"
+                     "       already made from %s. Publishing would be a no-op reported as "
+                     "success and\n"
+                     "       would change nothing. Add to %s (or its current version) "
+                     "instead." % (newid, a.id, newid))
         print("%s: %s %s" % (a.id, member, change), file=sys.stderr)
         cmd_publish(argparse.Namespace(
             type="collection", file=path, title=old.get("title") or "Collection",
@@ -6318,16 +6507,34 @@ def collection_subscription_spec(cid, remote):
 
 
 def superseding_collections(cid):
-    """Accepted collection manifests that explicitly supersede cid."""
+    """Accepted collection manifests that supersede cid: (id, first signed publisher).
+
+    Declared by the successor's spec where held; where it is not, the manifest hint stands
+    in and `supersede_decision` checks the spec before anything is followed (#39).
+    """
     out = []
     for m in iter_manifests():
         if m.get("type") != "collection":
             continue
-        if any(link.get("rel") == "supersedes" and link.get("id") == cid
-               for link in (m.get("links") or []) if isinstance(link, dict)):
+        if cid in local_supersedes(m):
             fp = first_publisher(m["id"])
             out.append((m["id"], fp[0] if fp else None))
     return sorted(out)
+
+
+def _successor_declares(candidate, cid, remote):
+    """None when `candidate`'s spec declares `supersedes: [cid]`, else why it can't be followed.
+
+    The manifest link that found the candidate is a hint (#39); a subscription only moves to
+    a successor whose own content says it replaces the old collection.
+    """
+    spec, error = collection_subscription_spec(candidate, remote)
+    if error:
+        return "successor spec unavailable (%s)" % error
+    if cid not in spec_supersedes(spec):
+        return ("successor spec does not declare %s: [%s] (only a spec-declared "
+                "supersede is followed)" % (SPEC_SUPERSEDES, cid))
+    return None
 
 
 def supersede_decision(row):
@@ -6351,6 +6558,10 @@ def supersede_decision(row):
     if policy == "none":
         return {"collection": candidate, "signer": signer,
                 "follow": False, "reason": "follow_supersedes=none"},                "supersedes available (pending review)"
+    undeclared = _successor_declares(candidate, cid, row.get("remote", "origin"))
+    if undeclared:
+        return {"collection": candidate, "signer": signer,
+                "follow": False, "reason": undeclared},                "supersedes available (pending review)"
     if policy == "any":
         return {"collection": candidate, "signer": signer, "follow": True},                "supersedes available"
     spec, error = collection_subscription_spec(cid, row.get("remote", "origin"))
@@ -6990,7 +7201,7 @@ def hub_check(a):
         if os.path.exists(p) and sha256_file(p) != d:
             problems.append("%s: blob does not match its hash" % m.get("id"))
 
-    print("check: ingest policy flag matches the spec")
+    print("check: collection manifest hints match the spec (ingest policy, supersedes)")
     # The manifest flag is a hint a peer could strip (it is outside SIGNED_FIELDS), and
     # stripping it would make a contributor's publish-time gate fail open for that peer.
     # A hub holds both the manifest and the blob, so this is the one place the two can be
@@ -7024,6 +7235,24 @@ def hub_check(a):
             # fetch a blob for no reason, so say it without failing the gate.
             print("  note: %s has %s but its spec declares no policy (nothing enforced)"
                   % (m.get("id"), INGEST_POLICY_FLAG))
+        # Same comparison for the lineage hint (#39). The spec's `supersedes` list is the
+        # declaration and `publish` derives the manifest links from it, so the two only
+        # disagree when a manifest was edited or produced some other way. Both directions
+        # fail the gate: a stripped hint hides a successor (and its policy) from peers that
+        # hold manifests only, and an extra one shows a supersede nobody declared, retiring
+        # a collection in their browse views and pointing their gates at the wrong specs.
+        hinted, declared_sup = manifest_supersedes(m), spec_supersedes(spec)
+        stripped = [x for x in declared_sup if x not in hinted]
+        extra = [x for x in hinted if x not in declared_sup]
+        if stripped:
+            problems.append("%s: spec declares %s %s but the manifest does not link it "
+                            "(peers holding only manifests would not see the supersede)"
+                            % (m.get("id"), SPEC_SUPERSEDES, ", ".join(stripped)))
+        if extra:
+            problems.append("%s: manifest links supersedes:%s but the spec does not declare "
+                            "it (only the spec's %s list counts; republish with it in the "
+                            "spec, or drop the link)" % (m.get("id"), ", supersedes:".join(extra),
+                                                         SPEC_SUPERSEDES))
     if a.base:
         problems += hub_check_ingest_policies(a.base)
 
@@ -8370,10 +8599,7 @@ def pending_subscription_supersedes(row):
                    if isinstance(x, dict) and x.get("addr")}
     pending = []
     for m in iter_manifests():
-        old_ids = sorted({link.get("id") for link in (m.get("links") or [])
-                          if isinstance(link, dict)
-                          and link.get("rel") == "supersedes"
-                          and link.get("id") in member_ids})
+        old_ids = sorted({x for x in local_supersedes(m) if x in member_ids})
         if not old_ids:
             continue
         fp = first_publisher(m["id"])

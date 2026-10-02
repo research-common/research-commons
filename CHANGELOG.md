@@ -10,11 +10,29 @@ manifest/ledger format version — `commons --version` prints both).
 ## [Unreleased]
 
 ### Changed
+- **Breaking: a collection's lineage is declared in its spec (safety fix, #39).** A successor
+  lists what it replaces in its content (`"supersedes": ["cl-…"]`), which the id pins and the
+  maintainer's signed publish covers. The manifest's `supersedes` links are derived from the
+  spec at publish and are only a hint for peers that hold manifests but not specs. Where the spec
+  is held it wins everywhere a collection lineage is read: ingest-policy inheritance (#11),
+  subscription supersede-following, the retired-base guard in `collection add-member`, the
+  `SUPERSEDED` marker in `collection show`, and `list --tips-only`. `collection add-member` writes
+  the field. `publish collection --link supersedes:X` is refused unless the spec declares X, and a
+  `--force` republish re-derives the hints from the spec, so it can change a collection's other
+  links but not its lineage. `hub check` fails a collection whose manifest hints disagree with its
+  spec. The spec's list is linted (a list of `cl-` ids, no duplicates). **Migration:** a collection
+  supersede declared only by a manifest link no longer counts. Republish the successor with the
+  field in its spec. Other artifact types are unchanged.
 - The `maintainers[i] needs an addr` collection lint now explains the expected path for a
   collection assembled before its owner's key signs it: list the intended owner's address and
   `collection show` marks the list unattributable until that address signs (#24).
 
 ### Fixed
+- **Ingest policy bypass reopened by stripping a manifest `supersedes` link (#39).** Before the
+  spec-declared lineage above, the #11 walk followed the successor's manifest link, which no
+  signature covers. Anyone holding the manifest could delete it (a manifest-only edit, or
+  `publish --force --link …` under any key), every gate passed, and afterwards a `part-of` claim
+  against the old id escaped the successor's policy at the publish gate and at `hub check --base`.
 - **Ingest policy bypassed by a `part-of` claim against a superseded collection (safety fix,
   #11).** The gate read only the collection named, so a policy added by superseding never
   applied to claims against the old id, and `hub check --base` passed them too. A claim now gets
