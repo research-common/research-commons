@@ -924,6 +924,13 @@ So `verify` can tell three different things apart:
 ENV-MISMATCH never lowers a chain grade and never counts as a verification failure;
 `status` shows it as a `(pre-sandbox baseline)` annotation.
 
+The same idea covers a *different workflow* producing bytes that are already published, for
+example a revision that `supersedes` the original and leaves one output unchanged. The
+manifest keeps citing the workflow that first produced it, and `run --publish` appends a
+`reproduced-by-workflow` ledger event naming the new workflow, the same way a cross-environment
+reproduction appends `reproduced-cross-env`. `verify` and `status` show it as
+`also reproduced by <wf>`.
+
 **Converging old artifacts.** The flip to a pinned userland is a migration you converge
 through, not a toggle you flip back:
 
