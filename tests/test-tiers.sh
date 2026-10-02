@@ -489,5 +489,24 @@ check "declared spec env still reaches the run" "$(c cat "$DECL")" "declared-val
 check "host var cannot override declared spec env" \
   "$(COMMONS_TEST_DECLARED=hijacked c cat "$DECL")" "declared-value"
 
+head_ "native publish: say so when the container runtime is unreachable (issue #25)"
+# Daemon-independent: a stub `docker` that always fails stands in for a stopped
+# daemon, and one that always succeeds for a running one. Advisory only.
+STUBDOWN="$W/stub-down"; STUBUP="$W/stub-up"; mkdir -p "$STUBDOWN" "$STUBUP"
+printf '#!/bin/sh\necho "Cannot connect to the Docker daemon" >&2\nexit 1\n' > "$STUBDOWN/docker"
+printf '#!/bin/sh\necho 27.0.0\nexit 0\n' > "$STUBUP/docker"
+chmod +x "$STUBDOWN/docker" "$STUBUP/docker"
+check "runtime down: native --publish still succeeds (exit unchanged)" \
+  "$(PATH="$STUBDOWN:$PATH" rc c run "$WFD" --exec native --publish --publish-type synthesis --title "declared probe")" "0"
+check "runtime down: stderr says sandboxed execution was not available" \
+  "$(grep -c 'runtime is not reachable on this host' "$W/err.txt")" "1"
+check "runtime down: the warning stays off stdout" \
+  "$(grep -c 'not reachable' "$W/out.txt")" "0"
+check "runtime up: no warning on native --publish" \
+  "$(PATH="$STUBUP:$PATH" rc c run "$WFD" --exec native --publish --publish-type synthesis --title "declared probe" >/dev/null; grep -c 'not reachable' "$W/err.txt")" "0"
+mkdir -p "$W/noout"
+check "runtime down, no --publish: no warning (nothing is being published)" \
+  "$(PATH="$STUBDOWN:$PATH" rc c run "$WFD" --exec native -o "$W/noout" >/dev/null; grep -c 'not reachable' "$W/err.txt")" "0"
+
 printf '\n\033[1mtest-tiers: %d passed, %d failed\033[0m\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

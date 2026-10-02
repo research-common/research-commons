@@ -725,6 +725,29 @@ def _normalized_repository(name):
     return name
 
 
+_CONTAINER_REACHABLE_CACHE = {}
+
+
+def container_reachable():
+    """Is the configured container runtime up and answerable? Cached per process
+    (one `run` invocation calls this at most once), and deliberately cheap: `version`
+    rather than `info` or an image pull, since this only gates a warning, not a
+    decision about what to execute (issue #25).
+    """
+    cmd = container_cmd()
+    if cmd in _CONTAINER_REACHABLE_CACHE:
+        return _CONTAINER_REACHABLE_CACHE[cmd]
+    try:
+        # Plain `version`: exits non-zero when the docker daemon is down, and is
+        # valid for podman too (whose Go-template fields differ from docker's).
+        r = subprocess.run([cmd, "version"], capture_output=True, text=True, timeout=10)
+        ok = r.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        ok = False
+    _CONTAINER_REACHABLE_CACHE[cmd] = ok
+    return ok
+
+
 def image_digest(image, require_repository=False):
     """Resolve a tag to its repository digest, or its local ID when permitted.
 
@@ -2820,6 +2843,16 @@ def _spec_verification(spec):
 def cmd_run(a):
     outputs, spec, scratch, wm, execrec = _run_workflow(a.id, exec_mode=getattr(a, "exec", None))
     verification = _spec_verification(spec)
+    if a.publish and execrec["mode"] == "native" and not container_reachable():
+        # Previously this only ever surfaced later, as `status`'s "(pre-sandbox
+        # baseline)" annotation on the published result — by which point the
+        # publisher has already moved on. Say it once, at the point the choice of
+        # environment is actually made, not just after the fact (issue #25).
+        print("warning: publishing a native run — the %s runtime is not reachable "
+              "on this host, so sandboxed execution was not available. This result "
+              "is native-only: a sandboxed re-run (or `rebaseline`) may not reproduce "
+              "it, and `status` will mark it (pre-sandbox baseline)."
+              % container_cmd(), file=sys.stderr)
     if a.publish:
         for name, path in outputs.items():
             digest = store_blob(path)

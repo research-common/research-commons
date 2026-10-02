@@ -63,6 +63,11 @@ manifest/ledger format version — `commons --version` prints both).
   interior was never examined for secrets (#20). Member-aware scanning (enumerating and
   scanning archive contents) is still not built; this only makes the existing gap visible
   at runtime instead of README-only.
+- `commons run --publish` on a native run now warns once on stderr when the container
+  runtime (`docker`, or `COMMONS_CONTAINER_CMD`) is not reachable, saying the result is
+  native-only and may not reproduce under the sandbox. Previously this surfaced only later,
+  as `status`'s `(pre-sandbox baseline)` annotation. Advisory only: no exit-code or manifest
+  change (#25).
 
 ## [0.2.0-alpha.1] - 2026-10-01
 

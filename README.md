@@ -1114,7 +1114,8 @@ subscription, and discovery. Specifically:
   sandboxed in code (`COMMONS_EXEC` is read, reported as ignored, and overridden), as is
   `run-skill` for fetched code. `run`/`verify` on your own workflows still default to
   `COMMONS_EXEC=native`; flipping that default globally is a `rebaseline` migration, not a
-  config change.
+  config change. A native `run --publish` on a host where the container runtime is
+  unreachable says so once on stderr, so a native-only result is flagged at publish time.
 - **Userland drift:** the sandbox image ships Python 3.11 vs the host's 3.12. Pure-stdlib
   workflows are unaffected (verified), but flipping the default is a migration requiring
   a `rebaseline` pass, not a config change.
