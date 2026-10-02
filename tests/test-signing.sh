@@ -385,6 +385,42 @@ check "streamed scan: a 3 MiB single line is scanned in windows and the key is s
 check "streamed scan: windowed long line is reported, never silent" \
   "$(grep -c 'very long line' "$W/out.txt")" "1"
 
+# Archive members are invisible to this lint: the scan reads raw bytes only, so a
+# secret inside a compressed member of a zip/tar/gzip is never examined (issue #20).
+# Before this fix, `scan_file` printed nothing to say so. The cheap fix recognises
+# the container by its leading magic bytes and reports it the same way the over-cap
+# case is reported: a WARN plus the shared PARTIAL verdict, never a silent 'clean'.
+python3 - "$W" <<'PY'
+import gzip, os, sys, tarfile, zipfile
+w = sys.argv[1]
+with gzip.open(os.path.join(w, "arc.tar.gz"), "wb") as f:
+    f.write(b"AKIA" + b"Q" * 16)  # a credential INSIDE the compressed bytes
+with zipfile.ZipFile(os.path.join(w, "arc.zip"), "w") as z:
+    z.writestr("a.txt", "AKIA" + "Q" * 16)
+with tarfile.open(os.path.join(w, "arc.tar"), "w") as t:
+    data = b"hello"
+    import io
+    ti = tarfile.TarInfo(name="a.txt"); ti.size = len(data)
+    t.addfile(ti, io.BytesIO(data))
+PY
+check "archive detection: a .tar.gz is flagged, not silently clean" \
+  "$(python3 "$REPO/lib/publish_lint.py" "$W/arc.tar.gz" | grep -c 'archive members not scanned')" "1"
+check "archive detection: gzip verdict is PARTIAL" \
+  "$(python3 "$REPO/lib/publish_lint.py" "$W/arc.tar.gz" | grep -c '^secret-lint: clean (PARTIAL: 1 file(s) only partly scanned)$')" "1"
+check "archive detection: a credential inside the compressed bytes does not falsely BLOCK" \
+  "$(rc python3 "$REPO/lib/publish_lint.py" "$W/arc.tar.gz")" "0"
+check "archive detection: zip magic is recognised" \
+  "$(python3 "$REPO/lib/publish_lint.py" "$W/arc.zip" | grep -c 'zip archive detected')" "1"
+check "archive detection: uncompressed ustar tar magic is recognised" \
+  "$(python3 "$REPO/lib/publish_lint.py" "$W/arc.tar" | grep -c 'tar archive detected')" "1"
+printf 'hello\n' > "$W/plain_not_archive.txt"
+check "archive detection: an ordinary text file is unaffected" \
+  "$(python3 "$REPO/lib/publish_lint.py" "$W/plain_not_archive.txt" | grep -c 'archive members not scanned')" "0"
+ARCID_RC=$(rc c publish dataset "$W/arc.tar.gz" "archive dataset" --license CC0-1.0 --obtainability open --allow-secrets)
+check "publish an archive: exit code unchanged (advisory only)" "$ARCID_RC" "0"
+check "publish an archive: stderr says members were not scanned" \
+  "$(grep -c 'archive members not scanned' "$W/err.txt")" "1"
+
 # Context exemption for hash-shaped fields (issue #9): a bare 32-byte hex value is
 # indistinguishable between a private key and a tx/block hash by shape alone, so
 # on-chain datasets (every row has a txHash) tripped the eth-key block pattern

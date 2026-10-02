@@ -426,6 +426,40 @@ TRUNCATED_LABEL = "scan incomplete"
 GITHUB_FILE_LIMIT = 100 << 20
 DEFAULT_MAX_BYTES = GITHUB_FILE_LIMIT
 
+# --- archive detection (issue #20) ---
+#
+# The scan reads raw bytes only: a secret sitting inside a compressed member of a
+# zip/tar/gzip is invisible to the block/warn patterns above until that member is
+# decompressed, and the binary path (see `scan_file`) runs its patterns over the
+# *compressed* bytes, which is close to useless — compression destroys the plaintext
+# shapes those patterns look for. Before this fix `scan_file` printed nothing to flag
+# that, so a publisher who had not read the README had no runtime signal at all.
+# Enumerating archive members is the planned real fix (not yet built, per the issue);
+# this is the cheap half: recognise the container by its leading magic bytes — file
+# extensions are an easy thing to get wrong or omit — and say out loud that the
+# interior went unscanned, using the same PARTIAL verdict the over-cap case already
+# uses, so a publisher sees one consistent signal for "this scan covered less than
+# the whole file" rather than two different silences.
+ARCHIVE_LABEL = "archive members not scanned"
+
+
+def _detect_archive_magic(head):
+    """Archive family from the file's leading bytes, or None. `head` must be at least
+    262 bytes for the tar check (ustar magic lives at offset 257); shorter heads just
+    skip that check, which is fine — a tar too short to carry that magic is also too
+    short to carry a member worth flagging."""
+    if head[:2] == b"\x1f\x8b":
+        return "gzip"
+    if head[:4] in (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08"):
+        return "zip"
+    if head[:3] == b"BZh":
+        return "bzip2"
+    if head[:6] == b"\xfd7zXZ\x00":
+        return "xz"
+    if len(head) >= 262 and head[257:262] == b"ustar":
+        return "tar"
+    return None
+
 
 def default_max_bytes():
     """The scan cap. COMMONS_LINT_MAX_BYTES can only LOWER it (tests use it to cross
@@ -451,6 +485,7 @@ def scan_file(path, max_bytes=None):
             # Sniff at least 8 KiB for NUL (the binary test), whatever the chunk size.
             first = f.read(min(max(CHUNK_BYTES, 8192), max_bytes))
             binary = b"\0" in first[:8192]
+            archive_kind = _detect_archive_magic(first)
 
             def chunks():
                 total = len(first)
@@ -494,11 +529,22 @@ def scan_file(path, max_bytes=None):
         if size > GITHUB_FILE_LIMIT:
             note += " (GitHub also rejects files over 100 MiB: partition it)"
         findings.append(("warn", TRUNCATED_LABEL, 0, note))
+    if archive_kind:
+        # The scan above ran over compressed bytes (binary path, if NUL showed up in
+        # the sniff window) or found nothing to do (text path): either way the member
+        # content was never examined. Marked PARTIAL like the over-cap case (see
+        # `is_partial`) so the two "this scan covered less than the whole file" signals
+        # look the same at the call site, instead of one being silent.
+        findings.append(("warn", ARCHIVE_LABEL, 0,
+                         "%s archive detected (%s); its members were NOT scanned for "
+                         "secrets — check them yourself before publishing, or wait for "
+                         "member-aware scanning (planned, not yet built)"
+                         % (archive_kind, os.path.basename(path))))
     return findings
 
 
 def is_partial(findings):
-    return any(f[1] == TRUNCATED_LABEL for f in findings)
+    return any(f[1] in (TRUNCATED_LABEL, ARCHIVE_LABEL) for f in findings)
 
 
 def _scan_binary_text(text, max_findings=40):

@@ -57,6 +57,12 @@ manifest/ledger format version — `commons --version` prints both).
 - `collection show` labelled an instance applying a method revision two or more `supersedes`
   hops behind the collection's method member as `(different method)`. It now walks the chain and
   prints `(superseded)` or `(superseded ×N)`. Display only (#8).
+- `publish_lint.scan_file` now recognises gzip/zip/bzip2/xz/tar magic bytes and emits a
+  `WARN archive members not scanned` finding, folded into the existing PARTIAL verdict
+  (`secret-lint: clean (PARTIAL: ...)`), instead of printing nothing for an archive whose
+  interior was never examined for secrets (#20). Member-aware scanning (enumerating and
+  scanning archive contents) is still not built; this only makes the existing gap visible
+  at runtime instead of README-only.
 
 ## [0.2.0-alpha.1] - 2026-10-01
 

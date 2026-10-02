@@ -643,7 +643,12 @@ binary content (still noise there: delimiters and base64-shaped protobuf fields 
 positive constantly). **What's still missing:** archive-aware scanning — the lint reads raw
 bytes only, so a secret sitting *inside a compressed member* of a zip/tar is invisible
 until that member is decompressed. The planned fix (assessed 2026-08-23, not yet built)
-enumerates zip/tar/gzip members and runs the full text scan on each. Until that lands, **check compressed archive members yourself before publishing them.**
+enumerates zip/tar/gzip members and runs the full text scan on each. Until that lands, **check
+compressed archive members yourself before publishing them** — and the lint now says so at
+runtime (fixed 2026-10-01, issue #20): a recognised gzip/zip/bzip2/xz/tar container prints
+`WARN archive members not scanned` and the verdict is folded into the same PARTIAL marker
+used for an over-cap file (`secret-lint: clean (PARTIAL: ...)`), so a publisher who never read
+this section still gets a signal rather than a bare `clean`.
 
 **The scan streams, up to 100 MiB per file, and says so when it stops short.** 100 MiB is
 GitHub's hard per-file limit ("GitHub blocks files larger than 100 MiB"), and hubs federate
