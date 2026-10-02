@@ -1904,8 +1904,10 @@ def run_publish_lint(path, allow):
     for sev, label, lineno, excerpt in findings:
         print("%-5s line %s: %s [%s]" % (sev.upper(), lineno or "?", label, excerpt),
               file=sys.stderr)
-    if publish_lint.is_partial(findings):
-        # Advisory, never an exit-code change (warn-only epoch).
+    if any(f[1] == publish_lint.TRUNCATED_LABEL for f in findings):
+        # Advisory, never an exit-code change (warn-only epoch). Over-cap only: an
+        # archive is also PARTIAL, but "split it under 100 MiB" is the wrong advice
+        # there; its own WARN line above says what to do.
         print("warning: the secret lint only partly scanned %s. Its tail is unchecked:\n"
               "         scan it yourself before publishing, or split it by its natural range\n"
               "         (block range, date) into files under 100 MiB, which is also GitHub's\n"

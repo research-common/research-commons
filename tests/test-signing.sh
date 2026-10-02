@@ -420,6 +420,8 @@ ARCID_RC=$(rc c publish dataset "$W/arc.tar.gz" "archive dataset" --license CC0-
 check "publish an archive: exit code unchanged (advisory only)" "$ARCID_RC" "0"
 check "publish an archive: stderr says members were not scanned" \
   "$(grep -c 'archive members not scanned' "$W/err.txt")" "1"
+check "publish an archive: no over-cap 'split it' advice (wrong remedy for an archive)" \
+  "$(grep -c 'secret lint only partly scanned' "$W/err.txt")" "0"
 
 # Context exemption for hash-shaped fields (issue #9): a bare 32-byte hex value is
 # indistinguishable between a private key and a tx/block hash by shape alone, so
