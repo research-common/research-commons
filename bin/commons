@@ -2958,6 +2958,24 @@ def cmd_run(a):
                 # exec record — and if the environment differed, that is a *stronger*
                 # claim (reproduced across userlands), so record it in the ledger.
                 prior_exec = recorded_exec(prior)
+                noted = False
+                prior_wf = (prior.get("provenance") or {}).get("workflow") or {}
+                if prior_wf.get("id") and prior_wf["id"] != a.id:
+                    # A different workflow id reproduced the same bytes. Content-addressed
+                    # ids mean this manifest's own provenance.workflow still cites the
+                    # ORIGINAL (possibly now-superseded) workflow — first-writer-wins is
+                    # about the manifest, not about silence on later reproductions. Record
+                    # the successor as a second, equally strong claim: it re-derived these
+                    # exact bytes too. Same posture as reproduced-cross-env: the original
+                    # manifest is never rewritten, the ledger carries the extra evidence.
+                    ledger_append({"agent": a.agent, "action": "reproduced-by-workflow",
+                                   "id": aid, "sha256": digest,
+                                   "tier": verification["tier"],
+                                   "workflow": a.id, "workflow_sha256": wm["content"]["sha256"],
+                                   "recorded_workflow": prior_wf.get("id"), **ev_exec})
+                    print("%s  %s  (already published; also reproduced by %s)"
+                          % (aid, name, a.id))
+                    noted = True
                 if not exec_equivalent(prior_exec, execrec):
                     ledger_append({"agent": a.agent, "action": "reproduced-cross-env",
                                    "id": aid, "sha256": digest,
@@ -2965,7 +2983,8 @@ def cmd_run(a):
                                    "recorded_exec": prior_exec.get("mode"), **ev_exec})
                     print("%s  %s  (already published; also reproduced under %s)"
                           % (aid, name, fmt_exec(execrec)))
-                else:
+                    noted = True
+                if not noted:
                     print("%s  %s  (already published; unchanged)" % (aid, name))
                 continue
             commit_signed_publish(aid, m, {"agent": a.agent, "action": "publish",
@@ -3165,6 +3184,9 @@ def cmd_verify(a):
             # Reproduced despite a different userland: strictly stronger evidence.
             print("  note: recorded environment was %s — result is environment-independent"
                   % fmt_exec(rec_exec))
+        other_wfs = [w for w in reproducing_workflows_for(a.id) if w != wf["id"]]
+        if other_wfs:
+            print("  also reproduced by: %s" % ", ".join(other_wfs))
         # A PASS over data nobody else can obtain is a true statement that reads as a
         # stronger one. Say the quiet part: it reproduced HERE, and no independent party
         # can run this check. Advisory only — the exit code stays 0, because the
@@ -4999,6 +5021,12 @@ def cmd_status(a):
         # simply run with --exec native afterwards.
         if not meth and t in ("T0", "T1") and recorded_exec(m).get("mode") == "native":
             extra = (extra + "  " if extra else "") + "(pre-sandbox baseline)"
+        if not meth and t in ("T0", "T1"):
+            other_wfs = [w for w in reproducing_workflows_for(aid)
+                         if w != ((m.get("provenance") or {}).get("workflow") or {}).get("id")]
+            if other_wfs:
+                extra = (extra + "  " if extra else "") + \
+                        "(also reproduced by %s)" % ", ".join(other_wfs)
         print("%s%-14s %-10s %-4s %-11s %s %s"
               % (indent, aid, rel, tcol, tname, m.get("title", ""), extra))
     if truncated:
@@ -5758,6 +5786,24 @@ def forbidden_key_findings(path, keys):
     finally:
         sys.path.pop(0)
     return publish_lint.forbidden_key_findings(path, keys)
+
+
+def reproducing_workflows_for(aid):
+    """Workflows (other than the recorded one) whose run produced the SAME bytes.
+
+    Reads `reproduced-by-workflow` ledger events (appended by `run --publish` when
+    a different workflow id reproduces an already-published artifact byte for byte,
+    e.g. a successor that supersedes the one that first produced it). Advisory only:
+    the manifest's own provenance.workflow is never rewritten (first-writer-wins), so
+    this is the only place a later reproduction is visible.
+    """
+    out = []
+    for e, _p, _i, _l in ledger_lines():
+        if e.get("id") == aid and e.get("action") == "reproduced-by-workflow":
+            wf = e.get("workflow")
+            if wf and wf not in out:
+                out.append(wf)
+    return out
 
 
 def ingest_unchecked_for(aid):

@@ -9,6 +9,12 @@ manifest/ledger format version — `commons --version` prints both).
 
 ## [Unreleased]
 
+### Added
+- `run --publish` records a `reproduced-by-workflow` ledger event when a different workflow
+  (for example a superseding revision) produces bytes that are already published. The
+  manifest's `provenance.workflow` is unchanged (first writer wins); `verify` prints
+  `also reproduced by: <wf>` and `status` annotates the node (#22).
+
 ### Changed
 - **Breaking: a collection's lineage is declared in its spec (safety fix, #39).** A successor
   lists what it replaces in its content (`"supersedes": ["cl-…"]`), which the id pins and the
