@@ -20,9 +20,17 @@
 #   8. independent local and incoming annotations union on an add/add manifest,
 #      but an incoming unbacked link is still refused; an unreadable task spec
 #      never grants a foreign accept authority
-#   9. a foreign publish-only event and a rewritten incoming ledger are refused
-#  10. a copied accept with a changed unsigned result, and a republish-only
-#      authority-laundering sequence, cannot authorise manifest edits
+#   8b. a collection maintainer named by the spec may republish it, nobody else
+#   9. a foreign publish-only event grants no authority (refused where it would be
+#      the only signed publish), and a rewritten incoming ledger is refused
+#  10. a copied accept or submit with a changed unsigned result, and a republish-only
+#      authority-laundering sequence, cannot authorise manifest edits; links bind to
+#      the backing event's signed fields, and an already-held event still backs one;
+#      replay detection keys on changed bytes, and ledger folds prefer the signer's own
+#      log. KNOWN GAP, pinned: which result an accept names is unsigned (#43)
+#  10b. the publisher may restate criteria through its own attestation, nobody else;
+#      same-second events by one signer stay distinct; pull from an unrelated history
+#      still runs the replay check; a no-op pull is quick; hub check never tracebacks
 #  11. KNOWN GAP, pinned so it is not mistaken for coverage: an edit committed after a
 #      genuine republish in the same range rides on it (closed by signing manifests,
 #      the follow-up designed with #10)
@@ -66,6 +74,7 @@ if [ -z "$ADDR_L" ]; then
 fi
 # Not C(): the contributor clone does not exist yet.
 ADDR_C=$( (cd "$HL" && COMMONS_ROOT="$HL" COMMONS_SIGNING_KEY="$KC" "$COMMONS" peer whoami) 2>/dev/null | head -1)
+ADDR_Cl=$(echo "$ADDR_C" | tr 'A-Z' 'a-z')
 L peer add "$ADDR_L" --agent-id lead --trust full >/dev/null 2>&1
 L peer add "$ADDR_C" --agent-id contrib --trust full >/dev/null 2>&1
 cp "$REPO/registry/exec-policy.example.json" "$HL/registry/exec-policy.json"
@@ -145,14 +154,34 @@ for path in (pathlib.Path(root) / "registry/ledger").glob("*.jsonl"):
 raise SystemExit("original signed accept not found")
 PY
 }
-append_foreign_publish() {  # a fresh signed event, with no manifest change
-  COMMONS_ROOT="$HC" COMMONS_SIGNING_KEY="$KC" python3 - "$COMMONS" "$DS" "$HC" <<'PY'
+replay_altered() {  # replay_altered <ledger-addr> <action> <id> <new-result>
+  # Copy a genuine signed lifecycle event, change its unsigned `result`, rechain.
+  COMMONS_ROOT="$HC" python3 - "$COMMONS" "$HC" "$@" <<'PY'
+import hashlib, json, pathlib, runpy, sys
+commons, root, addr, action, aid, result = sys.argv[1:]
+path = pathlib.Path(root) / "registry/ledger" / (addr.lower() + ".jsonl")
+lines = path.read_text().splitlines()
+old = [e for e in map(json.loads, lines)
+       if e.get("action") == action and e.get("id") == aid]
+if not old:
+    raise SystemExit("original signed %s not found" % action)
+event = dict(old[-1], result=result)
+event["prev"] = hashlib.sha256(lines[-1].encode()).hexdigest()
+if not runpy.run_path(commons)["verify_entry"](event, event["sig"], event["addr"])[0]:
+    raise SystemExit("altered copy no longer verifies")
+with path.open("a") as f:
+    f.write(json.dumps(event, sort_keys=True) + "\n")
+PY
+}
+append_foreign_publish() {  # append_foreign_publish <id>: a fresh signed event, no manifest change
+  COMMONS_ROOT="$HC" COMMONS_SIGNING_KEY="$KC" python3 - "$COMMONS" "$1" "$HC" <<'PY'
 import json, pathlib, runpy, sys
 commons, aid, root = sys.argv[1:]
 m = json.loads((pathlib.Path(root) / "registry/artifacts" / (aid + ".json")).read_text())
 runpy.run_path(commons)["ledger_append"](
     {"agent": "contrib", "action": "publish", "id": aid,
-     "sha256": m["content"]["sha256"], "tier": m["verification"]["tier"]})
+     "sha256": m["content"]["sha256"],
+     "tier": (m.get("verification") or {}).get("tier") or "method"})
 PY
 }
 append_rebaseline() {  # append_rebaseline <key> <agent> <id> <with|without digest>
@@ -329,6 +358,45 @@ check "pull accepts the identical republish from another branch" "$(lpull repub-
 check "  and keeps the authorised title" "$(field "$HL" "$DS" 'm["title"]')" "readings, corrected title"
 lreset "$BASE"
 
+head_ "2b. a collection maintainer named by the spec may republish; others may not"
+# The lead publishes a collection whose spec names the contributor as a co-maintainer.
+python3 - "$W/coll.json" "$DS" "$ADDR_L" "$ADDR_C" <<'PY'
+import json, sys
+out, ds, lead, contrib = sys.argv[1:5]
+json.dump({"scope": "manifest gate maintainer authority",
+           "maintainers": [{"agent": "lead", "addr": lead},
+                           {"agent": "contrib", "addr": contrib}],
+           "members": [{"id": ds, "role": "primary-dataset"}],
+           "task_criteria": "none"}, open(out, "w"), indent=2, sort_keys=True)
+PY
+CO=$(L publish collection "$W/coll.json" "gate collection" 2>/dev/null | tail -1)
+check "collection fixture published" "$(echo "$CO" | grep -cE '^cl-[0-9a-f]{8}$')" "1"
+( cd "$HL" && git add -A && git commit -qm "collection" && git push -q origin HEAD:main )
+git -C "$HC" fetch -q origin
+branch maintainer-edit
+check "the co-maintainer republishes the collection with a new title" \
+  "$(rc C publish collection "$W/coll.json" "gate collection (co-maintainer)" --force)" "0"
+cpush maintainer-edit
+check "hub check --base accepts a named maintainer's republish" "$(hcheck)" "0"
+check "pull accepts it" "$(lpull maintainer-edit --dry-run)" "0"
+python3 - "$W/coll.json" "$W/coll-lead-only.json" "$ADDR_L" <<'PY'
+import json, sys
+spec = json.load(open(sys.argv[1])); spec["maintainers"] = [{"agent": "lead", "addr": sys.argv[3]}]
+json.dump(spec, open(sys.argv[2], "w"), indent=2, sort_keys=True)
+PY
+CO2=$(L publish collection "$W/coll-lead-only.json" "lead-only collection" 2>/dev/null | tail -1)
+( cd "$HL" && git add -A && git commit -qm "lead-only collection" && git push -q origin HEAD:main )
+git -C "$HC" fetch -q origin
+branch non-maintainer-edit
+check "a key the spec does not name republishes the lead-only collection" \
+  "$(rc C publish collection "$W/coll-lead-only.json" "hijacked" --force)" "0"
+cpush non-maintainer-edit
+check "hub check --base refuses it" "$(hcheck)" "1"
+check "pull refuses it" "$(lpull non-maintainer-edit --dry-run)" "1"
+check "  for lack of authority" "$(both | grep -c "$ADDR_Cl (no authority over $CO2)")" "1"
+( cd "$HL" && git push -q -f origin "$BASE:main" ) && git -C "$HC" fetch -q origin
+lreset "$BASE"
+
 # ---------------------------------------------------------------- 3. unauthorised republish
 head_ "3. publish --force by a key with no authority over the artifact is refused"
 branch foreign
@@ -341,20 +409,59 @@ check "  saying the republish does not authorise it" \
 check "hub check --base refuses it" "$(hcheck)" "1"
 
 # ---------------------------------------------------------------- 3a. publish-only authority
-head_ "3a. a foreign publish-only event cannot claim an already-held artifact"
+head_ "3a. a foreign publish-only event never makes its signer an owner"
+# DS has a verified signed publisher (the lead). A second key's `publish` of it (a
+# backdated forgery, or an honest concurrent publish of the same bytes) is ingested and
+# reported, never refused: its log is append-only, so refusing would wedge federation
+# with that peer for good, and priority between the two is the anchors' call (see the
+# two-root drill, case d). It grants no authority; with two signed publishers no key
+# may rewrite the manifest (fail closed until #43's signed publisher views).
 branch foreign-publish-only
 check "contributor appends a fresh signed publish for the lead's dataset" \
-  "$(rc append_foreign_publish)" "0"
+  "$(rc append_foreign_publish "$DS")" "0"
 cpush foreign-publish-only
 check "fixture leaves the manifest unchanged" \
   "$(git -C "$HC" diff --name-only origin/main HEAD -- "registry/artifacts/$DS.json" | wc -l | tr -d ' ')" "0"
-check "hub check --base refuses the foreign publish-only event" "$(hcheck)" "1"
-check "  hub check names the authority failure" \
-  "$(grep -c "publish by $(echo "$ADDR_C" | tr 'A-Z' 'a-z') does not authorise already-held $DS" "$W/out.txt")" "1"
-check "pull refuses the foreign publish-only event" \
-  "$(lpull foreign-publish-only --dry-run)" "1"
-check "  pull names the authority failure" \
-  "$(both | grep -c "publish does not authorise already-held artifact(s): $DS by $(echo "$ADDR_C" | tr 'A-Z' 'a-z')")" "1"
+check "hub check --base passes the publish-only event" "$(hcheck)" "0"
+check "  and reports that it grants no authority" \
+  "$(grep -c "publish of already-held $DS by $ADDR_Cl grants no authority" "$W/out.txt")" "1"
+check "pull ingests it" "$(lpull foreign-publish-only)" "0"
+check "  and reports that it grants no authority" \
+  "$(both | grep -c "publish of already-held $DS by $ADDR_Cl grants no authority")" "1"
+( cd "$HL" && git push -q origin HEAD:main ) && git -C "$HC" fetch -q origin
+branch foreign-publish-edit
+check "contributor then republishes it with a new title" \
+  "$(rc C publish dataset "$W/r.csv" "contributor title" --force)" "0"
+cpush foreign-publish-edit
+check "hub check --base refuses the edit" "$(hcheck)" "1"
+check "pull refuses the edit" "$(lpull foreign-publish-edit --dry-run)" "1"
+check "  the contributor has no authority over it" \
+  "$(both | grep -c "$ADDR_Cl (no authority over $DS)")" "1"
+check "  and the lead keeps its title" "$(field "$HL" "$DS" 'm["title"]')" "readings"
+( cd "$HL" && git push -q -f origin "$BASE:main" ) && git -C "$HC" fetch -q origin
+lreset "$BASE"
+
+head_ "3a1. a foreign publish of an artifact with no signed publisher is refused"
+# Here landing the event WOULD mint authority: it would be the only verified signed
+# publish, so its signer would become the owner.
+printf 'legacy\n' > "$W/legacy.csv"
+UL=$( (cd "$HL" && COMMONS_ROOT="$HL" COMMONS_AGENT=lead COMMONS_SIGNING_KEY= "$COMMONS" \
+        publish dataset "$W/legacy.csv" "legacy unsigned" --license CC0-1.0 \
+        --obtainability open) 2>/dev/null | tail -1)
+check "an unsigned (legacy) publish fixture" "$(echo "$UL" | grep -cE '^ds-[0-9a-f]{8}$')" "1"
+( cd "$HL" && git add -A && git commit -qm "legacy unsigned artifact" && git push -q origin HEAD:main )
+git -C "$HC" fetch -q origin
+branch foreign-claim
+check "contributor appends a signed publish for it" "$(rc append_foreign_publish "$UL")" "0"
+cpush foreign-claim
+check "hub check --base refuses it" "$(hcheck)" "1"
+check "  naming the authority grab" \
+  "$(grep -c "publish by $ADDR_Cl does not authorise already-held $UL (it has no signed publisher" "$W/out.txt")" "1"
+check "pull refuses it" "$(lpull foreign-claim --dry-run)" "1"
+check "  naming the authority grab" \
+  "$(both | grep -c "already-held artifact(s): $UL by $ADDR_Cl (it has no signed publisher")" "1"
+( cd "$HL" && git push -q -f origin "$BASE:main" ) && git -C "$HC" fetch -q origin
+lreset "$BASE"
 
 # ---------------------------------------------------------------- 3a2. republish-only authority laundering
 head_ "3a2. a republish-only push does not grant its signer authority"
@@ -526,6 +633,108 @@ check "  lead retains only the genuine accepted result" \
   "$(field "$HL" "$TK" 'sorted(l["id"] for l in m["links"] if l["rel"] == "accepted")')" \
   "['$DS']"
 
+# ---------------------------------------------------------------- 4a2. altered submit copy
+head_ "4a2. changing an unsigned result on a copied submit cannot add a fulfills link"
+branch altered-submit
+check "copy of the contributor's submit, result changed, still verifies" \
+  "$(rc replay_altered "$ADDR_C" submit "$TK" "$T3")" "0"
+edit "$HC" "$T3" 'm.setdefault("links", []).append({"rel": "fulfills", "id": "'"$TK"'"})'
+cpush altered-submit
+check "hub check --base refuses the altered submit" "$(hcheck)" "1"
+check "  as a replayed signed event" "$(grep -c "replayed signed ledger event: submit $TK" "$W/out.txt")" "1"
+check "pull refuses it" "$(lpull altered-submit)" "1"
+check "  as a replayed signed event" "$(both | grep -c "replayed signed ledger event(s): submit $TK")" "1"
+check "  and the result carries no fulfills link" "$(field "$HL" "$T3" 'm.get("links", [])')" "[]"
+lreset "$BASE2"
+
+# ---------------------------------------------------------------- 4a3. links bind to signed fields
+head_ "4a3. a relayed submit cannot back a link on another result; held events still back links"
+branch relayed-submit
+check "contributor submits DS for the task on an unmerged branch" "$(rc C submit "$TK2" "$DS" --force)" "0"
+python3 - "$HC/registry/ledger/$ADDR_Cl.jsonl" "$T3" <<'PY'
+import json, sys
+path, other = sys.argv[1:]
+lines = open(path).read().splitlines()
+e = json.loads(lines[-1]); assert e["action"] == "submit"
+e["result"] = other          # unsigned; the signature still verifies
+lines[-1] = json.dumps(e, sort_keys=True)
+open(path, "w").write("\n".join(lines) + "\n")
+PY
+( cd "$HC" && git checkout -q origin/main -- "registry/artifacts/$DS.json" )
+edit "$HC" "$T3" 'm.setdefault("links", []).append({"rel": "fulfills", "id": "'"$TK2"'"})'
+cpush relayed-submit
+check "hub check --base refuses a fulfills link the submit's signed hash doesn't cover" "$(hcheck)" "1"
+check "pull refuses it" "$(lpull relayed-submit --dry-run)" "1"
+check "  naming the unbacked link" "$(both | grep -c "link fulfills:$TK2 added with no signed ledger event")" "1"
+
+branch held-1
+check "contributor submits DS for the second task" "$(rc C submit "$TK2" "$DS" --force)" "0"
+( cd "$HC" && git checkout -q origin/main -- "registry/artifacts/$DS.json" )
+cpush held-1
+check "lead pulls the submit without its link" "$(lpull held-1)" "0"
+( cd "$HL" && git push -q origin HEAD:main ) && git -C "$HC" fetch -q origin
+branch held-2
+edit "$HC" "$DS" 'm["links"].append({"rel": "fulfills", "id": "'"$TK2"'"})'
+cpush held-2
+check "a link backed by an already-held submit passes hub check --base" "$(hcheck)" "0"
+check "  and pull" "$(lpull held-2)" "0"
+check "  and lands" "$(field "$HL" "$DS" 'sorted(l["id"] for l in m["links"] if l["rel"] == "fulfills")')" \
+  "$(python3 -c 'import sys;print(sorted(sys.argv[1:]))' "$TK" "$TK2")"
+( cd "$HL" && git push -q -f origin "$BASE2:main" ) && git -C "$HC" fetch -q origin
+lreset "$BASE2"
+
+head_ "4a4. replay detection keys on changed bytes, not on duplicates"
+check "a byte-identical duplicate is not a replay; a re-chained copy is" \
+  "$( cd "$HL" && COMMONS_ROOT="$HL" python3 - "$COMMONS" <<'PY'
+import json, runpy, sys
+ns = runpy.run_path(sys.argv[1])
+lines = ns["_ledger_raw_lines_at"]("HEAD")
+line = next(l for l in lines if json.loads(l).get("action") == "accept")
+moved = json.dumps(dict(json.loads(line), prev="0" * 64), sort_keys=True)
+r = ns["replayed_ledger_events"]
+print(r([], [line, line]) == [] and r([line], [line, line]) == []
+      and len(r([], [line, moved])) == 1 and len(r([line], [line, moved])) == 1)
+PY
+)" "True"
+
+check "the fold keeps the copy in the signer's own log, not a relayed one" \
+  "$( T="$LAB/fold" && mkdir -p "$T" && cp -r "$HL/." "$T/" && cd "$T" && COMMONS_ROOT="$T" python3 - "$COMMONS" "$TK" "$T3" <<'PY'
+import json, pathlib, runpy, sys
+commons, task, other = sys.argv[1:]
+led = pathlib.Path("registry/ledger")
+own = next(p for p in led.glob("*.jsonl")
+           if any(json.loads(l).get("action") == "accept" for l in p.read_text().splitlines()))
+e = [json.loads(l) for l in own.read_text().splitlines() if json.loads(l).get("action") == "accept"][-1]
+# a foreign log whose name sorts before every real address
+(led / "0x0000000000000000000000000000000000000000.jsonl").write_text(
+    json.dumps(dict(e, result=other), sort_keys=True) + "\n")
+ns = runpy.run_path(commons)
+rows = [r for r, _p in ns["read_ledger_entries"]() if r.get("action") == "accept" and r.get("id") == task]
+print(len(rows) == 1 and rows[0].get("result") == e["result"])
+PY
+)" "True"
+
+head_ "4a5. KNOWN GAP (pinned): which result an accept names is unsigned"
+# An accept signs the task id and task hash, not `result`. A relayed copy of an
+# unmerged genuine accept, with result changed, backs `accepted:<other>` on the SAME
+# task. (Once the genuine accept is held, a changed copy is a replay: 4a.) Closed by
+# the signed-statement follow-up (#43).
+branch relayed-accept
+check "the lead accepts DS for the second task on an unmerged branch" \
+  "$(rc LC accept "$TK2" "$DS" --force)" "0"
+python3 - "$HC/registry/ledger/$(echo "$ADDR_L" | tr 'A-Z' 'a-z').jsonl" "$T3" <<'PY'
+import json, sys
+path, other = sys.argv[1:]
+lines = open(path).read().splitlines()
+e = json.loads(lines[-1]); assert e["action"] == "accept"
+lines[-1] = json.dumps(dict(e, result=other), sort_keys=True)
+open(path, "w").write("\n".join(lines) + "\n")
+PY
+edit "$HC" "$TK2" 'm["links"] = [{"rel": "accepted", "id": "'"$T3"'"}]'
+cpush relayed-accept
+check "accepted today by hub check --base" "$(hcheck)" "0"
+check "  and by pull" "$(lpull relayed-accept --dry-run)" "0"
+
 # ---------------------------------------------------------------- 4b. explicit trust denial
 head_ "4b. a trust=none attester cannot change a held claim"
 check "lead explicitly denies the contributor's trust" \
@@ -541,6 +750,44 @@ check "  identifies the unsupported edit" \
   "$(both | grep -c 'verification.attested_by changed without a valid attestation')" "1"
 check "lead restores full trust for remaining cases" \
   "$(rc L peer add "$ADDR_C" --agent-id contrib --trust full --force)" "0"
+
+head_ "4b2. criteria: the publisher may restate them through an attestation; nobody else"
+branch owner-criteria
+check "the lead re-attests its own T3 dataset with new criteria" \
+  "$(rc LC attest "$T3" --criteria "GET /x, verified mirror" --observed 2026-09-02T00:00:00Z --force)" "0"
+cpush owner-criteria
+check "hub check --base passes the owner's restated criteria" "$(hcheck)" "0"
+check "pull accepts them" "$(lpull owner-criteria --dry-run)" "0"
+branch contrib-criteria
+check "the contributor attests with new criteria" \
+  "$(rc C attest "$T3" --criteria "contributor's criteria" --observed 2026-09-02T00:00:00Z --force)" "0"
+cpush contrib-criteria
+check "hub check --base refuses a non-owner's criteria" "$(hcheck)" "1"
+check "pull refuses them" "$(lpull contrib-criteria --dry-run)" "1"
+check "  naming the criteria change" "$(both | grep -c 'verification.criteria changed')" "1"
+
+head_ "4b3. same-second events by one signer stay distinct"
+check "two accepts of one task in the same second keep distinct signed timestamps" \
+  "$( T="$LAB/same-second" && mkdir -p "$T" && cp -r "$HL/." "$T/" && cd "$T" && \
+      COMMONS_ROOT="$T" COMMONS_SIGNING_KEY="$KL" python3 - "$COMMONS" "$TK" "$DS" "$T3" <<'PY'
+import json, runpy, sys, time
+commons, task, r1, r2 = sys.argv[1:]
+ns = runpy.run_path(commons)
+digest = ns["load_manifest"](task)["content"]["sha256"]
+before = {e.get("sig") for e, _p in ns["read_ledger_entries"]()}
+while time.time() % 1 > 0.2:   # start early in a second so both calls share it
+    time.sleep(0.02)
+for r in (r1, r2):
+    ns["ledger_append"]({"agent": "lead", "action": "accept", "id": task, "task": task,
+                         "sha256": digest, "result": r})
+rows = [e for e, _p in ns["read_ledger_entries"]()
+        if e.get("action") == "accept" and e.get("sig") not in before]
+lines = ns["_ledger_raw_lines_local"]()
+print(len(rows) == 2 and rows[0]["ts"] != rows[1]["ts"]
+      and {r["result"] for r in rows} == {r1, r2}
+      and ns["replayed_ledger_events"]([], lines) == [])
+PY
+)" "True"
 
 # ---------------------------------------------------------------- 5. unbacked annotations
 head_ "5. annotations with nothing behind them are refused"
@@ -627,6 +874,54 @@ done
 lreset "$BASE2"
 
 # ---------------------------------------------------------------- 8. known gap
+head_ "9. unrelated histories: the replay and publish checks still run"
+# A peer bootstrapped with `git init` shares no merge base with us. What we hold stands
+# in for the base: an altered copy of an accept we already hold is still a replay.
+U="$LAB/unrelated"
+git clone -q "$BARE" "$U" && ( cd "$U" && git checkout -q main && git reset -q --hard "$BASE2" )
+rm -rf "$U/.git" && git -C "$U" init -q -b main
+python3 - "$U" "$TK" "$T3" <<'PY'
+import hashlib, json, pathlib, sys
+root, task, other = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+led = root / "registry/ledger"
+for p in sorted(led.glob("*.jsonl")):
+    lines = p.read_text().splitlines()
+    hit = [json.loads(l) for l in lines if json.loads(l).get("action") == "accept"
+           and json.loads(l).get("id") == task]
+    if hit:
+        e = dict(hit[-1], result=other, prev=hashlib.sha256(lines[-1].encode()).hexdigest())
+        with p.open("a") as f:
+            f.write(json.dumps(e, sort_keys=True) + "\n")
+        break
+m = json.loads((root / "registry/artifacts" / (task + ".json")).read_text())
+m["links"].append({"rel": "accepted", "id": other})
+(root / "registry/artifacts" / (task + ".json")).write_text(json.dumps(m, indent=2, sort_keys=True))
+PY
+( cd "$U" && git add -A && git commit -qm "unrelated bootstrap" )
+( cd "$HL" && git reset -q --hard "$BASE2" && git remote add unrelated "$U" )
+check "pull from an unrelated history refuses the altered accept" \
+  "$(rc L pull unrelated --branch main)" "1"
+check "  as a replayed signed event" "$(both | grep -c "replayed signed ledger event(s): accept $TK")" "1"
+check "  and the task keeps only the genuine acceptance" \
+  "$(field "$HL" "$TK" '[l["id"] for l in m["links"] if l["rel"] == "accepted"]')" "['$DS']"
+check "a pull of a ref we already contain is a no-op" "$(rc L pull origin --branch main)" "0"
+check "  that says so" "$(both | grep -c 'nothing new to merge')" "1"
+( cd "$HL" && git remote remove unrelated )
+lreset "$BASE"
+
+head_ "10. hub check survives malformed edits (reports, never a traceback)"
+branch no-content
+edit "$HC" "$T3" 'del m["content"]'
+cpush no-content
+check "hub check --base fails a manifest edit that drops content" "$(hcheck)" "1"
+check "  without a traceback" "$(grep -c Traceback "$W/out.txt")" "0"
+branch drop-ledger
+( cd "$HC" && git rm -q "registry/ledger/$(echo "$ADDR_L" | tr 'A-Z' 'a-z').jsonl" )
+cpush drop-ledger
+check "hub check --base fails a deleted ledger" "$(hcheck)" "1"
+check "  naming it" "$(grep -c 'registry content deleted: registry/ledger/' "$W/out.txt")" "1"
+check "  without a traceback" "$(grep -c Traceback "$W/out.txt")" "0"
+
 head_ "8. KNOWN GAP (pinned): an edit after a genuine republish rides on it"
 branch ride
 LC publish dataset "$W/r.csv" "readings v2" --force >/dev/null 2>&1

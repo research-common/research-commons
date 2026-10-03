@@ -509,17 +509,36 @@ ledger entry. Rejects go to `registry/quarantine.log` and the fetch is left unme
 by any signature (a publish signs the content hash), so a peer can change an artifact's
 tier, criteria, licence, obtainability, title or links without changing its id. `pull` and
 `hub check --base` compare every modified manifest with the merge base and accept the edit
-only if the incoming range carries a verified signed `publish`/`republish` of that id (what
-`publish --force` emits) by a key with authority over it: a verified publisher of the
-artifact at the base or, for a collection, a maintainer its spec names. `pull` also
-requires that key to be a registered peer whose trust covers the type. Without a republish,
-the only edits allowed are annotations a signed ledger event backs: a `fulfills` link (a
-`submit` of this result), an `accepted` link (the beneficiary's `accept`), an attestation
-(a valid `attested_by` plus its `attest` event), and a rebaseline exec record. These may only
-add, never remove. Anything else is rejected and quarantined. **Known gap:** a republish
-signs the content hash, not the manifest bytes, so an edit committed after a genuine
-republish in the same range is accepted with it. Closing that needs the manifest itself
-under the signature (planned together with #10).
+only if the incoming range carries a new verified signed `publish`/`republish` of that id
+(what `publish --force` emits) by a key with authority over it: the artifact's verified
+signed publisher at the base or, for a collection, a maintainer its spec names. A
+`republish` never grants authority by itself. If the base holds no verified signed publish
+(a legacy unsigned artifact) or several from different keys, no key has authority and only
+annotation edits can land. `pull` also requires that key to be a registered peer whose
+trust covers the type and whose validity window covers the event. Without a republish, the
+only edits allowed are annotations a signed ledger event backs, matched on the event's
+signed fields: a `fulfills` link (a `submit` signing this result's hash), an `accepted`
+link (the beneficiary's `accept` of this task), an attestation (a valid `attested_by` plus
+its `attest` event; replacing another attester, or restating the criteria, needs
+authority) and a rebaseline exec
+record (an owner-signed v2 `rebaseline` whose signature covers the mode and image digest).
+These may only add, never remove. Anything else is rejected and quarantined.
+
+Both gates also refuse a **replayed** ledger event: a copy of a signed event with an
+unsigned field changed (`prev`, `result`, the signature encoding). Events are identified
+by the recovered signer plus the signed payload. `pull` runs this check on unrelated
+histories too, against what it already holds. It also refuses an incoming tree that
+rewrites or truncates a ledger, as `hub check --base` already did. A second key's
+`publish` of an id the base already holds is refused if the id has no verified signed
+publisher (the event would make its signer the owner). Otherwise it is reported and
+grants nothing. `pull --force` overrides the manifest-edit rejections, as it does every
+per-artifact ingest check, but not these ledger checks.
+
+**Known gaps** (pinned by the test suite): a republish signs the content hash, not the
+manifest bytes, so an edit committed after a genuine republish in the same range is
+accepted with it; and an `accept` doesn't sign which result it accepts, so a relayed copy
+of a not-yet-held accept can name another result for the same task. Closing both needs the
+manifest and the full statement under the signature (#43, together with #10).
 
 **A peer can never hand you local policy.** `registry/peers.json`,
 `registry/exec-policy.json`, `registry/subscriptions.json`, and `quarantine.log` are

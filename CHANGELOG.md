@@ -33,15 +33,43 @@ manifest/ledger format version — `commons --version` prints both).
   present", no check ran, and `git merge` applied the edit, so a peer could rewrite tier,
   criteria, licence, obtainability, title or links. `hub check --base` did not look at modified
   manifests at all. Both gates now compare a modified manifest with the merge base. They accept
-  it if the range carries a verified signed `publish`/`republish` of the id by a key with
-  authority over it (a verified publisher at the base, or a collection maintainer). `pull` also
-  requires a registered peer with sufficient trust and a valid key window. Otherwise they accept
-  only additive annotations backed by a signed ledger event (`submit` → `fulfills`,
-  beneficiary's `accept` → `accepted`, `attest` → `attested_by`, matching `rebaseline` → exec
-  record). Everything else is rejected and quarantined. Known gap, pinned by the test suite:
-  the republish signature does not cover manifest bytes, so an edit committed after a genuine
-  republish in the same range rides on it. **Behaviour change:** a hub PR or peer branch that
-  hand-edits manifests now fails. Use `publish --force` instead.
+  it if the range carries a new verified signed `publish`/`republish` of the id by a key with
+  authority over it: the artifact's single verified signed publisher at the base, or a
+  collection maintainer. A `republish` never grants authority, and an artifact with no
+  verified signed publish (legacy unsigned) or several from different keys has no owner who
+  can rewrite it. `pull` also requires a registered peer with sufficient trust and a valid key
+  window. Otherwise they accept only additive annotations backed by a signed ledger event,
+  matched on its signed fields (`submit` → `fulfills`, the beneficiary's `accept` →
+  `accepted`, `attest` → `attested_by`, an owner-signed v2 `rebaseline` → exec record).
+  Everything else is rejected and quarantined. Known gaps, pinned by the test suite: the
+  republish signature does not cover manifest bytes, so an edit committed after a genuine
+  republish in the same range rides on it; and an `accept` does not sign its `result`.
+  **Behaviour change:** a hub PR or peer branch that hand-edits manifests now fails. Use
+  `publish --force` instead.
+- **Replayed and rewritten ledger events (#42 review).** Both gates refuse a copy of a
+  signed event with an unsigned field changed (`prev`, `result`, the signature's
+  recovery-byte encoding), whichever copy arrives first. Events are identified by recovered
+  signer plus signed payload. Ledger readers keep one row per event, preferring the copy in
+  the signer's own log. Byte-identical duplicates are tolerated. `pull` runs these checks on
+  unrelated histories too, against the ledger it holds. Since `ts` has one-second
+  resolution, signing an event identical in every signed field to one already in the
+  signer's log waits for the next second, so two genuine events (`accept R1`, then
+  `accept R2 --force`) never share an identity. `pull` now enforces append-only ledgers
+  (including the legacy flat `registry/ledger.jsonl`), as `hub check --base` already did.
+  Both gates refuse a second key's `publish` of an already-held id when the base holds no
+  verified signed publish of it (the event would make its signer the owner). When the id
+  already has a signed publisher, the event is reported and grants no authority, but it is
+  not refused: the sender's log is append-only, so refusing would wedge federation with
+  that peer, and priority between the two publishes is settled by anchors.
+- **`attest --criteria` by the artifact's own publisher** restates its criteria and passes
+  both gates. A different attester may add or replace `attested_by` but cannot change the
+  criteria.
+- `pull` from a ref already contained in `HEAD` returns before any signature pass.
+  `hub check` reports a modified manifest without `content`, or a deleted ledger file,
+  instead of raising.
+- **`rebaseline` events are signed with a v2 payload** that also covers `tier`, `result`,
+  `exec_mode`, `image_digest` and `superseded_by` (`sig_v: 2`). v1 events still verify, but
+  only a v2 event can back a changed exec record on an already-held manifest.
 - **Ingest policy bypass reopened by stripping a manifest `supersedes` link (#39).** Before the
   spec-declared lineage above, the #11 walk followed the successor's manifest link, which no
   signature covers. Anyone holding the manifest could delete it (a manifest-only edit, or
