@@ -152,7 +152,7 @@ root cannot be retrofitted.
 
 ## Status
 
-Alpha preview (`0.2.0-alpha.1`; `commons --version` prints the version you have checked
+Alpha preview (`0.3.0-alpha.1`; `commons --version` prints the version you have checked
 out). Built and drilled end to end: verification tiers with chain grading, EIP-191-signed
 per-peer ledgers with key rotation, git federation with a validating ingest gate,
 sandboxed execution with recorded environments, OpenTimestamps anchoring, collections,

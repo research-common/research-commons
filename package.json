@@ -1,6 +1,6 @@
 {
   "name": "research-commons",
-  "version": "0.2.0-alpha.1",
+  "version": "0.3.0-alpha.1",
   "private": true,
   "description": "Only needed for signing/verifying ledger entries (EIP-191 via viem). Read-only use needs just git + python3.",
   "type": "module",

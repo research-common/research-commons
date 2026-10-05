@@ -9,6 +9,14 @@ manifest/ledger format version — `commons --version` prints both).
 
 ## [Unreleased]
 
+## [0.3.0-alpha.1] - 2026-10-04
+
+Second tagged release. **MINOR bump:** `hub check` and `pull` now refuse things they accepted
+before (hand-edited manifests, replayed or misplaced ledger lines, unbacked links and tags), so
+a hub PR that passed under 0.2.0-alpha.1 can fail here. **Upgrade note for hub maintainers:**
+bump `hub-check.yml`'s pinned tool SHA. New events carry a second signature (`sig2`) that older
+tools ignore, so mixed fleets keep verifying each other; only this release and later check it.
+
 ### Changed
 - **Breaking: a collection's lineage is declared in its spec (safety fix, #39).** A successor
   lists what it replaces in its content (`"supersedes": ["cl-…"]`), which the id pins and the
@@ -168,6 +176,27 @@ manifest/ledger format version — `commons --version` prints both).
   as `status`'s `(pre-sandbox baseline)` annotation. Advisory only: no exit-code or manifest
   change (#25).
 
+### Known issues (open at this tag)
+
+- **#14**: `pull` accepts new lines in a peer's unsigned logs (warns and records them in
+  `quarantine.log`; a bootstrap from a hub with legacy unsigned history needs them).
+- **#41 part 2 / #43**: a republish signs the content hash, not the manifest, so an edit
+  committed after a genuine republish in the same range rides on it. Signed manifest views
+  (#43) close it.
+- **#45 residual**: a relayed accept with `sig2` stripped can name another genuine submission to
+  the same task (needs a per-signer v2 floor, #43).
+- **#46 residual (by design)**: a second key's backdated `publish` competes for first publisher
+  until anchors settle it; anchor promptly if derivation credit matters.
+- **#47**: a second key's `publish` leaves no key able to rewrite the artifact's manifest, and
+  legacy unsigned-only artifacts have no attribution repair (adoption, #43 §6.2).
+- **#48 item 3**: `pull` and `hub check --base` verify the whole held ledger on every
+  non-trivial pull (~5 ms per line).
+- **#10**: `verification.params` is outside the T3 signed statement.
+- **#9**: no size policy for files over GitHub's 100 MiB limit.
+- **#20**: archive members are flagged but not scanned.
+- Design questions open for input: #1, #2, #3, #4, #5, #6, #7, #8 (predecessor claims on a tip),
+  #16, #17, #19, #21, #22, #24, #25.
+
 ## [0.2.0-alpha.1] - 2026-10-01
 
 First tagged release. Predates this tag, the project shipped ~21 commits of untagged history
@@ -262,5 +291,6 @@ contributions, landed on top of that baseline.
 - **#12** — COMMONS.md review request from an external hub: the first outside use of the
   template and rubric.
 
-[Unreleased]: https://github.com/research-common/research-commons/compare/v0.2.0-alpha.1...HEAD
+[Unreleased]: https://github.com/research-common/research-commons/compare/v0.3.0-alpha.1...HEAD
+[0.3.0-alpha.1]: https://github.com/research-common/research-commons/compare/v0.2.0-alpha.1...v0.3.0-alpha.1
 [0.2.0-alpha.1]: https://github.com/research-common/research-commons/releases/tag/v0.2.0-alpha.1
