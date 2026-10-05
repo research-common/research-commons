@@ -186,6 +186,7 @@ import hashlib, json, os, subprocess, sys
 p = sys.argv[1]
 raw = [l for l in open(p).read().splitlines() if l.strip()]
 e = dict(json.loads(raw[-1]))
+e.pop("sig2", None)   # a v1-only event signed by the foreign key below
 e["action"] = "publish"; e["id"] = "ds-11111111"
 payload = {k: e[k] for k in ("action", "agent", "id", "sha256", "ts") if k in e}
 msg = json.dumps(payload, sort_keys=True, separators=(",", ":"))
@@ -610,17 +611,33 @@ check "republish preserves attested criteria" "$(rc c verify "$AT2")" "3"
 check "still VALID after republish" "$(grep -c 'attester : VALID' "$W/out.txt")" "1"
 
 head_ "signature covers only the declared field set"
-# Adding an unsigned annotation must NOT invalidate the entry: readers ignore
-# unknown fields, so the signed subset has to be explicit and stable.
+# `sig` covers SIGNED_FIELDS only, so a v1-only entry tolerates an added field (readers
+# ignore unknown fields). `sig2` covers the whole entry: a field added to a dual-signed
+# entry is a change to a signed event, so it no longer verifies (#45, #49).
+cp "$(mylog)" "$W/annot.bak"
 python3 - "$(mylog)" <<'PY'
 import json, sys
 p = sys.argv[1]
 lines = [json.loads(l) for l in open(p) if l.strip()]
-lines[-1]["received_at"] = "2026-07-25T00:00:00Z"   # the kind of field P4 adds on ingest
+lines[-1].pop("sig2", None)
+lines[-1]["received_at"] = "2026-07-25T00:00:00Z"
 open(p, "w").write("".join(json.dumps(e, sort_keys=True) + "\n" for e in lines))
 PY
 rc c log --verify >/dev/null 2>&1
-check "annotation does not invalidate" "$(grep -c 'BAD SIGNATURE' "$W/out.txt")" "0"
+check "annotation on a v1-only entry does not invalidate" "$(grep -c 'BAD SIGNATURE' "$W/out.txt")" "0"
+cp -f "$W/annot.bak" "$(mylog)"
+python3 - "$(mylog)" <<'PY'
+import json, sys
+p = sys.argv[1]
+lines = [json.loads(l) for l in open(p) if l.strip()]
+assert lines[-1].get("sig2"), "new entries are dual-signed"
+lines[-1]["received_at"] = "2026-07-25T00:00:00Z"
+open(p, "w").write("".join(json.dumps(e, sort_keys=True) + "\n" for e in lines))
+PY
+rc c log --verify >/dev/null 2>&1
+check "annotation on a dual-signed entry invalidates it" "$(grep -c 'BAD SIGNATURE' "$W/out.txt")" "1"
+cp -f "$W/annot.bak" "$(mylog)"
+check "restored ledger verifies" "$(rc c log --verify)" "0"
 
 head_ "retroactive ledger correction is caught (adversarial matrix T-1)"
 # The "tampering" section above only ever mutates the LAST line of the log, so a live
@@ -962,7 +979,8 @@ check "summary line counts unsigned-only" "$(grep -c '^unsigned-only (advisory):
 check "a signed publish is not reported" "$(grep -c "UNSIGNED-ONLY: $ORDID" "$W/out.txt")" "0"
 c publish dataset "$W/uns.csv" "unsigned only" --license CC0-1.0 --force >/dev/null 2>&1
 rc c fsck --attribution >/dev/null
-check "a signed republish clears it" "$(grep -c "UNSIGNED-ONLY: $UNS" "$W/out.txt")" "0"
+check "a signed republish does not clear it (a republish claims no authorship, #46)" \
+  "$(grep -c "UNSIGNED-ONLY: $UNS" "$W/out.txt")" "1"
 
 head_ "housekeeping"
 check "peer list is readable" "$(rc c peer list)" "0"

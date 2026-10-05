@@ -41,9 +41,9 @@ manifest/ledger format version — `commons --version` prints both).
   window. Otherwise they accept only additive annotations backed by a signed ledger event,
   matched on its signed fields (`submit` → `fulfills`, the beneficiary's `accept` →
   `accepted`, `attest` → `attested_by`, an owner-signed v2 `rebaseline` → exec record).
-  Everything else is rejected and quarantined. Known gaps, pinned by the test suite: the
+  Everything else is rejected and quarantined. Known gap, pinned by the test suite: the
   republish signature does not cover manifest bytes, so an edit committed after a genuine
-  republish in the same range rides on it; and an `accept` does not sign its `result`.
+  republish in the same range rides on it (closed by signed manifest views, #43).
   **Behaviour change:** a hub PR or peer branch that hand-edits manifests now fails. Use
   `publish --force` instead.
 - **Replayed and rewritten ledger events (#42 review).** Both gates refuse a copy of a
@@ -67,9 +67,48 @@ manifest/ledger format version — `commons --version` prints both).
 - `pull` from a ref already contained in `HEAD` returns before any signature pass.
   `hub check` reports a modified manifest without `content`, or a deleted ledger file,
   instead of raising.
-- **`rebaseline` events are signed with a v2 payload** that also covers `tier`, `result`,
-  `exec_mode`, `image_digest` and `superseded_by` (`sig_v: 2`). v1 events still verify, but
-  only a v2 event can back a changed exec record on an already-held manifest.
+- **Every ledger event is dual-signed (#49, format from the #43 design note §5.2).** `sig`
+  still covers the v1 fields (`action, agent, id, sha256, ts`), so every older tool, including
+  hub CI pinned to v0.2.0-alpha.1, verifies new events unchanged. `sig2` is EIP-191 over
+  `{"rc": "ledger/2", "entry": …}`, the whole entry minus `addr`, `sig`, `sig2` and `prev`, so
+  it also authenticates the fields `sig` leaves open: a submit's or accept's `task` and
+  `result`, a rebaseline's exec record. A present `sig2` that fails makes the event a forgery.
+  One signer process writes both. Only an owner-signed `rebaseline` carrying `sig2` can back
+  a changed exec record on an already-held manifest. (Unreleased `main` briefly signed
+  rebaselines with a `sig_v: 2` payload instead; old tools reported those as BAD SIGNATURE.
+  That form is gone and no released tool wrote it.)
+- **Lifecycle events bind the task and result they name (#45).** Lifecycle readers select a
+  task's events by the signed `id`, and drop an event whose unsigned `task` disagrees, so a
+  relayed accept with `task` changed no longer settles another task. A v1 submit (no `sig2`)
+  counts only if its `result` is a manifest we hold whose full content hash is the submit's
+  signed `sha256` (`submit` already refuses an unpublished result). A v1 accept's `result`
+  counts only if it names such a submission to the task, judged against every submission
+  regardless of timestamp order, and a v1 accept with its `result` removed no longer settles a
+  task that has submissions. The manifest-edit gate applies the same rules to `accepted`
+  links, which closes the gap #41's fix pinned. **Known gap:** a receiver that never saw a
+  dual-signed original cannot tell a copy with `sig2` stripped from a v1 event, so a relayed,
+  stripped accept can still name any *other* genuine submission to the same task, including
+  the relayer's own. Closing that needs a per-signer v2 floor (#43 phase 3).
+- **A `republish` no longer claims first-publisher credit (#46).** `first_publisher` counted
+  `republish` events, so any key could sign a backdated republish of an artifact whose
+  publish was unanchored, and its later `submit` of that artifact graded as an independent
+  derivation. Only `publish` claims authorship now. The gates' note on a second key's
+  `publish` now says it competes for first publisher, which anchors decide. **Behaviour
+  change:** a signed `publish --force` (a `republish`) no longer clears `fsck --attribution`'s
+  advisory `UNSIGNED-ONLY` for a legacy artifact. A backfilled signed `publish` would, but both
+  gates refuse it from any peer (it would mint an owner), so there is no federating repair
+  until adoption lands (#47).
+- **`pull` applies `hub check`'s per-line ledger rules (#48).** Every incoming signed line
+  that we don't already hold in that same file must verify and sit in the log named after its
+  signer. Before, a peer's line written into your own log (even a byte-identical copy of a
+  line we hold elsewhere) merged, and then failed hub CI on every later push. New lines in the
+  unsigned logs (`ledger.jsonl`, `local-unsigned.jsonl`) are **not** refused: a subscriber
+  bootstrapping from a hub with legacy unsigned history receives them legitimately. `pull`
+  warns and records them in `quarantine.log` (#14 stays open).
+- **`pull` refuses tags only the incoming copy carries on a manifest added on both sides
+  (#48)**, whether from an unrelated history or two peers publishing the same bytes since the
+  merge base. The add/add exemption kept both sides' tags, including tags a peer added to a
+  manifest it never published. Local tags still survive the merge; `pull --force` overrides.
 - **Ingest policy bypass reopened by stripping a manifest `supersedes` link (#39).** Before the
   spec-declared lineage above, the #11 walk followed the successor's manifest link, which no
   signature covers. Anyone holding the manifest could delete it (a manifest-only edit, or

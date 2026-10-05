@@ -27,7 +27,8 @@
 #      authority-laundering sequence, cannot authorise manifest edits; links bind to
 #      the backing event's signed fields, and an already-held event still backs one;
 #      replay detection keys on changed bytes, and ledger folds prefer the signer's own
-#      log. KNOWN GAP, pinned: which result an accept names is unsigned (#43)
+#      log. Which result an accept names is bound: by sig2, or for a v1 accept by a
+#      submission whose signed hash covers it (#45)
 #  10b. the publisher may restate criteria through its own attestation, nobody else;
 #      same-second events by one signer stay distinct; pull from an unrelated history
 #      still runs the replay check; a no-op pull is quick; hub check never tracebacks
@@ -144,8 +145,12 @@ for path in (pathlib.Path(root) / "registry/ledger").glob("*.jsonl"):
                 and e.get("id") == task and e.get("result") == original), None)
     if old is None:
         continue
-    event = dict(old, result=replacement,
-                 prev=hashlib.sha256(lines[-1].encode()).hexdigest())
+    tampered = dict(old, result=replacement)
+    if "sig2" in old and verify(tampered, tampered["sig"], tampered["addr"])[0]:
+        raise SystemExit("a dual-signed accept still verifies with its result changed")
+    # Strip sig2 (a downgrade to a v1-only event): what remains is a valid v1 copy.
+    event = {k: v for k, v in tampered.items() if k != "sig2"}
+    event["prev"] = hashlib.sha256(lines[-1].encode()).hexdigest()
     if not verify(event, event["sig"], event["addr"])[0]:
         raise SystemExit("altered-result accept no longer verifies")
     with path.open("a") as f:
@@ -165,7 +170,12 @@ old = [e for e in map(json.loads, lines)
        if e.get("action") == action and e.get("id") == aid]
 if not old:
     raise SystemExit("original signed %s not found" % action)
-event = dict(old[-1], result=result)
+tampered = dict(old[-1], result=result)
+if "sig2" in tampered and runpy.run_path(commons)["verify_entry"](
+        tampered, tampered["sig"], tampered["addr"])[0]:
+    raise SystemExit("a dual-signed event still verifies with its result changed")
+# Strip sig2 (a downgrade to a v1-only event): what remains is a valid v1 copy.
+event = {k: v for k, v in tampered.items() if k != "sig2"}
 event["prev"] = hashlib.sha256(lines[-1].encode()).hexdigest()
 if not runpy.run_path(commons)["verify_entry"](event, event["sig"], event["addr"])[0]:
     raise SystemExit("altered copy no longer verifies")
@@ -210,7 +220,7 @@ if len(events) != 1:
     raise SystemExit("expected one rebaseline event")
 event = events[0]
 altered = dict(event, image_digest="sha256:" + "0" * 64)
-print(event.get("sig_v") == 2
+print(bool(event.get("sig2"))
       and event.get("image_digest") == m["provenance"]["run"]["exec"]["image_digest"]
       and ns["verify_entry"](event, event["sig"], event["addr"])[0]
       and not ns["verify_entry"](altered, altered["sig"], altered["addr"])[0])
@@ -424,10 +434,10 @@ check "fixture leaves the manifest unchanged" \
   "$(git -C "$HC" diff --name-only origin/main HEAD -- "registry/artifacts/$DS.json" | wc -l | tr -d ' ')" "0"
 check "hub check --base passes the publish-only event" "$(hcheck)" "0"
 check "  and reports that it grants no authority" \
-  "$(grep -c "publish of already-held $DS by $ADDR_Cl grants no authority" "$W/out.txt")" "1"
+  "$(grep -c "publish of already-held $DS by $ADDR_Cl grants no edit authority" "$W/out.txt")" "1"
 check "pull ingests it" "$(lpull foreign-publish-only)" "0"
 check "  and reports that it grants no authority" \
-  "$(both | grep -c "publish of already-held $DS by $ADDR_Cl grants no authority")" "1"
+  "$(both | grep -c "publish of already-held $DS by $ADDR_Cl grants no edit authority")" "1"
 ( cd "$HL" && git push -q origin HEAD:main ) && git -C "$HC" fetch -q origin
 branch foreign-publish-edit
 check "contributor then republishes it with a new title" \
@@ -656,7 +666,8 @@ import json, sys
 path, other = sys.argv[1:]
 lines = open(path).read().splitlines()
 e = json.loads(lines[-1]); assert e["action"] == "submit"
-e["result"] = other          # unsigned; the signature still verifies
+e.pop("sig2", None)          # downgrade to v1: `result` is then outside every signature
+e["result"] = other
 lines[-1] = json.dumps(e, sort_keys=True)
 open(path, "w").write("\n".join(lines) + "\n")
 PY
@@ -707,33 +718,52 @@ own = next(p for p in led.glob("*.jsonl")
 e = [json.loads(l) for l in own.read_text().splitlines() if json.loads(l).get("action") == "accept"][-1]
 # a foreign log whose name sorts before every real address
 (led / "0x0000000000000000000000000000000000000000.jsonl").write_text(
-    json.dumps(dict(e, result=other), sort_keys=True) + "\n")
+    json.dumps({k: v for k, v in dict(e, result=other).items() if k != "sig2"},
+               sort_keys=True) + "\n")
 ns = runpy.run_path(commons)
 rows = [r for r, _p in ns["read_ledger_entries"]() if r.get("action") == "accept" and r.get("id") == task]
 print(len(rows) == 1 and rows[0].get("result") == e["result"])
 PY
 )" "True"
 
-head_ "4a5. KNOWN GAP (pinned): which result an accept names is unsigned"
-# An accept signs the task id and task hash, not `result`. A relayed copy of an
-# unmerged genuine accept, with result changed, backs `accepted:<other>` on the SAME
-# task. (Once the genuine accept is held, a changed copy is a replay: 4a.) Closed by
-# the signed-statement follow-up (#43).
+head_ "4a5. which result an accept names is bound (#45)"
+# A relayed copy of an unmerged genuine accept with `result` changed. Dual-signed: the
+# change breaks sig2, so the event is a forgery. Downgraded (sig2 stripped): a v1
+# accept's result must name a submission to the task bound by the submit's signed
+# hash, and T3 was never submitted to TK2.
 branch relayed-accept
 check "the lead accepts DS for the second task on an unmerged branch" \
   "$(rc LC accept "$TK2" "$DS" --force)" "0"
-python3 - "$HC/registry/ledger/$(echo "$ADDR_L" | tr 'A-Z' 'a-z').jsonl" "$T3" <<'PY'
+LEADLOG="$HC/registry/ledger/$(echo "$ADDR_L" | tr 'A-Z' 'a-z').jsonl"
+cp "$LEADLOG" "$W/leadlog.bak"
+python3 - "$LEADLOG" "$T3" <<'PY'
 import json, sys
 path, other = sys.argv[1:]
 lines = open(path).read().splitlines()
-e = json.loads(lines[-1]); assert e["action"] == "accept"
+e = json.loads(lines[-1]); assert e["action"] == "accept" and e.get("sig2")
 lines[-1] = json.dumps(dict(e, result=other), sort_keys=True)
 open(path, "w").write("\n".join(lines) + "\n")
 PY
 edit "$HC" "$TK2" 'm["links"] = [{"rel": "accepted", "id": "'"$T3"'"}]'
 cpush relayed-accept
-check "accepted today by hub check --base" "$(hcheck)" "0"
-check "  and by pull" "$(lpull relayed-accept --dry-run)" "0"
+check "dual-signed copy with result changed: hub check --base refuses" "$(hcheck)" "1"
+check "  as a bad signature" "$(grep -c "BAD SIGNATURE on accept $TK2" "$W/out.txt")" "1"
+check "  and pull refuses it" "$(lpull relayed-accept --dry-run)" "1"
+cp "$W/leadlog.bak" "$LEADLOG"
+python3 - "$LEADLOG" "$T3" <<'PY'
+import json, sys
+path, other = sys.argv[1:]
+lines = open(path).read().splitlines()
+e = json.loads(lines[-1]); assert e["action"] == "accept"
+e.pop("sig2"); e["result"] = other
+lines[-1] = json.dumps(e, sort_keys=True)
+open(path, "w").write("\n".join(lines) + "\n")
+PY
+cpush relayed-accept
+check "downgraded v1 copy: hub check --base refuses the unbacked accepted link" "$(hcheck)" "1"
+check "  and pull refuses it" "$(lpull relayed-accept --dry-run)" "1"
+check "  naming the unbacked link" \
+  "$(both | grep -c "link accepted:$T3 added with no signed ledger event")" "1"
 
 # ---------------------------------------------------------------- 4b. explicit trust denial
 head_ "4b. a trust=none attester cannot change a held claim"
@@ -890,6 +920,7 @@ for p in sorted(led.glob("*.jsonl")):
            and json.loads(l).get("id") == task]
     if hit:
         e = dict(hit[-1], result=other, prev=hashlib.sha256(lines[-1].encode()).hexdigest())
+        e.pop("sig2", None)   # downgrade to v1, so the copy still verifies: a replay
         with p.open("a") as f:
             f.write(json.dumps(e, sort_keys=True) + "\n")
         break

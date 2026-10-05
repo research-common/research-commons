@@ -220,8 +220,13 @@ VERIFY_BATCH_JS = os.path.join(LIB, "verify-batch.mjs")
 # Fields covered by a ledger signature. Order is irrelevant (canonical JSON sorts
 # keys); the SET is what matters, and it must never silently change meaning.
 SIGNED_FIELDS = ("action", "agent", "id", "sha256", "ts")
-REBASELINE_SIGNED_FIELDS = SIGNED_FIELDS + (
-    "sig_v", "tier", "result", "exec_mode", "image_digest", "superseded_by")
+# Second signature (`sig2`, design note #43 §5.2): EIP-191 over the WHOLE entry except
+# these, wrapped in a domain tag. `sig` keeps covering SIGNED_FIELDS only, so every
+# older tool still verifies a dual-signed event; tools that know `sig2` also
+# authenticate the fields `sig` leaves open (an accept's `result`, a submit's `task`,
+# a rebaseline's exec record). A present `sig2` that fails makes the event a forgery.
+SIG2_DOMAIN = "ledger/2"
+SIG2_EXCLUDED = ("addr", "sig", "sig2", "prev")
 TRUST_LEVELS = ("full", "datasets-only", "none")
 
 
@@ -462,29 +467,41 @@ def canonical(obj):
 
 
 def signing_payload(entry):
-    """The subset of a ledger entry that a signature covers."""
-    fields = (REBASELINE_SIGNED_FIELDS
-              if entry.get("action") == "rebaseline" and entry.get("sig_v") == 2
-              else SIGNED_FIELDS)
-    return {k: entry[k] for k in fields if k in entry}
+    """The subset of a ledger entry that the v1 signature (`sig`) covers."""
+    return {k: entry[k] for k in SIGNED_FIELDS if k in entry}
+
+
+def signing_payload2(entry):
+    """What `sig2` covers: every field except the signatures, signer and chain link."""
+    return {"rc": SIG2_DOMAIN,
+            "entry": {k: v for k, v in entry.items() if k not in SIG2_EXCLUDED}}
 
 
 def signing_key_path():
     return os.environ.get("COMMONS_SIGNING_KEY")
 
 
-def sign_entry(entry):
+def sign_entry(entry, dual=False):
     """Sign a ledger entry. Returns (addr, sig) or (None, None) when unconfigured.
+
+    With dual=True returns (addr, sig, sig2): `sig` over the v1 payload and `sig2`
+    over the whole entry (signing_payload2), from one signer process.
 
     Unsigned entries remain legal locally (single trusted host);
     they are simply marked so, and `log --verify` can tell them from forgeries.
     """
-    if not signing_key_path(): return None, None
-    msg = canonical(signing_payload(entry))
+    if not signing_key_path(): return (None, None, None) if dual else (None, None)
+    if dual:
+        msg = json.dumps({"m1": canonical(signing_payload(entry)),
+                          "m2": canonical(signing_payload2(entry))})
+        argv = ["node", SIGN_JS, "--stdin", "--pair"]
+    else:
+        msg = canonical(signing_payload(entry))
+        argv = ["node", SIGN_JS, "--stdin"]
     env = dict(os.environ)
     try:
         # --stdin: the message goes over a pipe, never into argv (process list).
-        r = subprocess.run(["node", SIGN_JS, "--stdin"], input=msg,
+        r = subprocess.run(argv, input=msg,
                            capture_output=True, text=True, timeout=60, env=env)
     except (OSError, subprocess.SubprocessError) as e:
         sys.exit("error: cannot run the signer (%s). Is node installed?" % e)
@@ -494,6 +511,11 @@ def sign_entry(entry):
         out = json.loads(r.stdout)
     except ValueError:
         sys.exit("error: signer produced unparseable output")
+    if dual:
+        if not out.get("signature2"):
+            sys.exit("error: signer did not return a second signature (lib/sign-message.mjs "
+                     "older than this bin/commons?)")
+        return out["address"], out["signature"], out["signature2"]
     return out["address"], out["signature"]
 
 
@@ -505,9 +527,34 @@ _VERIFY_CACHE = {}
 
 
 def verify_entry(entry, sig, addr):
-    """Check a signature over a ledger entry. Returns (ok, recovered_addr)."""
-    if not sig: return False, None
-    msg = canonical(signing_payload(entry))
+    """Check a ledger entry's signatures. Returns (ok, recovered_addr).
+
+    `sig` must recover over the v1 payload. If the entry carries `sig2`, it must
+    recover the SAME address over signing_payload2: a v2 field changed in transit
+    fails here, so such an entry is a forgery, not a v1 event with odd extras.
+    """
+    ok, rec = _verify_message(canonical(signing_payload(entry)), sig, addr)
+    if not ok or "sig2" not in entry:
+        return ok, rec
+    sig2 = entry.get("sig2")
+    if not isinstance(sig2, str) or not sig2:
+        return False, rec
+    ok2, rec2 = _verify_message(canonical(signing_payload2(entry)), sig2, addr)
+    if not ok2 or not isinstance(rec2, str) or not isinstance(rec, str) \
+            or rec2.lower() != rec.lower():
+        return False, rec
+    return True, rec
+
+
+def entry_is_v2(entry):
+    """Does an entry carry `sig2`? Presence only: call it on entries that already passed
+    verify_entry, which rejects a present but invalid `sig2`."""
+    return isinstance(entry.get("sig2"), str) and bool(entry.get("sig2"))
+
+
+def _verify_message(msg, sig, addr):
+    """EIP-191 check of one message. Returns (ok, recovered_addr). Cached."""
+    if not sig or not isinstance(sig, str): return False, None
     ck = (msg, sig, (addr or "").lower())
     if ck in _VERIFY_CACHE: return _VERIFY_CACHE[ck]
     env = dict(os.environ, SIGNATURE=sig)
@@ -611,10 +658,9 @@ def ledger_prepare(entry):
     signed field, so chaining at commit time does not invalidate the signature.
     """
     entry.setdefault("schema", SCHEMA)
-    if entry.get("action") == "rebaseline":
-        entry["sig_v"] = 2
+    entry.pop("sig_v", None)
     entry["ts"] = now()
-    addr, sig = sign_entry(entry)
+    addr, sig, sig2 = sign_entry(entry, dual=True)
     if addr and _same_signed_event_held(entry, addr):
         # `ts` has one-second resolution and only action/agent/id/sha256/ts are signed,
         # so two genuine events in one second (accept R1, then accept R2 --force) would
@@ -622,9 +668,13 @@ def ledger_prepare(entry):
         # replay gates would refuse the second. Move to the next second instead.
         time.sleep(max(0.0, 1.0 - (time.time() % 1.0)) + 0.01)
         entry["ts"] = now()
-        addr, sig = sign_entry(entry)
+        addr, sig, sig2 = sign_entry(entry, dual=True)
     entry["addr"] = addr
     entry["sig"] = sig
+    if sig2:
+        # Every event the tool writes is dual-signed (#43 §5.2, #49): `sig` for every
+        # existing reader, `sig2` so the fields `sig` leaves open are authenticated too.
+        entry["sig2"] = sig2
     return entry
 
 
@@ -2359,10 +2409,8 @@ def cmd_publish(a):
     entry = {"agent": a.agent, "action": "republish" if existed else "publish",
              "id": aid, "sha256": digest, "tier": tier or "method"}
     if ingest_unchecked:
-        # An audit trail for a deliberate skip. Recorded but NOT signed: SIGNED_FIELDS is
-        # ("action", "agent", "id", "sha256", "ts") and widening it would change the
-        # signing contract for every event type, which deserves its own change. Good
-        # enough for the honest-mistake case this exists to make visible.
+        # An audit trail for a deliberate skip. Outside the v1 `sig` (SIGNED_FIELDS),
+        # covered by `sig2`.
         entry["ingest_unchecked"] = ",".join(ingest_unchecked)
     commit_signed_publish(aid, m, entry, existed)
     print(aid)
@@ -3526,12 +3574,51 @@ def task_events(tid):
     """
     out = []
     for e, _path in read_ledger_entries():
-        if e.get("task") != tid: continue
+        if e.get("action") not in LIFECYCLE_ACTIONS: continue
+        # Select by the SIGNED `id` (every lifecycle writer sets id = task). The
+        # `task` field is outside the v1 signature, so a relayed copy could point a
+        # genuine accept at another task by changing it alone (#45). An event whose
+        # `task` disagrees with its `id` is not trusted to mean either.
+        if e.get("id") != tid: continue
+        if "task" in e and e.get("task") != tid: continue
         if e.get("sig"):
             ok, _ = verify_entry(e, e["sig"], e.get("addr"))
             if not ok: continue
         out.append(e)
     return out
+
+
+LIFECYCLE_ACTIONS = ("claim", "heartbeat", "release", "derivation-commit",
+                     "submit", "accept", "reject")
+
+
+def submission_result(e):
+    """The result a submit event names, or None when its signatures don't bind it.
+
+    A v1 `submit` signs the task (`id`) and the result's content hash (`sha256`), not
+    the result id. Ids derive from the hash (`<prefix>-<sha256[:8]>`), so the named
+    result must agree with the signed hash; otherwise a relayer changed it (#45). A
+    v2 event (`sig2`) signs `result` itself. Unsigned events are local and taken as
+    written.
+    """
+    rid = e.get("result")
+    if not isinstance(rid, str) or not rid:
+        return None
+    if not e.get("sig") or entry_is_v2(e):
+        return rid
+    digest = e.get("sha256")
+    if not isinstance(digest, str) or rid.rsplit("-", 1)[-1] != digest[:8]:
+        return None
+    # The id suffix is only 32 bits of the hash, and an id with no manifest behind it
+    # has nothing to contradict it. `submit` refuses an unpublished result, so a v1
+    # submit counts only when we hold that manifest and its FULL hash is the signed one.
+    try:
+        rm = load_manifest(rid, missing_ok=True)
+    except SystemExit:
+        return None
+    if not isinstance(rm, dict) or (rm.get("content") or {}).get("sha256") != digest:
+        return None
+    return rid
 
 
 def task_state(m, at=None):
@@ -3551,6 +3638,15 @@ def task_state(m, at=None):
     settled = None     # ("accepted"|"rejected", event)
     ben = ((spec.get("beneficiary") or {}).get("addr") or "").lower()
 
+    # Results some submit to this task binds. Accepts are judged against the whole set,
+    # not just submits that sort earlier: `ts` is self-declared, and skewed clocks put
+    # genuine accepts before the submit they settle.
+    bound_results = set()
+    for e in events:
+        if e.get("action") == "submit":
+            rid = submission_result(e)
+            if rid: bound_results.add(rid)
+
     for e in events:
         act, addr = e.get("action"), (e.get("addr") or "").lower()
         ts = parse_ts(e.get("ts")) or 0
@@ -3565,13 +3661,28 @@ def task_state(m, at=None):
         elif act == "release" and addr in claims:
             del claims[addr]
         elif act == "submit":
-            submissions.append({"addr": e.get("addr"), "result": e.get("result"),
+            rid = submission_result(e)
+            if rid is None:
+                continue   # the result it names is not the one it signed (#45)
+            submissions.append({"addr": e.get("addr"), "result": rid,
                                 "ts": ts, "event": e})
         elif act in ("accept", "reject"):
             # Only the beneficiary settles. A non-beneficiary "accept" is not an error
             # to report here — it simply has no authority, so it changes nothing.
-            if ben and addr == ben:
-                settled = (act, e)
+            if not (ben and addr == ben):
+                continue
+            # A v1 accept signs the task and its hash, not which result it accepts.
+            # Trust its `result` only if it names a verified submission to this task
+            # (#45); a v2 accept (`sig2`) signs `result` itself.
+            res = e.get("result")
+            if e.get("sig") and not entry_is_v2(e):
+                if res and res not in bound_results:
+                    continue
+                # `_settle` omits `result` only when nothing was submitted, so a v1
+                # accept without one, on a task with submissions, had it stripped.
+                if not res and act == "accept" and bound_results:
+                    continue
+            settled = (act, e)
 
     active = {a: c for a, c in claims.items() if c["expires"] > nowt}
     expired = {a: c for a, c in claims.items() if c["expires"] <= nowt}
@@ -3820,7 +3931,11 @@ def first_publisher_index():
 
     cands, seen = {}, set()
     for e, _path, _idx, lsha in lines:
-        if e.get("action") not in ("publish", "republish"): continue
+        # Only `publish` claims creation. A `republish` restates metadata for an id
+        # that already exists, so it is never evidence of who produced the bytes:
+        # counting it let any key sign a backdated republish and take first-publisher
+        # (derivation) credit while the original was unanchored (#46).
+        if e.get("action") != "publish": continue
         if not e.get("sig"): continue
         aid = e.get("id")
         if not aid: continue
@@ -6573,6 +6688,84 @@ def _ledger_raw_lines_local():
     return out
 
 
+def _ledger_lines_by_file_at(ref):
+    """{repo-relative ledger path: set(raw lines)} committed at `ref`."""
+    r = git("ls-tree", "-r", "--name-only", ref, "--", "registry/ledger/",
+            "registry/ledger.jsonl", check=False)
+    out = {}
+    if r.returncode != 0:
+        return out
+    for rel in r.stdout.split():
+        if not rel.endswith(".jsonl"):
+            continue
+        show = git("show", "%s:%s" % (ref, rel), check=False)
+        if show.returncode == 0:
+            out[rel] = {l for l in show.stdout.splitlines() if l.strip()}
+    return out
+
+
+def _ledger_lines_by_file_local():
+    out = {}
+    for path in ledger_files():
+        with open(path) as f:
+            out[os.path.relpath(path, ROOT)] = {l.rstrip("\n") for l in f if l.strip()}
+    return out
+
+
+def incoming_ledger_line_problems(held_by_file, reg_dir):
+    """Problems with ledger lines in an incoming tree that we don't already hold.
+
+    Mirrors `hub check`'s ledger pass for a pull: a new line must be signed, verify,
+    and live in the log named after its signer. A line is "held" only if we hold it
+    in the SAME file: a copy of a held line planted in another signer's log is new
+    there, and would fail `hub check` on our next push to that log.
+
+    Returns (problems, warnings). New lines in the unsigned logs are a WARNING, not
+    a refusal: a subscriber bootstrapping from a hub with legacy unsigned history
+    receives them legitimately, and no "already held" rule tells that apart from a
+    forged line arriving with its artifact (#14 stays open on exactly this).
+    """
+    paths = []
+    if os.path.isfile(os.path.join(reg_dir, "ledger.jsonl")):
+        paths.append(os.path.join(reg_dir, "ledger.jsonl"))
+    ldir = os.path.join(reg_dir, "ledger")
+    if os.path.isdir(ldir):
+        paths += [os.path.join(ldir, fn) for fn in sorted(os.listdir(ldir))
+                  if fn.endswith(".jsonl")]
+    new = []
+    for path in paths:
+        held = held_by_file.get(os.path.relpath(path, os.path.dirname(reg_dir)), set())
+        with open(path) as f:
+            for line in f:
+                line = line.rstrip("\n")
+                if not line.strip() or line in held:
+                    continue
+                try:
+                    e = json.loads(line)
+                except ValueError:
+                    new.append((path, None)); continue
+                new.append((path, e if isinstance(e, dict) else None))
+    prime_verify_cache([e for _p, e in new if e and e.get("sig")])
+    out, warn = [], []
+    for path, e in new:
+        name = os.path.basename(path)
+        if e is None:
+            out.append("%s: unparseable line" % name); continue
+        if name in ("local-unsigned.jsonl", "ledger.jsonl"):
+            warn.append("%s: incoming line in an unsigned log (%s %s)"
+                        % (name, e.get("action"), e.get("id"))); continue
+        sig, addr = e.get("sig"), e.get("addr") or ""
+        if not sig:
+            out.append("%s: unsigned entry %s %s" % (name, e.get("action"), e.get("id")))
+            continue
+        if name[:-6].lower() != addr.lower():
+            out.append("%s: entry signed by %s written into someone else's log"
+                       % (name, addr)); continue
+        if not verify_entry(e, sig, addr)[0]:
+            out.append("%s: BAD SIGNATURE on %s %s" % (name, e.get("action"), e.get("id")))
+    return out, warn
+
+
 def replayed_ledger_events(base_lines, head_lines):
     """New occurrences of an already authenticated event in a ledger range.
 
@@ -6744,6 +6937,13 @@ class ManifestEditGate:
         return False, ("; a signed republish in the range does not authorise it: %s"
                        % ", ".join(sorted(set(refused))) if refused else "")
 
+    def _submitted(self, task, result):
+        """Is there a verified submit of `result` to `task` whose signed hash binds it?"""
+        for e, _who in self._events(self.all, "submit", id=task, task=task, result=result):
+            if entry_is_v2(e) or submission_result(e) == result:
+                return True
+        return False
+
     def _link_backed(self, aid, m, link):
         if not isinstance(link, dict):
             return False
@@ -6766,11 +6966,19 @@ class ManifestEditGate:
             ben = (((spec.get("beneficiary") or {}) if isinstance(spec, dict) else {})
                    .get("addr") or "")
             ben = ben.lower() if isinstance(ben, str) else ""
-            # An accept signs id (= the task) and sha256 (= the task's content hash),
-            # not `result`: which result was accepted is unauthenticated until the
-            # signed-statement follow-up (#43). Known gap, pinned by the test suite.
-            return bool(digest) and any(not ben or who == ben for _e, who in self._events(
-                self.all, "accept", id=aid, sha256=digest, task=aid, result=target))
+            # A v1 accept signs id (= the task) and sha256 (= the task's hash), not
+            # `result`. Trust its result only when a submit binds that result to this
+            # task through the submit's own signed hash; a v2 accept (`sig2`) signs
+            # `result` itself (#45).
+            if not digest:
+                return False
+            for e, who in self._events(self.all, "accept", id=aid, sha256=digest,
+                                       task=aid, result=target):
+                if ben and who != ben:
+                    continue
+                if entry_is_v2(e) or self._submitted(aid, target):
+                    return True
+            return False
         return False
 
     def _attestation_backed(self, aid, old, new, digest):
@@ -6816,7 +7024,7 @@ class ManifestEditGate:
         authority = self._authority(aid, old)
         for e, who in self._events(self.all, "rebaseline", id=aid, sha256=digest,
                                    result="match"):
-            if who not in authority or e.get("sig_v") != 2:
+            if who not in authority or not entry_is_v2(e):
                 continue
             if parse_ts(e.get("ts")) is None:
                 continue
@@ -6853,6 +7061,12 @@ class ManifestEditGate:
                 continue
             if merge_annotations and k == "tags" and \
                     isinstance(ov or [], list) and isinstance(nv or [], list):
+                # Add/add: our own tags survive the union merge, but tags only the
+                # incoming copy carries have nothing signed behind them (#48).
+                mine = {canonical(t) for t in (ov or [])}
+                extra = [t for t in (nv or []) if canonical(t) not in mine]
+                for t in extra:
+                    bad.append("tag %r added with no authorised signed republish" % (t,))
                 continue
             if k == "links" and isinstance(nv, list) and isinstance(ov or [], list):
                 old_keys = {canonical(x) for x in (ov or [])}
@@ -7680,8 +7894,10 @@ def hub_check(a):
                                     "(it has no signed publisher; this would make %s "
                                     "its owner)" % (who, aid, who))
                 else:
-                    print("  note: publish of already-held %s by %s grants no "
-                          "authority (it already has a signed publisher)" % (aid, who))
+                    print("  note: publish of already-held %s by %s grants no edit "
+                          "authority (it already has a signed publisher), but it is a "
+                          "priority claim: it competes for first publisher, decided by "
+                          "anchors (#46)" % (aid, who))
         for description in replayed_ledger_events(
                 _ledger_raw_lines_at(mb), _ledger_raw_lines_at("HEAD")):
             problems.append("replayed signed ledger event: %s" % description)
@@ -8007,6 +8223,26 @@ def cmd_pull(a):
         # passes below (a no-op pull used to batch-verify the whole ledger).
         contained = git("merge-base", "--is-ancestor", ref, "HEAD",
                         check=False).returncode == 0
+        # The same per-line rules `hub check --base` applies (#48): every NEW incoming
+        # signed line must verify and sit in its signer's own log. A foreign line
+        # merged into our log would fail every later hub check on our pushes.
+        misplaced, unsigned_in = ([], []) if contained else incoming_ledger_line_problems(
+            _ledger_lines_by_file_at(mbase) if mbase else _ledger_lines_by_file_local(),
+            os.path.join(worktree, "registry"))
+        if unsigned_in:
+            # Recorded, not refused (#14): unsigned lines grant nothing (an unsigned
+            # publish only makes a publish time unprovable), but they are nobody's word.
+            quarantine("ledger-unsigned-incoming", {"lines": unsigned_in[:50],
+                                                    "remote": remote})
+            print("warning: %d incoming line(s) in an unsigned log (nobody's signed word; "
+                  "see quarantine.log), e.g. %s" % (len(unsigned_in), unsigned_in[0]),
+                  file=sys.stderr)
+        if misplaced:
+            quarantine("ledger-line-rejected", {"problems": misplaced[:50],
+                                                "remote": remote})
+            sys.exit("error: refusing to merge — incoming ledger line(s) fail the "
+                     "ledger rules:\n%s"
+                     % "\n".join("         " + p for p in misplaced[:20]))
         replayed = [] if contained else replayed_ledger_events(
             held_lines, _ledger_raw_lines_at(ref))
         if replayed:
@@ -8037,8 +8273,10 @@ def cmd_pull(a):
                 foreign.append("%s by %s (it has no signed publisher; this would make "
                                "the signer its owner)" % (aid, who))
             else:
-                print("note: publish of already-held %s by %s grants no authority "
-                      "(it already has a signed publisher)" % (aid, who))
+                print("note: publish of already-held %s by %s grants no edit authority "
+                      "(it already has a signed publisher), but it is a priority claim: "
+                      "it competes for first publisher, decided by anchors (#46)"
+                      % (aid, who))
         if foreign:
             quarantine("foreign-publish", {"events": foreign, "remote": remote})
             sys.exit("error: refusing to merge — publish does not authorise "
@@ -9334,7 +9572,9 @@ def cmd_fsck(a):
         # is not UNATTRIBUTED, but no VERIFIED signed publisher exists. Authorship-based
         # features (`first_publisher`: "curated by", trust-gated materialization, the
         # origin grade) treat it as unattributed. Advisory, not a problem: unsigned
-        # entries are tolerated locally. Repair: `publish --force` with a key.
+        # entries are tolerated locally. No repair yet: a signed `republish` restates
+        # metadata and never claims authorship (#46), and a second key's `publish`
+        # would mint an owner, which both gates refuse. Adoption is #47 / #43 §6.2.
         for m in iter_manifests():
             if m["id"] not in have or first_publisher(m["id"]): continue
             print("UNSIGNED-ONLY: %s (%s) — no verified signed publish event; authorship "
@@ -9367,16 +9607,21 @@ def prime_verify_cache(entries):
     single batch call is the difference between ~1.4s and ~0.1s on a small registry,
     and the gap only widens as the ledger grows.
     """
-    pending, payloads = [], []
+    pending, payloads, queued = [], [], set()
     for e in entries:
         sig = e.get("sig")
-        if not sig: continue
-        msg = canonical(signing_payload(e))
+        if not sig or not isinstance(sig, str): continue
         addr = (e.get("addr") or "")
-        ck = (msg, sig, addr.lower())
-        if ck in _VERIFY_CACHE: continue
-        pending.append(ck)
-        payloads.append(json.dumps({"message": msg, "signature": sig, "address": addr}))
+        msgs = [(canonical(signing_payload(e)), sig)]
+        sig2 = e.get("sig2")
+        if isinstance(sig2, str) and sig2:
+            msgs.append((canonical(signing_payload2(e)), sig2))
+        for msg, sg in msgs:
+            ck = (msg, sg, addr.lower())
+            if ck in _VERIFY_CACHE or ck in queued: continue
+            queued.add(ck)
+            pending.append(ck)
+            payloads.append(json.dumps({"message": msg, "signature": sg, "address": addr}))
     if not pending: return
     if not os.path.exists(VERIFY_BATCH_JS):
         return  # fall back to per-entry verification

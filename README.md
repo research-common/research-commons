@@ -132,9 +132,13 @@ takes the bitwise re-run path and returns 0, 1, or 5 rather than 4.
 
 ## Identity & signed ledger
 
-Ledger entries are signed with EIP-191 (`personal_sign`) over canonical JSON of
-`{action, agent, id, sha256, ts}`, using viem (installed by `npm ci`) — no new crypto,
-no keys in config. The key is read from the file named by `COMMONS_SIGNING_KEY` and from
+Ledger entries are signed with EIP-191 (`personal_sign`), using viem (installed by
+`npm ci`) — no new crypto, no keys in config. Each entry carries two signatures from the same
+key. `sig` covers canonical JSON of `{action, agent, id, sha256, ts}`, which every version of
+the tool verifies. `sig2` covers `{"rc": "ledger/2", "entry": …}`, the whole entry except
+`addr`, `sig`, `sig2` and `prev`, so it also binds fields like an accept's `result` or a
+rebaseline's exec record. An entry whose `sig2` fails is a forgery. Entries from before
+`sig2` existed carry `sig` only, and readers bind their open fields by other means (below). The key is read from the file named by `COMMONS_SIGNING_KEY` and from
 nowhere else: no other signing tool's environment variable is consulted, so a wallet key
 exported for some other program can never silently become your commons identity.
 
@@ -518,10 +522,11 @@ annotation edits can land. `pull` also requires that key to be a registered peer
 trust covers the type and whose validity window covers the event. Without a republish, the
 only edits allowed are annotations a signed ledger event backs, matched on the event's
 signed fields: a `fulfills` link (a `submit` signing this result's hash), an `accepted`
-link (the beneficiary's `accept` of this task), an attestation (a valid `attested_by` plus
+link (the beneficiary's `accept` of this task, naming this result in a `sig2`-signed field
+or, for an entry without `sig2`, naming a result a submit to the task binds by hash), an attestation (a valid `attested_by` plus
 its `attest` event; replacing another attester, or restating the criteria, needs
 authority) and a rebaseline exec
-record (an owner-signed v2 `rebaseline` whose signature covers the mode and image digest).
+record (an owner-signed `rebaseline` whose `sig2` covers the mode and image digest).
 These may only add, never remove. Anything else is rejected and quarantined.
 
 Both gates also refuse a **replayed** ledger event: a copy of a signed event with an
@@ -530,15 +535,27 @@ by the recovered signer plus the signed payload. `pull` runs this check on unrel
 histories too, against what it already holds. It also refuses an incoming tree that
 rewrites or truncates a ledger, as `hub check --base` already did. A second key's
 `publish` of an id the base already holds is refused if the id has no verified signed
-publisher (the event would make its signer the owner). Otherwise it is reported and
-grants nothing. `pull --force` overrides the manifest-edit rejections, as it does every
-per-artifact ingest check, but not these ledger checks.
+publisher (the event would make its signer the owner). Otherwise it is reported: it grants
+no edit authority, but it competes for first publisher, which anchors decide. `pull` also
+applies `hub check`'s per-line rules to every incoming ledger line it doesn't already hold:
+signed, verifying, and in the log named after its signer. New lines in the unsigned logs
+are accepted with a warning and a quarantine record, because a first pull from a hub with
+legacy unsigned history needs them (#14). Tags only the incoming copy carries on a manifest
+added on both sides are refused. `pull --force` overrides the manifest-edit rejections, as it
+does every per-artifact ingest check, but not these ledger checks.
+
+Lifecycle readers select a task's events by the signed `id` and ignore an event whose
+`task` disagrees with it. A submit without `sig2` counts only if its `result` is a manifest
+you hold whose content hash is the submit's signed hash, and an accept without `sig2` only if
+its `result` names such a submission (#45).
 
 **Known gaps** (pinned by the test suite): a republish signs the content hash, not the
 manifest bytes, so an edit committed after a genuine republish in the same range is
-accepted with it; and an `accept` doesn't sign which result it accepts, so a relayed copy
-of a not-yet-held accept can name another result for the same task. Closing both needs the
-manifest and the full statement under the signature (#43, together with #10).
+accepted with it (#43, together with #10). A receiver that never held a `sig2`-signed
+original cannot tell a copy with `sig2` stripped from an older entry, so the rules above
+are what bind it: a relayed, stripped accept can still name another genuine submission to the
+same task, including the relayer's own. A second key's `publish` of an artifact leaves no key able to rewrite its
+manifest until the dispute is settled (#47).
 
 **A peer can never hand you local policy.** `registry/peers.json`,
 `registry/exec-policy.json`, `registry/subscriptions.json`, and `quarantine.log` are
@@ -574,7 +591,8 @@ tamper checkpoint and says explicitly that it is not third-party-verifiable time
 Asserted `ts` fields are self-declared — a signature proves who wrote a statement, never
 that its timestamp is true. Since first-publisher decides whether a submission counts as an
 independent derivation or a copy, ordering keys on the **anchored upper bound first** and
-asserted time only as a tiebreak between equally-anchored claims.
+asserted time only as a tiebreak between equally-anchored claims. Only `publish` events are
+candidates: a `republish` restates metadata and never claims authorship (#46).
 
 ```bash
 $COMMONS status tk-…        # shows TIME DISCREPANCY when an assertion outruns its anchors
@@ -1059,7 +1077,8 @@ collections; no wall-clock timestamps inside outputs; no network in steps
   `--attribution` reports artifacts with no `publish`/`republish` ledger event
   (`UNATTRIBUTED:`, counted as problems — blob integrity says nothing about who published),
   plus artifacts whose only publish events are unsigned (`UNSIGNED-ONLY:`, advisory:
-  nothing verifiably names their publisher; repair with a signed `publish --force`);
+  nothing verifiably names their publisher. There is no repair yet: a signed `publish --force`
+  writes a `republish`, which never claims authorship (#46), and an adoption path is #47);
   `--availability` prints a read-only obtainability census for datasets
   (`open`/`licensed-obtainable`/`restricted`/`undeclared`, with ids) and previews what
   `push`'s disclosure gate would refuse — same shared predicate as the gate itself, so

@@ -114,9 +114,36 @@ for n in manifest members all self exec pending maint outsider none anysup; do
   COMMONS_ROOT="$LAB/$n" "$COMMONS" peer add "$OADDR" --agent-id outsider --trust full >/dev/null
 done
 
+# The fixture ledgers carry placeholder signatures ("offline-maintainer" etc.), and
+# `pull` verifies every incoming ledger line (#48), so plain syncs run through the
+# same verify stub the supersede sections use.
+sync_plain(){
+  ( cd "$M" && COMMONS_ROOT="$M" COMMONS_TEST_MAINTAINER="$MADDR" COMMONS_TEST_OUTSIDER="$OADDR" python3 - "$COMMONS" "$@" <<'PY_PLAIN_SYNC'
+import argparse, importlib.machinery, os, sys
+mod=importlib.machinery.SourceFileLoader("commons_cli",sys.argv[1]).load_module()
+m=os.environ["COMMONS_TEST_MAINTAINER"].lower()
+o=os.environ["COMMONS_TEST_OUTSIDER"].lower()
+real=mod.verify_entry
+def verified(entry, sig, claimed):
+    addr=(claimed or "").lower()
+    if (sig=="offline-maintainer" and addr==m) or (sig=="offline-outsider" and addr==o):
+        return True, claimed
+    return real(entry, sig, claimed)
+mod.verify_entry=verified
+sub=sys.argv[3] if len(sys.argv) > 3 and sys.argv[2] == "--subscription" else None
+try:
+    mod.cmd_sync(argparse.Namespace(subscription=sub))
+except SystemExit as e:
+    if e.code not in (None, 0):
+        if not isinstance(e.code, int): print(e.code, file=sys.stderr)
+        sys.exit(e.code if isinstance(e.code, int) else 1)
+PY_PLAIN_SYNC
+  )
+}
+
 head_ "manifests-only"
 M="$LAB/manifest"; COMMONS_ROOT="$M" "$COMMONS" subscribe "$COLLECTION" origin >/dev/null
-check "manifests-only sync succeeds" "$(rc env COMMONS_ROOT="$M" "$COMMONS" sync)" "0"
+check "manifests-only sync succeeds" "$(rc sync_plain)" "0"
 check "full pull carries every manifest" "$(find "$M/registry/artifacts" -name '*.json' | wc -l | tr -d ' ')" "13"
 check "manifests-only leaves curated blob absent" "$(test -e "$(bp "$M" "$DC")"; echo $?)" "1"
 check "manifests-only leaves collection blob absent" "$(test -e "$(bp "$M" "$DCL")"; echo $?)" "1"
@@ -125,14 +152,14 @@ check "zero-count report emitted" "$(grep -c 'result: fetched=0 skipped=0 alread
 
 head_ "curated members and executable deny"
 M="$LAB/members"; COMMONS_ROOT="$M" "$COMMONS" subscribe "$COLLECTION" origin --blobs members >/dev/null
-check "members sync succeeds" "$(rc env COMMONS_ROOT="$M" "$COMMONS" sync --subscription "$COLLECTION")" "0"
+check "members sync succeeds" "$(rc sync_plain --subscription "$COLLECTION")" "0"
 check "curated member fetched" "$(test -f "$(bp "$M" "$DC")"; echo $?)" "0"
 check "self-declared excluded by default" "$(test -e "$(bp "$M" "$DS")"; echo $?)" "1"
 check "unrelated artifact excluded" "$(test -e "$(bp "$M" "$DO")"; echo $?)" "1"
 check "executable denied by default" "$(test -e "$(bp "$M" "$DE")"; echo $?)" "1"
 check "executable skip is named" "$(grep -c "SKIPPED executable $EXEC" "$LAB/out.txt")" "1"
 check "members counts fetched and skipped" "$(grep -c 'result: fetched=1 skipped=1 already-present=0' "$LAB/out.txt")" "1"
-check "members resync succeeds" "$(rc env COMMONS_ROOT="$M" "$COMMONS" sync --subscription "$COLLECTION")" "0"
+check "members resync succeeds" "$(rc sync_plain --subscription "$COLLECTION")" "0"
 check "already-present member is counted" "$(grep -c 'result: fetched=0 skipped=1 already-present=1' "$LAB/out.txt")" "1"
 
 head_ "fsck subscription completeness"
@@ -187,7 +214,7 @@ check "empty-subscription counts are not invented" "$(grep -c '^  counts:' "$LAB
 
 head_ "all policy"
 M="$LAB/all"; COMMONS_ROOT="$M" "$COMMONS" subscribe "$COLLECTION" origin --blobs all >/dev/null
-check "all sync succeeds" "$(rc env COMMONS_ROOT="$M" "$COMMONS" sync)" "0"
+check "all sync succeeds" "$(rc sync_plain)" "0"
 check "all fetches curated" "$(test -f "$(bp "$M" "$DC")"; echo $?)" "0"
 check "all fetches unrelated" "$(test -f "$(bp "$M" "$DO")"; echo $?)" "0"
 check "all fetches self-declared" "$(test -f "$(bp "$M" "$DS")"; echo $?)" "0"
@@ -197,7 +224,7 @@ check "all still denies executable" "$(test -e "$(bp "$M" "$DE")"; echo $?)" "1"
 head_ "self-declared opt-in"
 M="$LAB/self"
 COMMONS_ROOT="$M" "$COMMONS" subscribe "$COLLECTION" origin --blobs members --include-self-declared >/dev/null
-check "self-declared opt-in sync succeeds" "$(rc env COMMONS_ROOT="$M" "$COMMONS" sync)" "0"
+check "self-declared opt-in sync succeeds" "$(rc sync_plain)" "0"
 check "self-declared fetched with flag" "$(test -f "$(bp "$M" "$DS")"; echo $?)" "0"
 check "self-declared intent persisted" "$(python3 - "$M/registry/subscriptions.json" <<'PY'
 import json,sys
@@ -215,11 +242,18 @@ entry = {"schema": "rc.v1", "ts": "2026-08-03T00:00:00Z", "action": "publish",
 open(sys.argv[1], "w").write(json.dumps(entry, sort_keys=True) + chr(10))
 PYLEDGER
 sync_exec_fixture(){
-  COMMONS_ROOT="$M" COMMONS_TEST_VERIFIED_PUBLISHER="$ADDR" python3 - "$COMMONS" <<'PYTRUST'
+  COMMONS_ROOT="$M" COMMONS_TEST_VERIFIED_PUBLISHER="$ADDR" COMMONS_TEST_MAINTAINER="$MADDR" \
+    COMMONS_TEST_OUTSIDER="$OADDR" python3 - "$COMMONS" <<'PYTRUST'
 import argparse, importlib.machinery, os, sys
 mod=importlib.machinery.SourceFileLoader("commons_cli",sys.argv[1]).load_module()
 addr = os.environ["COMMONS_TEST_VERIFIED_PUBLISHER"].lower()
-mod.verify_entry = lambda entry, sig, claimed: (sig == "offline-test-signature" and (claimed or "").lower() == addr, claimed)
+m = os.environ["COMMONS_TEST_MAINTAINER"].lower(); o = os.environ["COMMONS_TEST_OUTSIDER"].lower()
+def _stub(entry, sig, claimed):
+    c = (claimed or "").lower()
+    return ((sig == "offline-test-signature" and c == addr)
+            or (sig == "offline-maintainer" and c == m)
+            or (sig == "offline-outsider" and c == o)), claimed
+mod.verify_entry = _stub
 mod.cmd_sync(argparse.Namespace(subscription=None))
 PYTRUST
 }
@@ -244,7 +278,7 @@ check "trusted executable counted fetched" "$(grep -c 'result: fetched=1 skipped
 
 head_ "pending and pull refusal visibility"
 M="$LAB/pending"; COMMONS_ROOT="$M" "$COMMONS" subscribe cl-1234abcd origin --blobs members >/dev/null
-check "pending collection sync is nonfatal" "$(rc env COMMONS_ROOT="$M" "$COMMONS" sync)" "0"
+check "pending collection sync is nonfatal" "$(rc sync_plain)" "0"
 check "pending collection is visible" "$(grep -c 'status: pending: collection not replicated' "$LAB/out.txt")" "1"
 python3 - "$M/registry/artifacts/$EXEC.json" <<'PYPENDINGINGEST'
 import json, sys
@@ -257,7 +291,7 @@ check "unsynced subscription fsck is nonfatal" "$(rc env COMMONS_ROOT="$M" "$COM
 check "unsynced subscription fsck stays pending" "$(grep -c '^  status: pending: collection not replicated$' "$LAB/out.txt")" "1"
 check "unsynced subscription has zero derived counts" "$(grep -c '^  counts: pinned=0 queued=0 skipped=0 pending-review=0$' "$LAB/out.txt")" "1"
 M="$LAB/refused"; COMMONS_ROOT="$M" "$COMMONS" subscribe cl-1234abcd missing --blobs all >/dev/null
-check "pull refusal fails sync" "$(rc env COMMONS_ROOT="$M" "$COMMONS" sync)" "1"
+check "pull refusal fails sync" "$(rc sync_plain)" "1"
 check "pull refusal is reported" "$(grep -c 'pull: REFUSED' "$LAB/out.txt")" "1"
 
 sync_supersede_fixture(){
