@@ -818,6 +818,29 @@ either direction. (Before #39 the manifest link *was* the declaration. Manifests
 successor's policy over claims against the old id.) Other artifact types still supersede with a
 manifest `--link supersedes:…`.
 
+**Migrating a collection superseded before #39** (0.2.x and earlier, where the lineage exists only
+as manifest links). From 0.3.0 those links are ignored: `hub check` fails each successor ("manifest
+links supersedes:… but the spec does not declare it"), and a version reachable *only* through such
+a link drops out of the lineage. If that version carries no `ingest` policy of its own, typically
+the original collection when the policy was added on a later supersede, **a `part-of` claim
+against it is no longer checked against the successor's policy**. To migrate, in one hub PR
+together with the `hub-check.yml` pin bump:
+
+1. Publish a new tip whose spec lists **every** earlier version, not just the latest:
+   `commons cat <tip> > c.json`, add `"supersedes": ["<tip>", …, "<original>"]`, and run
+   `commons publish collection c.json "<title>" --license …`. If you list only the latest, any
+   version that no spec names stays orphaned, along with any claim against it.
+2. Re-run `commons publish collection <spec> "<title>" --license … --force` on each intermediate
+   version, using its own unchanged spec (`commons cat <id>`). A `--force` republish re-derives the
+   manifest links from the spec, so the stale link is dropped. The id doesn't change, and since
+   0.3.0 a republish never claims authorship.
+3. Commit, then run `commons hub check --base origin/main` and `commons hub check`. Both should pass,
+   and a forbidden key should be refused against every old id. Point your README and `COMMONS.md`
+   at the new tip.
+
+Step 1 needs a maintainer's key, because only a maintainer-signed supersede retires a collection.
+`tests/test-spec-supersedes.sh` ("migrating a pre-#39 chain") runs this sequence.
+
 `--allow-unchecked-ingest` is recorded in the publish ledger event and shown by `verify` and
 `status`, so a deliberate skip is visible rather than silent. **A denylist is only a floor:**
 a contributor who exports `acct` instead of `account_id` passes cleanly. The allowlist form

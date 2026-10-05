@@ -224,6 +224,48 @@ check "  saying it is not a collection id" "$(grep -c "supersedes\[0\] '$DSX' is
 mkcoll "$W/lint.json" "lint unheld target" "" '["cl-abcdef01"]'
 check "accepted: an unheld collection id (lazy replication)" "$(rc L publish collection "$W/lint.json" "lint")" "0"
 
+# ---------------------------------------------------------------- migrating a pre-#39 chain
+head_ "migrating a pre-#39 chain: OLD3 (no policy) <- MID3 <- TIP3, lineage in hints only"
+# The shape a hub has after superseding twice under 0.2.0: the policy was added on the first
+# supersede, and both hops exist only as manifest links.
+hint() { python3 - "$HL/registry/artifacts/$1.json" "$2" <<'PY'
+import json, sys
+p, old = sys.argv[1:3]; m = json.load(open(p))
+m["links"] = [{"rel": "supersedes", "id": old}]
+json.dump(m, open(p, "w"), indent=2, sort_keys=True)
+PY
+}
+mkcoll "$W/old3.json" "migration root" "" ""
+OLD3=$(L publish collection "$W/old3.json" "old3" --license CC-BY-4.0 2>/dev/null | tail -1)
+mkcoll "$W/mid3.json" "migration middle" "$ACCT" ""
+MID3=$(L publish collection "$W/mid3.json" "mid3" --license CC-BY-4.0 2>/dev/null | tail -1)
+mkcoll "$W/tip3.json" "migration tip" "$ACCT" ""
+TIP3=$(L publish collection "$W/tip3.json" "tip3" --license CC-BY-4.0 2>/dev/null | tail -1)
+hint "$MID3" "$OLD3"; hint "$TIP3" "$MID3"
+check "before migrating: a leak part-of OLD3 publishes (the root has no policy of its own)" \
+  "$(pubds L "$(leak)" "$OLD3")" "0"
+mkcoll "$W/m-direct.json" "migration tip v2, direct predecessor only" "$ACCT" "[\"$TIP3\"]"
+L publish collection "$W/m-direct.json" "m-direct" --license CC-BY-4.0 >/dev/null 2>&1
+check "a new tip declaring only TIP3 still lets a leak part-of OLD3 through" \
+  "$(pubds L "$(leak)" "$OLD3")" "0"
+mkcoll "$W/m-all.json" "migration tip v2, whole lineage" "$ACCT" "[\"$TIP3\",\"$MID3\",\"$OLD3\"]"
+M3=$(L publish collection "$W/m-all.json" "m-all" --license CC-BY-4.0 2>/dev/null | tail -1)
+check "a new tip declaring every ancestor refuses a leak part-of OLD3" "$(pubds L "$(leak)" "$OLD3")" "1"
+check "  by the new tip's policy" "$(grep -c "(policy of $M3)" "$W/err.txt")" "1"
+( cd "$HL" && COMMONS_ROOT="$HL" "$COMMONS" hub check ) >"$W/out.txt" 2>&1
+check "hub check still fails the two stale hints" \
+  "$(grep -cE "PROBLEM: ($MID3|$TIP3): manifest links supersedes:" "$W/out.txt")" "2"
+L publish collection "$W/mid3.json" "mid3" --license CC-BY-4.0 --force >/dev/null 2>&1
+L publish collection "$W/tip3.json" "tip3" --license CC-BY-4.0 --force >/dev/null 2>&1
+check "a --force republish of each intermediate drops its hint, id unchanged" \
+  "$(links_of "$HL" "$MID3")|$(links_of "$HL" "$TIP3")" "|"
+( cd "$HL" && COMMONS_ROOT="$HL" "$COMMONS" hub check ) >"$W/out.txt" 2>&1
+check "  and hub check passes" "$(grep -c PROBLEM "$W/out.txt")" "0"
+check "the policy still holds against OLD3, MID3 and TIP3" \
+  "$(for c in "$OLD3" "$MID3" "$TIP3"; do pubds L "$(leak)" "$c"; done | tr -d '\n')" "111"
+check "collection show marks the root SUPERSEDED by the new tip" \
+  "$(L collection show "$OLD3" 2>/dev/null | grep -c "SUPERSEDED by $M3")" "1"
+
 # ---------------------------------------------------------------- add-member
 head_ "collection add-member writes the field"
 AM=$(L collection add-member "$NEW" "$DSX" 2>/dev/null | tail -1)

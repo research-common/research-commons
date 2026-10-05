@@ -9,6 +9,15 @@ manifest/ledger format version — `commons --version` prints both).
 
 ## [Unreleased]
 
+### Documentation
+- **How to migrate a collection superseded before #39.** The 0.3.0-alpha.1 migration note said to
+  republish the successor with `supersedes` in its spec. That alone isn't enough. If the chain has
+  more than one hop and the policy was added after the first version, a claim against the original
+  id still escapes the policy. The new tip has to list every earlier version, and each
+  intermediate version needs a `--force` republish to drop its stale manifest link, or `hub check`
+  keeps failing. README §"Migrating a collection superseded before #39" gives the steps, and
+  `tests/test-spec-supersedes.sh` covers them.
+
 ## [0.3.0-alpha.1] - 2026-10-04
 
 Second tagged release. **MINOR bump:** `hub check` and `pull` now refuse things they accepted
