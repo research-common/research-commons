@@ -2299,6 +2299,7 @@ def cmd_publish(a):
     if a.type == "skill":
         rubric = _lint_skill_bundle(a)
     _lint_applies_links(a)
+    _lint_workflow_network(a)
     digest = store_blob(a.file)
     aid = "%s-%s" % (TYPES[a.type], digest[:8])
     existed = os.path.exists(manifest_path(aid))
@@ -2529,6 +2530,64 @@ def _lint_skill_bundle(a):
               "recorded, but `list --category`/`collection show` will not treat it as a "
               "method." % METHOD_TAG, file=sys.stderr)
     return rubric
+
+
+# Network-shaped workflow steps (#7). The determinism checklist says "no network in
+# steps": acquire, publish the capture as a dataset, then derive. Natively nothing
+# enforces it, so a step that fetches can verify byte-identically on the publisher's
+# machine and then fail under `--exec sandbox` (no network) as an ordinary workflow
+# failure a stranger cannot tell from a broken workflow. This is a publish-time hint
+# only: the heuristic reads the step text, never scripts the steps call.
+_NETWORK_STEP_PATTERNS = (
+    (re.compile(r"(?:^|[;|&(`]|\$\()\s*(?:sudo\s+|env\s+(?:\w+=\S*\s+)*|"
+                r"timeout\s+\S+\s+|xargs\s+(?:-\S+\s+)*)?(curl|wget|aria2c|httpie|http|nc|ncat|netcat|socat|telnet|"
+                r"ftp|sftp|scp|ssh|rsync|ipfs|gsutil|aws|az|gcloud|"
+                r"bitcoin-cli|dcrctl|geth|cast|solana|grpcurl|websocat)(?=\s|$)"),
+     "runs %s"),
+    (re.compile(r"\bgit\s+(clone|fetch|pull|ls-remote|submodule\s+update)\b"), "runs git %s"),
+    (re.compile(r"\b(pip3?|uv|npm|pnpm|yarn|gem|cargo|go)\s+(install|add|get)\b"),
+     "installs packages (%s)"),
+    (re.compile(r"\b(apt-get|apt|apk|dnf|yum|brew)\s+(install|update|add)\b"),
+     "installs packages (%s)"),
+    (re.compile(r"\b(?:https?|ftp|wss?)://[^\s'\"]+"), "names a URL (%s)"),
+    (re.compile(r"\b(requests|urllib\.request|urllib3|httpx|aiohttp|socket\.create_connection|"
+                r"http\.client|web3|ethers|fetch)\s*[.(]"), "calls %s"),
+)
+
+
+def workflow_network_hints(spec):
+    """[(step index, reason)] for steps that look like they reach the network."""
+    hints = []
+    steps = spec.get("steps") if isinstance(spec, dict) else None
+    for i, step in enumerate(steps if isinstance(steps, list) else []):
+        if not isinstance(step, str):
+            continue
+        for rx, fmt in _NETWORK_STEP_PATTERNS:
+            m = rx.search(step)
+            if m:
+                hints.append((i, fmt % (m.group(1) if m.groups() else m.group(0))))
+                break
+    return hints
+
+
+def _lint_workflow_network(a):
+    if a.type != "workflow":
+        return
+    try:
+        with open(a.file) as f:
+            spec = json.load(f)
+    except (OSError, ValueError):
+        return
+    hints = workflow_network_hints(spec)
+    if not hints:
+        return
+    for i, why in hints:
+        print("warning: steps[%d] looks network-shaped: it %s." % (i, why), file=sys.stderr)
+    print("         A step that reaches the network can PASS natively for you and fail for a "
+          "verifier\n         without that source, and always fails under `--exec sandbox` "
+          "(no network),\n         reported as an ordinary workflow failure. Prefer: acquire, "
+          "publish the capture\n         as a dataset (T3), then derive from it here. "
+          "See the README's determinism checklist.", file=sys.stderr)
 
 
 def _lint_applies_links(a):

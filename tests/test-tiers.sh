@@ -164,7 +164,30 @@ spec = {
 }
 json.dump(spec, open(sys.argv[1], "w"), indent=2, sort_keys=True)
 PY
-WF0=$(c publish workflow "$W/wf-t0.json" "T0 aggregation" -t demo)
+WF0=$(c publish workflow "$W/wf-t0.json" "T0 aggregation" -t demo 2>"$W/wf0-err.txt")
+
+head_ "network-shaped steps warn at publish (#7, advisory)"
+check "deterministic workflow: no network warning" "$(grep -c 'network-shaped' "$W/wf0-err.txt")" "0"
+net_case() {
+  local label="$1" step="$2" want="$3"
+  jq -n --arg s "$step" '{steps:["true", $s], outputs:{o:"o"}}' >"$W/wf-net-$label.json"
+  local code; code=$(rc c publish workflow "$W/wf-net-$label.json" "net $label")
+  if [ "$code" = 0 ] && grep -q "warning: steps\[1\] looks network-shaped: it $want" "$W/err.txt" \
+     && grep -q -- "--exec sandbox" "$W/err.txt"; then
+    ok "$label: warns, exit 0"
+  else
+    bad "$label (exit $code): $(cat "$W/err.txt")"
+  fi
+}
+net_case curl 'curl -sS http://example.com > "$OUT_DIR/o"' "runs curl"
+net_case piped-rpc 'seq 1 3 | xargs -n1 dcrctl getblockhash > "$OUT_DIR/o"' "runs dcrctl"
+net_case subshell 'H=$(bitcoin-cli getbestblockhash); echo "$H" > "$OUT_DIR/o"' "runs bitcoin-cli"
+net_case git-clone 'git clone https://example.org/x.git src' "runs git clone"
+net_case pip 'pip install pandas' "installs packages (pip)"
+net_case python-requests 'python3 -c "import requests; requests.get(1)"' "calls requests"
+jq -n '{steps:["echo \"see the http docs\" > \"$OUT_DIR/o\"", "sort \"$IN_X\" | ssh-keygen -l > /dev/null || true"], outputs:{o:"o"}}' >"$W/wf-net-quiet.json"
+check "word 'http' in an argument / ssh-keygen: no warning" \
+  "$(rc c publish workflow "$W/wf-net-quiet.json" "net quiet" >/dev/null; grep -c 'network-shaped' "$W/err.txt")" "0"
 OUT0=$(c run "$WF0" --publish --publish-type synthesis --title "T0 out" | awk '{print $1}')
 
 head_ "T0 — bitwise"
@@ -194,7 +217,8 @@ check "skill gets no verification block" \
   "$(c get "$CMP" | python3 -c 'import json,sys;print("verification" in json.load(sys.stdin))')" "False"
 check "workflow gets no verification block" \
   "$(c get "$WF0" | python3 -c 'import json,sys;print("verification" in json.load(sys.stdin))')" "False"
-check "method ledger line says method" "$(c log -n 100 | grep -c '"tier": "method"')" "3"
+# 3 = WF0 + the two comparators; the #7 network-warning cases above add 7 workflows.
+check "method ledger line says method" "$(c log -n 100 | grep -c '"tier": "method"')" "10"
 check "method shows as — in list" "$(c list --type skill | grep -c '—')" "2"
 check "explicit tier on a method still honoured" \
   "$(c publish skill "$REPO/comparators/sorted-set-equality.py" "forced tier" --tier T0 --force >/dev/null; c get "$CMP_SET" | python3 -c 'import json,sys;print(json.load(sys.stdin)["verification"]["tier"])')" "T0"

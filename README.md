@@ -1095,6 +1095,15 @@ Pin `TZ=UTC LC_ALL=C PYTHONHASHSEED=0` in spec `env`; sort all output
 collections; no wall-clock timestamps inside outputs; no network in steps
 (acquire → publish dataset first, derive second).
 
+`publish workflow` warns (exit code unchanged) when a step looks network-shaped: a fetch or
+RPC client in command position (`curl`, `wget`, `nc`, `ssh`, `bitcoin-cli`, `dcrctl`, …),
+`git clone/fetch/pull`, a package install, a URL, or a Python/JS HTTP client call. Such a
+step can PASS natively for you, fail for a verifier without the same source, and always
+fails under `--exec sandbox` (no network) as an ordinary workflow failure. The check reads
+the step text only, not scripts the steps call, so it's a hint, not a guarantee. Declaring a
+public source (a chain node, an immutable-by-id API) as an input is an open design question
+(#7, with #1).
+
 ## Maintenance
 
 - **Project integration contracts:** a project that wants to share data writes a

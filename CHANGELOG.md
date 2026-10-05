@@ -16,6 +16,12 @@ manifest/ledger format version — `commons --version` prints both).
   `--remote-url` (or a `publish peer-announce` spec) now prints a stderr warning that
   announces are public and permanent. Exit code and accepted URLs are unchanged.
   `announce --help` says the same.
+- **`publish workflow` warns on network-shaped steps (#7, warn half).** A step that runs a
+  fetch or RPC client in command position (`curl`, `wget`, `nc`, `ssh`, `bitcoin-cli`,
+  `dcrctl`, `cast`, …), `git clone/fetch/pull`, a package install, names a URL, or calls a
+  Python/JS HTTP client prints a stderr warning pointing at the determinism checklist
+  (acquire, publish the capture, derive). Advisory: exit code unchanged, step text only.
+  The declared public-source input stays open in #7.
 
 ### Documentation
 - **How to migrate a collection superseded before #39.** The 0.3.0-alpha.1 migration note said to
