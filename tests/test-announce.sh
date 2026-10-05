@@ -118,6 +118,45 @@ else
   bad "re-announce supersedes chain"
 fi
 
+printf 'remote exposure warnings (advisory)\n'
+warn_case() {
+  local label="$1" url="$2" want="$3"
+  spec "$SIGNER" "$url" "$EXPIRES"
+  if c publish peer-announce "$W/spec.json" "warn-$label" >"$W/out" 2>"$W/err"; then
+    if [ -n "$want" ]; then
+      if grep -q "warning: remotes\[0\].url $want" "$W/err" && grep -q "public and permanent" "$W/err"; then
+        ok "$label warns, exit 0"
+      else
+        bad "$label: missing warning ($want): $(cat "$W/err")"
+      fi
+    elif grep -q "warning: remotes" "$W/err"; then
+      bad "$label: unexpected warning: $(cat "$W/err")"
+    else
+      ok "$label publishes without a warning"
+    fi
+  else
+    bad "$label refused: $(cat "$W/err")"
+  fi
+}
+warn_case local-path "$W/private-hub" "is a local filesystem path"
+warn_case rfc1918 "https://192.168.1.20/hub.git" "points at a private"
+warn_case single-label "ssh://git@nas/hub.git" "points at a single-label host"
+warn_case dot-local "git@builder.local:hub.git" "points at an internal hostname"
+warn_case username "ssh://alice@git.example.org/hub.git" "includes a username"
+warn_case public-https "https://git.example.org/team/hub.git" ""
+warn_case public-scp "git@git.example.org:team/hub.git" ""
+if c announce --remote-url /tmp/commons-announce-probe >"$W/out" 2>"$W/err" \
+   && grep -q "is a local filesystem path" "$W/err"; then
+  ok "announce command warns on a local path, exit 0"
+else
+  bad "announce command local-path warning"
+fi
+if "$COMMONS" announce --help | tr -s ' \n' ' ' | grep -q "public and permanent"; then
+  ok "announce --help says announces are public and permanent"
+else
+  bad "announce --help missing the permanence note"
+fi
+
 printf 'evidence exclusion\n'
 printf 'analysis\n' >"$W/report.txt"
 REPORT="$(c publish report "$W/report.txt" guarded --tier T2 --criteria reviewed   --link "supports:$PA2" | tail -1)"

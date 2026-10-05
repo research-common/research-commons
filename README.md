@@ -468,6 +468,14 @@ automatically supersedes the signer's previous announce. Collection claims are e
 unless `--hosts-from-local` is opted into; that flag also declares collections the signer
 published locally.
 
+**Announces are public and permanent.** A `--remote-url` replicates to every reader of the
+hub, and a later announce hides the old one from resolution but never deletes its bytes or
+ledger entry. `announce` (and `publish peer-announce`) therefore warns, without refusing,
+when a remote is a local filesystem path, points at a private, loopback or single-label
+host or an internal name (`.local`, `.lan`, `.internal`, …), or carries a username other
+than `git`. Same-host and LAN test hubs stay legitimate; just don't announce them into a
+hub that leaves your network.
+
 `commons peer suggest [--json] [--all]` resolves each signer's latest valid,
 single-author announce and shows registration/trust/revocation state, expiry, claimed
 remotes and collections, configured/subscribed matches, and copy-pasteable `peer add`,

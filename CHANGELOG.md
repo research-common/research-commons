@@ -9,6 +9,14 @@ manifest/ledger format version — `commons --version` prints both).
 
 ## [Unreleased]
 
+### Added
+- **`announce` warns when a remote would leak local or internal details (#53).** A local
+  filesystem path, a private/loopback/CGNAT or single-label host, an internal name
+  (`.local`, `.lan`, `.internal`, `.localdomain`, `.home.arpa`) or a non-`git` username in a
+  `--remote-url` (or a `publish peer-announce` spec) now prints a stderr warning that
+  announces are public and permanent. Exit code and accepted URLs are unchanged.
+  `announce --help` says the same.
+
 ### Documentation
 - **How to migrate a collection superseded before #39.** The 0.3.0-alpha.1 migration note said to
   republish the successor with `supersedes` in its spec. That alone isn't enough. If the chain has

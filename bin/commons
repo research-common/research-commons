@@ -1959,6 +1959,57 @@ def lint_ingest_block(ing):
     return bad
 
 
+_PRIVATE_HOST_SUFFIXES = (".local", ".lan", ".internal", ".localdomain", ".home.arpa")
+
+
+def _remote_host_exposure(url):
+    """Why a plausible announce URL may leak private details, or None.
+
+    Advisory only: same-host and LAN hubs are legitimate, but an announce is signed,
+    content-addressed and replicates to every reader of the hub, so a local path or an
+    internal hostname in it is published permanently."""
+    if os.path.isabs(url):
+        return "is a local filesystem path"
+    user = host = None
+    m = re.fullmatch(r"([^@/:\s]+)@([^/:\s]+):.+", url)
+    if m:
+        user, host = m.group(1), m.group(2)
+    elif url.startswith(("ssh://", "https://")):
+        parsed = urlsplit(url)
+        user, host = parsed.username, parsed.hostname
+    if not host:
+        return None
+    host = host.lower().strip("[]")
+    try:
+        import ipaddress
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        ip = None
+    if ip is not None:
+        shared = ip.version == 4 and ip in ipaddress.ip_network("100.64.0.0/10")
+        if ip.is_private or ip.is_loopback or ip.is_link_local or shared:
+            return "points at a private or loopback address (%s)" % host
+    elif "." not in host:
+        return "points at a single-label host (%s)" % host
+    elif host.endswith(_PRIVATE_HOST_SUFFIXES):
+        return "points at an internal hostname (%s)" % host
+    if user and user != "git":
+        return "includes a username (%s@)" % user
+    return None
+
+
+def announce_remote_warnings(spec):
+    """Advisory messages for announce remotes that expose local or internal details."""
+    out = []
+    remotes = spec.get("remotes") if isinstance(spec, dict) else None
+    for i, remote in enumerate(remotes if isinstance(remotes, list) else []):
+        url = remote.get("url") if isinstance(remote, dict) else None
+        why = _remote_host_exposure(url) if isinstance(url, str) and url else None
+        if why:
+            out.append("remotes[%d].url %s: %s" % (i, why, url))
+    return out
+
+
 def lint_announce_spec(spec, signer_addr):
     """Validate a peer reachability hint against its publishing signer."""
     bad = []
@@ -2233,6 +2284,12 @@ def cmd_publish(a):
             sys.exit("error: refusing to publish %s — %d problem(s) above.\n"
                      "       Artifact content is immutable; correct the spec and retry."
                      % (a.type, len(problems)))
+        if a.type == "peer-announce":
+            for w in announce_remote_warnings(spec):
+                print("warning: %s\n"
+                      "         Announces are public and permanent: the URL replicates to every "
+                      "reader of\n         this hub, and a later announce hides it from "
+                      "resolution but never deletes it." % w, file=sys.stderr)
     # Analysis templates: skills may be SKILL.md bundles (tar) carrying a rubric, and
     # any artifact may declare `applies:sk-…`. Method conventions are advisory
     # (warnings) — the note's stage 1 is convention, not schema — but a bundle that
@@ -10424,9 +10481,13 @@ def main():
     s.add_argument("--force", action="store_true")
     s.set_defaults(fn=cmd_publish)
 
-    s = sub.add_parser("announce", help="publish signed reachability and hosting hints")
+    s = sub.add_parser("announce", help="publish signed reachability and hosting hints",
+                       description="Publish a signed peer-announce. Announces are public and "
+                                   "permanent: every --remote-url replicates to every reader "
+                                   "of the hub, and superseding hides it but never deletes it.")
     s.add_argument("--remote-url", action="append", metavar="U",
-                   help="plausible git URL (repeatable; at least one required)")
+                   help="plausible git URL (repeatable; at least one required). Local paths, "
+                        "private or single-label hosts and usernames publish with a warning")
     s.add_argument("--hosts", action="append", metavar="CL-ID[:POLICY]",
                    help="hosted collection and optional manifests-only|members|all policy")
     s.add_argument("--hosts-from-local", action="store_true",
