@@ -588,31 +588,45 @@ incomplete is not corrupt.
 ```bash
 $COMMONS anchor                      # Merkle root over log heads -> OpenTimestamps
 $COMMONS anchor-upgrade              # promote pending OTS proofs once confirmed
-$COMMONS anchor-verify               # re-derive roots, check proofs
+$COMMONS anchor-verify               # root consistency + proof inspection, not block time
 ```
 
 Anchoring gives an **upper** bound only ("this existed by then"); it cannot show
 something didn't exist earlier. With no OTS client installed, `anchor` records a local
 tamper checkpoint and says explicitly that it is not third-party-verifiable time.
 
-**Anchors decide priority disputes, so anchoring protects your derivation credit.**
+**Checkpoints inform priority, but self-declared times are not adversarial proof.**
 Asserted `ts` fields are self-declared — a signature proves who wrote a statement, never
 that its timestamp is true. Since first-publisher decides whether a submission counts as an
-independent derivation or a copy, ordering keys on the **anchored upper bound first** and
-asserted time only as a tiebreak between equally-anchored claims. Only `publish` events are
+independent derivation or a copy, ordering keys on **evidence quality, then checkpoint time**,
+and asserted time only as a tiebreak between equally-checkpointed claims. Only `publish` events are
 candidates: a `republish` restates metadata and never claims authorship (#46).
 
 ```bash
 $COMMONS status tk-…        # shows TIME DISCREPANCY when an assertion outruns its anchors
 ```
 
-- Unanchored sorts last. "I had it first but never anchored it" stays claimable and never
-  provable — so **if you publish work you want credit for, anchor.**
-- A Bitcoin-confirmed proof outranks a local checkpoint even if the checkpoint claims an
-  earlier time: you can backdate your own checkpoint, not a block.
-- A peer asserting priority its anchors cannot cover downgrades to a *concurring
-  reference* (zero quorum weight) and the gap is reported as a reputational tell.
-  Backdating isn't prevented, it's made visible.
+- A checkpoint's root must recompute from its heads, and a matching signed `anchor`
+  event must occur in its signer's own log. It bounds only that log's prefix before the
+  event, using the **signed event timestamp**, never the JSON's mutable `created`.
+  An operator's checkpoint over several logs does not confer priority on other keys.
+- All current bounds are **local (self-declared)**, including JSON marked `confirmed`
+  with `bitcoin_blocks` or `verified_locally: true`. Neither those fields nor `ots info`
+  proves a block or its time. `anchor-upgrade` records proof labels; `anchor-verify`
+  checks consistency and inspects proofs. Neither grants Bitcoin-quality priority.
+- A checkpoint with no matching signed event cannot affect a signed publisher, even
+  if it arrives through `pull`. Unsigned checkpoints can still cover the unsigned log
+  for operational drift warnings, but cannot authenticate a signed event relayed there.
+- Uncheckpointed claims sort last. A local checkpoint helps order honest peers, but
+  **a signer can still backdate its own signed checkpoint**. Local TIME DISCREPANCY
+  reports are discrepancies between assertions, not proof of dishonesty. A losing
+  assertion can still downgrade a submission to a *concurring reference* (zero quorum
+  weight); do not treat this provisional ordering as adversarial edit authority.
+
+Bitcoin-quality priority is disabled until a receiver-local verifier can bind the proof
+to the recomputed root and use a trusted **block time** instead of a publisher's date.
+This read-side safeguard does not reject anchor files at the `pull`/`hub check` gates.
+See [the anchor trust design note](docs/DESIGN-notes-anchor-trust.md) for the boundary and followups.
 
 **Staleness warning.** Because priority now rests on anchoring, letting the cadence lapse
 quietly leaves your recent work unprotected. When this host's own ledger has unanchored

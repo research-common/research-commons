@@ -9,6 +9,18 @@ manifest/ledger format version — `commons --version` prints both).
 
 ## [Unreleased]
 
+### Fixed
+- **Untrusted anchor JSON no longer grants Bitcoin-quality priority.** A fabricated
+  `confirmed` checkpoint could seize first-publisher credit and report a discrepancy
+  against the honest publisher, without a proof. Read-side bounds now require a
+  recomputed root and a matching signed `anchor` event in the signer's own log, cover
+  only that log's preceding prefix, and use the signed event's timestamp. All current
+  checkpoints stay local (self-declared), regardless of confirmation metadata;
+  Bitcoin quality awaits receiver-local proof/block-time verification. Evidence quality
+  sorts before time across publishers as well as within a line's bounds. Unsigned
+  operational checkpoints remain usable for unsigned-log drift coverage, but cannot
+  authenticate signed events. `pull`/`hub check` acceptance rules are unchanged.
+
 ### Added
 - **`announce` warns when a remote would leak local or internal details (#53).** A local
   filesystem path, a private/loopback/CGNAT or single-label host, an internal name

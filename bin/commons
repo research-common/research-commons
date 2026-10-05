@@ -3839,10 +3839,9 @@ _FIRSTPUB_CACHE = {"key": None, "map": None, "flags": None}
 _LINES_CACHE = {"key": None, "rows": None}
 _ANCHOR_CACHE = {"key": None, "map": None}
 
-# An unanchored event has no provable upper bound on when it came into existence, so
-# for ORDERING purposes it sorts after everything anchored. Not a penalty: an
-# unanchored claim is simply unprovable, and "I had it first but never anchored it"
-# must never outrank "here is a proof it existed by then".
+# An uncheckpointed event sorts after a checkpointed one. Current local bounds
+# order honest peers only: signing a checkpoint authenticates its author, not its
+# date. Adversarial priority requires receiver-verified Bitcoin evidence.
 UNANCHORED = float("inf")
 
 
@@ -3875,36 +3874,76 @@ def ledger_lines():
     return rows
 
 
+def checkpoint_root(heads):
+    """Recompute a checkpoint commitment; malformed heads cannot cover any log."""
+    if not isinstance(heads, dict) or not heads: return None
+    for name, head in heads.items():
+        if (not isinstance(name, str) or not name.endswith(".jsonl")
+                or "/" in name or "\\" in name
+                or not isinstance(head, str)
+                or not re.fullmatch(r"[0-9a-f]{64}", head)):
+            return None
+    layer = [hashlib.sha256((k + ":" + v).encode()).hexdigest()
+             for k, v in sorted(heads.items())]
+    while len(layer) > 1:
+        layer = [hashlib.sha256((layer[i] + (layer[i + 1]
+                 if i + 1 < len(layer) else layer[i])).encode()).hexdigest()
+                 for i in range(0, len(layer), 2)]
+    return layer[0]
+
+
+def bound_order(bound):
+    """Evidence quality precedes time: a self-declared date cannot beat a block."""
+    ts, quality = bound
+    return ({"bitcoin": 0, "local": 1, "none": 2}.get(quality, 2), ts)
+
+
 def anchor_bounds():
-    """line_sha -> (bound_ts, quality): the earliest anchor proving a line existed.
+    """line_sha -> (bound_ts, quality) for authenticated checkpoints.
 
-    An anchor records each log's head hash, so it transitively covers every line up to
-    and including that head. The earliest anchor covering a line is an authoritative
-    UPPER bound on when that line was written — the one direction time anchoring can
-    actually establish: a proof shows a line existed by then, never that it did not
-    exist earlier.
-
-    Quality matters as much as the number:
-      bitcoin  — OTS proof confirmed into a block; third-party verifiable, and the
-                 only quality that binds an ADVERSARIAL peer, since it cannot be
-                 backdated by whoever wrote the log.
-      local    — a checkpoint whose own timestamp is self-declared by the same peer.
-                 Bounds an honest-but-sloppy peer; an adversary could backdate it too.
+    JSON metadata is not evidence of Bitcoin confirmation. Until this host can
+    verify a proof against a trusted block-time source, EVERY checkpoint is local
+    (self-declared), regardless of anchored/bitcoin_blocks/verified_locally fields.
+    A signed anchor event binds its id, root and timestamp. It may cover only its
+    signer's own log, ending before that event. Unsigned checkpoints can cover the
+    unsigned log for drift warnings, but never authenticate a signed publisher.
     """
     lines = ledger_lines()
     anchor_key = None
     if os.path.isdir(ANCHOR_DIR):
         anchor_key = tuple(sorted(
-            (fn, os.path.getmtime(os.path.join(ANCHOR_DIR, fn)))
+            (fn, os.stat(os.path.join(ANCHOR_DIR, fn)).st_mtime_ns,
+             os.path.getsize(os.path.join(ANCHOR_DIR, fn)))
             for fn in os.listdir(ANCHOR_DIR) if fn.endswith(".json")))
     key = (id(lines), anchor_key)
     if _ANCHOR_CACHE["key"] == key:
         return _ANCHOR_CACHE["map"]
 
     # Per log: ordered line hashes, so a head hash locates a position.
-    per_log = {}
-    for _e, path, idx, lsha in lines:
+    per_log, entries = {}, {}
+    for e, path, _idx, lsha in lines:
         per_log.setdefault(os.path.basename(path), []).append(lsha)
+        entries[(os.path.basename(path), lsha)] = e
+
+    candidates = []
+    for e, path, _idx, lsha in lines:
+        if not isinstance(e, dict) or e.get("action") != "anchor": continue
+        addr = e.get("addr")
+        if (not isinstance(addr, str) or not re.fullmatch(r"0x[0-9a-fA-F]{40}", addr)
+                or os.path.basename(path) != addr.lower() + ".jsonl"
+                or not e.get("sig")):
+            continue
+        ats = parse_ts(e.get("ts"))
+        if ats is None: continue
+        candidates.append((e, path, lsha, ats))
+    prime_verify_cache([e for e, _p, _s, _t in candidates])
+    events = {}
+    for e, path, lsha, ats in candidates:
+        addr = e["addr"]
+        ok, _ = verify_entry(e, e["sig"], addr)
+        if ok and isinstance(e.get("id"), str) and isinstance(e.get("sha256"), str):
+            events.setdefault((e["id"], e["sha256"]), []).append(
+                (os.path.basename(path), lsha, ats))
 
     bounds = {}
     if os.path.isdir(ANCHOR_DIR):
@@ -3914,26 +3953,36 @@ def anchor_bounds():
                 with open(os.path.join(ANCHOR_DIR, fn)) as f: rec = json.load(f)
             except (OSError, ValueError):
                 continue
+            if not isinstance(rec, dict): continue
+            heads = rec.get("heads")
+            root = checkpoint_root(heads)
+            if root is None or root != rec.get("root"): continue
+            authorized = []
+            for logname, event_sha, ats in events.get((fn[:-5], root), []):
+                hashes = per_log.get(logname)
+                head = heads.get(logname)
+                if (head in hashes and hashes.index(head) < hashes.index(event_sha)):
+                    authorized.append((logname, head, ats))
+            # A local unsigned checkpoint is useful operationally, but cannot
+            # supply bounds for any signed log, even when it claims confirmation.
             ats = parse_ts(rec.get("created"))
-            if ats is None: continue
-            confirmed = (rec.get("anchored") == "confirmed"
-                         and rec.get("bitcoin_blocks"))
-            quality = "bitcoin" if confirmed else "local"
-            for logname, head in (rec.get("heads") or {}).items():
+            if ats is not None:
+                for logname in ("local-unsigned.jsonl", "ledger.jsonl"):
+                    if logname in heads:
+                        authorized.append((logname, heads[logname], ats))
+            for logname, head, ats in authorized:
                 hashes = per_log.get(logname)
                 if not hashes or head not in hashes: continue
                 for lsha in hashes[:hashes.index(head) + 1]:
                     prev = bounds.get(lsha)
-                    # Prefer a third-party-verifiable bound even if a self-declared one
-                    # claims to be earlier: an adversary can backdate their own
-                    # checkpoint, but not a Bitcoin block.
-                    if prev is None:
-                        bounds[lsha] = (ats, quality)
-                    else:
-                        p_ts, p_q = prev
-                        better = ((quality == "bitcoin" and p_q != "bitcoin")
-                                  or (quality == p_q and ats < p_ts))
-                        if better: bounds[lsha] = (ats, quality)
+                    # Never let an unsigned checkpoint authenticate a signed line
+                    # relayed into a legacy/unsigned log.
+                    if logname in ("local-unsigned.jsonl", "ledger.jsonl"):
+                        entry = entries[(logname, lsha)]
+                        if not isinstance(entry, dict) or entry.get("sig"): continue
+                    b = (ats, "local")
+                    if prev is None or bound_order(b) < bound_order(prev):
+                        bounds[lsha] = b
     _ANCHOR_CACHE["key"] = key
     _ANCHOR_CACHE["map"] = bounds
     return bounds
@@ -4027,14 +4076,15 @@ def warn_anchor_drift(now_ts=None):
 
 
 def first_publisher_index():
-    """artifact id -> (addr, ts) of its first publish, adjudicated by anchored time.
+    """artifact id -> (addr, ts) of its first publish, by quality then bound time.
 
     Asserted timestamps are self-declared, so an adversary can claim to have published
     someone else's artifact before they did — which would convert a copy into an
     `origin` derivation and hand it quorum weight. Ordering therefore keys on the
-    ANCHORED upper bound first and the asserted timestamp only as a tiebreak among
-    equally-anchored claims. "I derived it first but published late" stays claimable
-    and never provable: anchoring can only bound time from above.
+    evidence quality first, bound time next, and the asserted timestamp only as a
+    tiebreak among equally-checkpointed claims. Local checkpoint dates remain the
+    signer's own assertions, so current ordering is provisional for honest peers,
+    not adversarial proof. Real time anchoring can only bound time from above.
 
     Built in ONE ledger pass: doing it per-submission meant a full walk plus signature
     checks for every submission, which is how `status` on a 9-entry ledger reached 1.9s.
@@ -4068,8 +4118,9 @@ def first_publisher_index():
 
     idx, flags = {}, {}
     for aid, cs in cands.items():
-        # Provable order: anchored bound first, asserted time only as a tiebreak.
-        by_anchor = sorted(cs, key=lambda c: (c["bound"], c["asserted"]))
+        # Quality first, then bound time; asserted time is only a tiebreak.
+        by_anchor = sorted(cs, key=lambda c: (bound_order((c["bound"], c["quality"])),
+                                             c["asserted"]))
         by_asserted = sorted(cs, key=lambda c: c["asserted"])
         win = by_anchor[0]
         idx[aid] = (win["addr"], win["asserted"])
@@ -4095,7 +4146,10 @@ def first_publisher_index():
 
 
 def backdating_flags():
-    """artifact id -> discrepancy record where asserted priority beats anchored proof."""
+    """artifact id -> discrepancy between asserted and checkpoint order.
+
+    A local-quality discrepancy is not independent proof of backdating.
+    """
     first_publisher_index()
     return _FIRSTPUB_CACHE.get("flags") or {}
 
@@ -4103,15 +4157,16 @@ def backdating_flags():
 def fmt_bound(ts, quality):
     if ts == UNANCHORED or ts is None:
         return "unanchored"
-    return "%s (%s)" % (time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(ts)), quality)
+    label = "local, self-declared" if quality == "local" else quality
+    return "%s (%s)" % (time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(ts)), label)
 
 
 def first_publisher(result_id):
-    """(addr, ts) of the first publisher of an artifact, per anchored adjudication.
+    """(addr, ts) of the first publisher of an artifact, per checkpoint ordering.
 
     Content-addressing means the id is shared, so "who published it first" is the only
-    thing that distinguishes a derivation from a citation. Ordering leans on anchored
-    time as an upper bound, never on a publisher's self-declared timestamp.
+    thing that distinguishes a derivation from a citation. Local bound timestamps
+    are authenticated assertions, not independently verified publication times.
     """
     return first_publisher_index().get(result_id)
 
@@ -4145,7 +4200,7 @@ def publish_ordering_evidence(result_id):
         if not ok: continue
         if state is None: state = "signed"
         b = bounds.get(lsha, (UNANCHORED, "none"))
-        if best is None or b[0] < best[0]: best = b
+        if best is None or bound_order(b) < bound_order(best): best = b
     return (state or "none"), best
 
 
@@ -8917,14 +8972,8 @@ def cmd_anchor(a):
 
     leaves = [hashlib.sha256((k + ":" + v).encode()).hexdigest()
               for k, v in sorted(heads.items())]
-    layer = list(leaves)
-    while len(layer) > 1:
-        nxt = []
-        for i in range(0, len(layer), 2):
-            pair = layer[i] + (layer[i + 1] if i + 1 < len(layer) else layer[i])
-            nxt.append(hashlib.sha256(pair.encode()).hexdigest())
-        layer = nxt
-    root = layer[0]
+    root = checkpoint_root(heads)
+    if root is None: sys.exit("error: malformed ledger heads")
 
     os.makedirs(ANCHOR_DIR, exist_ok=True)
     stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
@@ -9037,7 +9086,7 @@ def cmd_anchor_upgrade(a):
 
 
 def cmd_anchor_verify(a):
-    """Re-derive each recorded root and, when possible, check its OTS proof."""
+    """Check root consistency and inspect proofs, NOT trusted Bitcoin block time."""
     if not os.path.isdir(ANCHOR_DIR):
         print("(no anchors recorded)"); return
     ots = find_ots()
@@ -9046,18 +9095,14 @@ def cmd_anchor_verify(a):
         print("(no anchors recorded)"); return
     bad = 0
     for fn in files:
-        with open(os.path.join(ANCHOR_DIR, fn)) as f: rec = json.load(f)
-        leaves = [hashlib.sha256((k + ":" + v).encode()).hexdigest()
-                  for k, v in sorted((rec.get("heads") or {}).items())]
-        layer = list(leaves)
-        while len(layer) > 1:
-            nxt = []
-            for i in range(0, len(layer), 2):
-                pair = layer[i] + (layer[i + 1] if i + 1 < len(layer) else layer[i])
-                nxt.append(hashlib.sha256(pair.encode()).hexdigest())
-            layer = nxt
-        recomputed = layer[0] if layer else None
-        state = "OK" if recomputed == rec.get("root") else "ROOT MISMATCH"
+        try:
+            with open(os.path.join(ANCHOR_DIR, fn)) as f: rec = json.load(f)
+        except (OSError, ValueError):
+            rec = {}
+        if not isinstance(rec, dict): rec = {}
+        recomputed = checkpoint_root(rec.get("heads"))
+        state = ("OK" if recomputed is not None and recomputed == rec.get("root")
+                 else "ROOT MISMATCH")
         if state != "OK": bad += 1
         line = "%s  %s  root=%s  anchored=%s" % (fn, state, str(rec.get("root"))[:16],
                                                 rec.get("anchored"))
@@ -9070,6 +9115,8 @@ def cmd_anchor_verify(a):
         print(line)
     if bad: sys.exit("anchor verify: %d root mismatch(es)" % bad)
     print("anchor verify: %d anchor(s) consistent" % len(files))
+    print("note: consistency/OTS block labels do not verify block time; "
+          "checkpoint bounds remain local (self-declared)")
 
 
 def cmd_reindex(a):

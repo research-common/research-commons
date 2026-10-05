@@ -850,12 +850,12 @@ anchor_on()  {
 import hashlib, json, sys
 log, out = sys.argv[1], sys.argv[2]
 last = [l.rstrip("\n") for l in open(log) if l.strip()][-1]
-# anchored:"none" = a local checkpoint. Quality is irrelevant here: coverage is what
-# silences the staleness warning, and a local checkpoint is the weaker of the two, so
-# asserting with it also covers the bitcoin case.
+# This unsigned checkpoint covers only the unsigned log. Its root must actually
+# commit to the head; a fabricated root must never suppress the drift warning.
+heads = {"local-unsigned.jsonl": hashlib.sha256(last.encode()).hexdigest()}
+root = hashlib.sha256(("local-unsigned.jsonl:" + heads["local-unsigned.jsonl"]).encode()).hexdigest()
 json.dump({"schema": "commons/v1", "created": "2026-08-01T00:00:00Z",
-           "root": "c" * 64, "leaves": ["c" * 64], "anchored": "none",
-           "heads": {"local-unsigned.jsonl": hashlib.sha256(last.encode()).hexdigest()}},
+           "root": root, "leaves": [root], "anchored": "none", "heads": heads},
           open(out, "w"), indent=2, sort_keys=True)
 PY
 }
