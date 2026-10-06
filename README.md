@@ -611,6 +611,9 @@ $COMMONS status tk-…        # shows TIME DISCREPANCY when an assertion outruns
   event, using the **signed event timestamp**, never the JSON's mutable `created`.
   An event dated earlier than a line it covers contradicts its own log and is ignored.
   An operator's checkpoint over several logs does not confer priority on other keys.
+  **Every key must run `anchor` on its own log**, or its publishes are uncheckpointed
+  and sort last in every priority dispute, even behind a later publisher who anchored.
+  A hub's anchor cadence protects only the hub operator's own lines.
 - All current bounds are **local (self-declared)**, including JSON marked `confirmed`
   with `bitcoin_blocks` or `verified_locally: true`. Neither those fields nor `ots info`
   proves a block or its time. `anchor-upgrade` records proof labels; `anchor-verify`

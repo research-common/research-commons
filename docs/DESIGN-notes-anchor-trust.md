@@ -49,6 +49,11 @@ unsigned metadata to confer signed derivation priority.
   backdates the lines it covers so its log stays self-consistent. Local bounds are
   assertions, so local ordering is useful for honest peers, not secure adjudication
   between adversaries. Do not build edit authority on local first-publisher order.
+  This rules out adjudicating metadata authority by anchored first-publisher order
+  (#47 option 1), and the signed-manifest design (#43) has withdrawn its matching
+  tie-break. For an artifact frozen by several publishers, the remaining routes are
+  adoption under local trust and signed views, until a receiver-local Bitcoin
+  verifier exists.
 - Bitcoin proofs remain available as artifacts, but `anchor-upgrade` only inspects
   proof labels. `anchor-verify` checks structural consistency and can inspect OTS
   attestations; success does not authenticate a block or establish its time.

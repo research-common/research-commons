@@ -9,6 +9,21 @@ manifest/ledger format version — `commons --version` prints both).
 
 ## [Unreleased]
 
+### Changed
+- **Anchor coverage is per signer, so every key must anchor its own log.** A checkpoint
+  now bounds only the log of the key that signed its `anchor` event. A hub operator's
+  `anchor` run no longer protects contributors' lines: a key that never runs `anchor`
+  has uncheckpointed publishes, which sort last in every priority comparison.
+- **A later publisher who anchored now outranks an earlier one who didn't.** With every
+  bound local (self-declared), ordering is checkpoint first, asserted time only as a
+  tiebreak. Derivation credit follows that ordering, so the uncheckpointed earlier
+  publisher's submission can drop from *independent derivation* to *concurring
+  reference*, and `status` reports a TIME DISCREPANCY against it.
+- **Existing `confirmed` checkpoints lose Bitcoin quality, with no grandfathering.**
+  They still count as local checkpoints when a matching signed `anchor` event exists
+  in the signer's own log; otherwise they contribute nothing to priority. Bitcoin
+  quality returns only with receiver-local proof and block-time verification.
+
 ### Fixed
 - **Untrusted anchor JSON no longer grants Bitcoin-quality priority.** A fabricated
   `confirmed` checkpoint could seize first-publisher credit and report a discrepancy
