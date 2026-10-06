@@ -19,7 +19,10 @@ manifest/ledger format version — `commons --version` prints both).
   Bitcoin quality awaits receiver-local proof/block-time verification. Evidence quality
   sorts before time across publishers as well as within a line's bounds. Unsigned
   operational checkpoints remain usable for unsigned-log drift coverage, but cannot
-  authenticate signed events. `pull`/`hub check` acceptance rules are unchanged.
+  authenticate signed events or unsigned lines that claim an `addr`. A signed anchor
+  event dated before a line it covers is ignored. `status` and derivation-evidence
+  text now describe a TIME DISCREPANCY as a disagreement between assertions, not
+  grounds to discount a peer. `pull`/`hub check` acceptance rules are unchanged.
 
 ### Added
 - **`announce` warns when a remote would leak local or internal details (#53).** A local

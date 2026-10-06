@@ -3919,11 +3919,18 @@ def anchor_bounds():
     if _ANCHOR_CACHE["key"] == key:
         return _ANCHOR_CACHE["map"]
 
-    # Per log: ordered line hashes, so a head hash locates a position.
-    per_log, entries = {}, {}
+    # Per log: ordered line hashes, so a head hash locates a position. Positions and
+    # the running maximum asserted ts are computed once, not per anchor/per line.
+    per_log, entries, pos, max_ts = {}, {}, {}, {}
     for e, path, _idx, lsha in lines:
-        per_log.setdefault(os.path.basename(path), []).append(lsha)
-        entries[(os.path.basename(path), lsha)] = e
+        logname = os.path.basename(path)
+        hashes = per_log.setdefault(logname, [])
+        pos.setdefault(logname, {}).setdefault(lsha, len(hashes))
+        hashes.append(lsha)
+        entries[(logname, lsha)] = e
+        ts = parse_ts(e.get("ts")) if isinstance(e, dict) else None
+        running = max_ts.setdefault(logname, [])
+        running.append(max(running[-1] if running else 0, ts or 0))
 
     candidates = []
     for e, path, _idx, lsha in lines:
@@ -3959,10 +3966,15 @@ def anchor_bounds():
             if root is None or root != rec.get("root"): continue
             authorized = []
             for logname, event_sha, ats in events.get((fn[:-5], root), []):
-                hashes = per_log.get(logname)
+                where = pos.get(logname, {})
                 head = heads.get(logname)
-                if (head in hashes and hashes.index(head) < hashes.index(event_sha)):
-                    authorized.append((logname, head, ats))
+                if head not in where or where[head] >= where[event_sha]: continue
+                # An event dated before a line it covers contradicts its own hash
+                # chain (the line existed first), so it cannot lend that earlier
+                # date to the prefix. Self-consistent backdating is NOT detectable
+                # here; see the anchor trust design note.
+                if max_ts[logname][where[head]] > ats: continue
+                authorized.append((logname, head, ats))
             # A local unsigned checkpoint is useful operationally, but cannot
             # supply bounds for any signed log, even when it claims confirmation.
             ats = parse_ts(rec.get("created"))
@@ -3972,14 +3984,16 @@ def anchor_bounds():
                         authorized.append((logname, heads[logname], ats))
             for logname, head, ats in authorized:
                 hashes = per_log.get(logname)
-                if not hashes or head not in hashes: continue
-                for lsha in hashes[:hashes.index(head) + 1]:
+                if not hashes or head not in pos[logname]: continue
+                for lsha in hashes[:pos[logname][head] + 1]:
                     prev = bounds.get(lsha)
                     # Never let an unsigned checkpoint authenticate a signed line
-                    # relayed into a legacy/unsigned log.
+                    # relayed into a legacy/unsigned log, nor an unsigned line that
+                    # names a key (`addr`) it cannot prove it holds.
                     if logname in ("local-unsigned.jsonl", "ledger.jsonl"):
                         entry = entries[(logname, lsha)]
-                        if not isinstance(entry, dict) or entry.get("sig"): continue
+                        if (not isinstance(entry, dict) or entry.get("sig")
+                                or entry.get("addr")): continue
                     b = (ats, "local")
                     if prev is None or bound_order(b) < bound_order(prev):
                         bounds[lsha] = b
@@ -4251,7 +4265,7 @@ def derivation_evidence(tid, result_id, submitter, submit_event, commits, fp):
         # rival's is covered. Downgrade to reference: an unprovable priority claim must
         # not convert a copy into a quorum-bearing derivation.
         return "reference", ("asserted first-publish of %s at %s is not covered by an "
-                            "anchor (%s); %s holds the anchored claim"
+                            "anchor (%s); %s holds the earlier checkpoint bound"
                             % (result_id,
                                time.strftime("%Y-%m-%dT%H:%M:%SZ",
                                              time.gmtime(fl["asserted_ts"])),
@@ -5112,8 +5126,9 @@ def task_status(m):
                   % (fl["anchored_winner"],
                      time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(fl["winner_ts"])),
                      fmt_bound(fl["winner_bound"], fl["winner_quality"])))
-            print("    An anchored upper bound beats an asserted timestamp: backdating")
-            print("    is not prevented, it is made visible. Discount the asserting peer.")
+            print("    Checkpoint bounds order first publisher ahead of asserted timestamps.")
+            print("    Local checkpoints are self-declared: this is a discrepancy between")
+            print("    assertions to investigate, not proof that either peer backdated.")
         real = [(k, g) for k, g in an["ranked"]
                 if not g.get("missing") and not k.startswith("<no-judgement:")]
         if an.get("structured"):

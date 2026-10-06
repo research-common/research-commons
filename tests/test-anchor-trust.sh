@@ -176,6 +176,40 @@ verdict, _ = c.derivation_evidence(tid, aid, b['addr'], {'salt': salt},
 c.load_manifest = load_manifest
 check('forged anchor cannot grant commit-reveal quorum credit', verdict == 'reference')
 
+# An unsigned line naming a key it cannot prove it holds gets no bound from an
+# unsigned checkpoint, so it cannot become commit-reveal evidence for that key.
+clear()
+ap.write_text(json.dumps(ar))
+tid2 = 'tk-unsigned-addr'
+commitment2 = hashlib.sha256((digest + salt).encode()).hexdigest()
+with u.open('a') as f:
+    f.write(json.dumps({'schema': c.SCHEMA, 'action': 'derivation-commit', 'agent': 'bob',
+                        'id': tid2, 'sha256': commitment2, 'commitment': commitment2,
+                        'addr': b['addr'], 'ts': '2025-01-01T00:00:00Z'}) + '\n')
+uh2 = c.ledger_head(str(u))
+checkpoint('anchor-unsigned-addr', {'local-unsigned.jsonl': uh2}, anchored='none')
+check('unsigned checkpoint does not bound an unsigned line claiming an addr',
+      uh2 not in c.anchor_bounds())
+c.load_manifest = lambda *args, **kwargs: {'content': {'sha256': digest}}
+verdict, _ = c.derivation_evidence(tid2, aid, b['addr'], {'salt': salt},
+                                   c.derivation_commits(tid2), c.first_publisher(aid))
+c.load_manifest = load_manifest
+check('unsigned addr-claiming commit cannot earn commit-reveal', verdict != 'commit-reveal')
+check('unsigned addr-less lines keep drift coverage', uh in c.anchor_bounds())
+
+# A signed anchor event dated BEFORE a line it covers contradicts its own hash
+# chain: it is ignored, so a copier cannot pull its later publish ahead with it.
+clear()
+ap.write_text(json.dumps(ar))
+c._FIRSTPUB_CACHE['key'] = None
+p, rec = checkpoint('anchor-backdated-event', {log(b): c.ledger_head(str(Path(c.LEDGER_DIR) / log(b)))})
+bad = append('bob', 'anchor', 'anchor-backdated-event', rec['root'], '2001-01-01T00:00:00Z')
+c._ANCHOR_CACHE['key'] = None; c._FIRSTPUB_CACHE['key'] = None
+check('signed anchor event older than a covered line contributes no bound', bh not in c.anchor_bounds())
+check('incoherent backdated anchor event cannot seize first publisher',
+      c.first_publisher(aid)[0] == a['addr'].lower())
+check('incoherent backdated anchor event cannot flag the honest publisher', not c.backdating_flags())
+
 # The quality-order helper is also used across competing publishers, not just when
 # choosing multiple anchors for one line. No metadata currently produces bitcoin.
 check('Bitcoin evidence sorts before a backdated local checkpoint',

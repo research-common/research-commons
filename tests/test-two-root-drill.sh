@@ -376,7 +376,7 @@ check "🔒 B is classified as a concurring reference" \
   "$(grep -c 'counts as: CONCURRING REFERENCE' "$W/out.txt")" "1"
 check "🔒 the refusal cites the missing anchor coverage" \
   "$([ "$(grep -c 'not covered by an anchor' "$W/out.txt")" -ge 1 ] && echo yes)" "yes"
-check "refusal names who holds the anchored claim" \
+check "refusal names who holds the earlier checkpoint bound" \
   "$([ "$(grep -ci "$(echo "$ADDR_A" | tr 'A-Z' 'a-z')" "$W/out.txt")" -ge 1 ] && echo yes)" "yes"
 
 bcommit "case-d submission"; bsync; b push origin >/dev/null 2>&1
@@ -389,10 +389,12 @@ check "flag names the asserting peer" \
   "$([ "$(a status "$TKD" | grep -ci "$(echo "$ADDR_B" | tr 'A-Z' 'a-z')")" -ge 1 ] && echo yes)" "yes"
 check "flag reports the unanchored assertion" \
   "$([ "$(a status "$TKD" | grep -c 'anchor bound is unanchored')" -ge 1 ] && echo yes)" "yes"
-check "flag states the adjudication rule" \
-  "$([ "$(a status "$TKD" | grep -c 'anchored upper bound beats an asserted timestamp')" -ge 1 ] && echo yes)" "yes"
-check "flag recommends discounting the peer (reputational tell)" \
-  "$([ "$(a status "$TKD" | grep -c 'Discount the asserting peer')" -ge 1 ] && echo yes)" "yes"
+check "flag states the ordering rule" \
+  "$([ "$(a status "$TKD" | grep -c 'Checkpoint bounds order first publisher ahead of asserted timestamps')" -ge 1 ] && echo yes)" "yes"
+check "flag does not present a local discrepancy as proof of backdating" \
+  "$([ "$(a status "$TKD" | grep -c 'not proof that either peer backdated')" -ge 1 ] && echo yes)" "yes"
+check "flag no longer tells readers to discount a peer" \
+  "$(a status "$TKD" | grep -c 'Discount the asserting peer')" "0"
 check "🔒 backdating earns no quorum weight" \
   "$([ "$(a status "$TKD" | grep -c '0 independent derivation')" -ge 1 ] && echo yes)" "yes"
 check "🔒 the quorum stays unsatisfiable by a backdated copy" "$(rc a settle "$TKD")" "3"

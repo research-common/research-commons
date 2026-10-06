@@ -609,6 +609,7 @@ $COMMONS status tk-…        # shows TIME DISCREPANCY when an assertion outruns
 - A checkpoint's root must recompute from its heads, and a matching signed `anchor`
   event must occur in its signer's own log. It bounds only that log's prefix before the
   event, using the **signed event timestamp**, never the JSON's mutable `created`.
+  An event dated earlier than a line it covers contradicts its own log and is ignored.
   An operator's checkpoint over several logs does not confer priority on other keys.
 - All current bounds are **local (self-declared)**, including JSON marked `confirmed`
   with `bitcoin_blocks` or `verified_locally: true`. Neither those fields nor `ots info`
@@ -616,9 +617,11 @@ $COMMONS status tk-…        # shows TIME DISCREPANCY when an assertion outruns
   checks consistency and inspects proofs. Neither grants Bitcoin-quality priority.
 - A checkpoint with no matching signed event cannot affect a signed publisher, even
   if it arrives through `pull`. Unsigned checkpoints can still cover the unsigned log
-  for operational drift warnings, but cannot authenticate a signed event relayed there.
+  for operational drift warnings, but cannot authenticate a signed event relayed there,
+  nor an unsigned line that names a key (`addr`) without a signature.
 - Uncheckpointed claims sort last. A local checkpoint helps order honest peers, but
-  **a signer can still backdate its own signed checkpoint**. Local TIME DISCREPANCY
+  **a signer can still backdate its own signed checkpoint** (consistently, together
+  with the lines it covers). Local TIME DISCREPANCY
   reports are discrepancies between assertions, not proof of dishonesty. A losing
   assertion can still downgrade a submission to a *concurring reference* (zero quorum
   weight); do not treat this provisional ordering as adversarial edit authority.

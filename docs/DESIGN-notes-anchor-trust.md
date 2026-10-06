@@ -25,6 +25,8 @@ consistency and transport through hub CI were not proof verification.
    the ability to checkpoint other identities for priority purposes.
 4. Use the signed event's `ts`, not mutable JSON dates, as the local checkpoint
    time. This authenticates whose assertion it is, **not whether the time is true**.
+   An event whose `ts` is earlier than any line it covers is ignored: the log's own
+   order shows that line existed first, so the event cannot lend it an earlier date.
 5. All currently supported bounds have `local` quality, displayed as self-declared.
    JSON claims of confirmation or local verification never upgrade quality. The
    reader does not invoke a block explorer or infer trust from peer registration.
@@ -34,12 +36,17 @@ consistency and transport through hub CI were not proof verification.
 
 Unsigned checkpoints remain operationally useful over `local-unsigned.jsonl` and
 the legacy unsigned log. They cannot authenticate signed events transported into
-those logs. This preserves unsigned publishing's drift warning without allowing
+those logs, nor unsigned lines carrying an `addr`: such a line names a key without
+proving it holds that key, and a bound would let it pose as that key's
+pre-publication `derivation-commit`. Unsigned lines written by this tool carry
+`addr: null`, so drift coverage is unaffected. Whether lifecycle commands should
+accept unsigned events naming a key at all is a separate ingest question. This preserves unsigned publishing's drift warning without allowing
 unsigned metadata to confer signed derivation priority.
 
 ## What this does not promise
 
-- A malicious signer can still backdate its own signed event. Local bounds are
+- A malicious signer can still backdate its own signed event, provided it also
+  backdates the lines it covers so its log stays self-consistent. Local bounds are
   assertions, so local ordering is useful for honest peers, not secure adjudication
   between adversaries. Do not build edit authority on local first-publisher order.
 - Bitcoin proofs remain available as artifacts, but `anchor-upgrade` only inspects
@@ -76,4 +83,10 @@ position from UTC time rather than presenting the latter as an exact creation bo
 malformed input, quality ordering, unsigned operational coverage, and a fabricated
 checkpoint transported through `hub check --base` and `pull`. It also checks that a
 forged checkpoint cannot give a derivation commit an authenticated bound or grant
-commit-reveal quorum credit against a checkpointed publisher.
+commit-reveal quorum credit against a checkpointed publisher, that an unsigned line
+claiming an `addr` gets no bound, and that a signed anchor event dated before a line
+it covers neither seizes first publisher nor flags the honest publisher.
+
+`status` reports a TIME DISCREPANCY as a disagreement between assertions to
+investigate. It does not tell readers to discount either peer, because a local
+checkpoint is itself an assertion.
