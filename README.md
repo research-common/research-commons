@@ -633,6 +633,8 @@ Bitcoin-quality priority is disabled until a receiver-local verifier can bind th
 to the recomputed root and use a trusted **block time** instead of a publisher's date.
 This read-side safeguard does not reject anchor files at the `pull`/`hub check` gates.
 See [the anchor trust design note](docs/DESIGN-notes-anchor-trust.md) for the boundary and followups.
+A proposed receiver-local verifier, open for comment, is in
+[docs/DESIGN-notes-bitcoin-ots-verification.md](docs/DESIGN-notes-bitcoin-ots-verification.md).
 
 **Staleness warning.** Because priority now rests on anchoring, letting the cadence lapse
 quietly leaves your recent work unprotected. When this host's own ledger has unanchored
