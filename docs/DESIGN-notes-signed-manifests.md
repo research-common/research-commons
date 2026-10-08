@@ -1,21 +1,39 @@
 # Design note: Signed manifest views
 
-**Date:** 2026-10-02, revised 2026-10-06 · **Status:** proposal for design review (revision 2)
+**Date:** 2026-10-02, revised 2026-10-07 · **Status:** phase 1 readers and phase 2 writers on this branch; phase 3 downstream
 **Covers:** #41 part 2 and #10 · **Builds on:** #42 (`ManifestEditGate`, merged in 0.3.0-alpha.1 with #44 and #50), #39, #18, #57
 **Implementation:** separate PRs, sequenced in [§12](#12-migration-plan)
 
+**Implementation status:** this branch adds phase 2 writers, backfill, event-derived
+links/reproduction notes and local arrival records to the phase 1 readers and gates.
+Phase 3 enforcement is a separate downstream branch, not implemented here.
+Frozen/orphan adoption through hub authority is deferred to #58. A valid
+standalone signature identifies its signer; deciding whether a replacement was
+authorised requires the held/base view. Full-tree inspection cannot reconstruct a
+lost delegation history from a replacement file alone.
+
+**Current commands:** with `COMMONS_SIGNING_KEY` set, `publish`, `publish --force`,
+`run --publish`, `run-task` (publishes by default; `--publish` is also accepted) and
+new `rebaseline --publish-superseding` outputs write a `publisher_sig` plus a
+matching dual-signed `view` event. `commons manifest sign ID...` or `--mine`
+backfills eligible held legacy views (§6.2, §12). `attest` writes `attestation/2`
+and `--force` replaces only the current signer's own attestation (§8).
+
+**Verification:** `verify` stops on `unknown-view-version` or `unnormalisable`
+with exit 3 before executing unchecked metadata, while readers still display those
+states (§10).
+
 ## Summary
 
-A manifest is a JSON file that several parties write. The publisher writes most of it, a
-submitter adds `fulfills`, a beneficiary adds `accepted`, an attester adds `attested_by`, and
-`pull` adds a local `ingest` stamp. Today no signature covers any of those bytes. A ledger
-signature covers `action, agent, id, sha256, ts`, and `sha256` is the content hash. So whoever
-holds a manifest can rewrite its tier, licence, criteria, parameters, links or verdicts.
-Nothing in the file shows that it changed. #42 closes the transport path, so `pull` and
-`hub check --base` now refuse unbacked edits. It cannot make a manifest checkable on its own,
-and it has a known ride-along gap.
+Before signed views, several parties wrote the manifest JSON: the publisher wrote
+most fields, a submitter added `fulfills`, a beneficiary added `accepted`, an
+attester added `attested_by`, and `pull` added a local `ingest` stamp. A v1 ledger
+signature covered
+`action, agent, id, sha256, ts`, with `sha256` the content hash; it did not cover
+publisher metadata. #42 closed the transport path for unbacked edits, but could
+not make a manifest checkable on its own and left a ride-along gap.
 
-This note proposes:
+This note records the design and its phased implementation:
 
 1. **A publisher view.** This is a normalised projection of the manifest that keeps exactly
    the fields the publisher vouches for. Each field of a manifest has one source of authority,
@@ -28,7 +46,7 @@ This note proposes:
 3. **A second signature on ledger entries.** New entries carry `sig2` over **every** field,
    and keep today's `sig` over `SIGNED_FIELDS` unchanged. Old tools therefore keep verifying
    new entries. **Shipped in 0.3.0-alpha.1 (#50) for every event**, in the form §5.2 specifies.
-   What remains is the `view` field on `publish`/`republish` entries (phase 2), which binds the
+   Phase 2 adds the `view` field on `publish`/`republish` entries, which binds the
    event to exact manifest bytes and closes #42's ride-along gap. `sig2` already signs the
    lifecycle fields (`task`, `result`, `exec_mode`, …) that the derived class depends on
    ([§2.2](#22-two-gaps-found-while-preparing-this-note), [§5.2](#52-ledger-entries-a-second-signature)).
@@ -56,9 +74,9 @@ range carries a verified signed `publish`/`republish` by a key with authority, o
 change is an annotation that a signed ledger event backs. That gate is necessary and stays. Its
 limits are structural:
 
-- **Ride-along.** A republish signs the content hash, not the manifest. Any edit committed
-  after a genuine republish in the same range passes with it. `tests/test-manifest-edit.sh` §8
-  ("KNOWN GAP (pinned)") pins this.
+- **Ride-along.** A legacy republish signs the content hash, not the manifest. An edit
+  after it can pass in the same range. Phase 2's matching view event closes this for
+  viewed manifests; `tests/test-manifest-edit.sh` §8 now targets refusal.
 - **Path-dependent.** The verdict depends on the git range a manifest arrived in. A file
   copied in any other way (a tarball, a hand-merge, a hub whose CI was skipped) carries no
   evidence either way, and `fsck` and `status` cannot tell it apart from the original.
@@ -66,7 +84,9 @@ limits are structural:
 The goal stated in #41 is that anyone holding a manifest can tell which key stated each field
 and whether that statement still covers what is displayed.
 
-## 2. What is signed today
+## 2. Historical signing baseline (before phases 1–2)
+
+This table preserves the starting point. Current formats are in §5 and §8.
 
 | Signed object | Bytes signed | Where it lives | Not covered |
 |---|---|---|---|
@@ -75,10 +95,9 @@ and whether that statement still covers what is displayed.
 | T3 attestation (`cmd_attest`) | `canonical({attests, sha256, criteria, observed})` | `verification.attested_by.{addr,sig,statement}` | `params` (#10), everything else |
 | Manifest | nothing | — | all of it |
 
-Both signed objects use the same primitive: EIP-191 `personal_sign` over a canonical JSON
-string, from `lib/sign-message.mjs`. Neither carries a domain tag. The two key sets are
-disjoint today, so neither can be passed off as the other. Any new statement must keep it that
-way on purpose, not by accident ([§5.4](#54-domain-separation)).
+The legacy ledger payload and attestation use EIP-191 `personal_sign` over canonical
+JSON from `lib/sign-message.mjs`. Neither v1 payload carries a domain tag, but their
+key sets are disjoint. New formats keep that separation explicit (§5.4).
 
 ### 2.1 Background read for this note
 
@@ -97,8 +116,9 @@ way on purpose, not by accident ([§5.4](#54-domain-separation)).
 
 Both were reproduced on #42's pre-merge head (`fix/41-manifest-edit-gate`) with that PR's own
 test fixtures: a lead L, a contributor C, both registered with `trust=full`, and a throwaway
-hub. **Both are now fixed** (G1 in #44 and #50, G2 in #44). They are kept because they shape
-the proposal; status is in [§12](#12-migration-plan).
+hub. The held-event G1 cases and G2 are fixed (#44, #50); #45's unknown-key
+whole-log stripping residual remains. These examples are kept because they shape
+the design; status is in [§12](#12-migration-plan).
 
 **G1. Lifecycle fields are unsigned, so a signed event can be replayed with different
 meaning.** `accept` signs `{action, agent, id=task, sha256=task content hash, ts}`. The
@@ -268,7 +288,9 @@ the publisher class, adding a set-valued path, or changing what counts as empty.
 Verifiers keep the v1 construction forever and pick the construction a statement names. Old
 digests therefore stay valid after the rules grow. A tool that meets a view version it doesn't
 know reports `unknown-view-version`. It never reports `altered`, so a newer manifest is never
-mislabelled as forged.
+mislabelled as forged. `verify` stops with exit 3 (`NOT-MACHINE-VERIFIABLE`) until the
+tool can check that metadata; unsupported metadata cannot drive workflow or comparator
+resolution or execution.
 
 ## 5. Signing formats
 
@@ -309,7 +331,8 @@ Why the statement lives in the manifest (brief Option B) rather than only in the
 - It follows the attestation pattern the codebase already has.
 
 Option B alone has a hole: strip the block and the manifest looks legacy. Binding the view
-into the ledger as well (§5.2) closes it, so the proposal uses both.
+into an authenticated ledger event by an authorised key (§5.2, §6) closes it, so the
+proposal uses both. A view event from an unrelated signer is not stripping evidence.
 
 ### 5.2 Ledger entries: a second signature
 
@@ -357,12 +380,22 @@ Readers apply these rules:
   fields say whatever the relayer left in them (#45 residual). Two defences, in order:
   1. **Per-signer v2 floor.** A signer's own hash-chained log is the record of what it writes.
      Once a log contains any v2 entry, readers treat every *later* v1-only line in that log as
-     stripped, and refuse it. Position in the chain is authenticated by `prev`, which the
-     signer's later `sig2` entries cover transitively. This needs no new field and is the
-     phase 1 fix.
-  2. **Hub enforcement flag.** Phase 3's `require_signed_views` also refuses v1-only events
-     from any signer known to write v2, which closes the window for logs that have never
-     reached the receiver.
+     stripped, and refuse it. Only a verified v2 event in the signer's own log
+     establishes that log's floor; foreign-log and invalid events cannot do so.
+     This needs no new field and is implemented in phase 1.
+
+     **Limit:** `prev` is excluded from both signatures. The floor enforces received
+     physical order; `sig2` does not authenticate that order transitively. Append-only
+     checks preserve a receiver's held prefix, but a receiver that never held the
+     original cannot detect a rewritten prefix, a stripped first v2 event, or a
+     completely downgraded log from an unknown key. #45 remains open for that window.
+     Closing it needs independently authenticated upgrade evidence or explicit receiver
+     enforcement, rather than a claim that the current hash chain signs its order.
+  2. **Receiver enforcement (downstream phase 3).** A hub may require views for
+     contributions. That policy does not itself prove an unknown key upgraded its
+     ledger: closing whole-log stripping needs authenticated upgrade evidence or
+     an explicit rule rejecting that downgraded history. Do not treat #45 as fully
+     closed by the received-order floor or a manifest-only enforcement flag.
 - **Status in 0.3.0.** #50 implements `sig2` exactly as above. It does **not** yet implement
   the v2 identity rule: `authenticated_event_identity()` uses the v1 payload for every entry,
   and `read_ledger_entries()` deduplicates on it. Two genuine v2 events from one key with the
@@ -371,8 +404,8 @@ Readers apply these rules:
   switches v2 entries to the complete-payload identity; until then the rule here is the
   target, and 0.3.0's behaviour is the documented interim.
 
-Cost: one extra signature per event. `sign-message.mjs` gains a mode that signs both messages
-in one Node process, so a publish still spawns one signer.
+Cost: one extra signature per ledger event. The existing signer signs both ledger
+payloads in one Node process; phase 2 separately signs the publisher statement.
 
 ### 5.3 Attestation statement v2
 
@@ -396,8 +429,10 @@ the same string as each other. The signer key stays the dedicated commons identi
 - **No negotiated signature version.** Each signature names its own format in its `rc` tag. A
   verifier either knows it or says `unknown`.
 - **Tool MINOR bumps** for phases 1 and 2, because `hub check` pass/fail semantics change
-  (`docs/RELEASING.md`). A hub that opts in to enforcement pins a phase-2 tool in
-  `hub-check.yml` ([§12](#12-migration-plan)).
+  (`docs/RELEASING.md`). Phases 2 and 3 may ship in the same 0.5 release while
+  remaining separate PRs. A hub enabling enforcement must pin a tool revision
+  containing both the writer and enforcement commits in `hub-check.yml` (§12);
+  a writer-only phase 2 SHA ignores the enforcement flag.
 
 ## 6. Authority: who may sign the next view
 
@@ -411,11 +446,14 @@ the local copy otherwise):
 1. If the held manifest has a valid `publisher_sig`: its `addr`, plus every address in the
    held view's optional `authority` list, plus (for collections) the maintainers named in the
    spec.
-2. If the held manifest is legacy (no `publisher_sig`, and no v2 `publish`/`republish` with a
-   `view` for this id anywhere in the ledger): the **sole** verified signer of a `publish` (not
-   `republish`) event for the id, plus collection maintainers. This is #44's rule, kept as is.
-   With two or more distinct signed publishers, the set is empty and the artifact is frozen
-   until it is adopted (§6.2). This is the **adoption** case.
+2. If the held manifest is legacy (no `publisher_sig`, and no authenticated v2
+   `publish`/`republish` with a `view` for this id by an eligible legacy key): the **sole**
+   verified signer of a `publish` (not `republish`) event for the id, plus collection
+   maintainers. This is #44's rule, kept as is.
+   With zero or multiple distinct signed publishers, there is no publisher authority.
+   Collection maintainers from the held, hash-checked spec remain eligible; other
+   artifacts are frozen (§6.2). First signing of an eligible legacy view is the
+   **backfill** case; broader adoption is not implemented here.
 
    An earlier revision proposed breaking the tie by `first_publisher_index()` order. That is
    withdrawn. #57 makes every checkpoint bound self-declared (there is no receiver-verified
@@ -423,9 +461,23 @@ the local copy otherwise):
    not build edit authority on local first-publisher order. A signer can backdate its own
    checkpoint consistently, so an anchored tie-break would hand authority to whoever
    backdates best. Asserted `ts` is weaker still.
-3. Otherwise (the ledger has a v2 view event for this id, but the manifest carries no valid
-   statement): the manifest is `stripped`. Nobody has authority until a valid view is restored,
-   and the gates refuse it.
+3. If the manifest has no `publisher_sig`, but the ledger has an authenticated v2
+   `publish`/`republish` view event for this id by its **sole verified publish signer** or
+   (for a collection) a maintainer named in its spec: the manifest is `stripped`.
+   Nobody has authority until a valid view is restored, and the gates refuse it.
+   This remains fail-closed when an authorised signer's statement is removed.
+
+For a manifest without a statement, determine the eligible legacy keys from rule 2's
+publish-signature and collection-spec evidence **before** looking for stripping events.
+Apply the same signer filter in view-state readers and in the authority freeze check.
+An unrelated signer's authenticated v2 `republish` carrying a `view` cannot make another
+publisher's legacy artifact `stripped` or freeze that publisher's authority. It does not
+grant the unrelated signer authority either. The existing rule for multiple verified
+`publish` signers remains unchanged.
+Stripping checks also retain receiver-held evidence that an incoming history omits,
+including receiver events after a shared merge base. This extra evidence is used
+only for stripping classification; range authority, supersession and new-event
+binding keep their existing meaning.
 
 **One canonical view per id.** A second key that publishes the same bytes is recorded in the
 ledger as a publisher, so first-publisher ordering and derivation credit are unchanged. It
@@ -464,8 +516,8 @@ The new key then signs the next view, and it may drop the old key. A separate op
 `"reproducers": ["0x…", …]` delegates only the ability to back a rebaseline stamp (§7.2);
 it never grants permission to sign a new publisher view. A lost key has no in-band recovery,
 by design: if a peer could re-key someone else's artifact, it could take any artifact over.
-The recovery path is adoption under local trust (§6.2). Collections keep their existing
-recovery path, the spec's maintainers list.
+Recovery through hub adopting authority is deferred to #58 (§6.2). Collections keep
+their existing recovery path, the spec's maintainers list.
 
 **#42's rule.** It is kept only for legacy manifests, as tightened by #44 and #50 (§13). It is
 replaced for every manifest that has carried a view.
@@ -476,45 +528,48 @@ replaced for every manifest that has carried a view.
 the trust clause. Signatures and authority come from the files alone, which meets the
 constraint that CI must work from signatures alone.
 
-### 6.2 Adoption of legacy and unsigned-only artifacts
+### 6.2 Legacy backfill and deferred adoption
 
-The first view on a legacy manifest is an adoption. Under rule 2 it must be signed by the
-legacy sole publisher.
+The first view on an eligible legacy manifest is backfill. Under rule 2 it must be
+signed by the sole verified legacy `publish` signer or, for a collection, a
+maintainer named in its held, hash-checked spec. A `republish` grants no authority.
 
 - **`hub check --base`** accepts it with a `note: adopts legacy view of <id>` line for
-  maintainer review. It is the publisher's own key, so the same signature-only standard holds.
+  maintainer review, requiring a matching new dual-signed view event.
 - **`pull`** additionally applies trust policy.
 
 Phase 2 asks every publisher to backfill their own artifacts promptly (`commons manifest sign`,
 §12), because a sole publisher can adopt in-band only until a second key publishes the same
-bytes. After that the artifact is **frozen** (#47): nobody has authority, anchors do not help
-(#57), and the routes out are the two below. Two publishers of identical bytes is routine for
-re-derived datasets, so this is the common case, not an attack.
+bytes. After that a non-collection legacy artifact is **frozen** (#47): nobody has
+publisher authority and anchors do not help (#57). Collection maintainers retain
+their spec-backed authority. Identical-byte re-derivations can cause this ambiguity
+without an attack.
 
-An artifact that is **frozen** (two or more signed publishers) or whose only publish events are
-**unsigned** has no sole publisher, so nobody can adopt it in-band:
+An orphan, unsigned-only or ambiguous non-collection artifact has no sole
+publisher:
 
 - It stays legacy and readable, labelled `UNSIGNED METADATA`.
 - It is frozen except for annotations that the legacy rules allow.
-- `publish --force --adopt` lets a key claim it, but only `pull --allow-adopt` accepts that,
-  under local trust. `hub check` refuses it. A hub lead who wants it adopts locally and pushes
-  to the hub.
-- That leaves hub CI with no way to accept an adoption on its own, so an owner whose artifact
-  was frozen by a stranger's `publish` cannot fix a licence through a hub PR. Whether a hub
-  should be able to name an adopting key in `.commons-hub` (a maintainer decision, reviewed
-  like the enforcement flag) is an open question in §15.
+- `manifest sign`, `--mine` and keyed `publish --force` do not mint ownership.
+  There is no `--adopt` or `--allow-adopt` command in this branch.
+- **#58 is separate work:** a hub adopting authority could authorise recovery
+  through a reviewed hub decision. It is neither phase 2 backfill nor implemented
+  by phase 3's enforcement flag. Hub CI currently has no general recovery route.
 
 ## 7. The derived class
 
 ### 7.1 `fulfills` and `accepted`
 
-**Phase 2 stops writing them into manifests and computes them from v2 events:**
+**Phase 2 computes these links without rewriting manifests:**
 
 - `fulfills`: a `submit` whose signed `task` and `result` name the pair.
 - `accepted`: an `accept`/`settle` by the beneficiary that the task spec names.
+  Only the current authenticated acceptance is shown; a later rejection clears it.
 
-`index_manifest()` and the graph readers (`status`, `collection show`, `list`) synthesise the
-links from the ledger. They already need the ledger to fold task state.
+The link index and readers (`links`, graph/chain traversal, `show`, JSON rows and
+generated artifact pages) combine publisher links with authenticated derived links.
+Links use held source/task manifests; acceptance also needs the hash-checked task
+spec. `run-task` publishes without a `fulfills` cache; `submit` establishes that relation.
 
 Manifests that already carry these links keep them as a **cache**. The cache is outside the
 view, so it never invalidates a signature. Readers show a cached link only when an event backs
@@ -533,8 +588,8 @@ ledger.
 
 ### 7.2 Rebaseline stamps
 
-A `rebaseline` with `result=match` stops writing `provenance.run.exec` and `.rebaselined` into
-the manifest. Today it rewrites the publisher's exec record. The v2 `rebaseline` event signs
+A `rebaseline` with `result=match` no longer writes `provenance.run.exec` and `.rebaselined` into
+the manifest. Before phase 2 it rewrote the publisher's exec record. The v2 `rebaseline` event signs
 `result`, `exec_mode` and `image_digest`. A `match` event may back the derived reproduction
 stamp only when its recovered signer has standing: the signer is in the held view's `A(id)` or
 is a reproducer explicitly delegated by that signed view. `hub check` can verify that
@@ -545,16 +600,23 @@ v1-only event's unsigned `result`, `exec_mode` and `image_digest` cannot establi
 0.3.0 already enforces the standing, trust and image-digest rules for legacy manifests: the
 gate accepts an exec-record edit only behind a dual-signed `rebaseline` by a key with
 authority, trusted under `pull`, whose signed `image_digest` equals the manifest's (#44, #50;
-test 7). `recorded_exec(m)` may then report "recorded: X; reproduced under Y by K (rebaseline)".
-The publisher's own record stays as published. A publisher who wants the new record as
-*their* claim republishes.
+test 7). Phase 2's `show`, `status` and JSON reproduction note may report
+"recorded: X; reproduced under Y by K (rebaseline)" only after local trust, key-window
+and standing checks. `recorded_exec(m)` and `verify` continue to use the original
+publisher record. Matching and diverging rebaselines leave that original manifest
+unchanged. `--publish-superseding` signs a new successor and matching publish event;
+if that id is already held, its canonical manifest is retained.
 
 ### 7.3 `ingest` leaves the manifest
 
-Today the stamp travels with the file, and `fsck` reads it to tell `NOT REPLICATED` from
-`MISSING BLOB`. That means a peer's stamp can change how a missing blob is reported here.
-Phase 2 moves it to `registry/ingest.json` and adds that file to `LOCAL_ONLY`. Until then it
-is excluded from every digest (as #42 already excludes it) and ignored on incoming manifests.
+Before phase 2 the stamp travelled with the file, and `fsck` used it to distinguish
+`NOT REPLICATED` from `MISSING BLOB`. Phase 2 writes arrival data only to ignored,
+untracked `registry/ingest.json`, adds it to `LOCAL_ONLY` and leaves incoming
+manifests untouched. The sidecar shape is
+`{"schema": "rc.v1", "artifacts": {"<id>": {"received_at": "<UTC>", "from": "<remote>"}}}`.
+`fsck` uses this host's sidecar; embedded legacy/remote stamps supply no arrival
+authority. Publisher writes remove embedded `ingest`, which remains excluded from
+view digests for compatibility.
 
 ## 8. Attestations (#10)
 
@@ -562,17 +624,20 @@ is excluded from every digest (as #42 already excludes it) and ignored on incomi
 
 ```json
 {"rc": "attestation/2", "attests": "<id>", "sha256": "<content.sha256>",
- "criteria": "<string>", "params": {<normalised verification.params>}, "observed": "<RFC 3339>"}
+ "criteria": "<string>", "params": {"<parameter>": "<exact value>"}, "observed": "<RFC 3339>"}
 ```
 
-- `params` is the parsed `verification.params` map without pruning its members, or `{}` when
-  absent. Thus absent params and `{}` both appear as `{}`, while `{"CHECK_COLUMNS": ""}`
+- `params` is an exact copy of the parsed `verification.params` map without pruning
+  or coercing its members, or `{}` when absent or null. Other non-object values
+  are refused. Thus absent params and `{}` both appear as `{}`, while `{"CHECK_COLUMNS": ""}`
   remains distinct. The key is always present, so an attestation over "no params" is a
   positive statement.
 - `check_attestation` returns `stale` when either `criteria` or `params` differs from the
   manifest, as it already does for `criteria`.
-- `publish --force` already refuses to change `--criteria` under an attestation. It refuses a
-  changed `--param` the same way.
+- `publish --force` refuses changed criteria or explicit parameter changes under
+  an existing attestation. Omitted parameters are preserved, including when other
+  flags rebuild verification metadata. Comparison uses exact canonical JSON, so
+  false, zero and zero-as-float remain distinct; empty member values are retained.
 - An attestation authenticates the attester's observation, not a change to publisher-owned
   `verification.criteria` or `params`. Those changes still need an authorised new publisher
   view (§6). `pull` also requires the attester's peer registration, valid key window and trust
@@ -603,11 +668,15 @@ twice: once by the view and once by the attestation.
 - The gates **fail closed on new attestations**: a v1 statement arriving in a range on a
   manifest with `params` is refused ("re-attest with a current tool").
 
-**`attest --force`.** Any key can replace an attestation today. In future:
+**`attest --force` in phase 2:**
 
-- A key may replace only its own attestation.
+- A key may replace only its own attestation, including when it owns the artifact.
 - Displacing another attester's statement needs an authorised republish, because the
-  publisher decides whose attestation the artifact displays.
+  publisher decides whose attestation the artifact displays. This branch provides
+  no dedicated CLI replacement flag.
+- `attest --criteria` changes publisher criteria only with held authority, and
+  writes both the v2 attestation and a new publisher view backed by a republish event.
+  Attesting unchanged criteria modifies only the separately signed attestation field.
 - Multiple concurrent attestations (`attestations: [...]`) are a natural follow-up. They are
   not needed to close #10.
 
@@ -623,7 +692,8 @@ carry a view:
 - **Separately signed fields** merge if only one side has them. If both sides carry different
   ones, that is a conflict (for `attested_by`, until a list exists).
 - **Derived caches** (`fulfills`/`accepted` links) union. Readers recompute them anyway.
-- **`ingest`**: ours (local).
+- **Legacy embedded `ingest`**: ours for compatibility; phase 2 writes arrival
+  records to local `registry/ingest.json`.
 
 `ANNOTATION_FIELDS` remains as-is for legacy manifests, so tags and publisher links still
 union there, which keeps current federation working until those manifests are adopted.
@@ -634,26 +704,46 @@ A manifest is in exactly one **view state**:
 
 | State | Meaning | `status`/`list`/`show` | `fsck` | `verify` | gates |
 |---|---|---|---|---|---|
-| `signed` | valid `publisher_sig`, signer in `A(id)` | `signed by 0x… (agent)` | OK | proceeds | accept, per §6 |
+| `signed` | valid `publisher_sig`; contextual replacement checks establish `A(id)` | `signed by 0x… (agent)` | OK | proceeds | accept, per §6 |
 | `signed-unauthorised` | valid signature, signer not in `A(id)` | `METADATA SIGNED BY 0x…, NOT THE PUBLISHER` | problem | FAIL (1) | refuse |
 | `altered` | digest mismatch or bad signature | `METADATA ALTERED — does not match 0x…'s signature`; the tier is shown struck through or marked `?` | problem | FAIL (1) | refuse |
-| `stripped` | no statement, but the ledger has a v2 view event for the id | `METADATA SIGNATURE REMOVED` | problem | FAIL (1) | refuse |
+| `stripped` | no statement, but an authenticated v2 view event for the id is signed by its sole verified publish signer or collection spec maintainer (§6) | `METADATA SIGNATURE REMOVED` | problem | FAIL (1) | refuse |
 | `superseded` | valid and authorised, but a later view event by `A(id)` exists in the ledger | `older view (newer: <ts>)` | warning | proceeds, with a note | refuse in a range (rollback) |
-| `legacy` | no statement and no v2 history | `UNSIGNED METADATA (legacy)` | counted, not a problem | proceeds, with a note | #42 rules (§13) |
-| `unknown-view-version` / `unnormalisable` | from a newer tool, or NaN | `cannot check metadata (…)` | warning | proceeds, with a note | refuse |
+| `legacy` | no statement and no authenticated v2 view event by an eligible legacy key (§6) | browse rows: `view=legacy`; detailed readers: `UNSIGNED METADATA (legacy)` | counted, not a problem | proceeds, with a note | #42 rules (§13) |
+| `unknown-view-version` / `unnormalisable` | from a newer tool, or non-finite/unserialisable metadata | `cannot check metadata (…)` | warning | stops on unchecked metadata (3), before workflow/comparator resolution or execution | refuse |
 
-**Checks that run everywhere.** The view state, attestation state (`none`, `valid`, `partial`,
-`unknown-signer`, `stale`, `invalid`), and derived links resolved from events.
+**Read surfaces.** Readers display view states and derived links; attestation
+verification distinguishes `none`, `valid`, `partial`, `unknown-signer`, `stale`
+and `invalid`. A standalone `signed` view proves attribution, not replacement
+authority; the latter needs the held/base copy (§6).
+
+**Browse cost and presentation.** `list`, `search`, and `collection show` use compact
+`view=legacy` markers in rows; `show`, `status`, and `fsck --views` keep detailed metadata
+notes. A cheap prefilter skips the stripping-history scan when no candidate v2
+`publish`/`republish` event carries a `view` key. When candidates exist, reuse one verified
+ledger snapshot across rows and apply §6's signer filter. Candidate presence alone proves
+nothing. These shortcuts leave signature, unknown-version and unnormalisable-view checks
+in place, and authorised stripping remains a problem.
 
 **Why `verify` FAILs on `altered`.** The tier, criteria, params and recorded environment that
 `verify` reads come from the view. Re-running a workflow and comparing against a forged
 `provenance` would give a PASS that means nothing.
 
+**Unchecked metadata stops verification.** `unknown-view-version` and `unnormalisable`
+also cannot establish the tier, criteria, params or provenance used by `verify`.
+They stop verification with exit 3 and a clear unchecked-metadata diagnostic, without
+labelling an unsupported future format a forgery. The guard runs before resolving the
+artifact's workflow or comparator, and checks the workflow's own metadata before running
+its code. When T1 output needs comparison, the comparator's metadata is checked immediately
+before running its code; byte-identical output requires no comparator lookup. Altered and
+stripped views still FAIL with exit 1.
+
 **`hub check` (full tree).** Every manifest with a `publisher_sig` must be `signed`, and v2
 entries must verify `sig2`. With `--base`, modified and added manifests go through §6.
 
-**Lazy replication.** No check needs the blob or the spec. The pinned-by-content
-cross-checks run only where the blob is held, as they do today.
+**Lazy replication.** Standalone publisher-signature validation needs no blob or
+spec. Spec-backed authority and lifecycle links need the relevant hash-checked
+specs; pinned-by-content cross-checks run where blobs are held.
 
 ## 11. Version skew
 
@@ -665,7 +755,7 @@ cross-checks run only where the blob is held, as they do today.
 | Old tool **republishes** a viewed manifest (`publish --force`) | — | Writes no statement and a v1-only republish. New tools see `stripped` and refuse it ("republish with commons ≥ phase 2"). Fails closed. |
 | Old tool runs `rebaseline` on a viewed manifest | — | Rewrites `exec` inside the view, so the result is `altered`, refused. Re-run with a new tool. |
 | New tool | legacy manifest, v1-only entries | `legacy` view state. #42 rules apply. v1 extra fields are hints. |
-| Hub CI on an old tool | new contributions | Passes what it passes today. No regression, but none of the new checks run either. Enforcement needs the pin bump (§12 phase 3). |
+| Hub CI on an old tool or writer-only phase 2 SHA | enforcement flag | The flag is ignored. Enforcement requires a later pin containing both phase 2 writers and phase 3 enforcement (§12). |
 
 ## 12. Migration plan
 
@@ -674,42 +764,59 @@ cross-checks run only where the blob is held, as they do today.
 
 | Item | Status |
 |---|---|
-| Authenticated replay rejection (G1), including equivalent signature encodings and unrelated histories | Done, #44 (tests 3b, 9). v2 complete-payload identity: **not done**, phase 1 (§5.2 "Status in 0.3.0"). |
+| Authenticated replay rejection (G1), including equivalent signature encodings and unrelated histories | Done, #44 (tests 3b, 9). This branch's phase 1 uses the complete v2 payload as identity. |
 | `republish` never grants authority; foreign `publish` reported or refused (G2) | Done, #44 (tests 3a, 3a1, 3a2). |
 | `pull` enforces append-only ledgers | Done, #44 (test 3c), including the legacy flat log. |
 | Legacy rebaseline gate: standing, trust, signed image digest | Done, #44 and #50 (test 7). `sig_v: 2` was replaced by `sig2` before release (#49). |
 | Repeated pull of the locally held manifest | Done, #44 (test 2). |
 | `sig2` on every event | Done, #50, pulled forward from phase 2. |
-| Lifecycle readers bind to signed fields | Done, #50 (#45 cases 1–3). Residual: stripped `sig2` on a never-held copy, #45, phase 1. |
+| Lifecycle readers bind to signed fields | Done, #50 (#45 cases 1–3). Phase 1 rejects known stripped copies regardless of received order, and v1-only entries after a verified v2 floor. Unseen-prefix/all-v1 downgrades remain possible because `prev` is unsigned (§5.2). |
 | `pull` applies `hub check`'s per-line ledger rules | Done, #50 (#48 items 1, 2). Item 3 (verification cost) is open. |
 | Authority freeze when a second key publishes | **Open**, #47. Not fixable by anchored order after #57. Routes: §6.2 adoption, or views. |
 
-**Phase 1: reader (tool 0.4.0).**
+**Phase 1: reader (planned tool 0.4.0; implemented on this branch).**
 
 - Implement `publisher_view`/`view_digest`, `publisher_sig` verification, attestation v2
   verification and the view states. (`sig2` verification exists since 0.3.0.)
 - Switch v2 entries to the complete-payload replay identity, and add the per-signer v2 floor
-  (§5.2), which closes the #45 residual.
+  (§5.2). This contains the #45 residual where the receiver has stronger evidence; it
+  does not authenticate an unseen prefix or an entirely downgraded history.
 - Show the view states in `status`/`list`/`show`/`verify`; add `fsck --views`.
-- The gates refuse `altered`, `signed-unauthorised` and `stripped`.
+- The gates refuse `altered`, `signed-unauthorised` and `stripped`, and require a
+  matching authorised v2 view event for backfill or a replacement. Unknown view
+  versions remain visible on reads but cannot pass the ingest gates. An independent
+  phase 1 review fix will stop `verify` on unknown/unnormalisable states with exit 3
+  before execution (§10).
+- Supersession diagnostics compare received physical order within one signer's
+  history. An explicit republish can restore an earlier view. Separate delegate
+  logs establish no order between concurrent views.
 - **This phase writes nothing new.** Hubs and peers upgrade their readers before anyone
   produces the data.
 
-**Phase 2: writer (tool 0.5.0).**
+**Phase 2: writer (planned tool 0.5.0; current implementation on this branch).**
 
 - With a signing key set, `publish`/`republish`, `run --publish`, `run-task --publish` and
   `rebaseline --publish-superseding` write `publisher_sig` and add `view` to their dual-signed
-  entries. (Every event is already dual-signed since 0.3.0.)
+  entries for new/replaced views. `run-task` already publishes by default and now
+  accepts explicit `--publish`; existing run outputs retain their held manifests.
+  (Every keyed event is already dual-signed since 0.3.0.)
 - `submit`, `accept`/`settle` and `rebaseline` (match) stop writing manifests (§7).
-- `attest` writes v2.
-- `ingest` moves to `registry/ingest.json`.
-- New command: `commons manifest sign [ID…|--mine]` backfills. For each held legacy artifact
-  where your key is the legacy first publisher (§6.2), it signs the current view and emits a
-  dual-signed `republish` with `view` and `backfill: true`. It prints the view it is about to
-  sign, because you are vouching for whatever the file says now. If the current bytes are not
-  what you published, fix them with `publish --force` first.
+- `attest` writes v2 with exact parameters; `--force` replaces only its signer's
+  own statement. Criteria changes require held publisher authority and a view event.
+- `ingest` moves to local-only `registry/ingest.json`.
+- `commons manifest sign ID...` or `commons manifest sign --mine` requires a key
+  and exactly one selection form. `--mine` selects eligible legacy manifests;
+  explicit ids with an already signed current view are unchanged. The writer
+  checks the selection before signing and prints each normalised view it signs.
+  Backfill requires the sole verified legacy publisher or a collection maintainer
+  in the held, hash-checked spec (§6.2), then emits a dual-signed `republish` with
+  `view` and `backfill: true`. It vouches for current claims and grants no authorship.
+  Correct mistaken claims with an authorised `publish --force` before backfilling.
+- Keyless new local publications remain legacy. Keyless replacement of a viewed
+  artifact is refused; `--force` cannot bypass held authority. No orphan or
+  ambiguous non-collection adoption is introduced; hub adopting authority is #58.
 
-**Phase 3: enforcement, opted into per hub.**
+**Phase 3: enforcement, opted into per hub; separate downstream branch, not here.**
 
 - `.commons-hub` gains `"require_signed_views": true`. That file is hub metadata, so the
   change itself goes through maintainer review.
@@ -717,12 +824,16 @@ cross-checks run only where the blob is held, as they do today.
   be `signed` after the change. The legacy edit path is closed there, and a legacy manifest
   must be adopted (backfilled) before anyone edits it.
 - `COMMONS_REQUIRE_VIEWS=1` does the same for `pull`, mirroring `COMMONS_REQUIRE_SIG`.
-- The hub pins a phase-2 tool in `hub-check.yml` before setting the flag.
+- Before setting the flag, the hub pins an enforcement-capable tool revision in
+  `hub-check.yml` containing **both phase 2 writer and phase 3 enforcement commits**.
+  A literal writer-only phase 2 SHA ignores the flag and provides no enforcement.
+  Separate PRs may share a 0.5 release; the pinned revision must contain both.
 
 **Old manifests are grandfathered indefinitely for reading**, as `legacy`. Nothing forces a
 republish. Where a hub enforces views, editing a manifest requires adopting it first.
 
-**Unsigned-only artifacts** stay legacy and frozen unless adopted under local trust (§6.2).
+**Unsigned-only non-collection artifacts** stay legacy and frozen; general adoption
+is deferred to #58 (§6.2).
 
 ## 13. Where #42's rules end up
 
@@ -768,8 +879,10 @@ It is attested under v2 (`params` is in the statement). The tamper sets `params`
 - The view: params are a publisher claim, so the digest changes and the state is `altered`.
 - The attestation: the statement's `params` no longer equal the manifest's, so
   `check_attestation` returns `stale`.
-- `verify` prints `attester : STALE — attestation covers different params than the manifest`
-  and exits FAIL (1). Before this change it reported a valid signature and exited 3.
+- `verify` exits FAIL (1) at the altered-view check before attestation dispatch.
+  Where metadata remains legacy or has been validly republished with changed params,
+  the attestation check reports `STALE` and exits 1. Before #10's reader fix it
+  reported a valid attestation and exited 3.
 - `fsck --views` and both gates report it as a problem.
 - On a legacy (pre-view) manifest with a v1 attestation, the same tamper still yields
   `partial` plus the #42 edit gate. The gap closes completely once the publisher adopts the
@@ -781,9 +894,10 @@ It is attested under v2 (`params` is in the statement). The tamper sets `params`
   payload as the original, even if C changes the signature's recovery-byte encoding. It is a
   replay, so the gates refuse it and readers ignore it. The `accepted` link loses its backing
   and is refused.
-- From phase 2, if C instead edits `result` on a v2 line, `sig2` fails: BAD SIGNATURE. If C
-  strips `sig2`, the line is a v1-only replay of a v2 original, refused as above. Two
-  legitimately signed v2 `accept` events with different `result` values are distinct because
+- If C instead edits `result` on a v2 line, `sig2` fails: BAD SIGNATURE. If the
+  receiver holds the original or a preceding v2 floor, stripping `sig2` is refused.
+  An unknown key's entirely stripped log still falls outside those defences (#45).
+  Two legitimately signed v2 `accept` events with different `result` values are distinct because
   their complete v2 payloads differ, even if their v1 signatures match.
 
 **(d) G2, authority laundering.** Step 1 (a `republish` line with the manifest reverted) gives
@@ -801,18 +915,21 @@ anyway.
   signed claim that a TEE was involved, not proof of it. Diversity quorums still count it.
   Receipt- or TEE-backed family claims need their own separately signed statement, analogous
   to §8. This is a follow-up and out of scope here.
-- **Frozen legacy artifacts have no in-band exit** (#47). Rule 2 fails closed on two signed
-  publishers, and #57 removes anchored order as a tie-break, so the only routes are adoption
-  under local trust (§6.2) or a view signed before the second publish. Prompt backfill is the
-  mitigation for owners. For hub CI there is none today.
-- **Lost keys** have no in-band recovery (§6). This is deliberate. Is adoption under local
-  trust enough for hubs, or does a hub need a maintainer set that can re-key or adopt
-  artifacts (`.commons-hub`, reviewed like the enforcement flag)? That would be a new
-  authority and needs its own design. The frozen-artifact case above makes it more pressing
-  than lost keys alone did.
-- **v2 replay identity.** 0.3.0 identifies every event by its v1 payload (§5.2 "Status"). Until
-  phase 1, two genuine v2 events from one key in the same second are collapsed by readers and
-  flagged by the gates; `ledger_prepare` avoids this on one machine only.
+- **Frozen legacy artifacts have no general in-band exit** (#47, #58). Rule 2
+  fails closed on ambiguous non-collection publishers, and #57 removes anchored
+  order as a tie-break. Prompt backfill before ambiguity protects held authority.
+  Collections retain spec-maintainer authority. Hub adopting authority is separate
+  #58 work; no adoption flags or general hub-CI recovery are implemented here.
+- **Lost keys** have no general in-band recovery (§6). #58 must define whether a
+  reviewed hub authority may re-key/adopt artifacts and what authorises that act;
+  an enforcement flag alone is insufficient.
+- **#45 whole-log stripping remains open.** Phase 1 distinguishes complete v2
+  payloads and rejects known stripped copies and post-floor v1 lines. An unknown
+  key's entirely downgraded log supplies no authenticated upgrade evidence.
+- **Attestation replacement workflow.** The writer blocks another attester's
+  replacement, including by an owner using `--force`; no dedicated authorised
+  replacement command exists. A broader CLI or multiple-attestation design remains
+  follow-up work.
 - **Concurrent legitimate views.** With an `authority` list of more than one key, two keys can
   republish concurrently. §9 makes that a merge conflict, and resolving it is manual. Is that
   acceptable, or should views carry a `prev_view` digest so that a fork can be detected
@@ -827,19 +944,24 @@ anyway.
 These are separate PRs, in this order:
 
 1. **Phase 0**: done in #44 and #50 (table in §12). Still open from it: the #45 residual
-   (phase 1), #47 (needs a decision; see §6.2 and §15), #48 item 3 (cost).
-2. **Phase 1:**
+   (not fully closed by phase 1), #47/#58 (see §6.2 and §15), #48 item 3 (cost).
+2. **Phase 1: implemented on this branch, pending review and release.**
    - `publisher_view`, `view_digest`, view states, attestation v2 verification
    - v2 complete-payload replay identity and the per-signer v2 floor (§5.2)
    - `tests/test-manifest-view.sh` with **fixed test vectors**: a manifest, its view, its
      digest, and the statement and signature from a fixed test key. Cover empty vs absent, set
      ordering, duplicate-id `provenance.inputs` order, an empty comparator parameter,
      non-ASCII, floats, an unknown field (default-include) and an unknown view version.
-3. **Phase 2:**
-   - the writers, `manifest sign`, derived links, `ingest.json`
-   - flip the ride-along test in `tests/test-manifest-edit.sh` §8 to "refused"
-   - the #10 repro as a test
-4. **Phase 3:** `require_signed_views` and `COMMONS_REQUIRE_VIEWS`, plus hub docs.
+3. **Phase 2: current writer implementation, pending integration and validation.**
+   - keyed publisher statements and matching ledger views; exact attestation v2
+   - `manifest sign` with held authority; derived links/reproduction notes;
+     local-only `ingest.json`
+   - regression coverage for writer commands, immutable lifecycle manifests,
+     exact attestation parameters and ride-along refusal
+4. **Phase 3: separate downstream branch, not implemented here.**
+   `require_signed_views` and `COMMONS_REQUIRE_VIEWS`, plus hub docs.
+5. **#58 adoption authority:** separate design and implementation; no general
+   recovery path is added by phase 2 or implied by phase 3 enforcement.
 
 ### Acceptance criteria from #41, mapped
 

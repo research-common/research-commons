@@ -32,9 +32,9 @@
 #  10b. the publisher may restate criteria through its own attestation, nobody else;
 #      same-second events by one signer stay distinct; pull from an unrelated history
 #      still runs the replay check; a no-op pull is quick; hub check never tracebacks
-#  11. KNOWN GAP, pinned so it is not mistaken for coverage: an edit committed after a
-#      genuine republish in the same range rides on it (closed by signing manifests,
-#      the follow-up designed with #10)
+#  11. An edit committed after a genuine viewed republish is refused.
+# Legacy fixtures below simulate pre-view writer output explicitly; actual phase 2
+# writers and immutable lifecycle manifests are exercised in test-view-writers.
 set -uo pipefail
 
 unset COMMONS_SIGNING_KEY COMMONS_ROOT COMMONS_AGENT COMMONS_EXEC COMMONS_REQUIRE_SIG
@@ -60,11 +60,17 @@ for k in "$KL" "$KC"; do
 done
 HL="$LAB/hub-lead"; HC="$LAB/hub-contrib"; BARE="$LAB/hub.git"
 
-L()  { ( cd "$HL" && COMMONS_ROOT="$HL" COMMONS_AGENT=lead    COMMONS_SIGNING_KEY="$KL" "$COMMONS" "$@" ); }
-C()  { ( cd "$HC" && COMMONS_ROOT="$HC" COMMONS_AGENT=contrib COMMONS_SIGNING_KEY="$KC" "$COMMONS" "$@" ); }
+fixture_cli() {
+  case "$1" in
+    publish|attest|submit|accept) python3 "$HERE/legacy-writer-fixture.py" "$COMMONS" "$@" ;;
+    *) "$COMMONS" "$@" ;;
+  esac
+}
+L()  { ( cd "$HL" && COMMONS_ROOT="$HL" COMMONS_AGENT=lead    COMMONS_SIGNING_KEY="$KL" fixture_cli "$@" ); }
+C()  { ( cd "$HC" && COMMONS_ROOT="$HC" COMMONS_AGENT=contrib COMMONS_SIGNING_KEY="$KC" fixture_cli "$@" ); }
 # The lead's own key, working in the contributor's clone (a second machine, same identity).
-LC() { ( cd "$HC" && COMMONS_ROOT="$HC" COMMONS_AGENT=lead    COMMONS_SIGNING_KEY="$KL" "$COMMONS" "$@" ); }
-CL() { ( cd "$HL" && COMMONS_ROOT="$HL" COMMONS_AGENT=contrib COMMONS_SIGNING_KEY="$KC" "$COMMONS" "$@" ); }
+LC() { ( cd "$HC" && COMMONS_ROOT="$HC" COMMONS_AGENT=lead    COMMONS_SIGNING_KEY="$KL" fixture_cli "$@" ); }
+CL() { ( cd "$HL" && COMMONS_ROOT="$HL" COMMONS_AGENT=contrib COMMONS_SIGNING_KEY="$KC" fixture_cli "$@" ); }
 rc() { "$@" >"$W/out.txt" 2>"$W/err.txt"; echo $?; }
 both() { cat "$W/out.txt" "$W/err.txt"; }
 
@@ -287,6 +293,8 @@ PY
 WF=$(L publish workflow "$W/wf.json" "wf" 2>/dev/null | tail -1)
 RB=$(L run "$WF" --publish --publish-type synthesis --exec native \
        --title "native baseline" 2>/dev/null | awk '{print $1}')
+COMMONS_ROOT="$HL" COMMONS_SIGNING_KEY="$KL" \
+  python3 "$HERE/legacy-writer-fixture.py" "$COMMONS" unview "$RB"
 check "native result published for rebaseline cases" "$(echo "$RB" | grep -cE '^sy-[0-9a-f]{8}$')" "1"
 check "  with a native execution record" "$(field "$HL" "$RB" 'm["provenance"]["run"]["exec"]["mode"]')" "native"
 python3 - "$W/task.json" "$DS" "$WF" "$ADDR_L" <<'PY'
@@ -676,7 +684,8 @@ edit "$HC" "$T3" 'm.setdefault("links", []).append({"rel": "fulfills", "id": "'"
 cpush relayed-submit
 check "hub check --base refuses a fulfills link the submit's signed hash doesn't cover" "$(hcheck)" "1"
 check "pull refuses it" "$(lpull relayed-submit --dry-run)" "1"
-check "  naming the unbacked link" "$(both | grep -c "link fulfills:$TK2 added with no signed ledger event")" "1"
+check "  naming the stripped event after the v2 floor" \
+  "$(both | grep -c "v1-only event after this signer's v2 floor")" "1"
 
 branch held-1
 check "contributor submits DS for the second task" "$(rc C submit "$TK2" "$DS" --force)" "0"
@@ -762,8 +771,8 @@ PY
 cpush relayed-accept
 check "downgraded v1 copy: hub check --base refuses the unbacked accepted link" "$(hcheck)" "1"
 check "  and pull refuses it" "$(lpull relayed-accept --dry-run)" "1"
-check "  naming the unbacked link" \
-  "$(both | grep -c "link accepted:$T3 added with no signed ledger event")" "1"
+check "  naming the stripped event after the v2 floor" \
+  "$(both | grep -c "v1-only event after this signer's v2 floor")" "1"
 
 # ---------------------------------------------------------------- 4b. explicit trust denial
 head_ "4b. a trust=none attester cannot change a held claim"
@@ -953,14 +962,16 @@ check "hub check --base fails a deleted ledger" "$(hcheck)" "1"
 check "  naming it" "$(grep -c 'registry content deleted: registry/ledger/' "$W/out.txt")" "1"
 check "  without a traceback" "$(grep -c Traceback "$W/out.txt")" "0"
 
-head_ "8. KNOWN GAP (pinned): an edit after a genuine republish rides on it"
+head_ "8. viewed republish: ride-along edit is refused"
 branch ride
-LC publish dataset "$W/r.csv" "readings v2" --force >/dev/null 2>&1
+LC manifest sign "$DS" >/dev/null 2>&1
+( cd "$HC" && COMMONS_ROOT="$HC" COMMONS_AGENT=lead COMMONS_SIGNING_KEY="$KL" \
+    "$COMMONS" publish dataset "$W/r.csv" "readings v2" --force ) >/dev/null 2>&1
 ( cd "$HC" && git add registry store && git commit -qm "genuine republish" )
 edit "$HC" "$DS" 'm["verification"] = {"tier": "T0"}'
 cpush "ride-along edit"
-check "accepted today: the republish signs the content hash, not the manifest" \
-  "$(lpull ride --dry-run)" "0"
+check "refused: ride-along bytes differ from the signed publisher view" \
+  "$(lpull ride --dry-run)" "1"
 
 head_ "housekeeping"
 ( cd "$HL" && COMMONS_ROOT="$HL" "$COMMONS" fsck ) >"$W/out.txt" 2>&1

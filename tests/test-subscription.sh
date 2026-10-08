@@ -24,7 +24,7 @@ git init -q --bare "$BARE"; git init -q "$PUB"
 (
   cd "$PUB" || exit
   git config user.name test; git config user.email test@local
-  git remote add origin "$BARE"; printf '%s\n' registry/index.sqlite registry/peers.json registry/quarantine.log registry/exec-policy.json registry/subscriptions.json __pycache__/ > .gitignore  # a registry repo's own ignores (the tool repo's .gitignore excludes registry/* entirely)
+  git remote add origin "$BARE"; printf '%s\n' registry/index.sqlite registry/peers.json registry/quarantine.log registry/exec-policy.json registry/subscriptions.json registry/ingest.json __pycache__/ > .gitignore  # a registry repo's own ignores (the tool repo's .gitignore excludes registry/* entirely)
   mkdir -p registry/artifacts store/sha256
   touch registry/artifacts/.keep store/sha256/.keep
   git add .gitignore registry/artifacts/.keep store/sha256/.keep
@@ -46,6 +46,12 @@ printf '#!/bin/sh\nprintf executable\n' >"$LAB/tool.sh"
 EXEC=$(pub publish workflow "$LAB/tool.sh" executable)
 for n in manifest members all self exec pending maint outsider none anysup; do
   cp "$PUB/registry/artifacts/$EXEC.json" "$LAB/$n/registry/artifacts/"
+  python3 - "$LAB/$n/registry/ingest.json" "$EXEC" <<'PYARRIVAL'
+import json, sys
+json.dump({"schema": "rc.v1", "artifacts": {
+    sys.argv[2]: {"received_at": "2026-08-03T00:00:00Z", "from": "origin"}}},
+    open(sys.argv[1], "w"))
+PYARRIVAL
   git -C "$LAB/$n" add "registry/artifacts/$EXEC.json"
   git -C "$LAB/$n" commit -qm "preaccepted executable manifest"
 done
@@ -172,12 +178,12 @@ data = json.load(open(p))
 data["subscriptions"][0]["include_self_declared"] = True
 open(p, "w").write(json.dumps(data, indent=2, sort_keys=True) + chr(10))
 PYFSCKPOLICY
-python3 - "$M/registry/artifacts/$EXEC.json" <<'PYFSCKINGEST'
+python3 - "$M/registry/ingest.json" "$EXEC" <<'PYFSCKINGEST'
 import json, sys
 p = sys.argv[1]
-manifest = json.load(open(p))
-manifest["ingest"] = {"received_at": "2026-08-03T00:00:00Z", "from": "origin"}
-open(p, "w").write(json.dumps(manifest, indent=2, sort_keys=True) + chr(10))
+arrivals = json.load(open(p))
+arrivals["artifacts"][sys.argv[2]] = {"received_at": "2026-08-03T00:00:00Z", "from": "origin"}
+open(p, "w").write(json.dumps(arrivals, indent=2, sort_keys=True) + chr(10))
 PYFSCKINGEST
 # An unattributed superseder is a pending-review candidate under the default
 # maintainer-signed gate. Its dummy digest is computed, never embedded as a literal.
@@ -280,12 +286,12 @@ head_ "pending and pull refusal visibility"
 M="$LAB/pending"; COMMONS_ROOT="$M" "$COMMONS" subscribe cl-1234abcd origin --blobs members >/dev/null
 check "pending collection sync is nonfatal" "$(rc sync_plain)" "0"
 check "pending collection is visible" "$(grep -c 'status: pending: collection not replicated' "$LAB/out.txt")" "1"
-python3 - "$M/registry/artifacts/$EXEC.json" <<'PYPENDINGINGEST'
+python3 - "$M/registry/ingest.json" "$EXEC" <<'PYPENDINGINGEST'
 import json, sys
 p = sys.argv[1]
-manifest = json.load(open(p))
-manifest["ingest"] = {"received_at": "2026-08-03T00:00:00Z", "from": "origin"}
-open(p, "w").write(json.dumps(manifest, indent=2, sort_keys=True) + chr(10))
+arrivals = json.load(open(p))
+arrivals["artifacts"][sys.argv[2]] = {"received_at": "2026-08-03T00:00:00Z", "from": "origin"}
+open(p, "w").write(json.dumps(arrivals, indent=2, sort_keys=True) + chr(10))
 PYPENDINGINGEST
 check "unsynced subscription fsck is nonfatal" "$(rc env COMMONS_ROOT="$M" "$COMMONS" fsck)" "0"
 check "unsynced subscription fsck stays pending" "$(grep -c '^  status: pending: collection not replicated$' "$LAB/out.txt")" "1"

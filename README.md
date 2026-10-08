@@ -69,6 +69,8 @@ commons list --type collection           # topics in this hub
 commons collection show <cl-id>          # endorsed vs. claimed members + open work
 commons search "some phrase"             # full-text search across artifacts
 commons get <id> / cat <id> / links <id> # manifest, content, citation edges
+commons show <id>                       # manifest + metadata signature state
+commons fsck --views                    # audit signed metadata views
 commons graph <id> --depth 10            # transitive evidence tree
 
 # contribute
@@ -100,7 +102,7 @@ dispatches on the tier; the exit code tells scripts which kind of answer they go
 | `T0` | bitwise | re-run of the recorded workflow reproduces identical bytes | re-runs + hash compare | 0 / 1 / 5 |
 | `T1` | tolerance | re-run reproduces an equivalent result under the declared comparator | re-runs + comparator skill | 0 / 1 / 5 |
 | `T2` | judged | independent review against a rubric declared before the work was claimed | prints guarantee + rubric | 3 |
-| `T3` | attested | signer attests a one-time observation; raw capture is published as-is | checks the signature only — attestation binding, criteria drift, key validity at `observed`; **no capture-format check exists** | 3 (1 if invalid/stale) |
+| `T3` | attested | signer attests a one-time observation; raw capture is published as-is | checks the signature only — content, criteria and parameter binding, key validity at `observed`; **no capture-format check exists** | 3 (1 if invalid/stale) |
 | `unverified` | — | no verification guarantee is declared by the publisher | prints guarantee when no workflow is recorded | 4 without workflow; 0 / 1 / 5 with workflow |
 
 ```bash
@@ -111,8 +113,10 @@ $COMMONS publish synthesis out.json "Floats" --tier T1 --criteria sk-e0f1d443 --
 ```
 
 A T3 publisher may initially record only self-reported criteria; `commons attest` names
-the signer and binds `{id, sha256, criteria, observed}` to that address. On ingest an
-attester, if present, must be a registered peer with non-`none` trust (`datasets-only` or `full` for
+the signer and signs `{rc: "attestation/2", attests: id, sha256, criteria, params, observed}`.
+The exact parameter map is covered, including empty member values; absent or null
+parameters become `{}`. On ingest, an attester must be a registered peer with
+non-`none` trust (`datasets-only` or `full` for
 non-method artifacts). The signature proves who signed that statement, not that the
 observation is true or that its self-declared time is independently trustworthy.
 
@@ -209,6 +213,12 @@ generating model** — rubrics judge output, never pedigree.
 **Lifecycle is folded from the ledger**, never stored: claim expiry needs no daemon, and
 the queue is a view that cannot disagree with the log. Unsigned or invalidly-signed
 events are dropped when computing state, not merely flagged.
+
+`submit`, `accept` and `settle` append events without rewriting result or task manifests.
+Readers derive `fulfills` from authenticated v2 submissions and `accepted` from the
+beneficiary's authenticated settlement; a later rejection clears acceptance.
+`run-task` publishes outputs by default (`--publish` is an explicit spelling of that
+default); the `fulfills` link appears after `submit`.
 
 **`claim` warns about federation lag, advisory only.** Within one registry the ledger
 fold can't disagree with itself, but replication across peers is asynchronous, so a
@@ -517,25 +527,19 @@ with bad), id collisions against different local content, attester registration 
 trust, and **executable artifacts gated on the publisher's trust** from their signed
 ledger entry. Rejects go to `registry/quarantine.log` and the fetch is left unmerged.
 
-**An edit to a manifest you already hold is checked too (#41).** Manifests are not covered
-by any signature (a publish signs the content hash), so a peer can change an artifact's
-tier, criteria, licence, obtainability, title or links without changing its id. `pull` and
-`hub check --base` compare every modified manifest with the merge base and accept the edit
-only if the incoming range carries a new verified signed `publish`/`republish` of that id
-(what `publish --force` emits) by a key with authority over it: the artifact's verified
-signed publisher at the base or, for a collection, a maintainer its spec names. A
-`republish` never grants authority by itself. If the base holds no verified signed publish
-(a legacy unsigned artifact) or several from different keys, no key has authority and only
-annotation edits can land. `pull` also requires that key to be a registered peer whose
-trust covers the type and whose validity window covers the event. Without a republish, the
-only edits allowed are annotations a signed ledger event backs, matched on the event's
-signed fields: a `fulfills` link (a `submit` signing this result's hash), an `accepted`
-link (the beneficiary's `accept` of this task, naming this result in a `sig2`-signed field
-or, for an entry without `sig2`, naming a result a submit to the task binds by hash), an attestation (a valid `attested_by` plus
-its `attest` event; replacing another attester, or restating the criteria, needs
-authority) and a rebaseline exec
-record (an owner-signed `rebaseline` whose `sig2` covers the mode and image digest).
-These may only add, never remove. Anything else is rejected and quarantined.
+**An edit to a manifest you already hold is checked too (#41).** `pull` and
+`hub check --base` compare modified manifests with the held/base copy. For a viewed
+artifact, changing publisher claims requires a valid `publisher_sig` by the held
+view's signer, a key in its signed `authority` list, or a collection maintainer
+named in its hash-checked spec. The range must carry a new dual-signed
+`publish`/`republish` whose `view` equals the incoming view digest. `pull` also
+checks peer trust and the signing key's validity window.
+
+For legacy metadata, the earlier edit gate still applies: an authorised republish
+backs publisher-field edits, and authenticated events back additive annotations.
+Legacy edit authority comes from the sole verified `publish` signer or a
+collection maintainer; `republish` alone never grants it. Non-collection artifacts
+with no signed publisher or multiple publishers cannot be backfilled by this writer.
 
 Both gates also refuse a **replayed** ledger event: a copy of a signed event with an
 unsigned field changed (`prev`, `result`, the signature encoding). Events are identified
@@ -557,17 +561,80 @@ Lifecycle readers select a task's events by the signed `id` and ignore an event 
 you hold whose content hash is the submit's signed hash, and an accept without `sig2` only if
 its `result` names such a submission (#45).
 
-**Known gaps** (pinned by the test suite): a republish signs the content hash, not the
-manifest bytes, so an edit committed after a genuine republish in the same range is
-accepted with it (#43, together with #10). A receiver that never held a `sig2`-signed
-original cannot tell a copy with `sig2` stripped from an older entry, so the rules above
-are what bind it: a relayed, stripped accept can still name another genuine submission to the
-same task, including the relayer's own. A second key's `publish` of an artifact leaves no key able to rewrite its
-manifest until the dispute is settled (#47).
+**Signed manifest views (#43 phases 1–2).** With `COMMONS_SIGNING_KEY` set,
+`publish`, `publish --force`, `run --publish`, `run-task` (including `--publish`)
+and new outputs from `rebaseline --publish-superseding` write `publisher_sig`
+over a `manifest/1` statement naming the `manifest-view/1` digest. Their matching
+dual-signed publish/republish events carry the same `view` digest.
+Repeated runs producing an already-held id retain its original manifest.
+Keyless local publication remains legacy; a viewed artifact cannot be republished
+without a key, and `--force` does not bypass held authority.
+
+`show`, `status`, `list`, `search` and `collection show` label legacy metadata and
+check a present `publisher_sig`.
+Browse rows (`list`, `search`, and `collection show`) use the compact `view=legacy`
+marker; `show`, `status`, and `fsck --views` retain detailed metadata notes.
+`list --json` adds `view_state` and `view_detail`; `fsck --views` audits signatures.
+`status --brief` stays one line and adds `view=<state>`.
+`verify` fails with exit 1 on altered, stripped or contextually unauthorised metadata
+before executing a workflow. Unknown view versions and unnormalisable metadata
+remain visible as states to readers, while `verify` stops on those states with
+exit 3 before resolving or executing unchecked workflows or comparators. Unsupported
+future formats are labelled unchecked rather than forged. T1 verification checks
+comparator metadata immediately before use; byte-identical output needs no comparator lookup.
+The file proves who signed it; authorisation of a replacement needs the held/base
+copy. Concurrent publisher views cannot be union-merged.
+For a legacy artifact without `publisher_sig`, stripping evidence must be an
+authenticated v2 `publish`/`republish` view event by its sole verified publish
+signer or, for a collection, a maintainer named in its spec. An unrelated signer's
+view event cannot mark it `stripped` or freeze its owner's edit authority.
+An authorised event still makes removal of the signature fail closed.
+Pull retains receiver-held stripping evidence even when incoming history omits
+it, including evidence recorded after a shared merge base.
+Browse readers use a cheap no-view-event prefilter and reuse a verified ledger
+snapshot across rows, avoiding repeated ledger verification for each artifact.
+
+Backfill current legacy claims with your signing key:
+
+```bash
+commons manifest sign ds-XXXX sy-YYYY   # explicit ids
+commons manifest sign --mine           # eligible legacy manifests authorised by your key
+```
+
+Use either ids or `--mine`. Each backfill prints the normalised view being signed,
+then writes a dual-signed `republish` with `view` and `backfill: true`; it does not
+claim first-publisher credit. An already signed current view is left unchanged.
+Eligibility requires the sole verified legacy publisher or a collection maintainer
+named in the held, hash-checked spec. Review the printed claims: backfill vouches
+for what the manifest says now. Orphan, unsigned-only and ambiguous non-collection
+artifacts have no adoption path here. Hub adopting authority is deferred to #58.
+Phase 3 enforcement (`require_signed_views`, `COMMONS_REQUIRE_VIEWS`) is a separate
+downstream branch and is not implemented here. Before enabling it, pin a later
+tool revision in `hub-check.yml` containing both phase 2 writers and phase 3
+enforcement; a writer-only SHA ignores the flag. See the
+[signed-views design](docs/DESIGN-notes-signed-manifests.md).
+
+Distinct v2 events use their complete signed payload as their replay identity.
+A stripped copy of a known v2 event is refused, as is a v1-only line after a verified
+v2 line in that signer's own log. Invalid or foreign-log v2 lines establish no floor.
+Because `prev` is unsigned, this does not authenticate the original log order or
+detect complete downgrade of a log the receiver has never seen.
+
+Attestation v2 readers check signed `params`. A valid v1 attestation on metadata
+with parameters is `partial`; new partial attestations are refused by both gates.
+
+**Remaining gaps.** An edit after a legacy republish can still ride along because
+that event has no signed view digest; backfill closes this for viewed artifacts.
+**#45 is not fully closed:** an unknown key's entire log can arrive with `sig2`
+stripped and no independently authenticated v2 floor. A stripped accept can then
+name another genuine submission to the same task. A second signed publisher freezes
+legacy non-collection edit authority (#47); neither timestamps nor anchors resolve
+that authority dispute. #58's hub adopting authority remains separate work.
 
 **A peer can never hand you local policy.** `registry/peers.json`,
-`registry/exec-policy.json`, `registry/subscriptions.json`, and `quarantine.log` are
-local-only and never replicated; an incoming tree carrying one is refused outright.
+`registry/exec-policy.json`, `registry/subscriptions.json`, `registry/ingest.json`,
+and `registry/quarantine.log` are local-only and never replicated; an incoming tree
+carrying one is refused outright.
 Otherwise the sender could decide whom you trust, what may run, or what you intend to fetch.
 
 **Per-peer ledgers.** Each writer owns `registry/ledger/<addr>.jsonl`, so concurrent
@@ -581,7 +648,9 @@ any peer log approaches roughly 50 MB.
 
 **Lazy replication.** Manifests always travel; blobs on demand. `fsck` says
 `NOT REPLICATED` (not `MISSING BLOB`) for a manifest ingested without its bytes, because
-incomplete is not corrupt.
+incomplete is not corrupt. Arrival records live in this host's ignored
+`registry/ingest.json`; `pull` does not stamp signed manifests. Embedded `ingest`
+fields do not establish arrival here or change missing-blob classification.
 
 ## Time anchoring
 
@@ -657,8 +726,19 @@ $COMMONS attest ds-abc --criteria "GET /v1/rewards at 2026-07-25T00:00Z" --obser
 $COMMONS verify ds-abc      # attester : VALID — attested by 0x… (agent=alice, observed …)
 ```
 
-A tampered attestation, or one covering different content or criteria, exits **1 (FAIL)**
+A tampered attestation, or one covering different content, criteria or parameters, exits **1 (FAIL)**
 — it's the one machine-checkable part of T3. Unattested T3 reports `NONE`.
+
+`attest` writes `attestation/2` with the exact `verification.params` map, preserving
+empty values. A legacy v1 attestation with nonempty parameters is `partial` and
+`verify` exits 3; both ingest gates refuse newly introduced partial attestations.
+`attest --force` can replace only your own attestation, even if you own the artifact.
+Changing criteria with `attest --criteria` requires publisher authority and also
+emits a matching signed republish view. Displacing another attester requires an
+authorised republish; there is no dedicated replacement flag in this branch.
+`publish --force` preserves attested parameters when `--param` is omitted and
+refuses explicit parameter changes that would invalidate the retained statement.
+Repeating the same parameters in another flag order is allowed.
 
 `--observed` takes RFC 3339 with an explicit zone. Offset forms are accepted and
 **normalised to UTC before signing** (`2026-08-09T23:00:00-08:00` is stored as
@@ -673,10 +753,9 @@ attesting key's validity window against — see the fixed defect below.
 > could attest by choosing a timezone, turning exit 1 into exit 3. Validation happens at
 > `attest`, never at `verify`: no published artifact changed grade.
 
-> ⚠️ **Known defect, filed 2026-08-23:**
-> **`verification.params` is outside the signed statement**, so `--param` values can be edited
-> after attestation without the attester going `STALE`. Only `sha256` and `criteria` are covered.
-> Put anything load-bearing in `--criteria`, which *is* signed.
+The historical #10 defect left `verification.params` outside v1 attestations.
+Current v2 statements cover them; re-attest legacy parameterised captures with
+the original attester's key.
 
 ## Publish-time secret lint
 
@@ -1044,13 +1123,19 @@ ENV-MISMATCH never lowers a chain grade and never counts as a verification failu
 through, not a toggle you flip back:
 
 ```bash
-$COMMONS rebaseline sy-abc                        # MATCH -> stamp exec record, id unchanged
+$COMMONS rebaseline sy-abc                        # MATCH -> reproduction event, manifest unchanged
 $COMMONS rebaseline sy-abc --publish-superseding  # DIVERGED -> publish sandbox result, supersede
 ```
 
-Three honest outcomes: **MATCH** (metadata repair), **DIVERGED** (superseding artifact,
-native one kept as legacy baseline), or **NONDETERMINISTIC** (a real workflow defect,
-surfaced rather than hidden). All are ledger events.
+Three honest outcomes: **MATCH** (a reproduction event), **DIVERGED** (superseding artifact,
+native one kept as the original baseline), or **NONDETERMINISTIC** (a real workflow defect,
+surfaced rather than hidden). All are ledger events. The original publisher manifest
+and execution record stay unchanged. `show` and `status` display a matching reproduction
+only from a trusted signer with held publisher authority or a signed `reproducers`
+delegation, with a valid key window and the exact sandbox image digest.
+`verify` still compares against the original published execution record.
+A new superseding artifact gets its own view signature; an already-held successor
+retains its canonical manifest.
 
 **Methods aren't evidence.** `workflow` and `skill` artifacts carry no tier (shown as `—`):
 they're pinned verbatim by content hash and re-executed as-is, so they never set a chain grade.
@@ -1098,8 +1183,11 @@ identical output at different times construct the same id from `content.sha256` 
 recording different `provenance.run.finished` and `created` timestamps, and may add
 different annotations; identical bytes still collapse to one artifact. A manifest diff
 therefore does not by itself show a content disagreement. The ingest gate checks
-`content.sha256` and that the id derives from that hash; on merge, `links` and `tags`
-union, while conflicts in other shared fields abort (`ingest` is a local stamp).
+`content.sha256` and that the id derives from that hash. Legacy `links` and `tags`
+can union-merge; viewed publisher claims cannot, because the union would be unsigned.
+Readers combine publisher links with authenticated lifecycle links. Old cached
+`fulfills`/`accepted` links are displayed only when backed; `fsck` reports unbacked
+caches. Local arrival data lives in `registry/ingest.json`.
 
 `publish --force` over an id you already hold edits its manifest in place, starting from
 the existing one: a field changes only when its flag is passed (`-d`, `-t`, `--link`,
@@ -1138,7 +1226,8 @@ public source (a chain node, an immutable-by-id API) as an input is an open desi
   (`UNATTRIBUTED:`, counted as problems — blob integrity says nothing about who published),
   plus artifacts whose only publish events are unsigned (`UNSIGNED-ONLY:`, advisory:
   nothing verifiably names their publisher. There is no repair yet: a signed `publish --force`
-  writes a `republish`, which never claims authorship (#46), and an adoption path is #47);
+  writes a `republish`, which never claims authorship (#46), and hub adopting authority
+  is deferred to #58);
   `--availability` prints a read-only obtainability census for datasets
   (`open`/`licensed-obtainable`/`restricted`/`undeclared`, with ids) and previews what
   `push`'s disclosure gate would refuse — same shared predicate as the gate itself, so
@@ -1161,6 +1250,8 @@ public source (a chain node, an immutable-by-id API) as an input is an open desi
   **Local-only**, seeded from `registry/exec-policy.example.json`.
 - `registry/subscriptions.json` — collection sync intent and policy.
   **Local-only**; manage it with `subscribe`, `unsubscribe`, and `subscriptions`.
+- `registry/ingest.json` — this host's per-artifact arrival records.
+  **Local-only**; written by `pull`, ignored by git and never replicated.
 - `environments/CONTRACT.md` — what an execution image must guarantee (roll your own).
 - `environments/base/Dockerfile` — reference build of the default image, snapshot-pinned.
 - `registry/peers.json` — signer identities, trust levels, key validity windows.
@@ -1212,6 +1303,7 @@ store/sha256/<2hex>/<hash>     content-addressed immutable blobs
 .github/workflows/hub-check.yml   CI gate for pull requests
 # local-only, git-ignored, never replicated:
 registry/peers.json  registry/exec-policy.json  registry/subscriptions.json
+registry/ingest.json
 registry/quarantine.log  registry/index.sqlite (derived)
 ```
 

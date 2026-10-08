@@ -1,0 +1,498 @@
+{
+  "version": "manifest-view/1",
+  "description": "Fixed vectors: expected projections authored independently; SHA-256 of ASCII canonical JSON. Signature is EIP-191 personal_sign, viem, public test key scalar 1. Never use this key for funds or production.",
+  "test_private_key_scalar": 1,
+  "vectors": [
+    {
+      "name": "signed-rich",
+      "manifest": {
+        "id": "ds-01234567",
+        "content": {
+          "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        },
+        "schema": "rc.v1",
+        "type": "dataset",
+        "title": "Caf\u00e9 e\u0301 \ud83c\udf0d",
+        "description": "",
+        "tags": [
+          "\u03b2",
+          "alpha",
+          "\u03b2",
+          "",
+          null
+        ],
+        "links": [
+          {
+            "rel": "derives",
+            "id": "ds-parent"
+          },
+          {
+            "id": "ds-parent",
+            "rel": "derives"
+          },
+          {
+            "rel": "fulfills",
+            "id": "tk-one"
+          },
+          {
+            "rel": "accepted",
+            "id": "ds-two"
+          },
+          {
+            "rel": "cites",
+            "id": "rp-source",
+            "note": ""
+          }
+        ],
+        "verification": {
+          "tier": "T1",
+          "criteria": "",
+          "attested_by": {
+            "sig": "ignored"
+          },
+          "params": {
+            "delimiter": "",
+            "missing": null,
+            "columns": [],
+            "options": {
+              "empty": {},
+              "label": ""
+            }
+          }
+        },
+        "provenance": {
+          "inputs": [
+            {
+              "id": "ds-same",
+              "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            {
+              "id": "ds-same",
+              "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          ],
+          "run": {
+            "env": {},
+            "finished": null
+          }
+        },
+        "generation": {
+          "temperature": 0.1,
+          "negative_zero": -0.0,
+          "small": 1e-07,
+          "large": 1e+20,
+          "whole": 1.0,
+          "order": [
+            2,
+            1,
+            2
+          ]
+        },
+        "future": {
+          "kept": true,
+          "zero": 0,
+          "off": false,
+          "pruned": {
+            "none": null
+          }
+        },
+        "ingest": {
+          "from": "local",
+          "received_at": "ignored"
+        },
+        "publisher_sig": {
+          "addr": "0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf",
+          "sig": "0x4a799d5b0c91834f87d8ed64150ca1c9ab645a3d773471a80f721613f0a978003d0858214ab6829ca5d5d01832fbfc0b7b83c435166e332c5ddf822c4092f24c1b",
+          "statement": {
+            "rc": "manifest/1",
+            "id": "ds-01234567",
+            "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "view_version": "manifest-view/1",
+            "view": "13b984f961f6b0cae7178d64b93ccd9891a8cf4a3d23472488d5e5897f453572",
+            "ts": "2026-10-02T09:00:00Z"
+          }
+        }
+      },
+      "view": {
+        "rc": "manifest-view/1",
+        "manifest": {
+          "id": "ds-01234567",
+          "content": {
+            "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+          },
+          "schema": "rc.v1",
+          "type": "dataset",
+          "title": "Caf\u00e9 e\u0301 \ud83c\udf0d",
+          "tags": [
+            "",
+            "\u03b2",
+            "alpha",
+            null
+          ],
+          "links": [
+            {
+              "id": "ds-parent",
+              "rel": "derives"
+            },
+            {
+              "id": "rp-source",
+              "rel": "cites"
+            }
+          ],
+          "verification": {
+            "tier": "T1",
+            "params": {
+              "delimiter": "",
+              "missing": null,
+              "columns": [],
+              "options": {
+                "empty": {},
+                "label": ""
+              }
+            }
+          },
+          "provenance": {
+            "inputs": [
+              {
+                "id": "ds-same",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              },
+              {
+                "id": "ds-same",
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              }
+            ]
+          },
+          "generation": {
+            "temperature": 0.1,
+            "negative_zero": -0.0,
+            "small": 1e-07,
+            "large": 1e+20,
+            "whole": 1.0,
+            "order": [
+              2,
+              1,
+              2
+            ]
+          },
+          "future": {
+            "kept": true,
+            "zero": 0,
+            "off": false
+          }
+        }
+      },
+      "canonical_view": "{\"manifest\":{\"content\":{\"sha256\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"},\"future\":{\"kept\":true,\"off\":false,\"zero\":0},\"generation\":{\"large\":1e+20,\"negative_zero\":-0.0,\"order\":[2,1,2],\"small\":1e-07,\"temperature\":0.1,\"whole\":1.0},\"id\":\"ds-01234567\",\"links\":[{\"id\":\"ds-parent\",\"rel\":\"derives\"},{\"id\":\"rp-source\",\"rel\":\"cites\"}],\"provenance\":{\"inputs\":[{\"id\":\"ds-same\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},{\"id\":\"ds-same\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"}]},\"schema\":\"rc.v1\",\"tags\":[\"\",\"\\u03b2\",\"alpha\",null],\"title\":\"Caf\\u00e9 e\\u0301 \\ud83c\\udf0d\",\"type\":\"dataset\",\"verification\":{\"params\":{\"columns\":[],\"delimiter\":\"\",\"missing\":null,\"options\":{\"empty\":{},\"label\":\"\"}},\"tier\":\"T1\"}},\"rc\":\"manifest-view/1\"}",
+      "digest": "13b984f961f6b0cae7178d64b93ccd9891a8cf4a3d23472488d5e5897f453572",
+      "canonical_statement": "{\"id\":\"ds-01234567\",\"rc\":\"manifest/1\",\"sha256\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\",\"ts\":\"2026-10-02T09:00:00Z\",\"view\":\"13b984f961f6b0cae7178d64b93ccd9891a8cf4a3d23472488d5e5897f453572\",\"view_version\":\"manifest-view/1\"}"
+    },
+    {
+      "name": "absent",
+      "manifest": {
+        "id": "ds-01234567",
+        "content": {
+          "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        }
+      },
+      "view": {
+        "rc": "manifest-view/1",
+        "manifest": {
+          "id": "ds-01234567",
+          "content": {
+            "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+          }
+        }
+      },
+      "canonical_view": "{\"manifest\":{\"content\":{\"sha256\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"},\"id\":\"ds-01234567\"},\"rc\":\"manifest-view/1\"}",
+      "digest": "bfbfa3d919252b3451958a635debc99a0602bb540fde05a81500fe1ca984222d"
+    },
+    {
+      "name": "empty",
+      "manifest": {
+        "id": "ds-01234567",
+        "content": {
+          "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        },
+        "description": "",
+        "tags": [],
+        "links": [
+          {
+            "rel": "accepted",
+            "id": "x"
+          }
+        ],
+        "verification": {
+          "criteria": null,
+          "params": {},
+          "attested_by": {}
+        },
+        "unknown": {
+          "nested": {
+            "empty": []
+          }
+        }
+      },
+      "view": {
+        "rc": "manifest-view/1",
+        "manifest": {
+          "id": "ds-01234567",
+          "content": {
+            "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+          }
+        }
+      },
+      "canonical_view": "{\"manifest\":{\"content\":{\"sha256\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"},\"id\":\"ds-01234567\"},\"rc\":\"manifest-view/1\"}",
+      "digest": "bfbfa3d919252b3451958a635debc99a0602bb540fde05a81500fe1ca984222d"
+    },
+    {
+      "name": "opaque-empty-parameter",
+      "manifest": {
+        "id": "ds-01234567",
+        "content": {
+          "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        },
+        "verification": {
+          "params": {
+            "delimiter": ""
+          }
+        }
+      },
+      "view": {
+        "rc": "manifest-view/1",
+        "manifest": {
+          "id": "ds-01234567",
+          "content": {
+            "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+          },
+          "verification": {
+            "params": {
+              "delimiter": ""
+            }
+          }
+        }
+      },
+      "canonical_view": "{\"manifest\":{\"content\":{\"sha256\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"},\"id\":\"ds-01234567\",\"verification\":{\"params\":{\"delimiter\":\"\"}}},\"rc\":\"manifest-view/1\"}",
+      "digest": "ca8b43f4dc3b9b82f932bb904718da04d7220f1a3fbe5a6e59c28231d4e1bb4f"
+    },
+    {
+      "name": "ordered-list-empty-elements",
+      "manifest": {
+        "id": "ds-01234567",
+        "content": {
+          "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        },
+        "future": {
+          "ordered": [
+            null,
+            "",
+            [],
+            {},
+            {
+              "empty": null
+            },
+            false,
+            0
+          ]
+        },
+        "rubric": [
+          "b",
+          "a",
+          "b"
+        ]
+      },
+      "view": {
+        "rc": "manifest-view/1",
+        "manifest": {
+          "id": "ds-01234567",
+          "content": {
+            "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+          },
+          "future": {
+            "ordered": [
+              null,
+              "",
+              [],
+              {},
+              {},
+              false,
+              0
+            ]
+          },
+          "rubric": [
+            "b",
+            "a",
+            "b"
+          ]
+        }
+      },
+      "canonical_view": "{\"manifest\":{\"content\":{\"sha256\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"},\"future\":{\"ordered\":[null,\"\",[],{},{},false,0]},\"id\":\"ds-01234567\",\"rubric\":[\"b\",\"a\",\"b\"]},\"rc\":\"manifest-view/1\"}",
+      "digest": "351a5ea7187b214e5d2ee12059150f46b0fe5f1fb509342c264ea9044ce2ece6"
+    },
+    {
+      "name": "duplicate-id-inputs-reversed",
+      "manifest": {
+        "id": "ds-01234567",
+        "content": {
+          "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        },
+        "provenance": {
+          "inputs": [
+            {
+              "id": "ds-same",
+              "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            {
+              "id": "ds-same",
+              "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ]
+        }
+      },
+      "view": {
+        "rc": "manifest-view/1",
+        "manifest": {
+          "id": "ds-01234567",
+          "content": {
+            "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+          },
+          "provenance": {
+            "inputs": [
+              {
+                "id": "ds-same",
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              },
+              {
+                "id": "ds-same",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            ]
+          }
+        }
+      },
+      "canonical_view": "{\"manifest\":{\"content\":{\"sha256\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"},\"id\":\"ds-01234567\",\"provenance\":{\"inputs\":[{\"id\":\"ds-same\",\"sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"},{\"id\":\"ds-same\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}]}},\"rc\":\"manifest-view/1\"}",
+      "digest": "fb18cb8912a0cba79574bf435a6fb4cf32923318cbc65bddd8169ca5aed59b3d"
+    },
+    {
+      "name": "unknown-field",
+      "manifest": {
+        "id": "ds-01234567",
+        "content": {
+          "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        },
+        "future": {
+          "new": "signed"
+        }
+      },
+      "view": {
+        "rc": "manifest-view/1",
+        "manifest": {
+          "id": "ds-01234567",
+          "content": {
+            "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+          },
+          "future": {
+            "new": "signed"
+          }
+        }
+      },
+      "canonical_view": "{\"manifest\":{\"content\":{\"sha256\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"},\"future\":{\"new\":\"signed\"},\"id\":\"ds-01234567\"},\"rc\":\"manifest-view/1\"}",
+      "digest": "39bcbd1c257363f471856ab78cb0ecec207e8f7a2f5adf0be916e887420af31b"
+    },
+    {
+      "name": "unicode-key-order",
+      "manifest": {
+        "id": "ds-01234567",
+        "content": {
+          "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        },
+        "future": {
+          "\ud83d\ude00": "nonBMP",
+          "\ue000": "BMP",
+          "nfd": "e\u0301",
+          "nfc": "\u00e9"
+        }
+      },
+      "view": {
+        "rc": "manifest-view/1",
+        "manifest": {
+          "id": "ds-01234567",
+          "content": {
+            "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+          },
+          "future": {
+            "\ud83d\ude00": "nonBMP",
+            "\ue000": "BMP",
+            "nfd": "e\u0301",
+            "nfc": "\u00e9"
+          }
+        }
+      },
+      "canonical_view": "{\"manifest\":{\"content\":{\"sha256\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"},\"future\":{\"nfc\":\"\\u00e9\",\"nfd\":\"e\\u0301\",\"\\ue000\":\"BMP\",\"\\ud83d\\ude00\":\"nonBMP\"},\"id\":\"ds-01234567\"},\"rc\":\"manifest-view/1\"}",
+      "digest": "cd5c795ed343347c12b7a58a88612f58a2b8d4ee04f2634d539b48ae5447eca9"
+    },
+    {
+      "name": "sets-after-pruning",
+      "manifest": {
+        "id": "ds-01234567",
+        "content": {
+          "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        },
+        "tags": [
+          {
+            "empty": null
+          },
+          {},
+          [
+            null
+          ],
+          false,
+          0,
+          0.0
+        ],
+        "links": [
+          {
+            "rel": "cites",
+            "id": "a",
+            "empty": []
+          },
+          {
+            "rel": "cites",
+            "id": "a"
+          },
+          null,
+          "",
+          {}
+        ]
+      },
+      "view": {
+        "rc": "manifest-view/1",
+        "manifest": {
+          "id": "ds-01234567",
+          "content": {
+            "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+          },
+          "tags": [
+            0,
+            0.0,
+            [
+              null
+            ],
+            false,
+            {}
+          ],
+          "links": [
+            "",
+            null,
+            {
+              "id": "a",
+              "rel": "cites"
+            },
+            {}
+          ]
+        }
+      },
+      "canonical_view": "{\"manifest\":{\"content\":{\"sha256\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"},\"id\":\"ds-01234567\",\"links\":[\"\",null,{\"id\":\"a\",\"rel\":\"cites\"},{}],\"tags\":[0,0.0,[null],false,{}]},\"rc\":\"manifest-view/1\"}",
+      "digest": "908adda6e0961968f14cd99d0df1aff802adcebe2c990514cac958c04425070d"
+    }
+  ]
+}
