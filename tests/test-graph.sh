@@ -63,9 +63,9 @@ put relations; REL=$(c publish wiki "$W/relations.md" "Relations" --tier T0 \
   --link "part-of:$LEAF" --link "fulfills:$MID")
 c graph "$REL" >"$W/default-rel.txt"
 check "default graph omits non-evidence links" "$(grep -Ec "$LEAF|$MID" "$W/default-rel.txt")" "0"
-check "--rel all includes both non-evidence targets" \
-  "$(c graph "$REL" --rel all | grep 'non-evidence:' | grep -Ec "$LEAF|$MID")" "2"
-check "non-evidence links are marked" "$(c graph "$REL" --rel all | grep -c 'non-evidence:')" "2"
+check "--rel all includes the publisher link and ignores unbacked fulfills" \
+  "$(c graph "$REL" --rel all | grep 'non-evidence:' | grep -Ec "$LEAF|$MID")" "1"
+check "backed non-evidence links are marked" "$(c graph "$REL" --rel all | grep -c 'non-evidence:')" "1"
 
 head_ "brief status exit parity"
 put attested; T3=$(c publish dataset "$W/attested.md" "Attested leaf")
@@ -78,7 +78,7 @@ for spec in "$TOP:0" "$T3:3" "$UV:4"; do
 done
 check "brief is exactly one line" "$(wc -l <"$W/out.txt" | tr -d ' ')" "1"
 check "brief exposes badge, grade, nodes, weakest" \
-  "$(grep -Ec "^$UV \[unverified\] chain=unverified nodes=1 weakest=$UV$" "$W/out.txt")" "1"
+  "$(grep -Ec "^$UV \[unverified\] chain=unverified nodes=1 weakest=$UV view=legacy$" "$W/out.txt")" "1"
 check "negative graph depth is refused" "$(rc c graph "$TOP" --depth -1)" "2"
 
 head_ "unknown ids are reported, not silently empty"

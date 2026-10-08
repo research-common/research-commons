@@ -15,7 +15,7 @@ FILTER="${1:-}"
 
 LEAKED=()
 for v in COMMONS_SIGNING_KEY COMMONS_ROOT COMMONS_AGENT COMMONS_EXEC \
-         COMMONS_REQUIRE_SIG COMMONS_CONTAINER_CMD COMMONS_VIEM_DIR; do
+         COMMONS_REQUIRE_SIG COMMONS_REQUIRE_VIEWS COMMONS_CONTAINER_CMD COMMONS_VIEM_DIR; do
   [ -n "${!v:-}" ] && LEAKED+=("$v")
 done
 if [ ${#LEAKED[@]} -gt 0 ]; then
@@ -29,7 +29,7 @@ for suite in "$HERE"/test-*.sh; do
   printf '\n\033[1m═══ %s ═══\033[0m\n' "$name"
   # `env -u` rather than a subshell unset: guarantees the child cannot see them.
   env -u COMMONS_SIGNING_KEY -u COMMONS_ROOT -u COMMONS_AGENT -u COMMONS_EXEC \
-      -u COMMONS_REQUIRE_SIG -u COMMONS_CONTAINER_CMD -u COMMONS_VIEM_DIR \
+      -u COMMONS_REQUIRE_SIG -u COMMONS_REQUIRE_VIEWS -u COMMONS_CONTAINER_CMD -u COMMONS_VIEM_DIR \
       bash "$suite" || rc=1
   ran=$((ran+1))
 done

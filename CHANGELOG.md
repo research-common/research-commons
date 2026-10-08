@@ -25,6 +25,37 @@ manifest/ledger format version — `commons --version` prints both).
   quality returns only with receiver-local proof and block-time verification.
 
 ### Fixed
+- **Phase 2 preserves publisher records (#43).** `submit`, `accept`, `settle` and
+  matching `rebaseline` append lifecycle events without rewriting manifests.
+  Readers derive `fulfills`/`accepted` from authenticated events, honour later
+  rejection, and ignore unbacked legacy link caches (`fsck` reports them).
+  Trusted rebaseline reproductions with held authority or a signed reproducer
+  delegation are displayed separately; the original execution record remains.
+  Arrival stamps move to local-only `registry/ingest.json`; embedded `ingest`
+  cannot make a missing local blob count as lazily replicated.
+- **Attestation v2 writers (#10).** `attest` signs `attestation/2` with exact
+  parameters, including empty values. `--force` replaces only the signer's own
+  attestation. A criteria change requires publisher authority and emits a matching
+  signed republish view. Displacing another attester still requires an authorised
+  republish; there is no dedicated replacement flag.
+- **Unchecked metadata stops verification (#43 phase 1).** `verify` exits 3
+  (`NOT-MACHINE-VERIFIABLE`) for unknown view versions or unnormalisable metadata,
+  before resolving or executing the artifact's workflow/comparator. This also applies
+  to workflow metadata and, when needed, T1 comparator metadata, so changing the
+  version or injecting NaN cannot bypass the signed-view tamper guard. Comparator
+  filename/hash edits are rejected before execution; byte-identical output still
+  needs no comparator lookup. Unsupported future formats are labelled unchecked,
+  without a forgery accusation.
+- **Signed-view readers and gates (#43 phase 1).** A present publisher statement is
+  verified against the exact normalized metadata view. `pull` and `hub check` refuse
+  altered or stripped views, unauthorized replacements, rollback, and changes without
+  a matching new dual-signed view event. Distinct v2 ledger payloads remain distinct
+  even when their v1 signatures match; known stripped copies and v1-only lines after
+  a verified v2 line in the signer's own log are rejected. The floor does not prove
+  original log order or detect stripping an unseen first v2 event.
+- **Attestation v2 readers (#10).** `attestation/2` binds comparator parameters,
+  including empty values. Parameter changes are stale; legacy attestations with
+  parameters are `partial`, and new partial attestations fail the gates.
 - **Untrusted anchor JSON no longer grants Bitcoin-quality priority.** A fabricated
   `confirmed` checkpoint could seize first-publisher credit and report a discrepancy
   against the honest publisher, without a proof. Read-side bounds now require a
@@ -40,6 +71,31 @@ manifest/ledger format version — `commons --version` prints both).
   grounds to discount a peer. `pull`/`hub check` acceptance rules are unchanged.
 
 ### Added
+- **Signed-view writers and backfill (#43 phase 2).** Keyed `publish`/`republish`,
+  `run --publish`, `run-task` (also accepting explicit `--publish`) and new
+  `rebaseline --publish-superseding` outputs write `publisher_sig` and a matching
+  dual-signed ledger `view` event. Existing outputs retain their held manifests;
+  replacements require held authority, and keyless writes cannot downgrade views.
+  `commons manifest sign ID...` or `--mine` prints and signs eligible legacy claims
+  with a `republish` carrying `backfill: true`. Authority is the sole verified
+  legacy publisher or a collection maintainer in the hash-checked held spec;
+  orphan, unsigned-only and ambiguous non-collection adoption is unavailable.
+  Already signed current views are left unchanged. No `SCHEMA` bump.
+- **Opt-in signed-view enforcement (#43 phase 3).** Hub
+  `require_signed_views: true` and receiver `COMMONS_REQUIRE_VIEWS=1` require
+  signed views on incoming added/modified manifests. Base policy cannot be
+  disabled by the PR it checks, and `--force` cannot bypass receiver enforcement.
+  Pull refuses incoming changes to `.commons-hub`, including with `--allow-code`,
+  so a data sender cannot change security policy. New v1-only events from a
+  signer with authenticated v2 evidence anywhere in held/incoming history are
+  refused under enforcement. Completely downgraded unknown logs remain a #45
+  limitation. Enable only after pinning a tool with writers and enforcement.
+- **Metadata inspection.** `show`, `status`, `list`, `search`, collection display and
+  `list --json` expose metadata view state; `fsck --views` audits it. `verify` refuses
+  altered/stripped metadata before running code. Fixed normalization and EIP-191
+  vectors cover empty comparator values, ordered inputs, Unicode and floats.
+  Phase 1 introduced readers; phase 2 adds the writers above. These gate/CLI changes
+  require a MINOR tool release.
 - **`announce` warns when a remote would leak local or internal details (#53).** A local
   filesystem path, a private/loopback/CGNAT or single-label host, an internal name
   (`.local`, `.lan`, `.internal`, `.localdomain`, `.home.arpa`) or a non-`git` username in a
@@ -54,6 +110,17 @@ manifest/ledger format version — `commons --version` prints both).
   The declared public-source input stays open in #7.
 
 ### Documentation
+- **Phase boundaries and remaining gaps.** Writers and enforcement are separate
+  dependent changes, both included on this branch.
+  Deployment requires a tool pin containing both writer
+  and enforcement commits; a writer-only SHA ignores the flag.
+  Hub adopting authority for frozen/orphan legacy artifacts is
+  deferred to #58. #45 remains open for whole-log `sig2` stripping from an unknown
+  key; the received-order v2 floor cannot detect it. `verify` stops on
+  unknown/unnormalisable views with exit 3 before execution; readers continue to
+  display those states.
+  `publish --force` preserves omitted attested parameters and refuses an explicit
+  change using exact JSON comparison, including empty member values and number types.
 - **How to migrate a collection superseded before #39.** The 0.3.0-alpha.1 migration note said to
   republish the successor with `supersedes` in its spec. That alone isn't enough. If the chain has
   more than one hop and the policy was added after the first version, a claim against the original

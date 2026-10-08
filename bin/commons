@@ -16,7 +16,26 @@ from urllib.parse import urlsplit
 # ROOT = the registry/data root (relocatable via COMMONS_ROOT, e.g. for tests).
 # CODE_ROOT = where this CLI and its helper libs live. These are NOT the same thing:
 # lib/ ships with the code, so resolving it under a relocated data root breaks signing.
-CODE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CODE_ROOT = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+sys.path.insert(0, os.path.join(CODE_ROOT, "lib"))
+
+# Version/help must still work in a minimal checkout without helper libraries.
+# Resolve the projection lazily, from the actual tool location rather than a shim.
+def publisher_view(manifest):
+    from manifest_views import publisher_view as project
+    return project(manifest)
+
+
+def view_digest(manifest):
+    from manifest_views import view_digest as digest
+    return digest(manifest)
+
+
+def validate_publisher_signature(manifest, verify_message):
+    from manifest_views import validate_publisher_signature as validate
+    return validate(manifest, verify_message)
+
+
 # Tool/data split (2026-09-25): a HUB is a data-only git repo (registry/ + store/)
 # marked by a `.commons-hub` file at its root; the tool repo holds only code. Data root
 # precedence: COMMONS_ROOT > nearest ancestor of cwd holding the marker > CODE_ROOT
@@ -214,6 +233,7 @@ DEFAULT_EXEC = os.environ.get("COMMONS_EXEC", "native")
 LIB = os.path.join(CODE_ROOT, "lib")
 PEERS = os.path.join(REG, "peers.json")
 SUBSCRIPTIONS = os.path.join(REG, "subscriptions.json")
+INGEST = os.path.join(REG, "ingest.json")
 SIGN_JS = os.path.join(LIB, "sign-message.mjs")
 VERIFY_JS = os.path.join(LIB, "verify-message.mjs")
 VERIFY_BATCH_JS = os.path.join(LIB, "verify-batch.mjs")
@@ -416,7 +436,58 @@ def check_schema(m):
                  % (m.get("id", "?"), s, SCHEMA_MAJOR))
 
 
-def commit_signed_publish(aid, m, entry, existed):
+def local_manifest_gate():
+    lines = _ledger_raw_lines_local()
+    return ManifestEditGate(lines, lines, lambda d: _read_bytes(blob_read_path(d)))
+
+
+def require_manifest_authority(aid, held, signer):
+    if signer.lower() not in local_manifest_gate()._authority(aid, held):
+        sys.exit("error: %s has no authority to sign %s's held view; "
+                 "ambiguous, unsigned-only and orphan artifacts cannot be adopted "
+                 "by this command" % (signer, aid))
+
+
+def sign_statement(statement):
+    """Sign canonical statement bytes, without making any registry change."""
+    try:
+        message = json.dumps(statement, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        r = subprocess.run(["node", SIGN_JS, "--stdin"], input=message,
+                           capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.SubprocessError, ValueError, TypeError) as e:
+        sys.exit("error: cannot sign statement (%s)" % e)
+    if r.returncode:
+        sys.exit("error: statement signing failed: %s" % r.stderr.strip())
+    try:
+        out = json.loads(r.stdout)
+        return {"addr": out["address"], "sig": out["signature"], "statement": statement}
+    except (ValueError, KeyError, TypeError):
+        sys.exit("error: signer produced an invalid statement signature")
+
+
+def prepare_manifest_publish(aid, m, entry):
+    """Bind final manifest bytes and the dual-signed publish to the same view."""
+    held = load_manifest(aid, missing_ok=True)
+    if signing_key_path():
+        signer = my_addr()
+        if held is not None:
+            require_manifest_authority(aid, held, signer)
+        try:
+            digest = view_digest(m)
+        except (ValueError, TypeError, RecursionError, OverflowError) as e:
+            sys.exit("error: cannot canonicalise publisher view: %s" % e)
+        statement = {"rc": "manifest/1", "id": aid,
+                     "sha256": m["content"]["sha256"],
+                     "view_version": "manifest-view/1", "view": digest, "ts": now()}
+        m["publisher_sig"] = sign_statement(statement)
+        entry["view"] = digest
+    elif held is not None and manifest_view_state(held)[0] != "legacy":
+        sys.exit("error: a viewed artifact must be republished with a signing key")
+    m.pop("ingest", None)
+    return ledger_prepare(entry)
+
+
+def commit_signed_publish(aid, m, entry, existed, extra_entries=()):
     """Sign, then write manifest, then ledger, then index — rolling back on failure.
 
     Ordering contract (TODO 2026-09-21 publish/sign bug): the signature is obtained
@@ -427,18 +498,58 @@ def commit_signed_publish(aid, m, entry, existed):
     an artifact without its attribution event. The index is rebuilt last because it is
     derived state (`reindex` regenerates it).
     """
-    entry = ledger_prepare(entry)
+    entry = prepare_manifest_publish(aid, m, entry)
+    previous = _read_bytes(manifest_path(aid))
     publish_manifest(aid, m)
     try:
+        for extra in extra_entries:
+            ledger_commit(extra)
         ledger_commit(entry)
     except BaseException:
-        if not existed:
+        if previous is not None:
+            with open(manifest_path(aid), "wb") as f: f.write(previous)
+        else:
             try:
                 os.unlink(manifest_path(aid))
             except OSError:
                 pass
         raise
     con = db_conn(); index_manifest(con, m); con.commit(); con.close()
+
+
+def cmd_manifest_sign(a):
+    ensure_dirs()
+    require_signing("manifest views")
+    if bool(a.ids) == bool(a.mine):
+        sys.exit("error: give manifest sign ID... or --mine")
+    signer = my_addr()
+    gate = local_manifest_gate()
+    manifests = [load_manifest(aid) for aid in dict.fromkeys(a.ids)] if a.ids \
+        else [m for m in iter_manifests()
+              if manifest_view_state(m)[0] == "legacy"
+              and signer.lower() in gate._authority(m["id"], m)]
+    pending = []
+    # Validate the whole selection before signing any of it. Backfill is idempotent.
+    for m in manifests:
+        if manifest_view_state(m)[0] == "signed":
+            print("already signed %s; unchanged" % m["id"])
+            continue
+        require_manifest_authority(m["id"], m, signer)
+        try:
+            view_digest(m)
+        except (ValueError, TypeError, RecursionError, OverflowError) as e:
+            sys.exit("error: cannot sign %s: %s" % (m["id"], e))
+        pending.append(m)
+    for m in pending:
+        print("signing current publisher view of %s:" % m["id"], flush=True)
+        print(json.dumps(publisher_view(m), indent=2, sort_keys=True, allow_nan=False),
+              flush=True)
+        commit_signed_publish(m["id"], m, {
+            "agent": a.agent, "action": "republish", "id": m["id"],
+            "sha256": m["content"]["sha256"], "backfill": True}, True)
+        print("signed %s by %s" % (m["id"], signer))
+    if not manifests:
+        print("no eligible legacy manifests")
 
 
 def attributed_ids():
@@ -458,6 +569,124 @@ def load_manifest(aid, missing_ok=False):
     with open(p) as f: m = json.load(f)
     check_schema(m)
     return m
+
+
+def load_ingest():
+    """This host's arrival record. Embedded manifest stamps never supply authority."""
+    try:
+        with open(INGEST) as f: data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    artifacts = data.get("artifacts") if isinstance(data, dict) else None
+    return artifacts if isinstance(artifacts, dict) else {}
+
+
+def save_ingest(artifacts):
+    os.makedirs(REG, exist_ok=True)
+    tmp = INGEST + ".tmp.%d" % os.getpid()
+    try:
+        with open(tmp, "w") as f:
+            json.dump({"schema": SCHEMA, "artifacts": artifacts}, f, indent=2, sort_keys=True)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, INGEST)
+    finally:
+        if os.path.exists(tmp): os.unlink(tmp)
+
+
+_DERIVED_CACHE = {"key": None, "links": None, "gate": None}
+
+
+def derived_manifest_state():
+    """Authenticate event links once per held snapshot; never change signed bytes."""
+    manifests = list(iter_manifests())
+    rows = read_ledger_entries()
+    key = (_LEDGER_CACHE["key"], tuple(
+        (m["id"], os.stat(manifest_path(m["id"])).st_mtime_ns,
+         os.stat(manifest_path(m["id"])).st_size) for m in manifests))
+    if _DERIVED_CACHE["key"] == key:
+        return _DERIVED_CACHE
+    gate = local_manifest_gate()
+    held = {m["id"]: m for m in manifests}
+    links = {}
+    for e, _path in rows:
+        if not entry_is_v2(e) or not gate._signer(e):
+            continue
+        aid = e.get("id")
+        if e.get("task") != aid or not isinstance(e.get("result"), str):
+            continue
+        if e.get("action") == "submit":
+            source, link = e["result"], {"rel": "fulfills", "id": aid}
+        elif e.get("action") in ("accept", "settle"):
+            source, link = aid, {"rel": "accepted", "id": e["result"]}
+        else:
+            continue
+        m = held.get(source)
+        task = held.get(aid)
+        if not m or not task or task.get("type") != "task":
+            continue
+        if gate._link_backed(source, m, link):
+            links.setdefault(source, []).append(link)
+    _DERIVED_CACHE.update(key=key, links=links, gate=gate)
+    return _DERIVED_CACHE
+
+
+def effective_links(m):
+    """Publisher links plus authenticated derived facts, filtering legacy caches."""
+    state = derived_manifest_state()
+    result = []
+    seen = set()
+    for link in (m.get("links") or []) + state["links"].get(m["id"], []):
+        if not isinstance(link, dict) or not link.get("id"):
+            continue
+        if link.get("rel") in ("fulfills", "accepted") and \
+                not state["gate"]._link_backed(m["id"], m, link):
+            continue
+        identity = canonical(link)
+        if identity not in seen:
+            seen.add(identity)
+            result.append(link)
+    return result
+
+
+def reproduction_stamp(m):
+    """A trusted v2 reproduction with standing under the authenticated held view."""
+    gate = derived_manifest_state()["gate"]
+    authority = gate._authority(m["id"], m)
+    valid, _why, _signer = validate_publisher_signature(m, _view_verify_message)
+    if valid == "valid":
+        authority |= _view_delegates(m, "reproducers")
+    for e, _path in reversed(read_ledger_entries()):
+        if e.get("action") != "rebaseline" or e.get("id") != m["id"] \
+                or e.get("sha256") != _manifest_digest(m) or e.get("result") != "match" \
+                or not entry_is_v2(e) or parse_ts(e.get("ts")) is None:
+            continue
+        signer = gate._signer(e)
+        if signer not in authority:
+            continue
+        peer = find_peer(signer)
+        if not peer or not trust_allows(peer, m) or not key_valid_at(peer, e["ts"])[0]:
+            continue
+        mode = e.get("exec_mode")
+        if mode not in EXEC_MODES:
+            continue
+        if mode == "sandbox" and not re.fullmatch(
+                r"sha256:[0-9a-fA-F]{64}", e.get("image_digest") or ""):
+            continue
+        return {"mode": mode, **({"image_digest": e["image_digest"]}
+                                if mode == "sandbox" else {})}, signer, e["ts"]
+    return None
+
+
+def reproduction_note(m):
+    stamp = reproduction_stamp(m)
+    if stamp:
+        rec, signer, _ts = stamp
+        environment = ("sandbox @%s" % rec["image_digest"]) \
+            if rec["mode"] == "sandbox" else "native"
+        return "recorded: %s; reproduced under %s by %s (rebaseline)" % (
+            fmt_exec(recorded_exec(m)), environment, signer)
+    return None
 
 
 # ---------------- signing ----------------
@@ -555,6 +784,7 @@ def entry_is_v2(entry):
 def _verify_message(msg, sig, addr):
     """EIP-191 check of one message. Returns (ok, recovered_addr). Cached."""
     if not sig or not isinstance(sig, str): return False, None
+    if addr is not None and not isinstance(addr, str): return False, None
     ck = (msg, sig, (addr or "").lower())
     if ck in _VERIFY_CACHE: return _VERIFY_CACHE[ck]
     env = dict(os.environ, SIGNATURE=sig)
@@ -582,7 +812,224 @@ def authenticated_event_identity(entry):
     ok, recovered = verify_entry(entry, sig, entry.get("addr"))
     if not ok or not isinstance(recovered, str) or not recovered:
         return None
-    return recovered.lower(), canonical(signing_payload(entry))
+    payload = signing_payload2(entry) if entry_is_v2(entry) else signing_payload(entry)
+    return recovered.lower(), canonical(payload)
+
+
+def authenticated_v1_identity(entry):
+    """The legacy identity, including for a dual-signed original."""
+    identity = authenticated_event_identity(entry)
+    return (identity[0], canonical(signing_payload(entry))) if identity else None
+
+
+def ledger_read_policy(rows):
+    """Filter replays and v1 downgrades in physical log order.
+
+    rows are (entry, path) pairs. Only a verified v2 entry in its signer's own
+    log establishes that log's floor. `prev` is unsigned: this is a receiver
+    policy over the received order, not proof of the sender's original order.
+    Return accepted rows and (entry, path, reason) problems for transport/audits.
+    """
+    prime_verify_cache([e for e, _ in rows if isinstance(e, dict)])
+    complete = {authenticated_v1_identity(e) for e, _ in rows
+                if isinstance(e, dict) and entry_is_v2(e)
+                and authenticated_event_identity(e) is not None}
+    floors, v1_seen, v2_seen, out, problems = set(), {}, {}, [], []
+    for e, path in rows:
+        if not isinstance(e, dict):
+            problems.append((e, path, "ledger entry is not a JSON object"))
+            continue
+        identity = authenticated_event_identity(e)
+        if identity is None:
+            out.append((e, path))
+            continue
+        own = os.path.basename(path).lower() == identity[0] + ".jsonl"
+        legacy = authenticated_v1_identity(e)
+        if not entry_is_v2(e) and legacy in complete:
+            problems.append((e, path, "replayed signed ledger event (stripped sig2 copy)"))
+            continue
+        if entry_is_v2(e) and own:
+            floors.add(path)
+        if not entry_is_v2(e) and own and path in floors:
+            problems.append((e, path, "v1-only event after this signer's v2 floor (stripped sig2)"))
+            continue
+        seen = v2_seen if entry_is_v2(e) else v1_seen
+        lookup = identity if entry_is_v2(e) else legacy
+        if lookup in seen:
+            index, previous_own = seen[lookup]
+            previous = out[index][0]
+            if canonical(e) != canonical(previous):
+                problems.append((e, path, "replayed signed ledger event"))
+            if own and not previous_own and not (
+                    entry_is_v2(previous) and not entry_is_v2(e)):
+                out[index] = (e, path)
+                seen[lookup] = (index, True)
+                v1_seen[legacy] = (index, True)
+            continue
+        index = len(out)
+        out.append((e, path))
+        seen[lookup] = (index, own)
+        # A v1 copy of *any* previously seen v2 payload is a downgrade replay.
+        v1_seen.setdefault(legacy, (index, own))
+    # Preferring an own-log copy must also preserve its physical position. Leaving
+    # it in a foreign copy's earlier slot would reorder that signer's view history.
+    selected = {(id(e), path) for e, path in out}
+    ordered = []
+    for e, path in rows:
+        key = (id(e), path)
+        if key in selected:
+            ordered.append((e, path))
+            selected.remove(key)
+    return ordered, problems
+
+
+VIEW_FAILURES = {"altered", "stripped", "signed-unauthorised"}
+VIEW_LABELS = {
+    "signed": "metadata signed",
+    "legacy": "UNSIGNED METADATA (legacy)",
+    "altered": "METADATA ALTERED",
+    "stripped": "METADATA SIGNATURE REMOVED",
+    "signed-unauthorised": "METADATA SIGNED BY AN UNAUTHORISED KEY",
+    "superseded": "older signed metadata view",
+    "unknown-view-version": "cannot check metadata (unknown view version)",
+    "unnormalisable": "cannot check metadata (unnormalisable)",
+}
+
+
+def _view_verify_message(message, signature, address):
+    try:
+        return _verify_message(message, signature, address)
+    except SystemExit:
+        return False, None
+
+
+def _view_delegates(m, field="authority"):
+    addresses = m.get(field, [])
+    return {a.lower() for a in addresses if isinstance(a, str)
+            and re.fullmatch(r"0x[0-9a-fA-F]{40}", a)} if isinstance(addresses, list) else set()
+
+
+_VIEW_EVENT_IDS_CACHE = {"key": None, "ids": None}
+
+
+def _has_local_view_event(aid):
+    """Cheap candidate filter; presence never authenticates or authorises an event."""
+    paths = ledger_files()
+    key = tuple((path, st.st_mtime_ns, st.st_ctime_ns, st.st_size)
+                for path in paths for st in (os.stat(path),))
+    if _VIEW_EVENT_IDS_CACHE["key"] != key:
+        ids = {e["id"] for e, _path in _ledger_raw_lines_local().rows
+               if isinstance(e, dict) and isinstance(e.get("id"), str)
+               and e.get("action") in ("publish", "republish")
+               and entry_is_v2(e) and isinstance(e.get("view"), str)}
+        _VIEW_EVENT_IDS_CACHE.update(key=key, ids=ids)
+    return isinstance(aid, str) and aid in _VIEW_EVENT_IDS_CACHE["ids"]
+
+
+def _legacy_view_authority(m, entries, maintainers=()):
+    """Eligible legacy keys, before considering any claimed view history."""
+    publishers = set()
+    for e in entries:
+        if isinstance(e, dict) and e.get("action") == "publish" \
+                and e.get("id") == m.get("id"):
+            identity = authenticated_event_identity(e)
+            if identity:
+                publishers.add(identity[0])
+    # Republishing somebody else's id never creates ownership. Multiple genuine
+    # publishers remain ambiguous; collection maintainers retain their authority.
+    return (publishers if len(publishers) == 1 else set()) | set(maintainers)
+
+
+def _local_view_maintainers(m):
+    if m.get("type") != "collection":
+        return set()
+    digest = _manifest_digest(m)
+    raw = _read_bytes(blob_read_path(digest)) if digest else None
+    if raw is None or hashlib.sha256(raw).hexdigest() != digest:
+        return set()
+    try:
+        spec = json.loads(raw)
+    except (ValueError, UnicodeDecodeError):
+        return set()
+    return _spec_maintainers(spec)
+
+
+def manifest_view_state(m, entries=None, held=None, authority=None):
+    """(state, detail) for metadata, relative to a held view when supplied.
+
+    A file verifies its own attribution. Authorisation of a replacement requires
+    the held copy; it cannot be reconstructed from the replacement's signature.
+    Contextual gates supply that copy and its authority explicitly.
+    """
+    state, detail, signer = validate_publisher_signature(m, _view_verify_message)
+    if state not in ("legacy", "valid"):
+        return state, detail
+    aid, digest = m.get("id"), _manifest_digest(m)
+    if entries is None:
+        # Legacy hubs have no view history to authenticate. Avoid starting the
+        # full ledger verifier on every browse command; candidates still take the
+        # same verified, replay/downgrade-filtered snapshot as all other readers.
+        entries = ([e for e, _p, _i, _s in ledger_lines()]
+                   if _has_local_view_event(aid) else [])
+    history = []
+    for e in entries:
+        if not isinstance(e, dict) or e.get("action") not in ("publish", "republish") \
+                or e.get("id") != aid or e.get("sha256") != digest \
+                or not entry_is_v2(e) or not isinstance(e.get("view"), str):
+            continue
+        identity = authenticated_event_identity(e)
+        if identity:
+            history.append((e, identity[0]))
+    if state == "legacy":
+        if history:
+            legacy_authority = (authority if held is not None and authority is not None
+                                else _legacy_view_authority(
+                                    m, entries, _local_view_maintainers(m)))
+            if any(who in legacy_authority for _e, who in history):
+                return "stripped", "ledger records a signed view but publisher_sig is missing"
+        try:
+            view_digest(m)
+        except (ValueError, TypeError, RecursionError, OverflowError):
+            return "unnormalisable", "cannot canonicalise publisher view"
+        return state, detail
+    stmt = m["publisher_sig"]["statement"]
+    if parse_ts(stmt["ts"]) is None:
+        return "altered", "publisher statement needs a valid timestamp"
+    signer = signer.lower()
+    if held is not None:
+        if authority is None:
+            old_state, _why, old_signer = validate_publisher_signature(held, _view_verify_message)
+            authority = ({old_signer.lower()} | _view_delegates(held)) \
+                if old_state == "valid" else set()
+        if signer not in authority:
+            return "signed-unauthorised", "%s has no authority over the held view" % signer
+    # Timestamps are assertions. Detect a later event by physical log position.
+    # Separate signer logs do not establish an order between delegates. Compare
+    # only this signer's own history and let an explicit republish restore a view.
+    own = [e for e, who in history if who == signer]
+    matching = [i for i, e in enumerate(own) if e["view"] == stmt["view"]]
+    if matching:
+        for e in own[matching[-1] + 1:]:
+            if e["view"] != stmt["view"]:
+                return "superseded", "newer signed view event exists (%s)" % e.get("ts", "?")
+    return "signed", "metadata signed by %s" % signer
+
+
+def metadata_note(m):
+    state, detail = manifest_view_state(m)
+    return state, "%s: %s" % (VIEW_LABELS[state], detail)
+
+
+def check_metadata_before_verify(m):
+    state, note = metadata_note(m)
+    print("  " + note)
+    if state in ("unknown-view-version", "unnormalisable"):
+        print("VERIFICATION STOPPED: %s has unchecked metadata (%s); "
+              "cannot proceed with workflow or comparator verification."
+              % (m.get("id"), state))
+        sys.exit(EX_NOT_MACHINE_VERIFIABLE)
+    if state in VIEW_FAILURES:
+        sys.exit("FAIL: %s metadata is %s" % (m.get("id"), state))
 
 
 # ---------------- peer registry ----------------
@@ -1057,7 +1504,13 @@ def ensure_read_index():
 
 def read_index_conn():
     ensure_read_index()
-    return db_conn()
+    con = db_conn()
+    # Events can change graph facts without touching any manifest or artifact count.
+    con.execute("DELETE FROM links")
+    for m in iter_manifests():
+        index_links(con, m)
+    con.commit()
+    return con
 
 
 def spec_search_text(m):
@@ -1092,7 +1545,11 @@ def index_manifest(con, m):
                 (m["id"], m["type"], m.get("title", ""), desc,
                  " ".join(m.get("tags", [])), m.get("agent", "")))
     con.execute("DELETE FROM links WHERE src=?", (m["id"],))
-    for l in m.get("links", []):
+    index_links(con, m)
+
+
+def index_links(con, m):
+    for l in effective_links(m):
         con.execute("INSERT OR IGNORE INTO links(src,rel,dst) VALUES(?,?,?)",
                     (m["id"], l.get("rel", "related"), l["id"]))
 
@@ -1106,6 +1563,19 @@ def parse_params(pairs):
             sys.exit("error: --param must be KEY=VALUE (got %r)" % kv)
         out[k] = v
     return out
+
+
+def canonical_verification_params(verification):
+    """Exact params contract shared by guarded republishing and attestation/2."""
+    params = (verification or {}).get("params", {})
+    if params is None:
+        params = {}
+    if not isinstance(params, dict):
+        sys.exit("error: verification.params must be an object")
+    try:
+        return json.dumps(params, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    except (ValueError, TypeError, RecursionError):
+        sys.exit("error: verification.params cannot be canonicalised")
 
 
 def resolve_tier(a, wf_present, atype):
@@ -2245,6 +2715,17 @@ def cmd_publish(a):
                      "deliberately." % (prior["id"], tier_of(prior), tier,
                                         tier_of(prior), tier))
         verification = build_verification(tier, a.criteria, parse_params(a.param))
+    prior_verification = (prior or {}).get("verification") or {}
+    if prior_verification.get("attested_by") and a.param is None \
+            and "params" in prior_verification:
+        verification = verification or {}
+        verification["params"] = copy.deepcopy(prior_verification["params"])
+    if prior is not None and prior_verification.get("attested_by") \
+            and canonical_verification_params(prior.get("verification")) != \
+            canonical_verification_params(verification):
+        sys.exit("error: %s carries an attestation over its current claim. "
+                 "Changing --param would orphan that signature. "
+                 "Omit --param to preserve the attested parameters" % prior["id"])
     judgement = parse_judgement(getattr(a, "judgement", None))
     if judgement and tier != "T2":
         sys.exit("error: --judgement is a T2 (judged) verdict vector; this artifact is tier %s"
@@ -2348,7 +2829,10 @@ def cmd_publish(a):
     _guard_manifest_collision(aid, m)
     if existed and not a.force:
         old = load_manifest(aid)
-        if aid not in attributed_ids() and not old.get("ingest"):
+        if aid not in attributed_ids() and aid not in load_ingest():
+            if signing_key_path():
+                sys.exit("error: %s is an orphan with no publisher authority; "
+                         "refusing to backfill ownership" % aid)
             # An artifact in the store with NO publish/republish event anywhere is the
             # residue of the pre-2026-09-21 publish-before-sign bug (or a hand-copied
             # manifest). Reporting "already published" with exit 0 here was a success
@@ -2421,6 +2905,11 @@ def cmd_publish(a):
         # must not silently downgrade a stated disclosure back to undeclared.
         if old.get("availability") and not m.get("availability"):
             m["availability"] = old["availability"]
+        # Preserve claims that have no command-line spelling (delegations,
+        # generation, future default-included fields).
+        for key, value in old.items():
+            if key not in ("publisher_sig", "ingest"):
+                m.setdefault(key, copy.deepcopy(value))
     # Dataset disclosure warnings check the FINAL manifest, after the --force
     # carry-forward and after the no-op early returns, for the same reason as the
     # advisory below: a republish that keeps a stated licence must not claim it lacks one.
@@ -2712,6 +3201,15 @@ def cmd_announce(a):
 def cmd_get(a):
     print(json.dumps(load_manifest(a.id), indent=2, sort_keys=True))
 
+def cmd_show(a):
+    m = load_manifest(a.id)
+    print(metadata_note(m)[1])
+    note = reproduction_note(m)
+    if note: print(note)
+    displayed = copy.deepcopy(m)
+    displayed["links"] = effective_links(m)
+    print(json.dumps(displayed, indent=2, sort_keys=True))
+
 
 def cmd_cat(a):
     m = load_manifest(a.id)
@@ -2741,8 +3239,11 @@ def _fmt_row(m):
         title = "[%s] %s" % (age, title)
     if avail:
         title = "[%s] %s" % (avail, title)
+    state, note = metadata_note(m)
+    title += "  [" + ("view=legacy" if state == "legacy" else note) + "]"
+    tier = tier_display(m) + ("?" if state in VIEW_FAILURES else "")
     return "%-14s %-12s %-8s %-10s %s" % (m["id"], m["type"], m.get("agent", "?"),
-                                          tier_display(m), title)
+                                          tier, title)
 
 
 def superseders_map():
@@ -2800,6 +3301,9 @@ def _json_row(m, smap=None):
     # time passed. `created` is already here, so this is the signed counterpart —
     # explicit null when nobody has attested, for the same reason as `obtainability`.
     row["observed"] = observed_of(m)
+    row["view_state"], row["view_detail"] = manifest_view_state(m)
+    row["links"] = effective_links(m)
+    row["reproduction"] = reproduction_note(m)
     # Additive fields only (2026-08-28, collection front-door disambiguation,
     # Option B conservative form): existing keys and the default TABLE output are
     # both untouched, so a consumer keying off known fields sees no change.
@@ -3287,6 +3791,7 @@ def print_ingest_unchecked(aid, indent="  "):
 
 def cmd_verify(a):
     m = load_manifest(a.id)
+    check_metadata_before_verify(m)
     tier = tier_of(m)
     v = m.get("verification") or {}
     criteria = v.get("criteria")
@@ -3320,6 +3825,7 @@ def cmd_verify(a):
         sys.exit(EX_UNVERIFIED)
 
     wm = load_manifest(wf["id"])
+    check_metadata_before_verify(wm)
     if wm["content"]["sha256"] != wf["sha256"]:
         sys.exit("FAIL: workflow %s content hash changed vs provenance record" % wf["id"])
 
@@ -3358,6 +3864,7 @@ def cmd_verify(a):
                 if sha256_file(p) == target:
                     ok, detail = True, "byte-identical (comparator not needed)"
                     break
+                check_metadata_before_verify(load_manifest(criteria))
                 good, out = run_comparator(criteria, stored, p, v.get("params"),
                                            exec_mode=att_exec["mode"])
                 if good:
@@ -3429,6 +3936,10 @@ def cmd_rebaseline(a):
         surfaced rather than papered over
     """
     m = load_manifest(a.id)
+    state, why = manifest_view_state(m)
+    if state in ("unknown-view-version", "unnormalisable"):
+        sys.exit("error: cannot rebaseline unchecked metadata: %s" % why)
+    check_metadata_before_verify(m)
     tier = tier_of(m)
     if tier not in ("T0", "T1"):
         sys.exit("error: rebaseline applies to machine-verified tiers (T0/T1); %s is %s"
@@ -3442,7 +3953,21 @@ def cmd_rebaseline(a):
         return
 
     recorded_inputs = {i["id"]: i["sha256"] for i in prov.get("inputs", [])}
-    with open(blob_read_path(load_manifest(wf["id"])["content"]["sha256"])) as f: spec = json.load(f)
+    wm = load_manifest(wf["id"])
+    state, why = manifest_view_state(wm)
+    if state in ("unknown-view-version", "unnormalisable"):
+        sys.exit("error: cannot rebaseline an unchecked workflow: %s" % why)
+    check_metadata_before_verify(wm)
+    if wm["content"]["sha256"] != wf.get("sha256"):
+        sys.exit("error: workflow content hash differs from the provenance record")
+    wf_path = blob_read_path(wm["content"]["sha256"])
+    if not os.path.exists(wf_path) or sha256_file(wf_path) != wm["content"]["sha256"]:
+        sys.exit("error: workflow blob does not match its recorded content hash")
+    with open(wf_path) as f: spec = json.load(f)
+    for iid, digest in recorded_inputs.items():
+        path = blob_read_path(digest)
+        if not os.path.exists(path) or sha256_file(path) != digest:
+            sys.exit("error: recorded input %s is missing or corrupt" % iid)
     overrides = {name: recorded_inputs[aid]
                  for name, aid in (spec.get("inputs") or {}).items() if aid in recorded_inputs}
 
@@ -3455,16 +3980,13 @@ def cmd_rebaseline(a):
     try:
         match = next((p for p in outputs.values() if sha256_file(p) == target), None)
         if match:
-            m.setdefault("provenance", {}).setdefault("run", {})["exec"] = execrec
-            m["provenance"]["run"]["rebaselined"] = now()
-            write_manifest(a.id, m)
             ledger_append({"agent": a.agent, "action": "rebaseline", "id": a.id,
                            "sha256": target, "tier": tier, "result": "match",
                            "exec_mode": execrec["mode"],
                            **({"image_digest": execrec["image_digest"]}
                               if execrec.get("image_digest") else {})})
             print("MATCH: bytes identical under the pinned userland.")
-            print("  stamped exec record; content unchanged, id still %s" % a.id)
+            print("  recorded reproduction event; publisher record unchanged, id still %s" % a.id)
             return
 
         # Differs. Is the sandbox itself deterministic? Run again and compare.
@@ -3521,19 +4043,19 @@ def cmd_rebaseline(a):
                        "superseded_by": newid, "exec_mode": execrec["mode"],
                        **({"image_digest": execrec["image_digest"]}
                           if execrec.get("image_digest") else {})})
-        pub_entry = ledger_prepare({"agent": a.agent, "action": "publish", "id": newid,
-                       "sha256": newdigest, "tier": tier, "exec_mode": execrec["mode"]})
-        new_existed = os.path.exists(manifest_path(newid))
-        publish_manifest(newid, new)
-        try:
+        # Identical sandbox bytes may already have a canonical publisher view.
+        # Retain it and record the reproduction rather than overwriting it.
+        prior = load_manifest(newid, missing_ok=True)
+        _guard_manifest_collision(newid, new)
+        if prior is None:
+            commit_signed_publish(newid, new, {
+                "agent": a.agent, "action": "publish", "id": newid,
+                "sha256": newdigest, "tier": tier, "exec_mode": execrec["mode"],
+                **({"image_digest": execrec["image_digest"]}
+                   if execrec.get("image_digest") else {})},
+                False, extra_entries=(rb_entry,))
+        else:
             ledger_commit(rb_entry)
-            ledger_commit(pub_entry)
-        except BaseException:
-            if not new_existed:
-                try: os.unlink(manifest_path(newid))
-                except OSError: pass
-            raise
-        con = db_conn(); index_manifest(con, new); con.commit(); con.close()
         print("  published %s [supersedes %s]" % (newid, a.id))
         print("  %s remains as the pre-sandbox baseline" % a.id)
     finally:
@@ -3548,6 +4070,9 @@ def cmd_attest(a):
     to an address, so "attested" answers *attested by whom*.
     """
     m = load_manifest(a.id)
+    state, why = manifest_view_state(m)
+    if state in VIEW_FAILURES or state in ("unknown-view-version", "unnormalisable"):
+        sys.exit("error: cannot attest %s metadata: %s" % (state, why))
     tier = tier_of(m)
     if tier != "T3":
         sys.exit("error: attestation applies to tier T3 artifacts; %s is %s" % (a.id, tier))
@@ -3555,32 +4080,39 @@ def cmd_attest(a):
         sys.exit("error: COMMONS_SIGNING_KEY is not set — an unsigned attestation is "
                  "just prose, which the criteria field already holds")
     v = m.setdefault("verification", {"tier": "T3"})
-    if a.criteria: v["criteria"] = a.criteria
+    previous_att = v.get("attested_by")
+    signer = my_addr()
+    if previous_att and (previous_att.get("addr") or "").lower() != signer.lower():
+        sys.exit("error: --force may replace only your own attestation; "
+                 "displacing another attester requires an authorised republish")
+    criteria_changed = a.criteria is not None and a.criteria != v.get("criteria")
+    if criteria_changed:
+        require_manifest_authority(a.id, m, signer)
+        v["criteria"] = a.criteria
     criteria = v.get("criteria") or DEFAULT_T3_CRITERIA
     if v.get("attested_by") and not a.force:
         sys.exit("error: %s is already attested by %s (use --force to re-attest)"
                  % (a.id, v["attested_by"]["addr"]))
 
     # The attestation statement is the claim being signed, in canonical form.
-    stmt = {"attests": a.id, "sha256": m["content"]["sha256"],
-            "criteria": criteria, "observed": validate_observed(a.observed)}
-    msg = canonical(stmt)
-    env = dict(os.environ)
-    try:
-        r = subprocess.run(["node", SIGN_JS, "--stdin"], input=msg,
-                           capture_output=True, text=True, timeout=60, env=env)
-    except (OSError, subprocess.SubprocessError) as e:
-        sys.exit("error: cannot run the signer (%s)" % e)
-    if r.returncode != 0:
-        sys.exit("error: attestation signing failed: %s" % r.stderr.strip())
-    out = json.loads(r.stdout)
-    v["attested_by"] = {"addr": out["address"], "sig": out["signature"],
-                        "statement": stmt}
-    write_manifest(a.id, m)
-    ledger_append({"agent": a.agent, "action": "attest", "id": a.id,
-                   "sha256": m["content"]["sha256"], "tier": "T3"})
-    print("%s attested by %s" % (a.id, out["address"]))
-    peer = find_peer(out["address"])
+    params = json.loads(canonical_verification_params(v))
+    stmt = {"rc": "attestation/2", "attests": a.id, "sha256": m["content"]["sha256"],
+            "criteria": criteria, "params": copy.deepcopy(params),
+            "observed": validate_observed(a.observed)}
+    v["attested_by"] = sign_statement(stmt)
+    entry = ledger_prepare({"agent": a.agent, "action": "attest", "id": a.id,
+                            "sha256": m["content"]["sha256"], "tier": "T3"})
+    if criteria_changed:
+        commit_signed_publish(a.id, m, {
+            "agent": a.agent, "action": "republish", "id": a.id,
+            "sha256": m["content"]["sha256"], "tier": "T3"}, True,
+            extra_entries=(entry,))
+    else:
+        # Signing errors must occur before a separately signed field is written.
+        ledger_commit(entry)
+        write_manifest(a.id, m)
+    print("%s attested by %s" % (a.id, signer))
+    peer = find_peer(signer)
     print("  registered as agent=%s trust=%s" % (peer.get("agent"), peer.get("trust"))
           if peer else "  (attester not in the local peer registry)")
     print("  observed: %s" % stmt["observed"])
@@ -3590,12 +4122,21 @@ def cmd_attest(a):
 def check_attestation(m):
     """Verify a T3 attestation. Returns (state, detail).
 
-    states: none | valid | invalid | unknown-signer | stale
+    states: none | valid | partial | invalid | unknown-signer | stale
     """
     v = m.get("verification") or {}
     att = v.get("attested_by")
     if not att: return "none", "no attester recorded"
+    if not isinstance(att, dict):
+        return "invalid", "attestation is not an object"
     stmt = att.get("statement") or {}
+    if not isinstance(stmt, dict):
+        return "invalid", "attestation statement is not an object"
+    version = stmt.get("rc")
+    if "rc" in stmt and version != "attestation/2":
+        return "invalid", "unknown attestation version %r" % version
+    if stmt.get("attests") != m.get("id"):
+        return "stale", "attestation names a different artifact"
     if stmt.get("sha256") != (m.get("content") or {}).get("sha256"):
         return "stale", "attestation covers different content than the manifest"
     # The attester signed a specific criteria string. If the manifest now says something
@@ -3604,16 +4145,39 @@ def check_attestation(m):
     if stmt.get("criteria") != current:
         return "stale", ("attestation covers different criteria than the manifest "
                          "(signed: %r)" % (stmt.get("criteria") or "")[:60])
-    msg = canonical(stmt)
-    env = dict(os.environ, SIGNATURE=att.get("sig", ""), ADDRESS=att.get("addr", ""))
+    params = v.get("params", {})
+    if params is None:
+        params = {}
+    if not isinstance(params, dict):
+        return "invalid", "verification.params is not an object"
+    if version == "attestation/2":
+        if not isinstance(stmt.get("params"), dict):
+            return "invalid", "attestation v2 needs a params object"
+        if parse_ts(stmt.get("observed")) is None:
+            return "invalid", "attestation v2 needs an observation timestamp"
+        try:
+            # Compare opaque params as exact canonical JSON (including types),
+            # rejecting non-finite values just like the signed view projection.
+            signed_params = json.dumps(stmt["params"], sort_keys=True,
+                                       separators=(",", ":"), allow_nan=False)
+            current_params = json.dumps(params, sort_keys=True,
+                                        separators=(",", ":"), allow_nan=False)
+        except (TypeError, ValueError):
+            return "invalid", "attestation params cannot be canonicalised"
+        if signed_params != current_params:
+            return "stale", "attestation covers different params than the manifest"
+    addr, sig = att.get("addr"), att.get("sig")
+    if not isinstance(addr, str) or not isinstance(sig, str):
+        return "invalid", "attestation needs a signer address and signature"
     try:
-        r = subprocess.run(["node", VERIFY_JS, "--stdin"], input=msg,
-                           capture_output=True, text=True, timeout=60, env=env)
-        res = json.loads(r.stdout or "{}")
-    except (OSError, subprocess.SubprocessError, ValueError):
+        msg = json.dumps(stmt, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        valid, _recovered = _verify_message(msg, sig, addr)
+    except (SystemExit, ValueError, TypeError):
         return "invalid", "could not run the verifier"
-    if not res.get("valid"):
+    if not valid:
         return "invalid", "signature does not recover %s" % att.get("addr")
+    if version is None and params:
+        return "partial", "valid legacy attestation does not cover verification.params"
     peer = find_peer(att["addr"])
     if peer is None:
         return "unknown-signer", "valid signature from unregistered %s" % att["addr"]
@@ -3705,7 +4269,7 @@ def task_events(tid):
 
 
 LIFECYCLE_ACTIONS = ("claim", "heartbeat", "release", "derivation-commit",
-                     "submit", "accept", "reject")
+                     "submit", "accept", "settle", "reject")
 
 
 def submission_result(e):
@@ -3759,7 +4323,7 @@ def task_state(m, at=None):
     # genuine accepts before the submit they settle.
     bound_results = set()
     for e in events:
-        if e.get("action") == "submit":
+        if e.get("action") == "submit" and authenticated_event_identity(e):
             rid = submission_result(e)
             if rid: bound_results.add(rid)
 
@@ -3782,23 +4346,24 @@ def task_state(m, at=None):
                 continue   # the result it names is not the one it signed (#45)
             submissions.append({"addr": e.get("addr"), "result": rid,
                                 "ts": ts, "event": e})
-        elif act in ("accept", "reject"):
+        elif act in ("accept", "settle", "reject"):
             # Only the beneficiary settles. A non-beneficiary "accept" is not an error
             # to report here — it simply has no authority, so it changes nothing.
-            if not (ben and addr == ben):
+            if not (ben and addr == ben) or not authenticated_event_identity(e) \
+                    or e.get("sha256") != m["content"]["sha256"]:
                 continue
             # A v1 accept signs the task and its hash, not which result it accepts.
             # Trust its `result` only if it names a verified submission to this task
             # (#45); a v2 accept (`sig2`) signs `result` itself.
             res = e.get("result")
-            if e.get("sig") and not entry_is_v2(e):
+            if act in ("accept", "settle") and not entry_is_v2(e):
                 if res and res not in bound_results:
                     continue
                 # `_settle` omits `result` only when nothing was submitted, so a v1
                 # accept without one, on a task with submissions, had it stripped.
-                if not res and act == "accept" and bound_results:
+                if not res and act in ("accept", "settle") and bound_results:
                     continue
-            settled = (act, e)
+            settled = ("accept" if act == "settle" else act, e)
 
     active = {a: c for a, c in claims.items() if c["expires"] > nowt}
     expired = {a: c for a, c in claims.items() if c["expires"] <= nowt}
@@ -3869,6 +4434,8 @@ def ledger_lines():
                     idx += 1; continue
                 rows.append((e, path, idx, hashlib.sha256(line).hexdigest()))
                 idx += 1
+    accepted = {id(e) for e, _ in ledger_read_policy([(e, p) for e, p, _i, _s in rows])[0]}
+    rows = [row for row in rows if id(row[0]) in accepted]
     _LINES_CACHE["key"] = key
     _LINES_CACHE["rows"] = rows
     return rows
@@ -4580,12 +5147,6 @@ def cmd_settle(a):
         ev["verdict_vector"] = key[len("verdict:"):]
         ev["reviews"] = sorted(g["ids"])
     ledger_append(ev)
-    tm = load_manifest(a.id)
-    if not any(l.get("rel") == "accepted" and l.get("id") == result
-               for l in tm.get("links", [])):
-        tm.setdefault("links", []).append({"rel": "accepted", "id": result})
-        write_manifest(a.id, tm)
-        con = db_conn(); index_manifest(con, tm); con.commit(); con.close()
     print("accepted %s by quorum" % result)
 
 
@@ -4783,8 +5344,7 @@ def cmd_run_task(a):
                         "workflow": {"id": wf, "sha256": wm["content"]["sha256"]},
                         "run": {"finished": now(), "env": spec_ran.get("env", {}),
                                 "exec": execrec}},
-                    "links": [{"rel": "derives", "id": wf},
-                              {"rel": "fulfills", "id": a.id}]}
+                    "links": [{"rel": "derives", "id": wf}]}
                 commit_signed_publish(aid, out_m, {
                     "agent": a.agent, "action": "publish", "id": aid,
                     "sha256": digest, "tier": out_m["verification"]["tier"],
@@ -4879,13 +5439,6 @@ def cmd_submit(a):
                 sys.exit("error: result %s's judgement does not match %s's rubric "
                          "(%d problem(s) above)" % (a.result, a.id, len(probs)))
 
-    # Link result -> task so the graph records what it was for.
-    if not any(l.get("rel") == "fulfills" and l.get("id") == a.id
-               for l in rm.get("links", [])):
-        rm.setdefault("links", []).append({"rel": "fulfills", "id": a.id})
-        write_manifest(a.result, rm)
-        con = db_conn(); index_manifest(con, rm); con.commit(); con.close()
-
     ev = {"agent": a.agent, "action": "submit", "id": a.id, "task": a.id,
           "result": a.result, "sha256": rm["content"]["sha256"]}
     if a.salt: ev["salt"] = a.salt
@@ -4938,14 +5491,6 @@ def _settle(a, action):
     if a.reason: ev["reason"] = a.reason
     ledger_append(ev)
 
-    if action == "accept" and result:
-        # Record acceptance in the graph, not just the ledger.
-        tm = load_manifest(a.id)
-        if not any(l.get("rel") == "accepted" and l.get("id") == result
-                   for l in tm.get("links", [])):
-            tm.setdefault("links", []).append({"rel": "accepted", "id": result})
-            write_manifest(a.id, tm)
-            con = db_conn(); index_manifest(con, tm); con.commit(); con.close()
     print("%sed %s%s" % (action, a.id, (" (%s)" % result) if result else ""))
     if a.reason: print("  reason: %s" % a.reason)
 
@@ -5224,7 +5769,7 @@ def _chain_edges(m, all_rels=False):
     prov = m.get("provenance") or {}
     for i in prov.get("inputs", []): out.append((i["id"], "input"))
     if prov.get("workflow"): out.append((prov["workflow"]["id"], "workflow"))
-    for l in m.get("links", []):
+    for l in effective_links(m):
         if all_rels or l.get("rel") in EVIDENCE_RELS:
             out.append((l["id"], l.get("rel", "related")))
     seen, uniq = set(), []
@@ -5304,7 +5849,9 @@ def _status_exit(grade):
 
 def cmd_status(a):
     root = load_manifest(a.id)
+    root_state, root_note = metadata_note(root)
     if root["type"] == "task":
+        print(root_note)
         sys.exit(task_status(root))
     visited, rows, truncated = _chain_walk(a.id, a.depth)
     grade, worst_node, counts = _chain_grade(root, rows)
@@ -5313,13 +5860,16 @@ def cmd_status(a):
 
     if a.brief:
         badge = "method" if is_method(root) else tier_of(root)
+        if root_state in VIEW_FAILURES:
+            badge += "?"
         avail = ""
         if restricted:
             avail = " unobtainable=%d" % len(restricted)
         elif undeclared:
             avail = " undeclared-availability=%d" % len(undeclared)
-        print("%s [%s] chain=%s nodes=%d weakest=%s%s"
-              % (root["id"], badge, grade or "n/a", len(visited), worst_node, avail))
+        print("%s [%s] chain=%s nodes=%d weakest=%s%s view=%s"
+              % (root["id"], badge, grade or "n/a", len(visited), worst_node, avail,
+                 root_state))
         warn_anchor_drift()
         sys.exit(_status_exit(grade))
 
@@ -5330,6 +5880,9 @@ def cmd_status(a):
         _root_badge = ("method — pinned by content hash" if is_method(root)
                        else tier_label(_root_tier))
     print("%s  %s  [%s]" % (root["id"], root.get("title", ""), _root_badge))
+    print(root_note)
+    reproduced = reproduction_note(root)
+    if reproduced: print(reproduced)
     print("evidence chain (provenance + %s links, depth cap %d):"
           % ("/".join(sorted(EVIDENCE_RELS)), a.depth))
     for depth, aid, rel, m, note in rows:
@@ -5337,6 +5890,7 @@ def cmd_status(a):
         if m is None:
             print("%s%-14s %-10s %s" % (indent, aid, rel, note or "MISSING"))
             continue
+        state, metadata = metadata_note(m)
         meth = is_method(m)
         t = tier_of(m)
         if meth:
@@ -5356,6 +5910,9 @@ def cmd_status(a):
         # simply run with --exec native afterwards.
         if not meth and t in ("T0", "T1") and recorded_exec(m).get("mode") == "native":
             extra = (extra + "  " if extra else "") + "(pre-sandbox baseline)"
+        if state in VIEW_FAILURES:
+            tcol += "?"
+        extra += "  [" + metadata + "]"
         print("%s%-14s %-10s %-4s %-11s %s %s"
               % (indent, aid, rel, tcol, tname, m.get("title", ""), extra))
     if truncated:
@@ -5785,21 +6342,7 @@ class GitReader(_LineageReader):
         return out
 
     def _publish_entries(self):
-        out = []
-        paths = [p for p in self._ls("registry/ledger/") if p.endswith(".jsonl")]
-        paths += self._ls("registry/ledger.jsonl")
-        for rel in paths:
-            r = git("show", "%s:%s" % (self.ref, rel), check=False)
-            if r.returncode != 0:
-                continue
-            for line in r.stdout.splitlines():
-                try:
-                    e = json.loads(line)
-                except ValueError:
-                    continue
-                if isinstance(e, dict):
-                    out.append(e)
-        return out
+        return [e for e, _ in ledger_read_policy(_ledger_raw_lines_at(self.ref).rows)[0]]
 
 
 def resolve_ingest_policy(cid, reader):
@@ -6209,6 +6752,9 @@ def collection_open_tasks(cid):
 
 def _member_line(m, extra=""):
     t = "method" if is_method(m) else tier_of(m)
+    state, metadata = metadata_note(m)
+    if state in VIEW_FAILURES:
+        t += "?"
     # Same markers as `_fmt_row`'s list/search rows: a collection's front door is where
     # a newcomer decides whether to trust a member enough to build on it, and that
     # decision needs the same obtainability and freshness signals the browse surfaces
@@ -6221,7 +6767,8 @@ def _member_line(m, extra=""):
         title = "[%s] %s" % (age, title)
     if avail:
         title = "[%s] %s" % (avail, title)
-    return "%-14s %-13s %-9s %s%s" % (m["id"], m.get("type", "?"), t, title, extra)
+    return "%-14s %-13s %-9s %s  [%s]%s" % (
+        m["id"], m.get("type", "?"), t, title, metadata, extra)
 
 
 def cmd_collection(a):
@@ -6496,6 +7043,7 @@ def cmd_collection_show(a):
     maint_addrs = {(x.get("addr") or "").lower() for x in maints if isinstance(x, dict)}
 
     print("%s  %s" % (m["id"], m.get("title", "")))
+    print(metadata_note(m)[1])
     print("scope: %s" % (spec.get("scope") or "(none)"))
 
     # Front-door disambiguation (2026-08-28):
@@ -6841,6 +7389,22 @@ def trust_allows(peer, m):
 # published before that change.
 MANIFEST_LOCAL_FIELDS = ("ingest",)
 
+class LedgerSnapshot(list):
+    """Raw range lines plus their physical log paths for downgrade checks."""
+    def __init__(self):
+        super().__init__()
+        self.rows = []
+
+    def add_log(self, path, lines):
+        for line in lines:
+            if not line.strip():
+                continue
+            self.append(line)
+            try:
+                self.rows.append((json.loads(line), path))
+            except ValueError:
+                pass
+
 
 def _read_bytes(path):
     try:
@@ -6854,7 +7418,7 @@ def _ledger_raw_lines_at(ref):
     """Every ledger line (raw text) committed at `ref`, in file order."""
     r = git("ls-tree", "-r", "--name-only", ref, "--", "registry/ledger/",
             "registry/ledger.jsonl", check=False)
-    out = []
+    out = LedgerSnapshot()
     if r.returncode != 0:
         return out
     for rel in r.stdout.split():
@@ -6862,15 +7426,15 @@ def _ledger_raw_lines_at(ref):
             continue
         show = git("show", "%s:%s" % (ref, rel), check=False)
         if show.returncode == 0:
-            out += [l for l in show.stdout.splitlines() if l.strip()]
+            out.add_log(rel, show.stdout.splitlines())
     return out
 
 
 def _ledger_raw_lines_local():
-    out = []
+    out = LedgerSnapshot()
     for path in ledger_files():
         with open(path) as f:
-            out += [l.rstrip("\n") for l in f if l.strip()]
+            out.add_log(path, [l.rstrip("\n") for l in f])
     return out
 
 
@@ -6918,18 +7482,23 @@ def incoming_ledger_line_problems(held_by_file, reg_dir):
     if os.path.isdir(ldir):
         paths += [os.path.join(ldir, fn) for fn in sorted(os.listdir(ldir))
                   if fn.endswith(".jsonl")]
-    new = []
+    new, all_rows = [], []
     for path in paths:
         held = held_by_file.get(os.path.relpath(path, os.path.dirname(reg_dir)), set())
         with open(path) as f:
             for line in f:
                 line = line.rstrip("\n")
-                if not line.strip() or line in held:
+                if not line.strip():
                     continue
                 try:
                     e = json.loads(line)
                 except ValueError:
-                    new.append((path, None)); continue
+                    if line not in held:
+                        new.append((path, None))
+                    continue
+                all_rows.append((e, path))
+                if line in held:
+                    continue
                 new.append((path, e if isinstance(e, dict) else None))
     prime_verify_cache([e for _p, e in new if e and e.get("sig")])
     out, warn = [], []
@@ -6949,6 +7518,11 @@ def incoming_ledger_line_problems(held_by_file, reg_dir):
                        % (name, addr)); continue
         if not verify_entry(e, sig, addr)[0]:
             out.append("%s: BAD SIGNATURE on %s %s" % (name, e.get("action"), e.get("id")))
+    new_keys = {(path, canonical(e)) for path, e in new if e}
+    for e, path, reason in ledger_read_policy(all_rows)[1]:
+        if isinstance(e, dict) and (path, canonical(e)) in new_keys:
+            out.append("%s: %s (%s %s)" % (
+                os.path.basename(path), reason, e.get("action"), e.get("id")))
     return out, warn
 
 
@@ -6974,19 +7548,28 @@ def replayed_ledger_events(base_lines, head_lines):
 
     base, head = entries(base_lines), entries(head_lines)
     prime_verify_cache(base + head)
-    known = {}
+    complete = {authenticated_v1_identity(e) for e in base + head
+                if entry_is_v2(e) and authenticated_event_identity(e) is not None}
+    known, legacy_known = {}, {}
     for event in base:
         identity = authenticated_event_identity(event)
         if identity is not None:
             known.setdefault(identity, set()).add(canonical(event))
+            legacy_known.setdefault(authenticated_v1_identity(event), set()).add(canonical(event))
     replayed = []
     for event in head:
         identity = authenticated_event_identity(event)
         if identity is None:
             continue
-        held = known.get(identity)
+        held = (known.get(identity) if entry_is_v2(event) else
+                legacy_known.get(authenticated_v1_identity(event)))
+        if not entry_is_v2(event) and authenticated_v1_identity(event) in complete \
+                and (held is None or canonical(event) not in held):
+            replayed.append("%s %s (stripped sig2)" % (event.get("action"), event.get("id")))
+            continue
         if held is None:
             known[identity] = {canonical(event)}   # a new event: its first bytes stand
+            legacy_known.setdefault(authenticated_v1_identity(event), set()).add(canonical(event))
         elif canonical(event) not in held:
             # Same signer and signed payload, different bytes. Genuine events never
             # share an identity (ledger_prepare keeps them apart), so this is a copy
@@ -7006,25 +7589,34 @@ class ManifestEditGate:
                  trust policy (it is local-only) and so checks signatures alone
     """
 
-    def __init__(self, base_lines, head_lines, blob, peers=None, trust=None):
+    def __init__(self, base_lines, head_lines, blob, peers=None, trust=None,
+                 stripping_lines=None):
         self.blob = blob
         self.peers = peers
         self.trust = trust
         self.base = self._parse(base_lines)
         head = self._parse(head_lines)
+        self.head = head
         prime_verify_cache([e for e in self.base + head if e.get("sig")])
         base_ids = {identity for e in self.base
                     if (identity := self._identity(e)) is not None}
         self.new = [e for e in head if self._identity(e) not in base_ids]
-        seen, everything = set(), []
-        for l in list(base_lines) + list(head_lines):
-            if l not in seen:
-                seen.add(l); everything.append(l)
-        self.all = self._parse(everything)
+        held_bytes = {canonical(b) for b in self.base}
+        self.all = self.base + [e for e in head if canonical(e) not in held_bytes]
         prime_verify_cache([e for e in self.all if e.get("sig")])
+        # Range/base authority and "new event" binding retain their old meaning.
+        # Stripping additionally consults already-held receiver evidence, which
+        # may postdate the merge base or be absent from an unrelated sender.
+        self.stripping = self.all
+        if stripping_lines is not None:
+            local = self._parse(stripping_lines)
+            known = {canonical(e) for e in self.all}
+            self.stripping = self.all + [e for e in local if canonical(e) not in known]
 
     @staticmethod
     def _parse(lines):
+        if isinstance(lines, LedgerSnapshot):
+            return [e for e, _ in ledger_read_policy(lines.rows)[0]]
         out = []
         for l in lines:
             try:
@@ -7063,7 +7655,7 @@ class ManifestEditGate:
 
     def _spec(self, m):
         raw = self.blob(_manifest_digest(m))
-        if raw is None:
+        if raw is None or hashlib.sha256(raw).hexdigest() != _manifest_digest(m):
             return None
         try:
             spec = json.loads(raw)
@@ -7071,16 +7663,86 @@ class ManifestEditGate:
             return None
         return spec if isinstance(spec, dict) else None
 
-    def _authority(self, aid, m):
-        """Addresses whose republish may rewrite aid's manifest."""
-        publishers = {s for _e, s in self._events(self.base, "publish", id=aid)}
-        # A republish-only push cannot turn its signer into an owner. Multiple
-        # publishers of the same content id are ambiguous without an anchored order;
-        # fail closed rather than let a later, backdated publish grant authority.
-        who = publishers if len(publishers) == 1 else set()
-        if m.get("type") == "collection":
-            who |= _spec_maintainers(self._spec(m))
+    def _authority(self, aid, m, freeze=True):
+        """Eligible keys; by default stripped held manifests freeze edit authority."""
+        state, _why, signer = validate_publisher_signature(m, _view_verify_message)
+        if state == "valid":
+            who = {signer.lower()} | _view_delegates(m)
+            if m.get("type") == "collection":
+                who |= _spec_maintainers(self._spec(m))
+            return who
+        if state != "legacy":
+            return set()
+        who = _legacy_view_authority(
+            m, self.base,
+            _spec_maintainers(self._spec(m)) if m.get("type") == "collection" else ())
+        if freeze and any(signer in who and entry_is_v2(e) and isinstance(e.get("view"), str)
+               and e.get("sha256") == _manifest_digest(m)
+               for action in ("publish", "republish")
+               for e, signer in self._events(self.base, action, id=aid)):
+            return set()
         return who
+
+    def _view_event_ok(self, aid, old, new, pool):
+        signature = new["publisher_sig"]
+        signer = signature["addr"].lower()
+        authority = self._authority(aid, old) if old is not None else {signer}
+        if signer not in authority:
+            return False
+        for act in ("publish", "republish"):
+            for e, who in self._events(pool, act, id=aid):
+                if who != signer or not entry_is_v2(e) or \
+                        e.get("sha256") != _manifest_digest(new) or \
+                        e.get("view") != signature["statement"]["view"]:
+                    continue
+                if self.peers is not None:
+                    peer = find_peer(who, self.peers)
+                    if peer is None or not self.trust or not self.trust(peer, new) \
+                            or parse_ts(e.get("ts")) is None \
+                            or not key_valid_at(peer, e.get("ts"))[0]:
+                        continue
+                return True
+        return False
+
+    def view_problems(self, aid, old, new):
+        """Validate a viewed incoming manifest; None selects the legacy gate."""
+        state, detail = manifest_view_state(
+            new, self.stripping if isinstance(new, dict) and "publisher_sig" not in new
+            else self.head, held=old,
+            # Classify stripping against the eligible held keys before freezing
+            # edits. An empty frozen set must not make its evidence disappear.
+            authority=self._authority(aid, old, freeze=False) if old is not None else None)
+        if state == "legacy":
+            # Removing a previously held statement is stripped even if its ledger
+            # has not reached this receiver (e.g. an isolated file import).
+            if old is not None and "publisher_sig" in old:
+                return ["metadata signature removed from an already viewed artifact"]
+            return None
+        if state != "signed":
+            return ["metadata %s: %s" % (state, detail)]
+        old_state, _why, old_signer = validate_publisher_signature(old, _view_verify_message)
+        same = old_state == "valid" \
+            and old["publisher_sig"].get("statement") == new["publisher_sig"]["statement"] \
+            and old_signer.lower() == new["publisher_sig"]["addr"].lower() \
+            and view_digest(old) == view_digest(new)
+        if not self._view_event_ok(aid, old, new, self.all if same else self.new):
+            return ["signed view has no authorised matching new v2 publish/republish event"
+                    if not same else "held signed view has no trusted matching v2 event"]
+        bad = []
+        previous_att = ((old or {}).get("verification") or {}).get("attested_by")
+        current_att = (new.get("verification") or {}).get("attested_by")
+        if current_att != previous_att and not self._attestation_backed(
+                aid, old or {}, new, _manifest_digest(new)):
+            bad.append("attestation changed without a valid statement and matching attest event")
+        # Derived caches are excluded from the view; they need their own backing.
+        old_links = {canonical(l) for l in (old or {}).get("links", [])}
+        for link in new.get("links", []):
+            if isinstance(link, dict) and link.get("rel") in ("accepted", "fulfills") \
+                    and canonical(link) not in old_links \
+                    and not self._link_backed(aid, new, link):
+                bad.append("derived link %s:%s has no signed event" % (
+                    link.get("rel"), link.get("id")))
+        return bad
 
     def _foreign_publish(self, aid, who, m):
         """Is a new `publish` of held artifact aid by `who` one that must be refused?
@@ -7130,6 +7792,27 @@ class ManifestEditGate:
                 return True
         return False
 
+    def _current_acceptance(self, aid, m):
+        """Latest authenticated beneficiary settlement, including rejection."""
+        spec = self._spec(m)
+        beneficiary = ((spec or {}).get("beneficiary") or {}).get("addr")
+        if not isinstance(beneficiary, str) or not beneficiary:
+            return None
+        digest = _manifest_digest(m)
+        accepted = None
+        for e in sorted(self.all, key=lambda e: e.get("ts", "")):
+            if e.get("action") not in ("accept", "settle", "reject") \
+                    or e.get("id") != aid or e.get("task", aid) != aid \
+                    or e.get("sha256") != digest \
+                    or self._signer(e) != beneficiary.lower():
+                continue
+            result = e.get("result")
+            if e.get("action") == "reject":
+                accepted = None
+            elif entry_is_v2(e) or self._submitted(aid, result):
+                accepted = result if isinstance(result, str) else None
+        return accepted
+
     def _link_backed(self, aid, m, link):
         if not isinstance(link, dict):
             return False
@@ -7146,24 +7829,29 @@ class ManifestEditGate:
         if rel == "accepted":
             if m.get("type") != "task":
                 return False
+            if self._current_acceptance(aid, m) != target:
+                return False
             spec = self._spec(m)
             if spec is None:
                 return False
             ben = (((spec.get("beneficiary") or {}) if isinstance(spec, dict) else {})
                    .get("addr") or "")
             ben = ben.lower() if isinstance(ben, str) else ""
+            if not ben:
+                return False
             # A v1 accept signs id (= the task) and sha256 (= the task's hash), not
             # `result`. Trust its result only when a submit binds that result to this
             # task through the submit's own signed hash; a v2 accept (`sig2`) signs
             # `result` itself (#45).
             if not digest:
                 return False
-            for e, who in self._events(self.all, "accept", id=aid, sha256=digest,
-                                       task=aid, result=target):
-                if ben and who != ben:
-                    continue
-                if entry_is_v2(e) or self._submitted(aid, target):
-                    return True
+            for action in ("accept", "settle"):
+                for e, who in self._events(self.all, action, id=aid, sha256=digest,
+                                           task=aid, result=target):
+                    if who != ben:
+                        continue
+                    if entry_is_v2(e) or self._submitted(aid, target):
+                        return True
             return False
         return False
 
@@ -7232,6 +7920,13 @@ class ManifestEditGate:
         """Reasons the edit old -> new may not land ([] = it may)."""
         if not isinstance(old, dict) or not isinstance(new, dict):
             return ["manifest is not a JSON object"]
+        viewed = self.view_problems(aid, old, new)
+        if viewed is not None:
+            return viewed
+        old_att = (old.get("verification") or {}).get("attested_by")
+        new_att = (new.get("verification") or {}).get("attested_by")
+        if new_att and old_att != new_att and check_attestation(new)[0] == "partial":
+            return ["new legacy attestation does not cover params; a params-bound attestation is required"]
         o = {k: v for k, v in old.items() if k not in MANIFEST_LOCAL_FIELDS}
         n = {k: v for k, v in new.items() if k not in MANIFEST_LOCAL_FIELDS}
         if canonical(o) == canonical(n):
@@ -7586,6 +8281,7 @@ LOCAL_ONLY = [
     # Subscription state is this host's fetch intent. A peer must neither learn it
     # from us nor choose it for us (same local-only class as execution policy).
     "registry/subscriptions.json",
+    "registry/ingest.json",
 ]
 
 
@@ -7723,6 +8419,7 @@ registry/peers.json
 registry/quarantine.log
 registry/exec-policy.json
 registry/subscriptions.json
+registry/ingest.json
 
 __pycache__/
 *.ots.bak
@@ -8016,6 +8713,10 @@ def _forbidden_key_findings_on_bytes(raw, filename, keys):
 def hub_check(a):
     """CI/lead gate for a hub. Exit 1 on any problem; prints every problem found."""
     problems = []
+    head_requires_views, policy_problems = signed_view_policy()
+    problems += policy_problems
+    require_views = head_requires_views
+    touched_manifests = set()
     if not os.path.isfile(os.path.join(ROOT, HUB_MARKER)):
         print("note: %s has no %s marker (legacy layout) — path check still applies"
               % (ROOT, HUB_MARKER), file=sys.stderr)
@@ -8050,6 +8751,16 @@ def hub_check(a):
                                    ).stdout.split() if p.endswith(".json")]
         mb = git("merge-base", a.base, "HEAD", check=False)
         mb = mb.stdout.strip() if mb.returncode == 0 else a.base
+        base_requires_views, policy_problems = signed_view_policy(ref=mb)
+        problems += policy_problems
+        # A PR cannot disable its own gate by changing the hub marker.
+        require_views = require_views or base_requires_views
+        touched_manifests = set(git(
+            "diff", "--name-only", "--no-renames", "--diff-filter=AMT",
+            "%s...HEAD" % a.base, "--", "registry/artifacts/"
+        ).stdout.splitlines())
+        if require_views:
+            print("check: signed views on added/modified manifests (unchanged legacy grandfathered)")
         if modified:
             print("check: edits to already-held manifests (%d)" % len(modified))
             gate = ManifestEditGate(
@@ -8087,6 +8798,9 @@ def hub_check(a):
         for description in replayed_ledger_events(
                 _ledger_raw_lines_at(mb), _ledger_raw_lines_at("HEAD")):
             problems.append("replayed signed ledger event: %s" % description)
+        if require_views:
+            problems += enforced_v2_event_problems(
+                _ledger_raw_lines_at(mb), _ledger_raw_lines_at("HEAD"))
         # Ledgers are append-only: the base version must be a prefix of HEAD's.
         for p in changed_ledgers:
             old = git("show", "%s:%s" % (a.base, p), check=False)
@@ -8096,12 +8810,48 @@ def hub_check(a):
                     problems.append("ledger rewritten, not appended: %s" % p)
 
     print("check: blobs")
+    current_entries = [e for e, _ in ledger_read_policy(_ledger_raw_lines_local().rows)[0]]
+    initial_gate = None
     for fn in sorted(os.listdir(ART)) if os.path.isdir(ART) else []:
         if not fn.endswith(".json"): continue
         try:
             with open(os.path.join(ART, fn)) as f: m = json.load(f)
         except ValueError:
             problems.append("unparseable manifest %s" % fn); continue
+        if not isinstance(m, dict):
+            problems.append("%s: manifest is not a JSON object" % fn); continue
+        view_state, view_detail = manifest_view_state(m, current_entries)
+        if a.base:
+            old_m = _git_json_at(mb, "registry/artifacts/" + fn)
+            if old_m is not None and view_state in ("legacy", "stripped"):
+                # An extra publisher in HEAD cannot erase the base's established
+                # owner or its stripping evidence, even for an unchanged manifest.
+                if initial_gate is None:
+                    initial_gate = ManifestEditGate(
+                        _ledger_raw_lines_at(mb), _ledger_raw_lines_at("HEAD"),
+                        lambda dg: _git_blob_at("HEAD", dg) or _git_blob_at(mb, dg))
+                view_state, view_detail = manifest_view_state(
+                    m, current_entries, held=old_m,
+                    authority=initial_gate._authority(m.get("id"), old_m, freeze=False))
+            if old_m is None and "publisher_sig" in m:
+                # Added manifests need exact event binding as well as a signature.
+                if initial_gate is None:
+                    initial_gate = ManifestEditGate(
+                        _ledger_raw_lines_at(mb), _ledger_raw_lines_at("HEAD"),
+                        lambda dg: _git_blob_at("HEAD", dg) or _git_blob_at(mb, dg))
+                problems += initial_gate.view_problems(m.get("id"), None, m) or []
+            old_att = ((old_m or {}).get("verification") or {}).get("attested_by")
+            new_att = (m.get("verification") or {}).get("attested_by")
+            if new_att and old_att != new_att and check_attestation(m)[0] == "partial":
+                problems.append("%s: new legacy attestation does not cover params; a params-bound attestation is required"
+                                % m.get("id"))
+        rel = "registry/artifacts/" + fn
+        if require_views and (not a.base or rel in touched_manifests) \
+                and view_state != "signed":
+            problems.append("%s: signed views required: metadata %s"
+                            % (m.get("id"), view_state))
+        if view_state not in ("signed", "legacy"):
+            problems.append("%s: metadata %s: %s" % (m.get("id"), view_state, view_detail))
         d = (m.get("content") or {}).get("sha256", "")
         prefix = TYPES.get(m.get("type"), "")
         if fn[:-5] != m.get("id") or (prefix and m.get("id") != "%s-%s" % (prefix, d[:8])):
@@ -8175,15 +8925,22 @@ def hub_check(a):
     print("check: ledger signatures + ownership")
     entries = []
     for path in ledger_files():
-        for line in open(path).read().splitlines():
+        with open(path) as stream:
+            lines = stream.read().splitlines()
+        for line in lines:
             if line.strip():
                 try: entries.append((path, json.loads(line)))
                 except ValueError: problems.append("%s: unparseable line" % os.path.basename(path))
     prime_verify_cache([e for _, e in entries])
     scope = None if changed_ledgers is None else {os.path.join(ROOT, p) for p in changed_ledgers}
+    for e, path, reason in ledger_read_policy([(e, path) for path, e in entries])[1]:
+        if scope is None or path in scope:
+            problems.append("%s: %s" % (os.path.basename(path), reason))
     for path, e in entries:
         if scope is not None and path not in scope: continue
         name = os.path.basename(path)
+        if not isinstance(e, dict):
+            problems.append("%s: ledger entry is not an object" % name); continue
         if name in ("local-unsigned.jsonl", "ledger.jsonl"):
             if scope is not None:
                 problems.append("unsigned entries added (%s): sign before contributing" % name)
@@ -8253,6 +9010,12 @@ def merge_manifest_annotations(rel_path, ref):
             if k in seen: continue
             seen.add(k); out.append(item)
         merged[field] = out
+    if "publisher_sig" in o or "publisher_sig" in t:
+        if validate_publisher_signature(o, _view_verify_message)[0] != "valid" \
+                or validate_publisher_signature(t, _view_verify_message)[0] != "valid":
+            return False
+        if view_digest(merged) != view_digest(o) or view_digest(merged) != view_digest(t):
+            return False
     write_manifest(merged["id"], merged)
     return True
 
@@ -8281,6 +9044,81 @@ def incoming_non_data_paths(ref, base="HEAD"):
     return sorted(p for p in (l.strip() for l in out.splitlines()) if p and not is_data_path(p))
 
 
+def signed_view_policy(ref=None):
+    """Read enforcement from this receiver, or a reviewed hub base, never a peer."""
+    if ref is None:
+        path = os.path.join(ROOT, HUB_MARKER)
+        if not os.path.exists(path):
+            return False, []
+        try:
+            with open(path) as stream:
+                marker = json.load(stream)
+        except (OSError, ValueError):
+            return False, ["%s: cannot read signed-view policy" % HUB_MARKER]
+    else:
+        raw = git("show", "%s:%s" % (ref, HUB_MARKER), check=False)
+        if raw.returncode != 0:
+            return False, []
+        try:
+            marker = json.loads(raw.stdout)
+        except ValueError:
+            return False, ["%s at %s: cannot read signed-view policy" % (HUB_MARKER, ref)]
+    if not isinstance(marker, dict):
+        return False, ["%s: hub metadata must be a JSON object" % HUB_MARKER]
+    value = marker.get("require_signed_views", False)
+    if not isinstance(value, bool):
+        return False, ["%s: require_signed_views must be a JSON boolean" % HUB_MARKER]
+    return value, []
+
+
+def incoming_hub_policy_changed(ref):
+    """A data pull may not change the receiver's reviewed hub configuration.
+
+    Use the common base so a receiver's own later policy edit does not block a
+    peer whose marker is unchanged. With unrelated histories compare full copies;
+    silently choosing the sender's policy would create authority on this host.
+    """
+    ancestor = git("merge-base", "HEAD", ref, check=False)
+    base = ancestor.stdout.strip() if ancestor.returncode == 0 else "HEAD"
+    return bool(git("diff", "--name-only", "--no-renames", base, ref,
+                    "--", HUB_MARKER).stdout.strip())
+
+
+def enforced_v2_event_problems(base_lines, head_lines):
+    """Refuse new v1-only events from any key with authenticated v2 evidence.
+
+    Evidence may follow a downgraded event physically, or live in another held
+    log; the phase-1 floor alone cannot reject those cases. An entirely stripped
+    log from an unknown key still lacks upgrade evidence.
+    """
+    def objects(lines):
+        for line in lines:
+            try:
+                value = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(value, dict):
+                yield value
+    base, head = list(objects(base_lines)), list(objects(head_lines))
+    prime_verify_cache(base + head)
+    v2_signers = set()
+    for event in base + head:
+        if entry_is_v2(event):
+            identity = authenticated_event_identity(event)
+            if identity is not None:
+                v2_signers.add(identity[0].lower())
+    held = set(base_lines)
+    problems = []
+    for line, event in ((line, value) for line in head_lines for value in objects([line])):
+        if line in held or entry_is_v2(event):
+            continue
+        identity = authenticated_event_identity(event)
+        if identity is not None and identity[0].lower() in v2_signers:
+            problems.append("signed views required: v1-only event from known v2 signer "
+                            "%s (%s %s)" % (identity[0], event.get("action"), event.get("id")))
+    return problems
+
+
 def cmd_pull(a):
     """Ingest gate. Fetch, validate every incoming artifact, THEN merge.
 
@@ -8291,6 +9129,10 @@ def cmd_pull(a):
     if not os.path.isdir(os.path.join(ROOT, ".git")):
         sys.exit("error: %s is not a git repository" % ROOT)
     ensure_local_only_ignored()
+    local_requires_views, policy_problems = signed_view_policy()
+    if policy_problems:
+        sys.exit("error: " + "; ".join(policy_problems))
+    require_views = local_requires_views or os.environ.get("COMMONS_REQUIRE_VIEWS") == "1"
     remote = a.remote or "origin"
     r = git("remote", "get-url", remote, check=False)
     if r.returncode != 0:
@@ -8344,6 +9186,14 @@ def cmd_pull(a):
                      "       A peer cannot be allowed to supply trust policy; that "
                      "would let the\n       sender decide whom you trust. Nothing was "
                      "ingested." % ", ".join(smuggled))
+
+        if incoming_hub_policy_changed(ref):
+            quarantine("hub-policy-changed", {"path": HUB_MARKER, "remote": remote})
+            sys.exit("error: refusing to merge — incoming changes modify %s. "
+                     "Hub configuration is receiver policy; review and apply it "
+                     "locally before pulling data. Neither --force nor --allow-code "
+                     "authorises a peer policy change. Nothing was ingested."
+                     % HUB_MARKER)
 
         # Code never rides in on a data pull (2026-09-25). The artifact gate below
         # only inspects registry/ + store/; `git merge` would otherwise bring in every
@@ -8409,6 +9259,16 @@ def cmd_pull(a):
         # passes below (a no-op pull used to batch-verify the whole ledger).
         contained = git("merge-base", "--is-ancestor", ref, "HEAD",
                         check=False).returncode == 0
+        if mbase:
+            incoming_manifest_changes = set(git(
+                "diff", "--name-only", "--no-renames", "--diff-filter=AMT",
+                mbase, ref, "--", "registry/artifacts/"
+            ).stdout.splitlines())
+        else:
+            incoming_manifest_changes = set(
+                "registry/artifacts/" + fn for fn in os.listdir(inc_art)
+                if fn.endswith(".json"))
+        unsigned_views = []
         # The same per-line rules `hub check --base` applies (#48): every NEW incoming
         # signed line must verify and sit in its signer's own log. A foreign line
         # merged into our log would fail every later hub check on our pushes.
@@ -8423,23 +9283,31 @@ def cmd_pull(a):
             print("warning: %d incoming line(s) in an unsigned log (nobody's signed word; "
                   "see quarantine.log), e.g. %s" % (len(unsigned_in), unsigned_in[0]),
                   file=sys.stderr)
-        if misplaced:
-            quarantine("ledger-line-rejected", {"problems": misplaced[:50],
-                                                "remote": remote})
-            sys.exit("error: refusing to merge — incoming ledger line(s) fail the "
-                     "ledger rules:\n%s"
-                     % "\n".join("         " + p for p in misplaced[:20]))
         replayed = [] if contained else replayed_ledger_events(
             held_lines, _ledger_raw_lines_at(ref))
         if replayed:
             quarantine("ledger-replayed", {"events": replayed, "remote": remote})
             sys.exit("error: refusing to merge — replayed signed ledger "
                      "event(s): %s" % ", ".join(replayed))
+        if misplaced:
+            quarantine("ledger-line-rejected", {"problems": misplaced[:50],
+                                                "remote": remote})
+            sys.exit("error: refusing to merge — incoming ledger line(s) fail the "
+                     "ledger rules:\n%s"
+                     % "\n".join("         " + p for p in misplaced[:20]))
+        if require_views and not contained:
+            downgrade_problems = enforced_v2_event_problems(
+                _ledger_raw_lines_local(), _ledger_raw_lines_at(ref))
+            if downgrade_problems:
+                quarantine("signed-views-v1-event", {"events": downgrade_problems,
+                                                    "remote": remote})
+                sys.exit("error: refusing to merge — " + "; ".join(downgrade_problems))
         pub_gate = None if contained else ManifestEditGate(
             held_lines, _ledger_raw_lines_at(ref),
             lambda dg: (_read_bytes(blob_read_path_at(inc_store, dg))
                         or _read_bytes(blob_read_path(dg))),
-            peers=peers, trust=trust_allows)
+            peers=peers, trust=trust_allows,
+            stripping_lines=_ledger_raw_lines_local())
         foreign = []
         for e, who in ([] if contained else pub_gate._events(pub_gate.new, "publish")):
             aid = e.get("id")
@@ -8474,9 +9342,27 @@ def cmd_pull(a):
             try:
                 with open(os.path.join(inc_art, fn)) as f: m = json.load(f)
             except ValueError:
+                if require_views and not contained \
+                        and "registry/artifacts/" + fn in incoming_manifest_changes:
+                    unsigned_views.append("%s: unparseable manifest" % fn)
                 rejected.append((fn, ["unparseable manifest"])); continue
+            if not isinstance(m, dict):
+                if require_views and not contained \
+                        and "registry/artifacts/" + fn in incoming_manifest_changes:
+                    unsigned_views.append("%s: manifest is not a JSON object" % fn)
+                rejected.append((fn, ["manifest is not a JSON object"])); continue
             aid = m.get("id") or fn[:-5]
             local = load_manifest(aid, missing_ok=True)
+            if require_views and not contained \
+                    and "registry/artifacts/" + fn in incoming_manifest_changes:
+                state, detail = manifest_view_state(m, pub_gate.head)
+                if state != "signed":
+                    unsigned_views.append("%s: metadata %s (%s)" % (aid, state, detail))
+                else:
+                    # Attribution alone is insufficient: force must not bypass
+                    # held-view authority, exact event binding or local trust.
+                    view_problems = pub_gate.view_problems(aid, local, m) or []
+                    unsigned_views.extend("%s: %s" % (aid, why) for why in view_problems)
             if local is not None and local["content"]["sha256"] == (
                     m.get("content") or {}).get("sha256"):
                 # Same manifest we already hold — but the incoming BLOB still has to be
@@ -8493,6 +9379,13 @@ def cmd_pull(a):
                 strip = lambda d: canonical({k: v for k, v in d.items()
                                              if k not in MANIFEST_LOCAL_FIELDS}
                                             if isinstance(d, dict) else d)
+                if not contained:
+                    # Classify against the held authority even when unchanged:
+                    # head-only ambiguity must not hide an owner's view evidence.
+                    reasons = pub_gate.view_problems(aid, local, m)
+                    if reasons:
+                        rejected.append((aid, reasons))
+                        continue
                 if strip(local) == strip(m):
                     unchanged += 1
                     continue
@@ -8500,6 +9393,8 @@ def cmd_pull(a):
                 merge_annotations = prior is None
                 if prior is None:
                     prior = local   # added on both sides since the merge base
+                if "publisher_sig" in local:
+                    prior = local
                 if strip(prior) == strip(m):
                     unchanged += 1
                     continue
@@ -8520,8 +9415,21 @@ def cmd_pull(a):
                 continue
             reasons = validate_incoming(m, inc_store, peers, require_sig, trust_allows,
                                         publisher_addrs)
+            if pub_gate is not None:
+                reasons += pub_gate.view_problems(aid, None, m) or []
+                new_att = (m.get("verification") or {}).get("attested_by")
+                if new_att and check_attestation(m)[0] == "partial":
+                    reasons.append("new legacy attestation does not cover params; a params-bound attestation is required")
             (accepted if not reasons else rejected).append(
                 (aid, reasons) if reasons else (aid, m))
+
+        if unsigned_views:
+            quarantine("signed-views-required", {"artifacts": unsigned_views,
+                                                 "remote": remote})
+            sys.exit("error: refusing to merge — signed views required for incoming "
+                     "added/modified manifests:\n%s\n"
+                     "       --force cannot bypass receiver signed-view policy."
+                     % "\n".join("         " + item for item in unsigned_views))
 
         print("incoming: %d new/changed, %d already present, %d rejected"
               % (len(accepted), unchanged, len(rejected)))
@@ -8631,14 +9539,13 @@ def cmd_pull(a):
         # Stamp arrival time: bounds self-declared-time games without pretending to
         # establish real ordering.
         stamped = 0
+        arrivals = load_ingest()
         for aid, m in accepted:
             p = manifest_path(aid)
             if not os.path.exists(p): continue
-            with open(p) as f: cur = json.load(f)
-            cur.setdefault("ingest", {})["received_at"] = now()
-            cur["ingest"]["from"] = remote
-            write_manifest(aid, cur)
+            arrivals[aid] = {"received_at": now(), "from": remote}
             stamped += 1
+        if stamped: save_ingest(arrivals)
         cmd_reindex(a)
         print("ingested %d artifact(s) from %s (received_at stamped on %d)"
               % (len(accepted), remote, stamped))
@@ -9323,7 +10230,7 @@ def _site_artifact_page(m, smap):
             body.append("<li>workflow: %s</li>" % _site_id_link(prov["workflow"]["id"]))
         body.append("</ul>")
 
-    links = m.get("links") or []
+    links = effective_links(m)
     if links:
         body.append("<h2>outbound links</h2><ul class=\"plain\">")
         for l in links:
@@ -9699,9 +10606,24 @@ def cmd_fsck(a):
     ensure_dirs()
     bad = absent = orphans = 0
     referenced = set()
+    views = {}
+    arrivals = load_ingest()
     for fn in sorted(os.listdir(ART)):
         if not fn.endswith(".json"): continue
         with open(os.path.join(ART, fn)) as f: m = json.load(f)
+        backed = {canonical(link) for link in effective_links(m)}
+        for link in m.get("links") or []:
+            if isinstance(link, dict) and link.get("rel") in ("fulfills", "accepted") \
+                    and canonical(link) not in backed:
+                print("UNBACKED CACHED LINK: %s %s:%s" % (
+                    m["id"], link.get("rel"), link.get("id")))
+                bad += 1
+        if getattr(a, "views", False):
+            state, detail = manifest_view_state(m)
+            views[state] = views.get(state, 0) + 1
+            print("%s: %s: %s" % (m.get("id"), VIEW_LABELS[state], detail))
+            if state in VIEW_FAILURES:
+                bad += 1
         d = m["content"]["sha256"]
         referenced.add(d)
         sharded, flat = blob_path(d), legacy_blob_path(d)
@@ -9709,7 +10631,7 @@ def cmd_fsck(a):
         if not present:
             # A manifest we ingested lazily is *incomplete*, not *corrupt* — conflating
             # the two would make lazy replication look like data loss.
-            if m.get("ingest"):
+            if m["id"] in arrivals:
                 print("NOT REPLICATED: %s (%s) — fetch with: commons fetch %s"
                       % (m["id"], d[:12], m["id"]))
                 absent += 1
@@ -9743,7 +10665,8 @@ def cmd_fsck(a):
             if m["id"] in have: continue
             print("UNATTRIBUTED: %s (%s) — no publish/republish ledger event%s"
                   % (m["id"], m.get("type"),
-                     "; ingested from %s" % m["ingest"].get("from") if m.get("ingest") else ""))
+                     "; ingested from %s" % arrivals[m["id"]].get("from")
+                     if m["id"] in arrivals else ""))
             unattributed += 1
         bad += unattributed
         # Attributed only by unsigned events: the artifact has a publish event, so it
@@ -9767,6 +10690,8 @@ def cmd_fsck(a):
     if getattr(a, "attribution", False):
         print("unattributed: %d" % unattributed)
         print("unsigned-only (advisory): %d" % unsigned_only)
+    if getattr(a, "views", False):
+        print("views: " + ", ".join("%s=%d" % (s, n) for s, n in sorted(views.items())))
     if a.ledger:
         print("--- ledger signature audit ---")
         class _A: pass
@@ -9787,9 +10712,11 @@ def prime_verify_cache(entries):
     """
     pending, payloads, queued = [], [], set()
     for e in entries:
+        if not isinstance(e, dict):
+            continue
         sig = e.get("sig")
         if not sig or not isinstance(sig, str): continue
-        addr = (e.get("addr") or "")
+        addr = e.get("addr") if isinstance(e.get("addr"), str) else ""
         msgs = [(canonical(signing_payload(e)), sig)]
         sig2 = e.get("sig2")
         if isinstance(sig2, str) and sig2:
@@ -9829,8 +10756,10 @@ def read_ledger_entries():
     if _LEDGER_CACHE["key"] == key:
         return _LEDGER_CACHE["rows"]
     raw_entries = []
-    for path in ledger_files():
-        for line in open(path).read().splitlines():
+    for path in paths:
+        with open(path) as stream:
+            lines = stream.read().splitlines()
+        for line in lines:
             if not line.strip(): continue
             try:
                 entry = json.loads(line)
@@ -9838,24 +10767,7 @@ def read_ledger_entries():
                 pass
             else:
                 raw_entries.append((entry, path))
-    prime_verify_cache([e for e, _ in raw_entries if e.get("sig")])
-    # One row per authenticated event. Copies differ only in unsigned fields, so
-    # keep the one in the signer's OWN log (where ledger_commit writes it): a relayed
-    # copy in another file, whose unsigned task/result may have been altered, must
-    # not displace the original just because its filename sorts first.
-    out, seen = [], {}
-    for entry, path in raw_entries:
-        identity = authenticated_event_identity(entry)
-        if identity is not None:
-            own = os.path.basename(path)[:-6].lower() == identity[0]
-            if identity in seen:
-                i, kept_own = seen[identity]
-                if own and not kept_own:
-                    out[i] = (entry, path)
-                    seen[identity] = (i, True)
-                continue
-            seen[identity] = (len(out), own)
-        out.append((entry, path))
+    out, _problems = ledger_read_policy(raw_entries)
     out.sort(key=lambda t: t[0].get("ts", ""))
     _LEDGER_CACHE["key"] = key
     _LEDGER_CACHE["rows"] = out
@@ -9881,6 +10793,12 @@ def cmd_log(a):
             try: all_entries.append(json.loads(line))
             except ValueError: pass
     prime_verify_cache(all_entries)
+    raw_rows = _ledger_raw_lines_local().rows
+    for e, path, reason in ledger_read_policy(raw_rows)[1]:
+        print("%s: %s (%s %s)" % (os.path.basename(path), reason,
+                                 e.get("action") if isinstance(e, dict) else "?",
+                                 e.get("id") if isinstance(e, dict) else "?"))
+        bad += 1
     # Each log is an independent single-writer chain, verified on its own terms.
     for path in paths:
         lines = [l for l in open(path).read().splitlines() if l.strip()]
@@ -10602,6 +11520,14 @@ def main():
     s.add_argument("--force", action="store_true")
     s.set_defaults(fn=cmd_publish)
 
+    s = sub.add_parser("manifest", help="sign current manifest views with held authority")
+    ms = s.add_subparsers(dest="manifest_cmd", required=True)
+    sign = ms.add_parser("sign", help="backfill current publisher views (prints claims signed)")
+    sign.add_argument("ids", nargs="*", metavar="ID")
+    sign.add_argument("--mine", action="store_true",
+                      help="sign eligible legacy manifests authorised by your key")
+    sign.set_defaults(fn=cmd_manifest_sign)
+
     s = sub.add_parser("announce", help="publish signed reachability and hosting hints",
                        description="Publish a signed peer-announce. Announces are public and "
                                    "permanent: every --remote-url replicates to every reader "
@@ -10618,6 +11544,7 @@ def main():
     s.set_defaults(fn=cmd_announce)
 
     for name, fn, hlp in (("get", cmd_get, "print manifest"), ("cat", cmd_cat, "print content blob"),
+                          ("show", cmd_show, "show manifest and metadata signature state"),
                           ("links", cmd_links, "show link graph edges")):
         s = sub.add_parser(name, help=hlp); s.add_argument("id"); s.set_defaults(fn=fn)
 
@@ -10685,10 +11612,12 @@ def main():
     s.add_argument("remote", nargs="?")
     s.add_argument("--dry-run", action="store_true", help="validate only, never merge")
     s.add_argument("--force", action="store_true",
-                   help="merge even though some artifacts were rejected (they stay quarantined)")
+                   help="merge even though some artifacts were rejected (they stay quarantined); "
+                        "does not bypass signed-view or receiver-policy enforcement")
     s.add_argument("--branch", help="remote branch to ingest (default: the current branch name)")
     s.add_argument("--allow-code", action="store_true",
-                   help="also merge changes outside registry/ and store/ (review them first)")
+                   help="also merge changes outside registry/ and store/ (review them first); "
+                        "does not authorise changes to .commons-hub receiver policy")
     s.set_defaults(fn=cmd_pull)
 
     s = sub.add_parser("hub", help="create or check a data-only hub repo")
@@ -10702,7 +11631,7 @@ def main():
     q.add_argument("--tool-ref", default="main", help="tool git ref CI checks against")
     q = hsub.add_parser("check", help="CI/lead gate: data-only changes, blobs, signatures")
     q.add_argument("--base", help="git ref to diff against (e.g. origin/main); "
-                                  "omit to skip the path check")
+                                  "omit to skip the path check and enforce views on the full tree")
     q = hsub.add_parser("where", help="print the data root in use and how it was chosen")
     s.set_defaults(fn=cmd_hub)
 
@@ -10759,6 +11688,8 @@ def main():
 
     s = sub.add_parser("run-task", help="execute a task's workflow (foreign tasks always sandboxed)")
     s.add_argument("id")
+    s.add_argument("--publish", action="store_true",
+                   help="publish outputs (also the historical default)")
     s.add_argument("--publish-type", default="synthesis", choices=sorted(TYPES))
     s.add_argument("--title")
     s.add_argument("--exec", dest="exec", choices=list(EXEC_MODES),
@@ -10873,6 +11804,7 @@ def main():
     s.set_defaults(fn=cmd_render_site)
 
     s = sub.add_parser("fsck", help="verify blob hashes vs manifests")
+    s.add_argument("--views", action="store_true", help="audit signed metadata views")
     s.add_argument("--ledger", action="store_true", help="also audit ledger signatures")
     s.add_argument("--strict", action="store_true", help="unsigned ledger entries are problems")
     s.add_argument("--orphans", action="store_true", help="report unreferenced blobs")

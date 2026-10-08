@@ -63,8 +63,11 @@ What that means for you:
   before merging that anyone else who committed to the branch gets a `Co-authored-by:`
   trailer. Put your `Signed-off-by:` (DCO) line in the PR description too, because the
   squash commit's body comes from the description, not from your commits.
-- **Signatures.** GitHub signs the squash commit itself, so `main` stays verified even
-  if your own commits aren't signed.
+- **Signatures.** Sign and verify the commits on your PR branch as well. GitHub signs
+  the final squash commit, but required-signature protection also checks the commits
+  introduced by the PR's test merge, so unsigned branch commits can block squash
+  merging. Use an existing signing key registered with your GitHub account; a DCO
+  `Signed-off-by:` trailer is separate from a cryptographic commit signature.
 - **One logical change per PR.** Squashing means a PR is the smallest unit `git bisect`
   or `git revert` can work with. Split unrelated changes into separate PRs.
 

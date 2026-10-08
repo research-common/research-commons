@@ -265,7 +265,8 @@ cp -f "$W/ledger2.bak" "$(mylog)"
 check "intact chain verifies" "$(rc c log --verify)" "0"
 
 head_ "unsigned entries are tolerated locally, flagged in strict mode"
-COMMONS_SIGNING_KEY= c publish dataset "$W/d.csv" "unsigned pub" --force >/dev/null 2>&1
+printf 'unsigned,local\nonly,1\n' > "$W/unsigned-local.csv"
+COMMONS_SIGNING_KEY= c publish dataset "$W/unsigned-local.csv" "unsigned pub" >/dev/null 2>&1
 # P4 routes unsigned writes to their own `local-unsigned` log: unsigned work is
 # segregated by construction, never interleaved into a signed chain.
 UNSIGNED_LOG="$COMMONS_ROOT/registry/ledger/local-unsigned.jsonl"
@@ -520,7 +521,11 @@ check "attestation over other content is STALE" "$(rc c verify "$AT")" "1"
 check "reported as stale" "$(grep -c 'attester : STALE' "$W/out.txt")" "1"
 # Changing the criteria on the manifest also orphans the signature: the attester
 # vouched for a specific claim, so a different claim is not covered by it.
-AT2=$(c publish dataset "$W/pii.txt" "criteria drift" --license MIT --tier T3 \
+# A genuinely signed legacy fixture keeps coverage of attestation staleness
+# independently of the publisher-view failure exercised by test-view-writers.
+printf 'legacy capture for attestation criteria drift\n' >"$W/legacy-attestation.txt"
+AT2=$(python3 "$HERE/legacy-writer-fixture.py" "$COMMONS" publish dataset \
+       "$W/legacy-attestation.txt" "criteria drift" --license MIT --tier T3 \
        --criteria "original detailed capture note" --force 2>/dev/null)
 c attest "$AT2" >/dev/null 2>&1
 check "attested cleanly" "$(c verify "$AT2" 2>&1 | grep -c 'attester : VALID')" "1"
@@ -606,7 +611,7 @@ check "offset valid_from ordered as an instant" "$(rc c verify "$O2")" "3"
 # this tests the republish path, not the drift above.
 c attest "$AT2" --force >/dev/null 2>&1
 check "re-attested to current text" "$(c verify "$AT2" 2>&1 | grep -c 'attester : VALID')" "1"
-c publish dataset "$W/pii.txt" "criteria drift, retitled" --license MIT --force >/dev/null 2>&1
+c publish dataset "$W/legacy-attestation.txt" "criteria drift, retitled" --license MIT --force >/dev/null 2>&1
 check "republish preserves attested criteria" "$(rc c verify "$AT2")" "3"
 check "still VALID after republish" "$(grep -c 'attester : VALID' "$W/out.txt")" "1"
 
@@ -955,16 +960,16 @@ PY
 check "fsck --attribution flags the unattributed artifact" "$(rc c fsck --attribution)" "1"
 check "fsck --attribution names it" "$(grep -c "UNATTRIBUTED: $LEG" "$W/out.txt")" "1"
 check "plain fsck unchanged (attribution is opt-in)" "$(rc c fsck)" "0"
-LEG2=$(c publish dataset "$W/leg.csv" "legacy" --license CC0-1.0 2>"$W/err.txt")
-check "dedup path backfills instead of 'already published'" "$LEG2" "$LEG"
-check "backfill note on stderr" "$(grep -c 'backfilled attribution' "$W/err.txt")" "1"
-check "backfilled event is signed + marked" \
-  "$(tail -1 "$(mylog)" | python3 -c 'import json,sys;e=json.load(sys.stdin);print(e["action"],e["id"],e.get("backfill"),e["sig"][:2])')" \
-  "publish $LEG True 0x"
+COUNT_BEFORE=$(wc -l < "$(mylog)" | tr -d ' ')
+check "dedup refuses orphan ownership backfill" \
+  "$(rc c publish dataset "$W/leg.csv" "legacy" --license CC0-1.0)" "1"
+check "refusal identifies orphan authority" "$(grep -c 'orphan' "$W/err.txt")" "1"
+check "refused backfill appends no event" \
+  "$(wc -l < "$(mylog)" | tr -d ' ')" "$COUNT_BEFORE"
 rc c fsck --attribution >/dev/null
-check "fsck --attribution no longer flags the backfilled artifact" "$(grep -c "UNATTRIBUTED: $LEG" "$W/out.txt")" "0"
-check "second retry is a plain no-op" \
-  "$(c publish dataset "$W/leg.csv" "legacy" --license CC0-1.0 2>/dev/null | grep -c 'already published')" "1"
+check "fsck still reports the unresolved orphan" "$(grep -c "UNATTRIBUTED: $LEG" "$W/out.txt")" "1"
+check "second retry still refuses ownership adoption" \
+  "$(rc c publish dataset "$W/leg.csv" "legacy" --license CC0-1.0)" "1"
 
 head_ "fsck --attribution: unsigned-only attribution is visible (advisory)"
 # An artifact whose only publish event is unsigned HAS a ledger event, so it is not

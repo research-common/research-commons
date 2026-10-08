@@ -13,8 +13,8 @@
 #           accept is judged against every submission, whatever the ts order
 #   4. #46  a backdated foreign `republish` never becomes the first publisher, so a
 #           submit of someone else's artifact counts as a reference
-#   5. #46  `publish --force` of a legacy unsigned-only artifact writes a backfilled
-#           signed `publish` (the attribution repair still works)
+#   5. #46  `publish --force` of a legacy unsigned-only artifact refuses adoption
+#           without minting publisher authority (recovery is deferred to #58)
 #   6. #48  `pull` refuses a line signed by one key inside another key's log
 #   7. #14  KNOWN GAP (pinned): `pull` accepts new incoming lines in the unsigned logs,
 #           with a warning and a quarantine record (a bootstrap pull from a hub with
@@ -198,7 +198,9 @@ lines[-1] = json.dumps(e, sort_keys=True)
 open(p, "w").write("\n".join(lines) + "\n")
 PY
 cpush swap
-check "lead pulls the branch" "$(lpull swap)" "0"
+check "lead refuses the downgraded submit after the signer's v2 floor" "$(lpull swap)" "1"
+check "the refusal names stripped sig2 / the v2 floor" \
+  "$(both | grep -Ec 'v2 floor|stripped sig2')" "1"
 check "the swapped submission is not listed" "$(L status "$TK2" 2>&1 | grep -c "$R2 by")" "0"
 check "a plain accept has nothing to settle on" "$(rc L accept "$TK2")" "1"
 
@@ -261,14 +263,14 @@ PY
 )" "None"
 
 # ---------------------------------------------------------------- 5. no authorship by republish
-head_ "5. publish --force of an unsigned-only artifact stays a republish (#46, #47)"
+head_ "5. publish --force of an unsigned-only artifact refuses adoption (#46, #58)"
 lreset "$BASE"
-check "the republish succeeds" \
-  "$(rc L publish dataset "$W/c.csv" "legacy unsigned" --license CC0-1.0 --obtainability open --force)" "0"
-check "  as a republish, which claims no authorship" \
-  "$(tail -1 "$HL/registry/ledger/$ADDR_Ll.jsonl" | python3 -c 'import json,sys;e=json.load(sys.stdin);print(e["action"],e["id"])')" \
-  "republish $UL"
-check "  so fsck still reports it unsigned-only (adoption is #47)" \
+BEFORE=$(wc -l <"$HL/registry/ledger/$ADDR_Ll.jsonl")
+check "the republish refuses unsigned-only adoption" \
+  "$(rc L publish dataset "$W/c.csv" "legacy unsigned" --license CC0-1.0 --obtainability open --force)" "1"
+check "  without adding an event" \
+  "$(wc -l <"$HL/registry/ledger/$ADDR_Ll.jsonl")" "$BEFORE"
+check "  so fsck still reports it unsigned-only (recovery is #58)" \
   "$(L fsck --attribution 2>&1 | grep -c "UNSIGNED-ONLY: $UL")" "1"
 
 # ---------------------------------------------------------------- 6. own-log rule in pull
@@ -330,7 +332,7 @@ PY
 ( cd "$U" && git add -A && git commit -qm boot )
 ( cd "$HL" && git remote add unrelated "$U" )
 check "pull refuses the incoming tag" "$(rc L pull unrelated --branch main --dry-run)" "1"
-check "  naming it" "$(both | grep -c "tag 'retracted' added with no authorised signed republish")" "1"
+check "  naming the altered view" "$(both | grep -c 'metadata altered')" "1"
 
 printf '\n\033[1mtest-ledger-binding: %d passed, %d failed\033[0m\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

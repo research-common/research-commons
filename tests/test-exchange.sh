@@ -49,6 +49,19 @@ chmod 600 "$BKEY" "$WKEY"
 ben() { COMMONS_SIGNING_KEY="$BKEY" "$COMMONS" "$@"; }
 wrk() { COMMONS_SIGNING_KEY="$WKEY" COMMONS_AGENT=worker "$COMMONS" "$@"; }
 rc()  { "$@" >"$W/out.txt" 2>"$W/err.txt"; echo $?; }
+# Generation has no public publish flag. Fixture authors amend their own held
+# view through the real signing/commit path instead of editing signed claims.
+set_generation() {
+  COMMONS_SIGNING_KEY="$1" python3 - "$COMMONS" "$2" "$3" <<'PYGEN'
+import json, runpy, sys
+ns = runpy.run_path(sys.argv[1])
+m = ns["load_manifest"](sys.argv[2])
+m["generation"] = json.loads(sys.argv[3])
+ns["commit_signed_publish"](m["id"], m, {
+    "agent": "generation-fixture", "action": "republish", "id": m["id"],
+    "sha256": m["content"]["sha256"]}, True)
+PYGEN
+}
 
 BEN=$(ben peer whoami | head -1)
 WRK=$(wrk peer whoami | head -1)
@@ -212,8 +225,8 @@ check "worker produced a result" "$([ -n "$RES" ] && echo yes)" "yes"
 check "submitting an unpublished result refused" "$(rc wrk submit "$TK" sy-deadbeef)" "1"
 check "refusal insists on published content" "$(grep -c 'publish it first' "$W/err.txt")" "1"
 check "submit succeeds" "$(rc wrk submit "$TK" "$RES")" "0"
-check "result links fulfills->task" \
-  "$(ben get "$RES" | python3 -c 'import json,sys;print(sum(1 for l in json.load(sys.stdin)["links"] if l["rel"]=="fulfills"))')" "1"
+check "result derives fulfills->task from the authenticated submit" \
+  "$(ben links "$RES" | grep -- '->' | grep -Fc "$TK [fulfills]")" "1"
 check "state now submitted" "$(ben status "$TK" | grep -c 'state      : submitted')" "1"
 check "status lists the submission" "$(ben status "$TK" | grep -c "$RES")" "1"
 check "unclaimed submit refused" "$(rc ben submit "$T2TASK" "$RES")" "1"
@@ -229,8 +242,8 @@ check "refusal explains unappealable" "$(grep -c 'unappealable' "$W/err.txt")" "
 check "beneficiary accepts" "$(rc ben accept "$TK")" "0"
 check "state now accepted" "$(ben status "$TK" | grep -c 'state      : accepted')" "1"
 check "status exits 0 once accepted" "$(rc ben status "$TK")" "0"
-check "task links accepted->result" \
-  "$(ben get "$TK" | python3 -c 'import json,sys;print(sum(1 for l in json.load(sys.stdin)["links"] if l["rel"]=="accepted"))')" "1"
+check "task derives accepted->result from the authenticated acceptance" \
+  "$(ben links "$TK" | grep -- '->' | grep -Fc "$RES [accepted]")" "1"
 check "settled task leaves the default queue" "$(ben queue | grep -c "$TK")" "0"
 check "--all still shows it" "$(ben queue --all | grep -c "$TK")" "1"
 check "claiming a settled task refused" "$(rc wrk claim "$TK")" "1"
@@ -289,6 +302,20 @@ check "warns about the pre-existing unrecorded result" \
   "$(grep -c "a result matching $TKF2 already exists locally" "$W/err.txt")" "1"
 check "names the orphaned result" "$(grep -c "$RESO" "$W/err.txt")" "1"
 wrk release "$TKF2" >/dev/null 2>&1
+# The deliberately unbacked cached link has served its federation-lag probe.
+# Remove it through the publisher's signing path so final fsck sees a clean view;
+# publish --force without --link preserves existing links rather than removing them.
+COMMONS_SIGNING_KEY="$BKEY" python3 - "$COMMONS" "$RESO" "$TKF2" <<'PYCLEAN'
+import runpy, sys
+ns = runpy.run_path(sys.argv[1])
+m = ns["load_manifest"](sys.argv[2])
+m["links"] = [link for link in m.get("links", [])
+              if link != {"rel": "fulfills", "id": sys.argv[3]}]
+ns["commit_signed_publish"](m["id"], m, {
+    "agent": "freshness-fixture", "action": "republish", "id": m["id"],
+    "sha256": m["content"]["sha256"]}, True)
+PYCLEAN
+check "unbacked freshness fixture cleaned through signed republish" "$?" "0"
 
 # Control: a task with a fresh, never-superseded input and no pre-existing result
 # manifest must not warn at all — the advisory must not fire on the common case.
@@ -541,13 +568,8 @@ wrk claim "$TKF" >/dev/null 2>&1
 wrk run-task "$TKF" >"$W/out.txt" 2>&1
 RF=$(grep -oE '(sy|ds)-[0-9a-f]{8}' "$W/out.txt" | head -1)
 # Self-reported family: advisory only, must NOT satisfy the quorum.
-python3 - "$COMMONS_ROOT/registry/artifacts/$RF.json" <<'PY'
-import json, sys
-p = sys.argv[1]; m = json.load(open(p))
-m["generation"] = {"model": "some-model", "model_family": "vendor-a/model",
-                   "attestation": "self-reported"}
-json.dump(m, open(p, "w"), indent=2, sort_keys=True)
-PY
+set_generation "$WKEY" "$RF" \
+  '{"model":"some-model","model_family":"vendor-a/model","attestation":"self-reported"}'
 wrk submit "$TKF" "$RF" >/dev/null 2>&1
 check "self-reported family shown as advisory" \
   "$([ "$(ben status "$TKF" | grep -c 'advisory')" -ge 1 ] && echo yes)" "yes"
@@ -557,12 +579,8 @@ check "refusal explains attestation is required" \
 check "refusal names the re-monetization risk" \
   "$(grep -c 're-monetizes the model claim' "$W/out.txt")" "1"
 # Promote to an attested claim: now it counts.
-python3 - "$COMMONS_ROOT/registry/artifacts/$RF.json" <<'PY'
-import json, sys
-p = sys.argv[1]; m = json.load(open(p))
-m["generation"]["attestation"] = "receipt"
-json.dump(m, open(p, "w"), indent=2, sort_keys=True)
-PY
+set_generation "$WKEY" "$RF" \
+  '{"model":"some-model","model_family":"vendor-a/model","attestation":"receipt"}'
 check "attested family is counted" "$(ben status "$TKF" | grep -c 'families vendor-a/model')" "1"
 check "quorum line reports progress" "$(ben status "$TKF" | grep -c 'quorum     : need k=2')" "1"
 check "still short of 2 families" "$(rc ben settle "$TKF")" "3"
@@ -681,14 +699,12 @@ check "status agrees: the submission is an uncounted reference" \
   "$(ben status "$TKU" | grep -ic "$W2.*concurring reference (no quorum weight)")" "1"
 check "🔒 quorum not satisfied" "$(rc ben settle "$TKU")" "3"
 
-# A later SIGNED republish must not reopen the hole: the signed first publisher is
-# then the republisher, whose event post-dates the commit and would hand it a later
-# "first publication" to beat.
+# An unsigned-only artifact cannot be adopted through a keyed republish.
 sleep 1
-rc ben publish synthesis "$W/r-unsig.json" "signed republish" --force >/dev/null
+ADOPT_RC=$(rc ben publish synthesis "$W/r-unsig.json" "signed republish" --force)
 rc wrk2 submit "$TKU" "$RU" --salt "0a1b2c3d4e5f" --force >/dev/null
-check "🔒 still a reference after a later signed republish" \
-  "$(grep -c 'CONCURRING REFERENCE' "$W/out.txt")" "1"
+check "🔒 unsigned-only adoption refuses and the submission remains a reference" \
+  "$ADOPT_RC:$(grep -c 'CONCURRING REFERENCE' "$W/out.txt")" "1:1"
 
 # A commit that truly precedes an unsigned publish also can't be credited: the
 # publish time is unprovable, so ordering is unprovable. Fail closed costs credit
@@ -765,13 +781,8 @@ wrk claim "$TKFF" >/dev/null 2>&1
 wrk run-task "$TKFF" >"$W/out.txt" 2>&1
 RFF=$(grep -oE '(sy|ds)-[0-9a-f]{8}' "$W/out.txt" | head -1)
 # Attested family on the original.
-python3 - "$COMMONS_ROOT/registry/artifacts/$RFF.json" <<'PY'
-import json, sys
-p = sys.argv[1]; m = json.load(open(p))
-m["generation"] = {"model": "m-a", "model_family": "vendor-a/model",
-                   "attestation": "receipt"}
-json.dump(m, open(p, "w"), indent=2, sort_keys=True)
-PY
+set_generation "$WKEY" "$RFF" \
+  '{"model":"m-a","model_family":"vendor-a/model","attestation":"receipt"}'
 wrk submit "$TKFF" "$RFF" >/dev/null 2>&1
 # worker2 copies the id. Even if the manifest claimed a second family, a copy is one
 # derivation — so distinct_families=2 must remain unsatisfied.
@@ -799,13 +810,8 @@ TKP=$(ben publish task "$W/t-parity.json" "Status parity" 2>/dev/null)
 # claim slot, so both real claim slots stay free for the two copying judges below.
 ben run-task "$TKP" >"$W/out.txt" 2>&1
 RP=$(grep -oE '(sy|ds)-[0-9a-f]{8}' "$W/out.txt" | head -1)
-python3 - "$COMMONS_ROOT/registry/artifacts/$RP.json" <<'PY'
-import json, sys
-p = sys.argv[1]; m = json.load(open(p))
-m["generation"] = {"model": "m-a", "model_family": "vendor-a/model",
-                   "attestation": "receipt"}
-json.dump(m, open(p, "w"), indent=2, sort_keys=True)
-PY
+set_generation "$BKEY" "$RP" \
+  '{"model":"m-a","model_family":"vendor-a/model","attestation":"receipt"}'
 # Both judges submit the SAME id as a plain copy — neither derived it.
 wrk claim "$TKP" >/dev/null 2>&1
 wrk submit "$TKP" "$RP" --force >/dev/null 2>&1

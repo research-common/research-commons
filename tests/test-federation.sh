@@ -178,8 +178,12 @@ check "dry-run left B empty" "$(b list 2>/dev/null | grep -c "$DS")" "0"
 check "pull succeeds" "$(rc b pull origin)" "0"
 check "artifact present on B" "$(b list | grep -c "$DS")" "1"
 check "content usable on B" "$(b cat "$DS" | grep -c 'alpha,900')" "1"
-check "received_at stamped" \
-  "$(b get "$DS" | python3 -c 'import json,sys;print("received_at" in (json.load(sys.stdin).get("ingest") or {}))')" "True"
+check "received_at stamped in local arrival registry" \
+  "$(python3 - "$B/registry/ingest.json" "$DS" <<'PY'
+import json, sys
+print("received_at" in json.load(open(sys.argv[1]))["artifacts"][sys.argv[2]])
+PY
+)" "True"
 check "A's attestation verifies on B" "$(b verify "$DS" 2>&1 | grep -c 'attester : VALID')" "1"
 check "B sees A's ledger as a separate log" \
   "$([ "$(ls "$B/registry/ledger" | wc -l)" -ge 1 ] && echo yes)" "yes"

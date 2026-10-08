@@ -36,6 +36,8 @@ with tempfile.TemporaryDirectory(prefix='commons-freshness-') as root:
     spec = importlib.util.spec_from_loader(loader.name, loader)
     c = importlib.util.module_from_spec(spec)
     loader.exec_module(c)
+    # JSON rows now resolve authenticated derived state from the held registry.
+    c.ensure_dirs()
     if not hasattr(c, 'fmt_age'):
         check('freshness formatter exists', False, True)
     else:

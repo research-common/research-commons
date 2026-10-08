@@ -2,7 +2,7 @@
 # Issue #39: a collection's lineage is declared in its SPEC, not in its manifest.
 #
 # Before #39 the `supersedes` link that the ingest-policy walk (#11) follows lived only in
-# the manifest, which no signature covers. Anyone holding the manifest could strip it, and
+# the manifest, which no signature covered then. Anyone holding the manifest could strip it, and
 # the successor's policy stopped applying to claims against the old id, with every gate
 # passing. The repro, reproduced here as the regression:
 #   1. a contributor's `publish --force --link related:<old>` on the lead's successor, or a
@@ -11,7 +11,7 @@
 #
 # What this pins:
 #   1. the spec's `supersedes` list is the authority: stripping the manifest link (by hand
-#      or by `publish --force --link …`) does not drop the successor's policy, at the
+#      or by an authorised `publish --force --link …`) does not drop the successor's policy, at the
 #      publish gate or at `hub check --base`
 #   2. a manifest link the spec does not declare does not count (no lineage by hint), and
 #      the resolver says so when that successor carries a policy
@@ -23,9 +23,13 @@
 #   6. the spec's list is linted: shape, id form, duplicates, a non-collection target
 #   7. browse surfaces (`collection show`, `list --tips-only`) and subscriptions read the
 #      same definition: an undeclared hint retires nothing and is never followed
+# Signed views also require held authority: foreign force edits and repairs from an
+# altered signed base fail without writes. Owner repair starts from a trusted snapshot;
+# authentic pre-view fixtures exercise migration without adopting corrupted views (#58).
 set -uo pipefail
 
 unset COMMONS_SIGNING_KEY COMMONS_ROOT COMMONS_AGENT COMMONS_EXEC COMMONS_REQUIRE_SIG
+export PYTHONDONTWRITEBYTECODE=1
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(dirname "$HERE")"
@@ -50,14 +54,18 @@ HL="$LAB/hub-lead"; HC="$LAB/hub-contrib"; BARE="$LAB/hub.git"
 
 L() { ( cd "$HL" && COMMONS_ROOT="$HL" COMMONS_AGENT=lead COMMONS_SIGNING_KEY="$KL" "$COMMONS" "$@" ); }
 C() { ( cd "$HC" && COMMONS_ROOT="$HC" COMMONS_AGENT=contrib COMMONS_SIGNING_KEY="$KC" "$COMMONS" "$@" ); }
+owner_C() { ( cd "$HC" && COMMONS_ROOT="$HC" COMMONS_AGENT=lead COMMONS_SIGNING_KEY="$KL" "$COMMONS" "$@" ); }
+legacy_L() { ( cd "$HL" && COMMONS_ROOT="$HL" COMMONS_AGENT=lead COMMONS_SIGNING_KEY="$KL" \
+  python3 "$HERE/legacy-writer-fixture.py" "$COMMONS" "$@" ); }
 rc() { "$@" >"$W/out.txt" 2>"$W/err.txt"; echo $?; }
 
 "$COMMONS" hub init "$HL" --name spec-sup >/dev/null 2>&1
 ADDR_L=$(L peer whoami 2>/dev/null | head -1)
 ADDR_C=$(C peer whoami 2>/dev/null | head -1 || true)
 if [ -z "$ADDR_L" ]; then
-  printf '\033[33mtest-spec-supersedes: signer not functional — skipping\033[0m\n'; exit 0
+  printf '\033[31mtest-spec-supersedes: signer not functional — cannot validate lineage\033[0m\n'; exit 1
 fi
+ADDR_L_LOWER=$(printf '%s' "$ADDR_L" | tr '[:upper:]' '[:lower:]')
 L peer add "$ADDR_L" --agent-id lead --trust full >/dev/null 2>&1
 
 mkcoll() {  # mkcoll <out> <scope> <ingest-json-or-empty> <supersedes-json-or-empty>
@@ -71,6 +79,39 @@ json.dump(spec, open(out, "w"), indent=2, sort_keys=True)
 PY
 }
 links_of() { python3 -c 'import json,sys;print(" ".join("%s:%s"%(l["rel"],l["id"]) for l in json.load(open(sys.argv[1])).get("links",[])))' "$1/registry/artifacts/$2.json"; }
+# Byte-level registry/store snapshot: refusal must not write a manifest, ledger, or blob.
+held_state() { python3 - "$1" <<'PY'
+import hashlib, pathlib, sys
+root = pathlib.Path(sys.argv[1]); digest = hashlib.sha256()
+for directory in ("registry", "store"):
+    for p in sorted((root / directory).rglob("*")):
+        if p.is_file():
+            digest.update(str(p.relative_to(root)).encode() + b"\0")
+            digest.update(p.read_bytes() + b"\0")
+print(digest.hexdigest())
+PY
+}
+view_state() { COMMONS_ROOT="$1" python3 - "$COMMONS" "$2" <<'PY'
+import runpy, sys
+ns = runpy.run_path(sys.argv[1])
+print(ns["manifest_view_state"](ns["load_manifest"](sys.argv[2]))[0])
+PY
+}
+# The pre-view helper emits dual-signed, viewless events, not v1-only downgrades.
+# Check the gate's filtered ledger directly: spec maintainers must not mask unusable
+# publish attribution when these fixtures follow viewed events in the same signer log.
+pre_view_publisher() { COMMONS_ROOT="$1" python3 - "$COMMONS" "$2" <<'PY'
+import runpy, sys
+ns = runpy.run_path(sys.argv[1]); aid = sys.argv[2]
+gate = ns["local_manifest_gate"]()
+events = list(gate._events(gate.base, "publish", id=aid,
+                          sha256=ns["load_manifest"](aid)["content"]["sha256"]))
+if len(events) == 1 and ns["entry_is_v2"](events[0][0]) and "view" not in events[0][0]:
+    print(events[0][1])
+else:
+    print("missing, ambiguous, downgraded, or viewed publish")
+PY
+}
 strip_links() { python3 - "$1/registry/artifacts/$2.json" <<'PY'
 import json, sys
 p = sys.argv[1]; m = json.load(open(p)); m["links"] = []
@@ -113,15 +154,25 @@ check "  by NEW's policy" "$(grep -c "forbidden key 'account_id'.*(policy of $NE
 # ---------------------------------------------------------------- the #39 repro, closed
 head_ "repro step 1: a contributor's publish --force --link cannot strip the lineage"
 ( cd "$HC" && git checkout -qb strip-force )
+BEFORE=$(held_state "$HC")
 check "--force with --link supersedes:<other> not in the spec is refused" \
   "$(rc C publish collection "$W/new.json" "new" --force --link "supersedes:cl-00000000")" "1"
 check "  saying the spec must declare it" "$(grep -c 'is not declared in the spec' "$W/err.txt")" "1"
-check "--force --link related:OLD (the original repro) publishes" \
-  "$(rc C publish collection "$W/new.json" "new" --force --link "related:$OLD")" "0"
-check "  but the supersede hint is re-derived from the spec, not dropped" \
-  "$(links_of "$HC" "$NEW")" "related:$OLD supersedes:$OLD"
+check "--force --link related:OLD (the original repro) is refused for a foreign signer" \
+  "$(rc C publish collection "$W/new.json" "new" --force --link "related:$OLD")" "1"
+check "  naming the held-view authority refusal" \
+  "$(grep -c "has no authority to sign $NEW's held view" "$W/err.txt")" "1"
+check "  neither foreign force attempt changes the registry or store" "$(held_state "$HC")" "$BEFORE"
+check "  the supersede hint remains intact" "$(links_of "$HC" "$NEW")" "supersedes:$OLD"
 check "  and a leaky part-of OLD is still refused" "$(pubds C "$(leak)" "$OLD")" "1"
 check "    by NEW's policy" "$(grep -c "(policy of $NEW)" "$W/err.txt")" "1"
+check "the owner's --force --link related:OLD publishes" \
+  "$(rc owner_C publish collection "$W/new.json" "new" --force --link "related:$OLD")" "0"
+check "  re-deriving the supersede hint from the spec" \
+  "$(links_of "$HC" "$NEW")" "related:$OLD supersedes:$OLD"
+check "  with a valid signed view" "$(view_state "$HC" "$NEW")" "signed"
+# Keep this successful owner control on its own fixture branch.
+( cd "$HC" && git add registry store && git commit -qm owner-force-control )
 
 head_ "repro step 2: a manifest-only edit stripping the hint changes nothing"
 ( cd "$HC" && git checkout -q main && git checkout -qb strip-edit )
@@ -136,38 +187,46 @@ check "  naming the stripped hint" \
   "$(grep -c "PROBLEM: $NEW: spec declares supersedes $OLD but the manifest does not link it" "$W/out.txt")" "1"
 
 head_ "repro step 3: even past a merged strip, the leak is caught at hub check --base"
-# Simulate the strip having merged (bypassing the check above): base now has no hint.
-( cd "$HC" && git push -q origin strip-edit:main && git fetch -q origin )
-( cd "$HC" && git checkout -q -b leak-after origin/main )
+# An independent, authentic pre-view hub avoids a broken signed view masking the
+# lineage check. Its signatures are emitted by the legacy helper, never stripped
+# from current events. Simulate an old manifest-only strip having already merged.
+HP="$LAB/hub-legacy"
+P() { ( cd "$HP" && COMMONS_ROOT="$HP" COMMONS_AGENT=lead COMMONS_SIGNING_KEY="$KL" "$COMMONS" "$@" ); }
+legacy_P() { ( cd "$HP" && COMMONS_ROOT="$HP" COMMONS_AGENT=lead COMMONS_SIGNING_KEY="$KL" \
+  python3 "$HERE/legacy-writer-fixture.py" "$COMMONS" "$@" ); }
+"$COMMONS" hub init "$HP" --name legacy-spec-sup >/dev/null 2>&1
+P peer add "$ADDR_L" --agent-id lead --trust full >/dev/null 2>&1
+check "legacy OLD publishes with the same content id" \
+  "$(legacy_P publish collection "$W/old.json" old --license CC-BY-4.0 2>/dev/null | tail -1)" "$OLD"
+check "legacy NEW publishes with the same spec-declared lineage" \
+  "$(legacy_P publish collection "$W/new.json" new --license CC-BY-4.0 2>/dev/null | tail -1)" "$NEW"
+check "  NEW is genuinely pre-view" "$(view_state "$HP" "$NEW")" "legacy"
+check "  its viewless publish attribution survives the binding filter" \
+  "$(pre_view_publisher "$HP" "$NEW")" "$ADDR_L_LOWER"
+check "  its intact signatures and lineage pass hub check" "$(rc P hub check)" "0"
+strip_links "$HP" "$NEW"
+( cd "$HP" && git add -A && git commit -qm merged-legacy-strip )
+LEGACY_BASE=$(git -C "$HP" rev-parse HEAD)
 LK=$(leak)
-check "a leaky part-of OLD is refused at the publish gate" "$(pubds C "$LK" "$OLD")" "1"
+check "a leaky part-of OLD is refused at the legacy publish gate" "$(pubds P "$LK" "$OLD")" "1"
 check "  forced through with --allow-unchecked-ingest? no: it is a policy hit, not unchecked" \
   "$(grep -c 'refusing to publish — 1 forbidden field name' "$W/err.txt")" "1"
-# Hand-assemble the dataset, as a peer on older tooling would.
-SNEAK=$(python3 - "$HC" "$OLD" "$LK" <<'PY'
-import hashlib, json, os, shutil, sys
-root, cid, src = sys.argv[1:4]
-raw = open(src, "rb").read(); d = hashlib.sha256(raw).hexdigest(); aid = "ds-" + d[:8]
-os.makedirs(os.path.join(root, "store", "sha256", d[:2]), exist_ok=True)
-shutil.copy(src, os.path.join(root, "store", "sha256", d[:2], d))
-json.dump({"id": aid, "type": "dataset", "schema": "rc.v1", "title": "sneaked",
-           "agent": "contrib", "created": "2026-10-01T00:00:00Z", "description": "",
-           "tags": [], "content": {"sha256": d, "filename": os.path.basename(src),
-                                   "bytes": len(raw)},
-           "links": [{"rel": "part-of", "id": cid}], "license": "CC0-1.0",
-           "availability": {"obtainability": "open"},
-           "verification": {"tier": "T3", "criteria": "x"}},
-          open(os.path.join(root, "registry", "artifacts", aid + ".json"), "w"),
-          indent=1, sort_keys=True)
-print(aid)
+# Publish without membership, then add the legacy unsigned metadata claim. This
+# preserves real publish attribution so the policy diagnostic cannot be orphan noise.
+SNEAK=$(legacy_P publish dataset "$LK" sneaked --license CC0-1.0 \
+  --obtainability open --criteria x 2>/dev/null | tail -1)
+python3 - "$HP/registry/artifacts/$SNEAK.json" "$OLD" <<'PY'
+import json, sys
+p, cid = sys.argv[1:3]; m = json.load(open(p))
+m["links"] = [{"rel": "part-of", "id": cid}]
+json.dump(m, open(p, "w"), indent=2, sort_keys=True)
 PY
-)
-( cd "$HC" && git add registry store && git commit -qm leak )
-( cd "$HC" && COMMONS_ROOT="$HC" "$COMMONS" hub check --base origin/main ) >"$W/out.txt" 2>&1
+check "  the sneaked membership remains a pre-view claim" "$(view_state "$HP" "$SNEAK")" "legacy"
+( cd "$HP" && git add registry store && git commit -qm leak )
+check "hub check --base fails against the stripped legacy baseline" \
+  "$(rc P hub check --base "$LEGACY_BASE")" "1"
 check "hub check --base refuses the leak against a base with the hint stripped" \
   "$(grep -c "PROBLEM: $SNEAK violates the ingest policy of $OLD: forbidden key 'account_id'.*(policy of $NEW)" "$W/out.txt")" "1"
-( cd "$HC" && git checkout -q main && git reset -q --hard "$(git -C "$HL" rev-parse HEAD)" )
-( cd "$HC" && git push -q -f origin main )
 
 # ---------------------------------------------------------------- no lineage by hint
 head_ "a manifest hint the spec does not declare does not count"
@@ -175,7 +234,9 @@ mkcoll "$W/old2.json" "hint-only target" "" ""
 OLD2=$(L publish collection "$W/old2.json" "old2" --license CC-BY-4.0 2>/dev/null | tail -1)
 mkcoll "$W/new2.json" "hint-only successor" "$ACCT" ""
 NEW2=$(L publish collection "$W/new2.json" "new2" --license CC-BY-4.0 2>/dev/null | tail -1)
-# A hand-added hint: what a pre-#39 manifest, or a tampered one, looks like.
+# Save authority before tampering: an altered signed base cannot be adopted (#58).
+cp "$HL/registry/artifacts/$NEW2.json" "$W/new2-trusted.json"
+# A hand-added hint on a signed manifest.
 python3 - "$HL/registry/artifacts/$NEW2.json" "$OLD2" <<'PY'
 import json, sys
 p, old = sys.argv[1:3]; m = json.load(open(p))
@@ -193,9 +254,18 @@ check "list --tips-only keeps OLD2" \
 ( cd "$HL" && COMMONS_ROOT="$HL" "$COMMONS" hub check ) >"$W/out.txt" 2>&1
 check "hub check fails the undeclared hint" \
   "$(grep -c "PROBLEM: $NEW2: manifest links supersedes:$OLD2 but the spec does not declare it" "$W/out.txt")" "1"
-L publish collection "$W/new2.json" "new2" --force --link "related:$OLD2" >/dev/null 2>&1
-check "a --force republish re-derives the hints, dropping the undeclared one" \
+BEFORE=$(held_state "$HL")
+check "even the owner cannot force-repair the corrupted signed base" \
+  "$(rc L publish collection "$W/new2.json" "new2" --force --link "related:$OLD2")" "1"
+check "  naming the held-view authority refusal" \
+  "$(grep -c "has no authority to sign $NEW2's held view" "$W/err.txt")" "1"
+check "  refusal leaves the corrupted registry and store untouched" "$(held_state "$HL")" "$BEFORE"
+cp "$W/new2-trusted.json" "$HL/registry/artifacts/$NEW2.json"
+check "owner republish from the trusted snapshot succeeds" \
+  "$(rc L publish collection "$W/new2.json" "new2" --force --link "related:$OLD2")" "0"
+check "  re-deriving hints from the spec with no undeclared supersede" \
   "$(links_of "$HL" "$NEW2")" "related:$OLD2"
+check "  and signing the repaired view" "$(view_state "$HL" "$NEW2")" "signed"
 ( cd "$HL" && COMMONS_ROOT="$HL" "$COMMONS" hub check ) >"$W/out.txt" 2>&1
 check "  and hub check passes again" "$(grep -c PROBLEM "$W/out.txt")" "0"
 
@@ -236,12 +306,17 @@ json.dump(m, open(p, "w"), indent=2, sort_keys=True)
 PY
 }
 mkcoll "$W/old3.json" "migration root" "" ""
-OLD3=$(L publish collection "$W/old3.json" "old3" --license CC-BY-4.0 2>/dev/null | tail -1)
+OLD3=$(legacy_L publish collection "$W/old3.json" "old3" --license CC-BY-4.0 2>/dev/null | tail -1)
 mkcoll "$W/mid3.json" "migration middle" "$ACCT" ""
-MID3=$(L publish collection "$W/mid3.json" "mid3" --license CC-BY-4.0 2>/dev/null | tail -1)
+MID3=$(legacy_L publish collection "$W/mid3.json" "mid3" --license CC-BY-4.0 2>/dev/null | tail -1)
 mkcoll "$W/tip3.json" "migration tip" "$ACCT" ""
-TIP3=$(L publish collection "$W/tip3.json" "tip3" --license CC-BY-4.0 2>/dev/null | tail -1)
+TIP3=$(legacy_L publish collection "$W/tip3.json" "tip3" --license CC-BY-4.0 2>/dev/null | tail -1)
 hint "$MID3" "$OLD3"; hint "$TIP3" "$MID3"
+check "both hint-only intermediates are authentic pre-view manifests" \
+  "$(view_state "$HL" "$MID3")|$(view_state "$HL" "$TIP3")" "legacy|legacy"
+check "all three viewless publishes survive the existing v2 signer-log floor" \
+  "$(pre_view_publisher "$HL" "$OLD3")|$(pre_view_publisher "$HL" "$MID3")|$(pre_view_publisher "$HL" "$TIP3")" \
+  "$ADDR_L_LOWER|$ADDR_L_LOWER|$ADDR_L_LOWER"
 check "before migrating: a leak part-of OLD3 publishes (the root has no policy of its own)" \
   "$(pubds L "$(leak)" "$OLD3")" "0"
 mkcoll "$W/m-direct.json" "migration tip v2, direct predecessor only" "$ACCT" "[\"$TIP3\"]"
@@ -255,10 +330,14 @@ check "  by the new tip's policy" "$(grep -c "(policy of $M3)" "$W/err.txt")" "1
 ( cd "$HL" && COMMONS_ROOT="$HL" "$COMMONS" hub check ) >"$W/out.txt" 2>&1
 check "hub check still fails the two stale hints" \
   "$(grep -cE "PROBLEM: ($MID3|$TIP3): manifest links supersedes:" "$W/out.txt")" "2"
-L publish collection "$W/mid3.json" "mid3" --license CC-BY-4.0 --force >/dev/null 2>&1
-L publish collection "$W/tip3.json" "tip3" --license CC-BY-4.0 --force >/dev/null 2>&1
+check "owner force-migrates MID3 from its valid pre-view authority" \
+  "$(rc L publish collection "$W/mid3.json" "mid3" --license CC-BY-4.0 --force)" "0"
+check "owner force-migrates TIP3 from its valid pre-view authority" \
+  "$(rc L publish collection "$W/tip3.json" "tip3" --license CC-BY-4.0 --force)" "0"
 check "a --force republish of each intermediate drops its hint, id unchanged" \
   "$(links_of "$HL" "$MID3")|$(links_of "$HL" "$TIP3")" "|"
+check "  both migrated views are signed" \
+  "$(view_state "$HL" "$MID3")|$(view_state "$HL" "$TIP3")" "signed|signed"
 ( cd "$HL" && COMMONS_ROOT="$HL" "$COMMONS" hub check ) >"$W/out.txt" 2>&1
 check "  and hub check passes" "$(grep -c PROBLEM "$W/out.txt")" "0"
 check "the policy still holds against OLD3, MID3 and TIP3" \
@@ -281,6 +360,11 @@ check "a second add-member replaces the field (immediate predecessor only)" \
   "$(L cat "$AM2" 2>/dev/null | python3 -c 'import json,sys;print(json.load(sys.stdin).get("supersedes"))')" "['$AM']"
 
 head_ "housekeeping"
+for who in L C P; do
+  check "$who log --verify --strict: signatures, chains and downgrade/replay policy" \
+    "$(rc "$who" log --verify --strict)" "0"
+  cat "$W/out.txt" "$W/err.txt"
+done
 ( cd "$HL" && COMMONS_ROOT="$HL" "$COMMONS" fsck ) >"$W/out.txt" 2>&1
 check "fsck clean" "$?" "0"
 

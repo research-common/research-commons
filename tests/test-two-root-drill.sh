@@ -74,7 +74,7 @@ for R in "$A" "$B"; do
   mkdir -p "$R/registry" "$R/store/sha256"
   git init -q "$R"
   ( cd "$R" && git remote add origin "$BARE" \
-    && printf 'registry/index.sqlite\nregistry/peers.json\nregistry/quarantine.log\n__pycache__/\n' > .gitignore \
+    && printf 'registry/index.sqlite\nregistry/peers.json\nregistry/quarantine.log\nregistry/ingest.json\n__pycache__/\n' > .gitignore \
     && cp "$REPO/registry/exec-policy.example.json" registry/exec-policy.json \
     && git add -A && git commit -qm init ) >/dev/null 2>&1
 done
@@ -144,8 +144,10 @@ check "A's push passes its own gates" "$(rc a push origin)" "0"
 check "B pulls through the ingest gate" "$(rc b pull origin)" "0"
 check "dataset landed on B" "$(b list | grep -c "$DS")" "1"
 check "workflow landed on B (code, full trust)" "$(b list --type workflow | grep -c "$WF")" "1"
-check "received_at stamped on ingest" \
-  "$(b get "$DS" | python3 -c 'import json,sys;print("received_at" in (json.load(sys.stdin).get("ingest") or {}))')" "True"
+check "received_at stamped only in local arrival registry" \
+  "$(python3 -c 'import json,sys
+print("received_at" in json.load(open(sys.argv[1]))["artifacts"][sys.argv[2]])' \
+      "$B/registry/ingest.json" "$DS")" "True"
 check "A's attestation still verifies on B" "$(b verify "$DS" 2>&1 | grep -c 'attester : VALID')" "1"
 check "🔒 B re-derives A's T0 artifact under the sandbox: PASS" \
   "$(COMMONS_EXEC=sandbox rc b verify "$OUT")" "0"
@@ -325,25 +327,29 @@ entry = {"schema": "rc.v1", "action": "publish", "agent": "peer-b", "id": aid,
          "sha256": sha, "ts": "2025-07-01T00:00:00Z", "tier": "T0"}
 payload = json.dumps({k: entry[k] for k in ("action", "agent", "id", "sha256", "ts")},
                      sort_keys=True, separators=(",", ":"))
+# B's genuine writes already established a v2 floor in its own log. A v1-only
+# claim would be rejected as a stripped-sig2 downgrade before anchor ordering ever
+# sees it. Sign both payloads independently here: the lie must survive signature
+# and ledger-policy checks, then lose because B cannot anchor its claimed priority.
+payload2 = json.dumps({"rc": "ledger/2", "entry": entry},
+                      sort_keys=True, separators=(",", ":"))
 # The signer keys off COMMONS_SIGNING_KEY and falls back to ~/.commons/signing.key.
 # Passing the wrong env var here silently signed with the operator's own key instead
 # of B's throwaway one, producing an UNKNOWN SIGNER that looked like a verification
 # bug. Be explicit, and never let the default apply in a test.
-env = dict(os.environ, MESSAGE=payload, COMMONS_SIGNING_KEY=keyfile)
-r = subprocess.run(["node", signer], capture_output=True, text=True, env=env)
-out = r.stdout.strip().splitlines()
-sig = addr = None
-for line in out:
-    try:
-        d = json.loads(line)
-        sig = d.get("signature") or sig; addr = d.get("address") or addr
-    except ValueError:
-        if line.startswith("0x") and len(line) > 100: sig = line
-        elif line.startswith("0x"): addr = line
-if not sig:
-    print("SIGNER_FAILED", r.stdout, r.stderr, file=sys.stderr); sys.exit(1)
-entry["addr"] = addr
-entry["sig"] = sig
+env = dict(os.environ, COMMONS_SIGNING_KEY=keyfile)
+r = subprocess.run(["node", signer, "--stdin", "--pair"],
+                   input=json.dumps({"m1": payload, "m2": payload2}),
+                   capture_output=True, text=True, env=env)
+try:
+    signed = json.loads(r.stdout)
+except ValueError:
+    signed = {}
+if r.returncode or not all(signed.get(k) for k in ("address", "signature", "signature2")):
+    print("SIGNER_FAILED: dual signatures unavailable", file=sys.stderr); sys.exit(1)
+entry["addr"] = signed["address"]
+entry["sig"] = signed["signature"]
+entry["sig2"] = signed["signature2"]
 # Chain onto B's own log so `log --verify` stays structurally clean: the point is that
 # a VALID signature on a FALSE timestamp must not win, not that forgery is detectable.
 prev = None
@@ -451,36 +457,34 @@ for line in sys.stdin:
 else: print('no-row')")" "yes"
 
 head_ "concurrent citation of one artifact must not wedge federation"
-# Content-addressed dedup ENCOURAGES two peers to cite the same artifact, and `submit`
-# annotates the result manifest with `fulfills`. So two peers submitting one artifact to
-# two different tasks both edit the same file — a git content conflict on ordinary
-# honest behaviour. Aborting there wedges the commons permanently: every subsequent pull
-# hits the same conflict, and neither side is actually disputing anything.
+# Two peers submit one artifact to different tasks in their separate signer logs.
+# Their manifests stay immutable; readers derive both links after federation.
 mktask "$W/task-f1.json" "$WF" '{"objective": "concurrent citation A-side", "verification": {"tier": "T2", "criteria": "rubric: judged by hand"}, "execution": {"brief": "cite an existing result"}}'
 mktask "$W/task-f2.json" "$WF" '{"objective": "concurrent citation B-side", "verification": {"tier": "T2", "criteria": "rubric: judged by hand"}, "execution": {"brief": "cite an existing result"}}'
 TF1=$(a publish task "$W/task-f1.json" "Concurrent cite 1" 2>/dev/null)
 TF2=$(a publish task "$W/task-f2.json" "Concurrent cite 2" 2>/dev/null)
 acommit "concurrent-citation tasks"; a push origin >/dev/null 2>&1
 b pull origin >/dev/null 2>&1
-# Both sides annotate the SAME result manifest, independently, then exchange.
+cp "$B/registry/artifacts/$OUT.json" "$W/pre-concurrent.json"
+# Both sides cite the SAME result, independently, then exchange their events.
 a claim "$TF1" >/dev/null 2>&1; a submit "$TF1" "$OUT" --force >/dev/null 2>&1
 b claim "$TF2" >/dev/null 2>&1; b submit "$TF2" "$OUT" --force >/dev/null 2>&1
 acommit "A cites for TF1"; bcommit "B cites for TF2"
 a push origin >/dev/null 2>&1
 check "🔒 concurrent citation of one artifact still merges" "$(rc b pull origin)" "0"
-check "reported as an additive-annotation merge, not a dispute" \
-  "$([ "$(grep -c 'merged additive annotations' "$W/out.txt")" -ge 1 ] && echo yes)" "yes"
-check "🔒 union keeps BOTH fulfills links (no information lost)" \
-  "$(b get "$OUT" | python3 -c "
+check "concurrent citation preserves the publisher manifest byte-for-byte" \
+  "$(cmp -s "$W/pre-concurrent.json" "$B/registry/artifacts/$OUT.json" && echo yes)" "yes"
+check "🔒 authenticated events derive BOTH fulfills links (no information lost)" \
+  "$(b links "$OUT" | python3 -c "
 import json,sys
-links = json.load(sys.stdin).get('links') or []
-ids = {l['id'] for l in links if l.get('rel') == 'fulfills'}
+ids = {line.split(' -> ',1)[1].split()[0] for line in sys.stdin
+       if ' -> ' in line and '[fulfills]' in line}
 print('yes' if {'$TF1','$TF2'} <= ids else 'no:%r' % (sorted(ids),))")" "yes"
-check "content hash untouched by the annotation merge" \
+check "content hash untouched by the event merge" \
   "$(b get "$OUT" | python3 -c 'import json,sys;print(json.load(sys.stdin)["content"]["sha256"][:8])')" \
   "$(echo "$OUT" | sed 's/^sy-//')"
 check "B still verifies the artifact after the merge" "$(COMMONS_EXEC=sandbox rc b verify "$OUT")" "0"
-check "B's fsck clean after the annotation merge" "$(rc b fsck)" "0"
+check "B's fsck clean after the event merge" "$(rc b fsck)" "0"
 check "B's ledger still verifies" "$(rc b log --verify)" "0"
 check "the merge is not left dangling (no unresolved paths)" \
   "$(cd "$B" && git diff --name-only --diff-filter=U | wc -l | tr -d ' ')" "0"

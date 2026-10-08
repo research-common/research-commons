@@ -38,6 +38,15 @@ W="$COMMONS_ROOT/work"; mkdir -p "$W"
 
 c() { "$COMMONS" "$@"; }
 rc() { "$@" >"$W/out.txt" 2>"$W/err.txt"; echo $?; }
+export COMMONS_SIGNING_KEY="$W/publisher.key"
+python3 - "$COMMONS_SIGNING_KEY" <<'PYKEY'
+import os, secrets, sys
+with open(sys.argv[1], "w") as f:
+    f.write("0x" + secrets.token_hex(32))
+os.chmod(sys.argv[1], 0o600)
+PYKEY
+PUBLISHER=$(c peer whoami | head -1)
+c peer add "$PUBLISHER" --agent-id test-p3 --trust full >/dev/null || exit 1
 jget() { python3 -c 'import json,sys
 d=json.load(sys.stdin)
 for k in sys.argv[1].split("."):
@@ -110,9 +119,35 @@ check "egress workflow FAILS in sandbox" "$(rc c run "$WFN" --exec sandbox -o "$
 check "failure is reported as workflow failure" "$(grep -c 'failed' "$W/err.txt")" "1"
 
 head_ "resource caps"
-mkspec_sh "$W/wf-bomb.json" '["python3 -c \"x=bytearray(4*1024*1024*1024)\" > \"$OUT_DIR/r.json\""]'
+# Keep this probe small and force physical page allocation: a large zero-filled
+# bytearray can depend on allocator/overcommit behaviour and available swap.
+# Docker defaults to another memory limit's worth of swap, so 512 MiB of touched
+# anonymous pages exceeds both the 128 MiB RAM cap and its 128 MiB swap allowance.
+cp "$COMMONS_ROOT/registry/exec-policy.json" "$W/exec-policy.memory-backup.json" || exit 1
+python3 - "$COMMONS_ROOT/registry/exec-policy.json" <<'PYMEM'
+import json, sys
+path = sys.argv[1]
+policy = json.load(open(path))
+policy["limits"]["memory"] = "128m"
+json.dump(policy, open(path, "w"), indent=2, sort_keys=True)
+PYMEM
+[ "$?" -eq 0 ] || exit 1
+cat > "$W/body-bomb.py" <<'PY'
+import json, mmap, os
+
+size = 512 * 1024 * 1024
+pages = mmap.mmap(-1, size, flags=mmap.MAP_PRIVATE | mmap.MAP_ANONYMOUS)
+for offset in range(0, size, mmap.PAGESIZE):
+    pages[offset] = 1
+json.dump({"touched_bytes": size}, open(os.environ["OUT_DIR"] + "/r.json", "w"))
+PY
+mkspec_py "$W/wf-bomb.json" "$W/body-bomb.py"
 WFB=$(c publish workflow "$W/wf-bomb.json" "memory bomb" -t demo)
-check "memory bomb killed by cap" "$(rc c run "$WFB" --exec sandbox -o "$W")" "1"
+BOMB_RC=$(rc c run "$WFB" --exec sandbox -o "$W")
+cp "$W/exec-policy.memory-backup.json" "$COMMONS_ROOT/registry/exec-policy.json" || exit 1
+# A generic failure (syntax, missing output, timeout, etc.) must not pass this gate.
+check "memory bomb killed by cap" \
+  "$BOMB_RC:$(grep -cF 'failed (exit 137, sandbox mode)' "$W/err.txt")" "1:1"
 mkspec_sh "$W/wf-slow.json" '["sleep 30"]' '{"timeout": 3}'
 WFS=$(c publish workflow "$W/wf-slow.json" "slow" -t demo)
 check "timeout enforced outside container" "$(rc c run "$WFS" --exec sandbox -o "$W")" "1"
@@ -234,23 +269,28 @@ fi
 
 head_ "rebaseline — converge, don't reverse"
 # $NATV_PRE is native-recorded and userland-insensitive: the canonical clean-converge case.
-check "rebaseline of matching artifact stamps exec" "$(rc c rebaseline "$NATV_PRE")" "0"
+cp "$COMMONS_ROOT/registry/artifacts/$NATV_PRE.json" "$W/pre-rebaseline.json"
+check "rebaseline of matching artifact records reproduction" "$(rc c rebaseline "$NATV_PRE")" "0"
 check "stamp reported as MATCH" "$(grep -c '^MATCH' "$W/out.txt")" "1"
-check "exec record now sandbox" "$(c get "$NATV_PRE" | jget provenance.run.exec.mode)" "sandbox"
-check "content id unchanged after stamp" "$(c get "$NATV_PRE" | jget id)" "$NATV_PRE"
-check "rebaseline records the image digest" \
-  "$(c get "$NATV_PRE" | jget provenance.run.exec.image_digest | grep -c '^sha256:')" "1"
-check "rebaseline stamps a timestamp" \
-  "$([ "$(c get "$NATV_PRE" | jget provenance.run.rebaselined)" != MISSING ] && echo yes)" "yes"
+check "publisher exec record stays native" "$(c get "$NATV_PRE" | jget provenance.run.exec.mode)" "native"
+check "publisher manifest stays byte-identical after reproduction" \
+  "$(cmp -s "$W/pre-rebaseline.json" "$COMMONS_ROOT/registry/artifacts/$NATV_PRE.json" && echo yes)" "yes"
+check "authenticated reproduction displays the sandbox image digest" \
+  "$(c show "$NATV_PRE" | grep -c "reproduced under sandbox @$DIG by")" "1"
+check "rebaseline event carries a signed timestamp" \
+  "$(c log -n 5 | python3 -c 'import json,sys
+events=[json.loads(line) for line in sys.stdin]
+print(any(e.get("id")==sys.argv[1] and e.get("action")=="rebaseline"
+          and e.get("result")=="match" and e.get("ts") and e.get("sig2")
+          for e in events))' "$NATV_PRE")" "True"
 check "rebaseline logged" "$(c log -n 5 | grep -c '\"rebaseline\"')" "1"
-check "second rebaseline is a no-op" "$(c rebaseline "$NATV_PRE" | grep -c 'already sandbox-baselined')" "1"
+check "second rebaseline reproduces the immutable native baseline" \
+  "$(c rebaseline "$NATV_PRE" | grep -c '^MATCH')" "1"
 check "rebaselined artifact verifies in sandbox" "$(rc c verify "$NATV_PRE" --exec sandbox)" "0"
-# Verifying it natively now runs outside the recorded environment, but the workflow is
-# userland-insensitive so the bytes still match. Reproducing despite an environment
-# difference is strictly stronger evidence, so it must PASS (with a note), not mismatch.
-check "cross-env reproduction still PASSes" "$(rc c verify "$NATV_PRE" --exec native)" "0"
-check "PASS notes the environment difference" \
-  "$(grep -c 'environment-independent' "$W/out.txt")" "1"
+# Reproduction never changes the publisher's native verification baseline.
+check "original native environment still PASSes" "$(rc c verify "$NATV_PRE" --exec native)" "0"
+check "native PASS has no environment-difference claim" \
+  "$(grep -c 'environment-independent' "$W/out.txt")" "0"
 if [ "$HOSTPY" != "$SBXPY" ]; then
   check "diverging artifact needs explicit supersede" "$(rc c rebaseline "$NATV")" "5"
   check "reports DIVERGED" "$(grep -c '^DIVERGED' "$W/out.txt")" "1"
