@@ -25,6 +25,24 @@ manifest/ledger format version — `commons --version` prints both).
   quality returns only with receiver-local proof and block-time verification.
 
 ### Fixed
+- **Unchecked metadata stops verification (#43 phase 1).** `verify` exits 3
+  (`NOT-MACHINE-VERIFIABLE`) for unknown view versions or unnormalisable metadata,
+  before resolving or executing the artifact's workflow/comparator. This also applies
+  to workflow metadata and, when needed, T1 comparator metadata, so changing the
+  version or injecting NaN cannot bypass the signed-view tamper guard. Comparator
+  filename/hash edits are rejected before execution; byte-identical output still
+  needs no comparator lookup. Unsupported future formats are labelled unchecked,
+  without a forgery accusation.
+- **Signed-view readers and gates (#43 phase 1).** A present publisher statement is
+  verified against the exact normalized metadata view. `pull` and `hub check` refuse
+  altered or stripped views, unauthorized replacements, rollback, and changes without
+  a matching new dual-signed view event. Distinct v2 ledger payloads remain distinct
+  even when their v1 signatures match; known stripped copies and v1-only lines after
+  a verified v2 line in the signer's own log are rejected. The floor does not prove
+  original log order or detect stripping an unseen first v2 event.
+- **Attestation v2 readers (#10).** `attestation/2` binds comparator parameters,
+  including empty values. Parameter changes are stale; legacy attestations with
+  parameters are `partial`, and new partial attestations fail the gates.
 - **Untrusted anchor JSON no longer grants Bitcoin-quality priority.** A fabricated
   `confirmed` checkpoint could seize first-publisher credit and report a discrepancy
   against the honest publisher, without a proof. Read-side bounds now require a
@@ -40,6 +58,12 @@ manifest/ledger format version — `commons --version` prints both).
   grounds to discount a peer. `pull`/`hub check` acceptance rules are unchanged.
 
 ### Added
+- **Metadata inspection.** `show`, `status`, `list`, `search`, collection display and
+  `list --json` expose metadata view state; `fsck --views` audits it. `verify` refuses
+  altered/stripped metadata before running code. Fixed normalization and EIP-191
+  vectors cover empty comparator values, ordered inputs, Unicode and floats.
+  This phase writes no publisher views or attestation-v2 statements; writers and
+  enforcement follow separately. These gate/CLI changes require a MINOR tool release.
 - **`announce` warns when a remote would leak local or internal details (#53).** A local
   filesystem path, a private/loopback/CGNAT or single-label host, an internal name
   (`.local`, `.lan`, `.internal`, `.localdomain`, `.home.arpa`) or a non-`git` username in a

@@ -325,25 +325,29 @@ entry = {"schema": "rc.v1", "action": "publish", "agent": "peer-b", "id": aid,
          "sha256": sha, "ts": "2025-07-01T00:00:00Z", "tier": "T0"}
 payload = json.dumps({k: entry[k] for k in ("action", "agent", "id", "sha256", "ts")},
                      sort_keys=True, separators=(",", ":"))
+# B's genuine writes already established a v2 floor in its own log. A v1-only
+# claim would be rejected as a stripped-sig2 downgrade before anchor ordering ever
+# sees it. Sign both payloads independently here: the lie must survive signature
+# and ledger-policy checks, then lose because B cannot anchor its claimed priority.
+payload2 = json.dumps({"rc": "ledger/2", "entry": entry},
+                      sort_keys=True, separators=(",", ":"))
 # The signer keys off COMMONS_SIGNING_KEY and falls back to ~/.commons/signing.key.
 # Passing the wrong env var here silently signed with the operator's own key instead
 # of B's throwaway one, producing an UNKNOWN SIGNER that looked like a verification
 # bug. Be explicit, and never let the default apply in a test.
-env = dict(os.environ, MESSAGE=payload, COMMONS_SIGNING_KEY=keyfile)
-r = subprocess.run(["node", signer], capture_output=True, text=True, env=env)
-out = r.stdout.strip().splitlines()
-sig = addr = None
-for line in out:
-    try:
-        d = json.loads(line)
-        sig = d.get("signature") or sig; addr = d.get("address") or addr
-    except ValueError:
-        if line.startswith("0x") and len(line) > 100: sig = line
-        elif line.startswith("0x"): addr = line
-if not sig:
-    print("SIGNER_FAILED", r.stdout, r.stderr, file=sys.stderr); sys.exit(1)
-entry["addr"] = addr
-entry["sig"] = sig
+env = dict(os.environ, COMMONS_SIGNING_KEY=keyfile)
+r = subprocess.run(["node", signer, "--stdin", "--pair"],
+                   input=json.dumps({"m1": payload, "m2": payload2}),
+                   capture_output=True, text=True, env=env)
+try:
+    signed = json.loads(r.stdout)
+except ValueError:
+    signed = {}
+if r.returncode or not all(signed.get(k) for k in ("address", "signature", "signature2")):
+    print("SIGNER_FAILED: dual signatures unavailable", file=sys.stderr); sys.exit(1)
+entry["addr"] = signed["address"]
+entry["sig"] = signed["signature"]
+entry["sig2"] = signed["signature2"]
 # Chain onto B's own log so `log --verify` stays structurally clean: the point is that
 # a VALID signature on a FALSE timestamp must not win, not that forgery is detectable.
 prev = None

@@ -676,7 +676,8 @@ edit "$HC" "$T3" 'm.setdefault("links", []).append({"rel": "fulfills", "id": "'"
 cpush relayed-submit
 check "hub check --base refuses a fulfills link the submit's signed hash doesn't cover" "$(hcheck)" "1"
 check "pull refuses it" "$(lpull relayed-submit --dry-run)" "1"
-check "  naming the unbacked link" "$(both | grep -c "link fulfills:$TK2 added with no signed ledger event")" "1"
+check "  naming the stripped event after the v2 floor" \
+  "$(both | grep -c "v1-only event after this signer's v2 floor")" "1"
 
 branch held-1
 check "contributor submits DS for the second task" "$(rc C submit "$TK2" "$DS" --force)" "0"
@@ -762,8 +763,8 @@ PY
 cpush relayed-accept
 check "downgraded v1 copy: hub check --base refuses the unbacked accepted link" "$(hcheck)" "1"
 check "  and pull refuses it" "$(lpull relayed-accept --dry-run)" "1"
-check "  naming the unbacked link" \
-  "$(both | grep -c "link accepted:$T3 added with no signed ledger event")" "1"
+check "  naming the stripped event after the v2 floor" \
+  "$(both | grep -c "v1-only event after this signer's v2 floor")" "1"
 
 # ---------------------------------------------------------------- 4b. explicit trust denial
 head_ "4b. a trust=none attester cannot change a held claim"

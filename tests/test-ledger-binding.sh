@@ -198,7 +198,9 @@ lines[-1] = json.dumps(e, sort_keys=True)
 open(p, "w").write("\n".join(lines) + "\n")
 PY
 cpush swap
-check "lead pulls the branch" "$(lpull swap)" "0"
+check "lead refuses the downgraded submit after the signer's v2 floor" "$(lpull swap)" "1"
+check "the refusal names stripped sig2 / the v2 floor" \
+  "$(both | grep -Ec 'v2 floor|stripped sig2')" "1"
 check "the swapped submission is not listed" "$(L status "$TK2" 2>&1 | grep -c "$R2 by")" "0"
 check "a plain accept has nothing to settle on" "$(rc L accept "$TK2")" "1"
 

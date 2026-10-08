@@ -78,7 +78,7 @@ for spec in "$TOP:0" "$T3:3" "$UV:4"; do
 done
 check "brief is exactly one line" "$(wc -l <"$W/out.txt" | tr -d ' ')" "1"
 check "brief exposes badge, grade, nodes, weakest" \
-  "$(grep -Ec "^$UV \[unverified\] chain=unverified nodes=1 weakest=$UV$" "$W/out.txt")" "1"
+  "$(grep -Ec "^$UV \[unverified\] chain=unverified nodes=1 weakest=$UV view=legacy$" "$W/out.txt")" "1"
 check "negative graph depth is refused" "$(rc c graph "$TOP" --depth -1)" "2"
 
 head_ "unknown ids are reported, not silently empty"

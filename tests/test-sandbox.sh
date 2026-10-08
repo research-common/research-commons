@@ -110,9 +110,35 @@ check "egress workflow FAILS in sandbox" "$(rc c run "$WFN" --exec sandbox -o "$
 check "failure is reported as workflow failure" "$(grep -c 'failed' "$W/err.txt")" "1"
 
 head_ "resource caps"
-mkspec_sh "$W/wf-bomb.json" '["python3 -c \"x=bytearray(4*1024*1024*1024)\" > \"$OUT_DIR/r.json\""]'
+# Keep this probe small and force physical page allocation: a large zero-filled
+# bytearray can depend on allocator/overcommit behaviour and available swap.
+# Docker defaults to another memory limit's worth of swap, so 512 MiB of touched
+# anonymous pages exceeds both the 128 MiB RAM cap and its 128 MiB swap allowance.
+cp "$COMMONS_ROOT/registry/exec-policy.json" "$W/exec-policy.memory-backup.json" || exit 1
+python3 - "$COMMONS_ROOT/registry/exec-policy.json" <<'PYMEM'
+import json, sys
+path = sys.argv[1]
+policy = json.load(open(path))
+policy["limits"]["memory"] = "128m"
+json.dump(policy, open(path, "w"), indent=2, sort_keys=True)
+PYMEM
+[ "$?" -eq 0 ] || exit 1
+cat > "$W/body-bomb.py" <<'PY'
+import json, mmap, os
+
+size = 512 * 1024 * 1024
+pages = mmap.mmap(-1, size, flags=mmap.MAP_PRIVATE | mmap.MAP_ANONYMOUS)
+for offset in range(0, size, mmap.PAGESIZE):
+    pages[offset] = 1
+json.dump({"touched_bytes": size}, open(os.environ["OUT_DIR"] + "/r.json", "w"))
+PY
+mkspec_py "$W/wf-bomb.json" "$W/body-bomb.py"
 WFB=$(c publish workflow "$W/wf-bomb.json" "memory bomb" -t demo)
-check "memory bomb killed by cap" "$(rc c run "$WFB" --exec sandbox -o "$W")" "1"
+BOMB_RC=$(rc c run "$WFB" --exec sandbox -o "$W")
+cp "$W/exec-policy.memory-backup.json" "$COMMONS_ROOT/registry/exec-policy.json" || exit 1
+# A generic failure (syntax, missing output, timeout, etc.) must not pass this gate.
+check "memory bomb killed by cap" \
+  "$BOMB_RC:$(grep -cF 'failed (exit 137, sandbox mode)' "$W/err.txt")" "1:1"
 mkspec_sh "$W/wf-slow.json" '["sleep 30"]' '{"timeout": 3}'
 WFS=$(c publish workflow "$W/wf-slow.json" "slow" -t demo)
 check "timeout enforced outside container" "$(rc c run "$WFS" --exec sandbox -o "$W")" "1"

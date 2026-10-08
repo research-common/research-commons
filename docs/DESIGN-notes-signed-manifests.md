@@ -1,8 +1,14 @@
 # Design note: Signed manifest views
 
-**Date:** 2026-10-02, revised 2026-10-06 · **Status:** proposal for design review (revision 2)
+**Date:** 2026-10-02, revised 2026-10-07 · **Status:** phase 1 implemented on this branch; phases 2–3 proposed
 **Covers:** #41 part 2 and #10 · **Builds on:** #42 (`ManifestEditGate`, merged in 0.3.0-alpha.1 with #44 and #50), #39, #18, #57
 **Implementation:** separate PRs, sequenced in [§12](#12-migration-plan)
+
+**Implementation status:** this branch implements phase 1 readers and gates. Writers,
+backfill, event-derived annotations and hub enforcement remain phases 2–3. A valid
+standalone signature identifies its signer; deciding whether a replacement was
+authorised requires the held/base view. Full-tree inspection cannot reconstruct a
+lost delegation history from a replacement file alone.
 
 ## Summary
 
@@ -268,7 +274,9 @@ the publisher class, adding a set-valued path, or changing what counts as empty.
 Verifiers keep the v1 construction forever and pick the construction a statement names. Old
 digests therefore stay valid after the rules grow. A tool that meets a view version it doesn't
 know reports `unknown-view-version`. It never reports `altered`, so a newer manifest is never
-mislabelled as forged.
+mislabelled as forged. `verify` stops with exit 3 (`NOT-MACHINE-VERIFIABLE`) until the
+tool can check that metadata; unsupported metadata cannot drive workflow or comparator
+resolution or execution.
 
 ## 5. Signing formats
 
@@ -309,7 +317,8 @@ Why the statement lives in the manifest (brief Option B) rather than only in the
 - It follows the attestation pattern the codebase already has.
 
 Option B alone has a hole: strip the block and the manifest looks legacy. Binding the view
-into the ledger as well (§5.2) closes it, so the proposal uses both.
+into an authenticated ledger event by an authorised key (§5.2, §6) closes it, so the
+proposal uses both. A view event from an unrelated signer is not stripping evidence.
 
 ### 5.2 Ledger entries: a second signature
 
@@ -357,9 +366,17 @@ Readers apply these rules:
   fields say whatever the relayer left in them (#45 residual). Two defences, in order:
   1. **Per-signer v2 floor.** A signer's own hash-chained log is the record of what it writes.
      Once a log contains any v2 entry, readers treat every *later* v1-only line in that log as
-     stripped, and refuse it. Position in the chain is authenticated by `prev`, which the
-     signer's later `sig2` entries cover transitively. This needs no new field and is the
-     phase 1 fix.
+     stripped, and refuse it. Only a verified v2 event in the signer's own log
+     establishes that log's floor; foreign-log and invalid events cannot do so.
+     This needs no new field and is implemented in phase 1.
+
+     **Limit:** `prev` is excluded from both signatures. The floor enforces received
+     physical order; `sig2` does not authenticate that order transitively. Append-only
+     checks preserve a receiver's held prefix, but a receiver that never held the
+     original cannot detect a rewritten prefix, a stripped first v2 event, or a
+     completely downgraded log. #45 therefore remains open for that window. Closing
+     it needs independently authenticated upgrade evidence or explicit receiver
+     enforcement, rather than a claim that the current hash chain signs its order.
   2. **Hub enforcement flag.** Phase 3's `require_signed_views` also refuses v1-only events
      from any signer known to write v2, which closes the window for logs that have never
      reached the receiver.
@@ -411,9 +428,10 @@ the local copy otherwise):
 1. If the held manifest has a valid `publisher_sig`: its `addr`, plus every address in the
    held view's optional `authority` list, plus (for collections) the maintainers named in the
    spec.
-2. If the held manifest is legacy (no `publisher_sig`, and no v2 `publish`/`republish` with a
-   `view` for this id anywhere in the ledger): the **sole** verified signer of a `publish` (not
-   `republish`) event for the id, plus collection maintainers. This is #44's rule, kept as is.
+2. If the held manifest is legacy (no `publisher_sig`, and no authenticated v2
+   `publish`/`republish` with a `view` for this id by an eligible legacy key): the **sole**
+   verified signer of a `publish` (not `republish`) event for the id, plus collection
+   maintainers. This is #44's rule, kept as is.
    With two or more distinct signed publishers, the set is empty and the artifact is frozen
    until it is adopted (§6.2). This is the **adoption** case.
 
@@ -423,9 +441,23 @@ the local copy otherwise):
    not build edit authority on local first-publisher order. A signer can backdate its own
    checkpoint consistently, so an anchored tie-break would hand authority to whoever
    backdates best. Asserted `ts` is weaker still.
-3. Otherwise (the ledger has a v2 view event for this id, but the manifest carries no valid
-   statement): the manifest is `stripped`. Nobody has authority until a valid view is restored,
-   and the gates refuse it.
+3. If the manifest has no `publisher_sig`, but the ledger has an authenticated v2
+   `publish`/`republish` view event for this id by its **sole verified publish signer** or
+   (for a collection) a maintainer named in its spec: the manifest is `stripped`.
+   Nobody has authority until a valid view is restored, and the gates refuse it.
+   This remains fail-closed when an authorised signer's statement is removed.
+
+For a manifest without a statement, determine the eligible legacy keys from rule 2's
+publish-signature and collection-spec evidence **before** looking for stripping events.
+Apply the same signer filter in view-state readers and in the authority freeze check.
+An unrelated signer's authenticated v2 `republish` carrying a `view` cannot make another
+publisher's legacy artifact `stripped` or freeze that publisher's authority. It does not
+grant the unrelated signer authority either. The existing rule for multiple verified
+`publish` signers remains unchanged.
+Stripping checks also retain receiver-held evidence that an incoming history omits,
+including receiver events after a shared merge base. This extra evidence is used
+only for stripping classification; range authority, supersession and new-event
+binding keep their existing meaning.
 
 **One canonical view per id.** A second key that publishes the same bytes is recorded in the
 ledger as a publisher, so first-publisher ordering and derivation credit are unchanged. It
@@ -479,10 +511,10 @@ constraint that CI must work from signatures alone.
 ### 6.2 Adoption of legacy and unsigned-only artifacts
 
 The first view on a legacy manifest is an adoption. Under rule 2 it must be signed by the
-legacy sole publisher.
+legacy sole publisher or, for a collection, a maintainer named in its spec.
 
 - **`hub check --base`** accepts it with a `note: adopts legacy view of <id>` line for
-  maintainer review. It is the publisher's own key, so the same signature-only standard holds.
+  maintainer review. It is an eligible legacy key, so the same signature-only standard holds.
 - **`pull`** additionally applies trust policy.
 
 Phase 2 asks every publisher to backfill their own artifacts promptly (`commons manifest sign`,
@@ -637,17 +669,34 @@ A manifest is in exactly one **view state**:
 | `signed` | valid `publisher_sig`, signer in `A(id)` | `signed by 0x… (agent)` | OK | proceeds | accept, per §6 |
 | `signed-unauthorised` | valid signature, signer not in `A(id)` | `METADATA SIGNED BY 0x…, NOT THE PUBLISHER` | problem | FAIL (1) | refuse |
 | `altered` | digest mismatch or bad signature | `METADATA ALTERED — does not match 0x…'s signature`; the tier is shown struck through or marked `?` | problem | FAIL (1) | refuse |
-| `stripped` | no statement, but the ledger has a v2 view event for the id | `METADATA SIGNATURE REMOVED` | problem | FAIL (1) | refuse |
+| `stripped` | no statement, but an authenticated v2 view event for the id is signed by its sole verified publish signer or collection spec maintainer (§6) | `METADATA SIGNATURE REMOVED` | problem | FAIL (1) | refuse |
 | `superseded` | valid and authorised, but a later view event by `A(id)` exists in the ledger | `older view (newer: <ts>)` | warning | proceeds, with a note | refuse in a range (rollback) |
-| `legacy` | no statement and no v2 history | `UNSIGNED METADATA (legacy)` | counted, not a problem | proceeds, with a note | #42 rules (§13) |
-| `unknown-view-version` / `unnormalisable` | from a newer tool, or NaN | `cannot check metadata (…)` | warning | proceeds, with a note | refuse |
+| `legacy` | no statement and no authenticated v2 view event by an eligible legacy key (§6) | browse rows: `view=legacy`; detailed readers: `UNSIGNED METADATA (legacy)` | counted, not a problem | proceeds, with a note | #42 rules (§13) |
+| `unknown-view-version` / `unnormalisable` | from a newer tool, or NaN | `cannot check metadata (…)` | warning | stops on unchecked metadata (3), before workflow/comparator resolution or execution | refuse |
 
 **Checks that run everywhere.** The view state, attestation state (`none`, `valid`, `partial`,
 `unknown-signer`, `stale`, `invalid`), and derived links resolved from events.
 
+**Browse cost and presentation.** `list`, `search`, and `collection show` use compact
+`view=legacy` markers in rows; `show`, `status`, and `fsck --views` keep detailed metadata
+notes. A cheap prefilter skips the stripping-history scan when no candidate v2
+`publish`/`republish` event carries a `view` key. When candidates exist, reuse one verified
+ledger snapshot across rows and apply §6's signer filter. Candidate presence alone proves
+nothing. These shortcuts leave signature, unknown-version and unnormalisable-view checks
+in place, and authorised stripping remains a problem.
+
 **Why `verify` FAILs on `altered`.** The tier, criteria, params and recorded environment that
 `verify` reads come from the view. Re-running a workflow and comparing against a forged
 `provenance` would give a PASS that means nothing.
+
+**Unchecked metadata stops verification.** `unknown-view-version` and `unnormalisable`
+also cannot establish the tier, criteria, params or provenance used by `verify`.
+They stop verification with exit 3 and a clear unchecked-metadata diagnostic, without
+labelling an unsupported future format a forgery. The guard runs before resolving the
+artifact's workflow or comparator, and checks the workflow's own metadata before running
+its code. When T1 output needs comparison, the comparator's metadata is checked immediately
+before running its code; byte-identical output requires no comparator lookup. Altered and
+stripped views still FAIL with exit 1.
 
 **`hub check` (full tree).** Every manifest with a `publisher_sig` must be `signed`, and v2
 entries must verify `sig2`. With `--base`, modified and added manifests go through §6.
@@ -674,24 +723,30 @@ cross-checks run only where the blob is held, as they do today.
 
 | Item | Status |
 |---|---|
-| Authenticated replay rejection (G1), including equivalent signature encodings and unrelated histories | Done, #44 (tests 3b, 9). v2 complete-payload identity: **not done**, phase 1 (§5.2 "Status in 0.3.0"). |
+| Authenticated replay rejection (G1), including equivalent signature encodings and unrelated histories | Done, #44 (tests 3b, 9). This branch's phase 1 uses the complete v2 payload as identity. |
 | `republish` never grants authority; foreign `publish` reported or refused (G2) | Done, #44 (tests 3a, 3a1, 3a2). |
 | `pull` enforces append-only ledgers | Done, #44 (test 3c), including the legacy flat log. |
 | Legacy rebaseline gate: standing, trust, signed image digest | Done, #44 and #50 (test 7). `sig_v: 2` was replaced by `sig2` before release (#49). |
 | Repeated pull of the locally held manifest | Done, #44 (test 2). |
 | `sig2` on every event | Done, #50, pulled forward from phase 2. |
-| Lifecycle readers bind to signed fields | Done, #50 (#45 cases 1–3). Residual: stripped `sig2` on a never-held copy, #45, phase 1. |
+| Lifecycle readers bind to signed fields | Done, #50 (#45 cases 1–3). Phase 1 rejects known stripped copies regardless of received order, and v1-only entries after a verified v2 floor. Unseen-prefix/all-v1 downgrades remain possible because `prev` is unsigned (§5.2). |
 | `pull` applies `hub check`'s per-line ledger rules | Done, #50 (#48 items 1, 2). Item 3 (verification cost) is open. |
 | Authority freeze when a second key publishes | **Open**, #47. Not fixable by anchored order after #57. Routes: §6.2 adoption, or views. |
 
-**Phase 1: reader (tool 0.4.0).**
+**Phase 1: reader (planned tool 0.4.0; implemented on this branch).**
 
 - Implement `publisher_view`/`view_digest`, `publisher_sig` verification, attestation v2
   verification and the view states. (`sig2` verification exists since 0.3.0.)
 - Switch v2 entries to the complete-payload replay identity, and add the per-signer v2 floor
-  (§5.2), which closes the #45 residual.
+  (§5.2). This contains the #45 residual where the receiver has stronger evidence; it
+  does not authenticate an unseen prefix or an entirely downgraded history.
 - Show the view states in `status`/`list`/`show`/`verify`; add `fsck --views`.
-- The gates refuse `altered`, `signed-unauthorised` and `stripped`.
+- The gates refuse `altered`, `signed-unauthorised` and `stripped`, and require a
+  matching authorised v2 view event for adoption or a replacement. Unknown view
+  versions remain advisory on reads but cannot pass the ingest gates.
+- Supersession diagnostics compare received physical order within one signer's
+  history. An explicit republish can restore an earlier view. Separate delegate
+  logs establish no order between concurrent views.
 - **This phase writes nothing new.** Hubs and peers upgrade their readers before anyone
   produces the data.
 
@@ -828,7 +883,7 @@ These are separate PRs, in this order:
 
 1. **Phase 0**: done in #44 and #50 (table in §12). Still open from it: the #45 residual
    (phase 1), #47 (needs a decision; see §6.2 and §15), #48 item 3 (cost).
-2. **Phase 1:**
+2. **Phase 1: implemented on this branch, pending review and release.**
    - `publisher_view`, `view_digest`, view states, attestation v2 verification
    - v2 complete-payload replay identity and the per-signer v2 floor (§5.2)
    - `tests/test-manifest-view.sh` with **fixed test vectors**: a manifest, its view, its
