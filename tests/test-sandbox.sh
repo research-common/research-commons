@@ -321,5 +321,40 @@ check "exec-policy allowlist is readable" "$(python3 -c 'import json;print(len(j
 check "seeded default image is the in-repo reference build" \
   "$(python3 -c 'import json;print(json.load(open("'"$COMMONS_ROOT"'/registry/exec-policy.json"))["default_image"])')" "$IMAGE"
 
+head_ "staging paths are confined on the host, before and after the container"
+# Attachments, input names and outputs are joined on the HOST, outside the container.
+# A spec-controlled absolute or `..` name used to write (or read) anywhere the user
+# could; a symlinked output let a sandboxed step publish a host file's bytes.
+ESC="$W/escape-probe"; mkdir -p "$ESC"
+echo "host secret" > "$ESC/secret.txt"
+mkesc() {  # mkesc <out> <json-attachments> <steps-json> <outputs-json>
+  python3 - "$@" <<'PY'
+import json, sys
+out, att, steps, outs = sys.argv[1:]
+json.dump({"interpreter": "bash", "attachments": json.loads(att), "steps": json.loads(steps),
+           "outputs": json.loads(outs), "timeout": 60}, open(out, "w"), sort_keys=True)
+PY
+}
+mkesc "$W/esc-abs.json" "{\"$ESC/abs.txt\": \"x\"}" '["echo 1 > $OUT_DIR/r"]' '{"r": "r"}'
+mkesc "$W/esc-rel.json" '{"../escape-rel.txt": "x"}' '["echo 1 > $OUT_DIR/r"]' '{"r": "r"}'
+mkesc "$W/esc-out.json" '{}' '["echo 1 > $OUT_DIR/r"]' "{\"r\": \"$ESC/secret.txt\"}"
+mkesc "$W/esc-lnk.json" '{}' "[\"ln -s $ESC/secret.txt \$OUT_DIR/r\"]" '{"r": "r"}'
+mkesc "$W/esc-ok.json" '{"sub/step.sh": "echo 1 > $OUT_DIR/r"}' '["bash sub/step.sh"]' '{"r": "r"}'
+for v in abs rel out lnk ok; do
+  eval "WF_$v=\$(c publish workflow \"$W/esc-$v.json\" \"escape $v\" 2>/dev/null)"
+done
+check "🔒 absolute attachment name refused" "$(rc c run "$WF_abs" --exec sandbox)" "1"
+check "  naming the rule" "$(grep -c 'unsafe attachment name.*absolute' "$W/err.txt")" "1"
+check "🔒 nothing written at the absolute path" "$([ -e "$ESC/abs.txt" ] && echo LEAKED || echo yes)" "yes"
+check "🔒 '..' attachment name refused" "$(rc c run "$WF_rel" --exec sandbox)" "1"
+check "  naming the rule" "$(grep -c "unsafe attachment name.*'\.\.'" "$W/err.txt")" "1"
+check "🔒 nothing written above scratch" \
+  "$(find "${TMPDIR:-/tmp}" -maxdepth 1 -name escape-rel.txt 2>/dev/null | grep -c . )" "0"
+check "🔒 absolute output path refused (host file not read back)" "$(rc c run "$WF_out" --exec sandbox)" "1"
+check "🔒 symlinked output refused (host file not read back)" "$(rc c run "$WF_lnk" --exec sandbox)" "1"
+check "  naming the symlink" "$(grep -c 'symlink' "$W/err.txt")" "1"
+check "🔒 same refusals natively" "$(rc c run "$WF_abs" --exec native)$(rc c run "$WF_lnk" --exec native)" "11"
+check "a nested relative attachment still works" "$(rc c run "$WF_ok" --exec sandbox)" "0"
+
 printf '\n\033[1mtest-sandbox: %d passed, %d failed, %d skipped\033[0m\n' "$PASS" "$FAIL" "$SKIP"
 [ "$FAIL" -eq 0 ]

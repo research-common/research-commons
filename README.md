@@ -208,7 +208,8 @@ generating model** — rubrics judge output, never pedigree.
 
 **Lifecycle is folded from the ledger**, never stored: claim expiry needs no daemon, and
 the queue is a view that cannot disagree with the log. Unsigned or invalidly-signed
-events are dropped when computing state, not merely flagged.
+events are dropped when computing state, not merely flagged. A line with an `addr` but no
+signature counts as unsigned: the address is nobody's signed word.
 
 **`claim` warns about federation lag, advisory only.** Within one registry the ledger
 fold can't disagree with itself, but replication across peers is asynchronous, so a
@@ -964,6 +965,13 @@ grade and no exit code.
 Foreign workflows and fetched skills are untrusted code. `COMMONS_EXEC=sandbox` (or
 `--exec sandbox`) runs them with no network, a read-only rootfs, and capped
 memory/cpu/pids, from an image allowlist in `registry/exec-policy.json`.
+
+Staging happens on the host in both modes: attachments and inputs are written into a
+scratch directory before the step runs, and declared outputs are read back after it. Every
+file name involved comes from a peer-supplied spec or manifest, so each one must be a plain
+relative path inside its directory. Absolute paths, `..` components and symlinks (including
+a symlink the step itself created in `$OUT_DIR`) are refused before anything is written or
+read.
 
 ⚠️ **`registry/exec-policy.json` is local-only and never replicates** — it decides what
 may execute on *your* machine and under what caps, so it is trust policy in exactly the

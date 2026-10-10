@@ -20,6 +20,8 @@
 #           with a warning and a quarantine record (a bootstrap pull from a hub with
 #           legacy unsigned history needs them; #14 stays open)
 #   8. #48  `pull` from an unrelated history refuses tags only the incoming copy has
+#   9.      an unsigned lifecycle line never moves task state, even one that names the
+#           beneficiary and arrives through a real (non-dry-run) `pull` from a peer
 set -uo pipefail
 
 unset COMMONS_SIGNING_KEY COMMONS_ROOT COMMONS_AGENT COMMONS_EXEC COMMONS_REQUIRE_SIG
@@ -331,6 +333,38 @@ PY
 ( cd "$HL" && git remote add unrelated "$U" )
 check "pull refuses the incoming tag" "$(rc L pull unrelated --branch main --dry-run)" "1"
 check "  naming it" "$(both | grep -c "tag 'retracted' added with no authorised signed republish")" "1"
+
+# ---------------------------------------------------------------- 9. unsigned lifecycle lines
+head_ "9. an unsigned lifecycle line never settles a task, even via pull"
+ST0=$(L queue --all 2>/dev/null | grep "$TK1" | awk '{print $3}')
+check "task t1 starts unsettled" "$(case "$ST0" in accepted|rejected) echo no;; "") echo missing;; *) echo yes;; esac)" "yes"
+branch unsettle
+python3 - "$HC/registry/ledger/local-unsigned.jsonl" "$TK1" "$ADDR_L" <<'PY'
+import json, sys
+p, tid, ben = sys.argv[1:]
+# What a peer can write: the beneficiary's address, no signature. Every lifecycle
+# writer refuses to run without a key, so only a hand-made line looks like this.
+with open(p, "a") as f:
+    for act in ("accept", "reject"):
+        f.write(json.dumps({"action": act, "agent": "lead", "id": tid, "task": tid,
+                            "addr": ben, "ts": "2026-10-10T17:00:00Z"}, sort_keys=True) + "\n")
+PY
+cpush unsettle
+check "pull still ingests the unsigned lines (#14 is a separate gap)" "$(lpull unsettle)" "0"
+check "  and warns" "$(both | grep -c "incoming line(s) in an unsigned log")" "1"
+# The pull also carries the contributor's signed submit from earlier sections, so
+# open -> submitted is legitimate; what must never happen is a settlement.
+ST1=$(L queue --all 2>/dev/null | grep "$TK1" | awk '{print $3}')
+check "🔒 the forged accept/reject did not settle the task" \
+  "$(case "$ST1" in accepted|rejected) echo "settled:$ST1";; *) echo unsettled;; esac)" "unsettled"
+check "🔒 status shows no settlement" "$(L status "$TK1" 2>/dev/null | grep -c '^  settled')" "0"
+check "task_events holds only signed events" "$(py "$HL" "$TK1" <<'PY'
+import runpy, sys
+ns = runpy.run_path(sys.argv[1])
+print("ok" if all(e.get("sig") and e.get("addr") for e in ns["task_events"](sys.argv[2])) else "leak")
+PY
+)" "ok"
+lreset "$BASE"
 
 printf '\n\033[1mtest-ledger-binding: %d passed, %d failed\033[0m\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
