@@ -9,6 +9,13 @@ manifest/ledger format version — `commons --version` prints both).
 
 ## [Unreleased]
 
+### Deprecated
+- **The 0.3 alpha line is in maintenance: security fixes only.** The next format, proposed in
+  #69 (design note in #70), is a clean break with no importer or compatibility layer. Feature
+  PRs against this line won't be merged, and non-security bugs stay open with the
+  `next-format` label, as requirements for the new format. Hubs built on this version should
+  expect to be rebuilt and their data republished.
+
 ### Changed
 - **Anchor coverage is per signer, so every key must anchor its own log.** A checkpoint
   now bounds only the log of the key that signed its `anchor` event. A hub operator's
