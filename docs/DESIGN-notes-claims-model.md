@@ -227,7 +227,7 @@ derivers inherit:
 | the workflow declares | identical bytes | different bytes |
 |---|---|---|
 | `bytes` (deterministic) | a byte-identical re-derivation (T0); "derived by *k*" | `diverged`: an environment differs or the determinism claim is wrong; shown, not adjudicated |
-| `protocol` | consistent with a re-run and with a copy, and not evidence of either: shown as `identical bytes (protocol workflow)`; independence is §9.3's question | compared under the workflow's comparator: `match` or `diverged` (T1); "derived by 3: 2 match, 1 diverged" |
+| `protocol` | consistent with a re-run and with a copy, and not evidence of either: shown as `identical bytes (protocol workflow)`; independence is §9.3's question | compared under the workflow's declared comparator: `match` or `diverged` (T1); "derived by 3: 2 match, 1 diverged". No declared comparator: `unchecked`, never a default comparison |
 | undeclared | `unchecked` | `unchecked` |
 
 A non-deterministic process can honestly return identical bytes (a tight response contract leaves few degrees
@@ -272,9 +272,14 @@ Rules:
   and whatever changes the apparatus under the observer, such as a routing era), and the window (#65). A fork
   or a vanished API does not make an observation false. It is still true of what it pinned. What changes is
   whether the referent is still canonical or still available, and that is shown separately. It never counts
-  against the observer.
-- **One class per statement, one class per blob.** An `observed` statement asserts one class, and a blob
-  carries one. A capture that mixes classes (chain state beside an API read) is published as separate blobs.
+  against the observer. A statement whose referent lacks a field its class requires is still a valid signed
+  statement: it is admitted, its referent shows `unpinned`, no class-specific agreement model is applied, and
+  its corroboration status is `unchecked`.
+- **One class per statement, one class per blob.** An `observed` statement asserts one class; a statement
+  asserting more than one is malformed (§11). A blob carries one class as far as the observer can tell, so a
+  capture that mixes classes (chain state beside an API read) is published as separate blobs. Class is a
+  single-party field: two observers may assert different classes for the same bytes, both are listed with
+  their signers, and each statement is corroborated under the model its own class names.
 - **A source may have a declared finality rule.** Chain state at depth *d* is one instance; a settlement API
   that revises each period on a published timetable until a final run is another, on a slower clock. An
   `observed` statement in the exact-bytes or source class may carry `finality: {rule, rule_source,
@@ -442,7 +447,9 @@ immutable editions.
 - **Controller changes** are editions authorized under the *previous* edition's rule. Nobody elevates
   themselves.
 - **Forks are visible.** Two editions with the same predecessor are a fork, shown as one. No timestamp or file
-  order picks a winner; controllers resolve it with a merge edition.
+  order picks a winner; controllers resolve it with a merge edition, which names every branch tip as a
+  predecessor and is authorized under each predecessor's rule. The fork clears when every tip is an ancestor
+  of one edition.
 - **Outsiders fork.** A non-controller who wants a different collection creates a new resource, which may
   declare `forked-from`.
 - **Membership is endorsement.** Only the collection's editions add members. A member's own "part of" claim
@@ -450,8 +457,11 @@ immutable editions.
 - **Intended-for runs the rules before the bytes are pinned.** Some rules (forbidden keys in content) only
   prevent harm if they run before publication. An `authored` or `observed` statement may carry
   `intended_for: {resource, edition}`. The publisher's tool applies that edition's rules before pinning and
-  refuses to publish on `fail`; the statement records the edition applied and the outcome. The field confers
-  nothing (I7): it is the publisher's own policy, chosen by naming it (I9), plus a signed trace. A hub re-applies
+  refuses to publish on `fail`; the statement records the edition applied and the outcome, `ok` or
+  `unchecked`. A check that ran but could not finish (an archive member it cannot scan) is `unchecked`: the
+  statement is published with that outcome recorded, and no edition rule admits it on that basis (I4). A
+  check that cannot run at all, because the publisher does not hold the named edition, refuses and names the
+  fetch; a statement never records `ok` for a rule that did not run. The field confers nothing (I7): it is the publisher's own policy, chosen by naming it (I9), plus a signed trace. A hub re-applies
   the named edition from its base revision, and separately the current edition when it endorses; both results
   are the reader's computation, shown side by side.
 - **A lost controller key ends the resource.** With no key that the current edition's rule authorizes, no
@@ -466,7 +476,9 @@ immutable editions.
   "frozen_before 2025-06-01 (declared) · members final to 2025-04-01 (2 segments provisional)". A declared
   boundary later than the computed one is flagged; `unchecked` when members carry no rule. A series edition
   rule may require agreement, so a hub can refuse a premature freeze under its own policy. A controller can
-  still freeze a tail the source intends to revise; it cannot do so invisibly.
+  still freeze a tail the source intends to revise; it cannot do so invisibly. An edition that replaces a
+  segment dated before its predecessor's `frozen_before` is shown as `REVISED-FROZEN`; the earlier edition and
+  its segment remain resolvable (I3).
 
 ## 9. Research exchange
 
@@ -546,8 +558,9 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
   type (#14, #24). Generating a key is part of first-run setup.
 - **One validation core.** `pull`, hub CI, `push` and the pre-pin check at `publish` (§8) call one validation
   function. They differ only in what history they hold and whose policy applies (I12).
-- **Refusal classes (I8).** *Intrinsic:* hash mismatch, bad signature, malformed statement, a line in another
-  key's log, rewritten history, unsafe paths, anything outside the data surface. *Reader policy:* trust floors,
+- **Refusal classes (I8).** *Intrinsic:* hash mismatch, bad signature, malformed statement (including one
+  asserting more than one observation class), a line in another key's log, rewritten history, unsafe paths,
+  anything outside the data surface. *Reader policy:* trust floors,
   executable admission, hub rules. *Operational:* size and resource limits. Everything else is admitted and
   labelled.
 - **Data never carries control.** Incoming trees cannot carry code, hooks, configuration, trust lists or policy.
@@ -585,18 +598,20 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
 
 - **Closed vocabulary.** One documented table of state tokens (`contested`, `unknown`, `unchecked`,
   `corroborated n`, `contradicted m`, `SUPERSEDED`, `FORK`, `retracted`, …), each with one meaning on every
-  surface. Every rule evaluation (edition rules, departure checks, pre-pin checks) is one of `ok`, `fail`,
-  `unchecked`.
+  surface, including `unpinned`, `REVISED-FROZEN` and `timeout`. Every rule evaluation (edition rules,
+  departure checks, pre-pin checks) is one of `ok`, `fail`, `unchecked`.
 - **Retraction is display.** A `retracts` statement is shown wherever the artifact is; it does not stop
   anyone serving the bytes. Superseded snapshots are often the evidence for their own erratum. A hub that
   must stop serving something does so under its own admission policy (I9).
-- **Exit codes.** `verify`: 0 checked and passed · 1 checked and wrong · 3 could not check (including contested
-  and unknown) · 4 nothing to re-run · 5 environment mismatch. Exit 0 means the requested operation succeeded,
+- **Exit codes.** `verify`: 0 checked and passed · 1 checked and wrong · 3 could not check (contested, unknown,
+  unchecked, unpinned, unsupported) · 4 nothing to re-run · 5 environment mismatch, including a sandbox
+  timeout, which is an operational limit (I8) and is reported as `timeout` with the resources used. Exit 0 means the requested operation succeeded,
   not that everything it referenced is valid.
 - **Explain.** Every status can be expanded to the statements, policy and checks behind it (I14).
 - **Dry runs** state their side effects: "no registry change" differs from "no fetch, no cache, no quarantine".
 - **Errors** say what failed, what is still known, whether anything was committed, and the narrowest next
-  step, never a blanket `--force`.
+  step, never a blanket `--force`. Error output and logs never include key material or secrets, and render
+  peer-supplied text inert.
 
 ## 14. Relationship to the alpha
 
