@@ -17,9 +17,11 @@ layer, no importer, no migration phases.
   that key's own log. No key can overwrite or freeze another key's statements. There is no shared mutable
   manifest. Each reader computes its own view.
 - **Observations and constructions answer different questions.** For a constructed artifact (a workflow, a
-  synthesis, a derived table), the author is claiming to have made it first, and verified publication time
-  settles rival claims. For an observation, the question is whether it reflects the world. That is answered by
-  corroboration and capture evidence, which accumulate and can change in either direction.
+  synthesis, a report), the author is claiming to have made it first, and verified publication time settles
+  rival claims. For a derived artifact with pinned provenance, the derivation is the claim: everyone who ran
+  the same workflow on the same inputs is a deriver, and nobody is first. For an observation, the question is
+  whether it reflects the world. That is answered by corroboration and capture evidence, which accumulate and
+  can change in either direction.
 - **Grades and disclosures are separate.** T0–T2 rank how a result was derived. Licence, availability,
   sampling, shelf life, capture evidence, corroboration status and curation are disclosed *beside* the grade.
   None of them moves it.
@@ -167,7 +169,7 @@ body are one statement. Canonical encoding, field names and test vectors belong 
 | `observed` | the observer | "I captured these bytes." Carries the referent, capture record, capture evidence and the observation class the observer asserts (§5.3), plus the same single-party fields. |
 | `holds` | anyone | "I have these bytes and serve them." Mirroring, with no authorship and no agreement. |
 | `describes` | anyone | Open annotations: tags, notes, non-evidential links. Shown as the signer's, ranked by the reader's trust. |
-| `reproduced` | anyone | "I re-ran this": match / diverged / not comparable, with environment record, including a successor workflow that reproduces the same outputs (#22). |
+| `reproduced` | anyone | "I re-ran this": match / diverged / not comparable, with environment record, including a successor workflow that reproduces the same outputs (#22). Emitted by `run --publish` in place of `authored` when the runner already holds a same-provenance `authored` for the bytes (§5.2). |
 | `corroborates` | anyone | Points at a corroboration result (§5.3.2): supports / contradicts / inconclusive under a named agreement model. |
 | `refutes` | anyone | "This premise or result is wrong", with the evidence artifact. |
 | `retracts` | the author | A recall request for the author's own artifact. |
@@ -188,7 +190,7 @@ Artifacts fall into two categories that answer different questions.
 | Examples | workflows, skills, syntheses, reports, derived datasets | sensor readings, chain state, API captures, benchmark runs, field measurements |
 | The author claims | "I made this, first" | "I saw this, and it reflects the world" |
 | Settled by | verified publication time | corroboration and capture evidence, accumulating over time |
-| Identical bytes from a second key | a later claimant (or a copy) | usually a copy; in the exact-bytes class, a possible corroboration (§5.3.1) |
+| Identical bytes from a second key | a later claimant (or a copy); with the same provenance, a member of the same derivation group (§5.2) | usually a copy; in the exact-bytes class, a possible corroboration (§5.3.1) |
 
 ### 5.1 Single-party fields
 
@@ -212,6 +214,28 @@ evidence locally (#59), every multi-author construction is honestly `contested`.
 
 Priority is credit for publishing first. It is not evidence that the earlier author worked independently, or
 that a later one copied. Independence is a separate question with its own evidence (§9.3).
+
+**Derivation groups.** The rules above apply to constructions *without* provenance, where "I made this" is
+the claim. A derived artifact with pinned provenance claims something else: "this workflow on these inputs
+produced this", which anyone can check by re-running, so time evidence is the wrong adjudicator. `authored`
+statements that carry the same provenance (workflow hash and input hashes) form one **derivation group**,
+whatever their output bytes. Priority is never computed within a group. The display is "derived by *k* under
+wf-…", each deriver listed, with independent re-runs distinguished from `holds`. Bytes are evidence *within*
+the group, read against the `replication` mode the workflow's own `authored` statement declares (§7), which
+derivers inherit:
+
+| the workflow declares | identical bytes | different bytes |
+|---|---|---|
+| `bytes` (deterministic) | a byte-identical re-derivation (T0); "derived by *k*" | `diverged`: an environment differs or the determinism claim is wrong; shown, not adjudicated |
+| `protocol` | consistent with a re-run and with a copy, and not evidence of either: shown as `identical bytes (protocol workflow)`; independence is §9.3's question | compared under the workflow's comparator: `match` or `diverged` (T1); "derived by 3: 2 match, 1 diverged" |
+| undeclared | `unchecked` | `unchecked` |
+
+A non-deterministic process can honestly return identical bytes (a tight response contract leaves few degrees
+of freedom), so identical output under `protocol` is neither a reproduction nor a red flag. Single-party fields
+default by agreement within the group; a field whose values differ is `contested` on that field only. The same
+bytes under *different* provenance are two claims and stay under the rules above; byte equality across
+workflows is a `reproduced: match` (#22). `run --publish` emits `reproduced` instead of a second `authored`
+when the runner already holds a same-provenance `authored` for the bytes.
 
 ### 5.3 Observations
 
@@ -243,9 +267,37 @@ Rules:
   belief. Whether it holds is computed from other observations and from the reader's own re-checks.
 - **The observation pins its referent.** For chain data that means chain id, block hash (not height) and
   confirmation depth at capture. For APIs: endpoint, parameters and response hash. For instruments: instrument
-  identity, location and time. A fork or a vanished API does not make an observation false. It is still true of
-  what it pinned. What changes is whether the referent is still canonical or still available, and that is
-  shown separately. It never counts against the observer.
+  identity, location and time. For methods: the method edition followed, the execution environment record
+  (image digest, platform, harness commit), the measured system's identity and state (model and provider pin,
+  and whatever changes the apparatus under the observer, such as a routing era), and the window (#65). A fork
+  or a vanished API does not make an observation false. It is still true of what it pinned. What changes is
+  whether the referent is still canonical or still available, and that is shown separately. It never counts
+  against the observer.
+- **One class per statement, one class per blob.** An `observed` statement asserts one class, and a blob
+  carries one. A capture that mixes classes (chain state beside an API read) is published as separate blobs.
+- **A source may have a declared finality rule.** Chain state at depth *d* is one instance; a settlement API
+  that revises each period on a published timetable until a final run is another, on a slower clock. An
+  `observed` statement in the exact-bytes or source class may carry `finality: {rule, rule_source,
+  state_at_capture}`: the rule (`confirmations ≥ 6`, `epoch finalized`, `settlement run ≥ RF`), where the rule
+  comes from, and the state the capture saw (the depth, or the run label from the response, or the capture
+  time against the timetable when the response lacks a label). The rule is a claim about the *source's
+  policy*, so `rule_source` is a citation, at best a hash-pinned capture of the policy document, which is
+  itself an ordinary source-class observation that others can corroborate. Rule provenance is shown as one
+  of `cited (document held)` · `cited (location only, unverified)` · `observer's convention` (a norm no
+  source publishes). A reader resolves rule sources against a source-profile collection it chooses (§6).
+  What the rule buys:
+  - *Referent status by rule.* `provisional (SF; final at RF)` while unmet, `final` once met, `revised` when
+    the bytes changed before finality, `not canonical` when they changed after it (a deep reorg, a dispute
+    run). The earlier observation stays true of what it pinned in every case.
+  - *Expected revision is not contradiction.* A finality-aware agreement model (§5.3.2) returns
+    `inconclusive (referent revised)` for two captures at different states before finality, and `contradicts`
+    only when both are at the same state or past it.
+  - *Class migration by rule.* While the rule is unmet, agreement is source-class (near-equality around the
+    same time). Once it holds, a re-capture of the same referent with identical bytes is an exact-bytes
+    corroboration. The observer still asserts the class; the rule is what lets a reader apply the stronger
+    agreement model.
+  - *Derived results inherit the horizon*, shown beside the grade: "rests on 3 captures: 2 final, 1
+    provisional until RF" (§7).
 - **Identical bytes mean different things per class.** For most classes, a second key publishing the same bytes
   is a copy. Only in the exact-bytes class is re-reading the same source a corroboration, and it still needs
   its own `observed` statement with its own capture record.
@@ -346,10 +398,29 @@ the source.
 | capture evidence | §5.3.3 level, verified or not |
 | corroboration | §5.3.2 status, scoped |
 | selection | curated · rule-based · completeness claim (§6) |
-| referent status | still canonical / source still available / unknown |
+| referent status | still canonical · `provisional` · `final` · `revised` · `not canonical` · source still available / unknown (§5.3.1) |
+
+| pre-registration | `pre-registered <task edition> (<bound quality>)` · `exploratory` · undeclared (#3). Missing means undeclared, not exploratory. |
+| finality | §5.3.1 rule and rule provenance; state at capture |
 
 `run --publish` accepts every disclosure that `publish` does (#21). Defaults for licences are documentation only;
 the tool never assumes one silently.
+
+**Declared beside computed.** Where a declaration can be checked against the statements a reader holds, the
+tool shows both and flags disagreement; it never substitutes one for the other. A synthesis author's declared
+sampling n beside the n computed from its inputs (with denominators); a contract's declared n beside the
+delivered sampling disclosure (§9.4); a series' declared `frozen_before` beside its members' finality (§8); an
+asserted finality state beside a re-check. A derived result carries each disclosure as a scoped summary
+("rests on 3 observations: 2 final, 1 provisional; 1 contradicted within statements you hold"), computed as
+the weakest replication, the shortest shelf life, the per-input n, and the count of final captures, with
+`explain` (§13) for the detail.
+
+**Availability can be withheld.** An `authored` or `observed` statement may be published and anchored with
+no `holds`: `availability: withheld until <condition>`, where the condition is prose or a task or edition
+reference. The reveal is a later `holds`; the bytes match by construction (I1) or the reveal fails. This is
+how a held-out test pool or a season seed is committed now and revealed later. Two cautions belong beside it:
+a commitment proves possession by T, not independence (§9.3), and a commitment to low-entropy content (a
+seed, a one-line rule) is enumerable against its hash, so such content must include a nonce.
 
 ## 8. Resources: collections, tasks, series
 
@@ -360,6 +431,14 @@ immutable editions.
   k of n). Its id is the hash of the genesis statement.
 - **Editions.** Each edition is a signed statement by a controller that references its predecessor by hash. It
   carries the full contents: members with roles, member schema (#5), ingest rules, task contract.
+- **Rules read statements.** An edition's ingest rules are predicates over a candidate member's signed
+  statement (its disclosures: sampling, replication, method edition, pre-registration, finality) and its
+  content (forbidden keys, member schema). Every evaluation is `ok`, `fail` or `unchecked`, and `unchecked`
+  never passes (I4). A failing rule rejects the membership, never the artifact: the artifact's own statements
+  are untouched. The rule language is a profile (§15); the core fixes only what a rule may read and the
+  three outcomes. Examples: "at least 24 h of coverage inside the window, the whole window in one routing
+  era, at most one endorsed member per instrument per era"; "same scenario edition, harness commit in range,
+  n ≥ 30 per arm, replication = protocol".
 - **Controller changes** are editions authorized under the *previous* edition's rule. Nobody elevates
   themselves.
 - **Forks are visible.** Two editions with the same predecessor are a fork, shown as one. No timestamp or file
@@ -368,11 +447,26 @@ immutable editions.
   declare `forked-from`.
 - **Membership is endorsement.** Only the collection's editions add members. A member's own "part of" claim
   confers nothing, and a laxer collection's rules never apply to members of a stricter one.
+- **Intended-for runs the rules before the bytes are pinned.** Some rules (forbidden keys in content) only
+  prevent harm if they run before publication. An `authored` or `observed` statement may carry
+  `intended_for: {resource, edition}`. The publisher's tool applies that edition's rules before pinning and
+  refuses to publish on `fail`; the statement records the edition applied and the outcome. The field confers
+  nothing (I7): it is the publisher's own policy, chosen by naming it (I9), plus a signed trace. A hub re-applies
+  the named edition from its base revision, and separately the current edition when it endorses; both results
+  are the reader's computation, shown side by side.
+- **A lost controller key ends the resource.** With no key that the current edition's rule authorizes, no
+  further edition exists. A successor resource declares `forked-from`. Delegation (scoped, revocable) and
+  "key B succeeds key A" mappings are reader projections, not core.
 - **Bindings are to editions.** Claims and submissions bind to the task edition they accepted. A later edition
   never changes the terms retroactively. Endorsing a task in a collection doesn't change either one's id
   (#54).
 - **Growing series** (#8) are resources whose editions append segments, with an explicit `frozen_before`
-  boundary when recent data is still being revised.
+  boundary when recent data is still being revised. The boundary is the controller's declaration. Where
+  segments carry finality rules (§5.3.1), a reader computes the members' finality boundary and shows both:
+  "frozen_before 2025-06-01 (declared) · members final to 2025-04-01 (2 segments provisional)". A declared
+  boundary later than the computed one is flagged; `unchecked` when members carry no rule. A series edition
+  rule may require agreement, so a hub can refuse a premature freeze under its own policy. A controller can
+  still freeze a tail the source intends to revise; it cannot do so invisibly.
 
 ## 9. Research exchange
 
@@ -417,7 +511,12 @@ divergence stays visible as its own report.
 Refutations and failed reproductions are first-class submissions, credited on their own track. A
 **pre-registration** (#3) is a task authored by its own beneficiary, published with its design and validity
 rule before the data. Results that fulfil it display "pre-registered" with the bound at verified quality. A
-pre-registration proves the plan existed by time T, not that the author hadn't seen the data.
+pre-registration proves the plan existed by time T, not that the author hadn't seen the data. An `observed`
+statement can carry `fulfills` to a task edition, so a pre-registered observation campaign is in scope, not
+only derived results. The opposite case is declared, not inferred: `exploratory` is a disclosure value (§7). A
+**departure check** compares the delivered `sampling` disclosure with the contract's declared n and reports
+`conforms`, `departed`, `unchecked` (no structured count) or `not comparable` (unit mismatch). It never moves
+the grade (I6).
 
 ### 9.5 Credit
 
@@ -445,8 +544,8 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
 
 - **Only signed statements enter a hub.** Unsigned work is a local draft that cannot be pushed, whatever its
   type (#14, #24). Generating a key is part of first-run setup.
-- **One validation core.** `pull`, hub CI and `push` call one validation function. They differ only in what
-  history they hold and whose policy applies (I12).
+- **One validation core.** `pull`, hub CI, `push` and the pre-pin check at `publish` (§8) call one validation
+  function. They differ only in what history they hold and whose policy applies (I12).
 - **Refusal classes (I8).** *Intrinsic:* hash mismatch, bad signature, malformed statement, a line in another
   key's log, rewritten history, unsafe paths, anything outside the data surface. *Reader policy:* trust floors,
   executable admission, hub rules. *Operational:* size and resource limits. Everything else is admitted and
@@ -457,6 +556,10 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
   runs sandboxed.
 - **Byte-exact transport.** Fetch is binary-safe and verifies the full hash before installing anything (#64).
   A download location is a hint, not authenticated content.
+- **Bytes may live elsewhere.** A `holds` statement may name an external location (an object store, a
+  content-addressed network, a plain URL). Because fetch verifies the full hash whatever the source, an
+  external hold is as good as a local one once fetched, and the holder's word about availability before
+  that. A hub that carries statements and external holds, and no blobs, is a first-class configuration.
 - **Package scope.** Refusing a package states its scope and leaves already-held statements valid; retrying
   individual objects remains possible.
 
@@ -482,7 +585,11 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
 
 - **Closed vocabulary.** One documented table of state tokens (`contested`, `unknown`, `unchecked`,
   `corroborated n`, `contradicted m`, `SUPERSEDED`, `FORK`, `retracted`, …), each with one meaning on every
-  surface.
+  surface. Every rule evaluation (edition rules, departure checks, pre-pin checks) is one of `ok`, `fail`,
+  `unchecked`.
+- **Retraction is display.** A `retracts` statement is shown wherever the artifact is; it does not stop
+  anyone serving the bytes. Superseded snapshots are often the evidence for their own erratum. A hub that
+  must stop serving something does so under its own admission policy (I9).
 - **Exit codes.** `verify`: 0 checked and passed · 1 checked and wrong · 3 could not check (including contested
   and unknown) · 4 nothing to re-run · 5 environment mismatch. Exit 0 means the requested operation succeeded,
   not that everything it referenced is valid.
@@ -517,24 +624,27 @@ What the clean break removes, and the alpha issues it closes by construction:
 
 Each of these needs its own note: wire format (canonical encoding, field names, signature scheme, test vectors);
 storage engine and transaction design; execution profiles (runtimes, confinement mechanism, limits); statistical
-comparison dialects; attestation verifiers (receipts, TEEs); receiver-local Bitcoin verification (#59); size
-policy (#9); hub discovery conventions (#66).
+comparison dialects; rule and schema dialects (what edition rules and member schemas may express, §8);
+attestation verifiers (receipts, TEEs); receiver-local Bitcoin verification (#59); size policy (#9); hub
+conventions (discovery #66; the hub-template and `COMMONS.md` rubric, which still use alpha vocabulary).
 
-## 16. Open questions
+## 16. Decisions on the questions this note first left open
 
-1. **Resource authority depth.** Is "controllers + k-of-n + editions" enough for the core, or do delegation
-   (scoped, revocable) and recovery from lost controller keys belong in it too?
-2. **Pinning.** Should programmatic consumers be *required* to pin a specific `authored` statement when a
-   construction is contested, or is a non-passing `contested` result enough?
-3. **Observation classes.** Are the five rows in §5.3.1 the right granularity? Is "the source" (weak consensus)
-   usefully distinct from "the phenomenon" in practice?
-4. **Corroboration status in derived results.** A result built on contradicted observations shows that status
-   beside its grade. Should the status propagate along the chain the way availability does, and at what level
-   of detail?
-5. **Retraction.** Should readers honour an author's retraction by default (stop serving the bytes), or only
-   display it?
-6. **Invariant ordering.** Is integrity > honesty > fairness > sovereignty/time > legibility the right priority
-   when guarantees collide, given §3.1's rule that the loser is always visible?
+The first revision of this note asked six questions. Review against three hubs in production or standing up
+answered each the way the note leaned, and they are now decided:
+
+1. **Resource authority depth.** Controllers, k-of-n and editions are the core. A lost controller key ends the
+   resource and a successor declares `forked-from` (§8). Delegation and key succession are reader projections.
+2. **Pinning.** Not required. A non-passing `contested` with exit 3 is enough; a consumer that needs stability
+   pins a statement hash. Derivation groups (§5.2) keep the common case, re-derived data, out of `contested`.
+3. **Observation classes.** The five rows stand. Source and phenomenon are distinct in practice: a settlement
+   API is a source; a wind farm's output is a phenomenon seen by that API and by the operator's own
+   instruments. One class per statement and per blob (§5.3.1).
+4. **Propagation.** Status propagates as a scoped summary beside the grade, with `explain` for detail, and
+   declared values are shown beside computed ones (§7).
+5. **Retraction.** Display only (§13).
+6. **Invariant ordering.** Stands. Integrity over honesty keeps a valid signature valid on bytes nobody
+   should have shared; honesty over sovereignty means a reader cannot configure disclosures away (I6).
 
 ## Appendix: worked examples
 
@@ -547,6 +657,16 @@ statement, and a reproduction by B counts as a reproduction, not as authorship.
 H. The observation remains true of H and its referent status becomes `not canonical`. Results derived from it
 show that status beside their grade. Other observers re-reading H from archival nodes can still corroborate the
 bytes.
+
+**An API with a revision schedule.** An observer captures a settlement period while the source still marks
+it provisional, and declares the source's finality rule with a pinned copy of the published timetable. The
+source revises the period twice on schedule; each later capture is a new `observed` statement, and a
+finality-aware agreement model reads the differences as `inconclusive (referent revised)`, not as
+contradiction. After the final run, a second observer re-captures the closed period and gets identical bytes.
+The first observation's referent status reads `revised`; the re-capture is an observation made outside any
+sandbox; the byte comparison between them is a sandboxed `corroborates` derivation. Network access lives in
+`observed`, determinism in `corroborates`. A series of monthly segments built from these captures declares
+`frozen_before`, and readers see it beside the boundary the members' rules compute.
 
 **An API that disappears.** Two observers captured the same endpoint within minutes and their responses
 corroborate each other. The API shuts down. Future corroboration becomes impossible (`source unavailable`), but
