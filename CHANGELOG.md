@@ -9,6 +9,10 @@ manifest/ledger format version — `commons --version` prints both).
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.4.0-alpha.1] - 2026-10-12
+
 ### Deprecated
 - **The 0.3 alpha line is in maintenance: security fixes only.** The next format, proposed in
   #69 (design note in #70), is a clean break with no importer or compatibility layer. Feature
@@ -91,6 +95,20 @@ manifest/ledger format version — `commons --version` prints both).
   intermediate version needs a `--force` republish to drop its stale manifest link, or `hub check`
   keeps failing. README §"Migrating a collection superseded before #39" gives the steps, and
   `tests/test-spec-supersedes.sh` covers them.
+
+### Known issues (open at this tag)
+
+This line is in maintenance (security fixes only; see Deprecated). Non-security findings are
+tracked as requirements for the next format under the `next-format` label and in #74.
+
+- **#14**: `pull` accepts new lines in a peer's unsigned logs (warns and records them in
+  `quarantine.log`).
+- **#41 / #45 residual / #48**: manifest edits on held artifacts, relayed lifecycle lines keyed on
+  unsigned fields, and `pull` lacking three of `hub check --base`'s ledger checks. All three are
+  closed by construction in the next format (#69 §4, §9.2, §11).
+- **#10**: `verification.params` is outside the T3 signed statement.
+- **#59**: Bitcoin-quality anchor evidence is disabled until receiver-local verification exists;
+  all bounds are local.
 
 ## [0.3.0-alpha.1] - 2026-10-04
 
@@ -374,6 +392,7 @@ contributions, landed on top of that baseline.
 - **#12** — COMMONS.md review request from an external hub: the first outside use of the
   template and rubric.
 
-[Unreleased]: https://github.com/research-common/research-commons/compare/v0.3.0-alpha.1...HEAD
+[Unreleased]: https://github.com/research-common/research-commons/compare/v0.4.0-alpha.1...HEAD
+[0.4.0-alpha.1]: https://github.com/research-common/research-commons/compare/v0.3.0-alpha.1...v0.4.0-alpha.1
 [0.3.0-alpha.1]: https://github.com/research-common/research-commons/compare/v0.2.0-alpha.1...v0.3.0-alpha.1
 [0.2.0-alpha.1]: https://github.com/research-common/research-commons/releases/tag/v0.2.0-alpha.1
