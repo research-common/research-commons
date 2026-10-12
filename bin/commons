@@ -3626,10 +3626,11 @@ def cmd_attest(a):
     print("  criteria: %s" % criteria)
 
 
-def check_attestation(m):
+def check_attestation(m, peers=None):
     """Verify a T3 attestation. Returns (state, detail).
 
     states: none | valid | invalid | unknown-signer | stale
+    `peers` defaults to this host's registry (pull passes the one it loaded).
     """
     v = m.get("verification") or {}
     att = v.get("attested_by")
@@ -3653,7 +3654,7 @@ def check_attestation(m):
         return "invalid", "could not run the verifier"
     if not res.get("valid"):
         return "invalid", "signature does not recover %s" % att.get("addr")
-    peer = find_peer(att["addr"])
+    peer = find_peer(att["addr"], peers)
     if peer is None:
         return "unknown-signer", "valid signature from unregistered %s" % att["addr"]
     okw, why = key_valid_at(peer, stmt.get("observed"))
@@ -6744,9 +6745,12 @@ def quarantine(reason, detail):
 
 
 def incoming_publishers(ledger_root):
-    """artifact id -> {addrs that signed a publish entry for it} from incoming logs.
+    """(artifact id, content sha256) -> {addrs that signed a publish entry for it}.
 
     Only signatures that actually verify count; a forged addr field proves nothing.
+    Keyed on the full content hash as well as the id: ids carry only 32 bits of the
+    hash, so a publish of `wf-x` with one digest must not attribute different bytes
+    that happen to share the id prefix.
     """
     out = {}
     if not os.path.isdir(ledger_root): return out
@@ -6758,9 +6762,10 @@ def incoming_publishers(ledger_root):
             except ValueError: continue
             if e.get("action") not in ("publish", "republish"): continue
             addr, sig, aid = e.get("addr"), e.get("sig"), e.get("id")
-            if not (addr and sig and aid): continue
+            digest = e.get("sha256")
+            if not (addr and sig and aid and isinstance(digest, str)): continue
             ok, _ = verify_entry(e, sig, addr)
-            if ok: out.setdefault(aid, set()).add(addr)
+            if ok: out.setdefault((aid, digest), set()).add(addr)
     return out
 
 
@@ -6810,11 +6815,23 @@ def validate_incoming(m, blob_dir, peers, require_sig, min_trust_ok,
                    % (aid, local["content"]["sha256"][:12], digest[:12]))
 
     # --- identity + trust ---
+    # Attribution comes only from signatures that verify: a verified signed publish of
+    # these exact bytes, or an attestation whose signature recovers its claimed address.
+    # A populated `addr` field is not a signature (#72).
+    publishers = publisher_addrs.get((aid, digest), set())
     att = (m.get("verification") or {}).get("attested_by") or {}
-    signer = att.get("addr")
-    if require_sig and not signer:
-        bad.append("unsigned artifact and COMMONS_REQUIRE_SIG=1")
+    signer = att.get("addr") if isinstance(att, dict) else None
+    attested = False
     if signer:
+        state, detail = check_attestation(m, peers)
+        if state in ("valid", "unknown-signer"):
+            attested = True
+        else:
+            bad.append("attestation by %s is %s: %s" % (signer, state, detail))
+    if require_sig and not (attested or publishers):
+        bad.append("unsigned artifact and COMMONS_REQUIRE_SIG=1 (no verified signed "
+                   "publish of these bytes and no valid attestation)")
+    if signer and attested:
         peer = find_peer(signer, peers)
         if peer is None:
             bad.append("attester %s not in peer registry" % signer)
@@ -6822,13 +6839,21 @@ def validate_incoming(m, blob_dir, peers, require_sig, min_trust_ok,
             bad.append("peer %s trust=%s insufficient for type %s"
                        % (signer, peer.get("trust"), m.get("type")))
 
+    # A peer this host registered with trust=none is refused for every type, not only
+    # as an attester. Publishers this host has never registered are unchanged (open
+    # federation); explicit distrust is the receiver's stated policy (#72).
+    if publishers and m.get("type") not in METHOD_TYPES:
+        registered = [find_peer(p, peers) for p in publishers]
+        if all(r is not None and r.get("trust", "none") == "none" for r in registered):
+            bad.append("published only by %s, registered here with trust=none"
+                       % ", ".join(sorted(publishers)))
+
     # Executable artifacts are gated on the PUBLISHER's trust, not the attester's.
     # Methods carry no tier and usually no attestation, so keying this off the
     # attestation would let any unsigned workflow sail past a datasets-only peer —
     # the cheapest possible bypass of the entire policy. Attribution comes from the
-    # signed ledger entry that published it.
+    # signed ledger entry that published these exact bytes.
     if m.get("type") in METHOD_TYPES:
-        publishers = publisher_addrs.get(aid, set())
         if not publishers:
             bad.append("executable %s has no signed publish entry — cannot attribute "
                        "incoming code to a peer" % m.get("type"))

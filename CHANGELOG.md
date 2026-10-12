@@ -46,6 +46,15 @@ manifest/ledger format version — `commons --version` prints both).
   unsigned logs (#14), a peer could settle or reject another key's task. Unsigned lifecycle
   events are now dropped. Every lifecycle writer already required a key, so no line this
   tool wrote is affected.
+- **Security: incoming attribution now requires a signature that verifies (#72).**
+  `pull` treated a populated `verification.attested_by.addr` as an attester without
+  checking its signature, so a forged attestation naming a trusted peer was ingested
+  (`verify` later caught it, `status` displayed it as attested). Attestations are now
+  verified at ingest. `COMMONS_REQUIRE_SIG=1` checked only for that field, so it refused
+  properly signed T0 datasets and admitted forged ones; it now accepts a verified signed
+  publish of the exact bytes or a valid attestation. A peer registered with `trust=none`
+  is refused for every artifact type, not only as an attester. Publisher attribution for
+  executables is matched on the full content hash, not the 8-character id.
 - **Untrusted anchor JSON no longer grants Bitcoin-quality priority.** A fabricated
   `confirmed` checkpoint could seize first-publisher credit and report a discrepancy
   against the honest publisher, without a proof. Read-side bounds now require a

@@ -121,7 +121,8 @@ $COMMONS publish synthesis out.json "Floats" --tier T1 --criteria sk-e0f1d443 --
 A T3 publisher may initially record only self-reported criteria; `commons attest` names
 the signer and binds `{id, sha256, criteria, observed}` to that address. On ingest an
 attester, if present, must be a registered peer with non-`none` trust (`datasets-only` or `full` for
-non-method artifacts). The signature proves who signed that statement, not that the
+non-method artifacts), and the attestation's signature must verify: an `attested_by` whose signature
+doesn't recover its address is refused, not treated as an attester. The signature proves who signed that statement, not that the
 observation is true or that its self-declared time is independently trustworthy.
 
 **Chain grade.** `commons status <id>` walks provenance + `based-on`/`cites`/`derives`/
@@ -162,7 +163,9 @@ Unset `COMMONS_SIGNING_KEY` and entries are written `"sig": null` — legal loca
 `log --verify` reports them as *unsigned* rather than pretending they're trusted
 (`--strict` makes them failures).
 
-**Trust levels:** `full` · `datasets-only` · `none`.
+**Trust levels:** `full` · `datasets-only` · `none`. A peer you register with `none` is refused
+on `pull` for every artifact it published, not only as an attester. A publisher you have never
+registered is not refused by trust: federation stays open, and `none` is explicit distrust.
 
 **Key lifecycle.** Entries are judged against a key's validity *window*, so rotation
 doesn't invalidate history: revoking affects what a key signed *after* `revoked_at` only.
@@ -522,9 +525,11 @@ under `COMMONS_REQUIRE_SIG=1`, or local-only state tracked in git.
 **`pull` validates every incoming artifact before merging:** schema, type, hash
 well-formedness, that the **id actually derives from the content hash**, blob integrity
 (including for artifacts you already hold — otherwise a merge could overwrite good bytes
-with bad), id collisions against different local content, attester registration and
-trust, and **executable artifacts gated on the publisher's trust** from their signed
-ledger entry. Rejects go to `registry/quarantine.log` and the fetch is left unmerged.
+with bad), id collisions against different local content, attester signature, registration and
+trust, publishers registered with `trust=none`, and **executable artifacts gated on the
+publisher's trust** from the signed ledger entry that published those exact bytes.
+`COMMONS_REQUIRE_SIG=1` additionally refuses any artifact with neither a verified signed
+publish of its bytes nor a valid attestation. Rejects go to `registry/quarantine.log` and the fetch is left unmerged.
 
 **An edit to a manifest you already hold is checked too (#41).** Manifests are not covered
 by any signature (a publish signs the content hash), so a peer can change an artifact's
