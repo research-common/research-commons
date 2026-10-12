@@ -33,6 +33,18 @@ recipient a patent license covering the claims necessarily infringed by your
 contribution. It is not a grant of your whole portfolio — only what your
 contribution necessarily reads on, and only patents you can license.
 
+## What we're accepting right now
+
+The current alpha is in **maintenance mode: security fixes only** (since 2026-10-11). The next
+format is being designed in the open in #69. Until it settles:
+
+- **Security fixes** to the alpha are welcome, with the usual tests (below).
+- **Design feedback** on #69 and line comments on its design note are the most useful
+  contribution.
+- **Features and non-security bug fixes** for the alpha won't be merged. If you hit one, open an
+  issue anyway: it gets the `next-format` label and becomes a requirement or test case for the
+  new format.
+
 ## What a change must pass
 
 1. **The full test suite.** `tests/run-all.sh` — hermetic, clears ambient
