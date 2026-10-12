@@ -25,6 +25,20 @@ manifest/ledger format version — `commons --version` prints both).
   quality returns only with receiver-local proof and block-time verification.
 
 ### Fixed
+- **Security: workflow staging could write and read host files outside the sandbox.** A
+  workflow spec's attachment names, output paths and input/comparator/skill file names
+  were joined on the host with no confinement, before and after the container ran. An
+  absolute or `../` attachment name wrote anywhere the user could write; an absolute or
+  symlinked output path made `run --publish` read a host file and publish its bytes. Foreign
+  tasks are always sandboxed, so this reached anyone who ran a peer's task. Every such name
+  now goes through one check that refuses absolute paths, `..` components and symlinks.
+  `export` without `-o` likewise keeps the manifest's filename in the current directory.
+- **Security: an unsigned lifecycle line could settle a task.** The lifecycle fold verified
+  a signature only if one was present, so an unsigned `accept`/`reject` naming the
+  beneficiary's address moved the task. Combined with `pull` accepting new lines in the
+  unsigned logs (#14), a peer could settle or reject another key's task. Unsigned lifecycle
+  events are now dropped. Every lifecycle writer already required a key, so no line this
+  tool wrote is affected.
 - **Untrusted anchor JSON no longer grants Bitcoin-quality priority.** A fabricated
   `confirmed` checkpoint could seize first-publisher credit and report a discrepancy
   against the honest publisher, without a proof. Read-side bounds now require a

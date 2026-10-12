@@ -1387,7 +1387,8 @@ def build_verification(tier, criteria, params):
 def _export_executable(aid, dest_dir):
     """Materialize a skill blob as an executable file (native exec; sandboxed in P3)."""
     m = load_manifest(aid)
-    path = os.path.join(dest_dir, m["content"]["filename"] or (aid + ".py"))
+    path = confined_path(dest_dir, m["content"]["filename"] or (aid + ".py"),
+                         "comparator file")
     shutil.copyfile(blob_read_path(m["content"]["sha256"]), path)
     os.chmod(path, 0o700)
     return path
@@ -2721,7 +2722,10 @@ def cmd_cat(a):
 
 def cmd_export(a):
     m = load_manifest(a.id)
-    dst = a.out or m["content"]["filename"]
+    # Without --out the name comes from the manifest, which a peer supplied: keep it
+    # in the current directory (an absolute or `../` name would write elsewhere).
+    dst = a.out or confined_path(os.getcwd(), m["content"]["filename"] or a.id,
+                                 "export file")
     shutil.copyfile(blob_read_path(m["content"]["sha256"]), dst)
     print(dst)
 
@@ -2973,6 +2977,39 @@ def cmd_links(a):
     con.close()
 
 
+def confined_path(base, name, what):
+    """Join an untrusted relative `name` under `base`, or exit naming the problem.
+
+    Workflow specs, task specs and manifests are peer-supplied, and the host joins
+    their file names BEFORE (attachments, inputs) and AFTER (outputs) the sandboxed
+    step runs. `os.path.join` discards `base` for an absolute name and walks out of
+    it on `..`, so every such join goes through here. Refused: empty or non-string
+    names, absolute paths, any `..` component, NUL bytes, and any existing
+    component that is a symlink (a sandboxed step can create one pointing at the
+    host filesystem, and the host would follow it when reading an output).
+    """
+    if not isinstance(name, str) or not name or "\x00" in name:
+        sys.exit("error: unsafe %s name %r" % (what, name))
+    if os.path.isabs(name) or name.startswith("~"):
+        sys.exit("error: unsafe %s name %r: absolute paths are not allowed" % (what, name))
+    parts = name.replace("\\", "/").split("/")
+    if any(p == ".." for p in parts):
+        sys.exit("error: unsafe %s name %r: '..' is not allowed" % (what, name))
+    base_real = os.path.realpath(base)
+    cur = base_real
+    for p in parts:
+        if p in ("", "."):
+            continue
+        cur = os.path.join(cur, p)
+        if os.path.islink(cur):
+            sys.exit("error: unsafe %s %r: it is (or passes through) a symlink"
+                     % (what, name))
+    path = os.path.join(base_real, *[p for p in parts if p not in ("", ".")])
+    if os.path.commonpath([base_real, os.path.realpath(path)]) != base_real:
+        sys.exit("error: unsafe %s name %r: resolves outside its directory" % (what, name))
+    return path
+
+
 def _dir_bytes(path):
     total = 0
     for root, _dirs, files in os.walk(path):
@@ -3078,12 +3115,14 @@ def _run_workflow(wf_id, override_inputs=None, exec_mode=None, force_sandbox=Fal
         # In sandbox mode the container path is derived from the artifact id, so the
         # in-container filename can't depend on host-side manifest metadata.
         fname = os.path.basename(aid) if mode == "sandbox" else im["content"]["filename"]
-        dst = os.path.join(scratch, fname)
+        dst = confined_path(scratch, fname, "input file")
         shutil.copyfile(src, dst)
         env["IN_" + name] = dst
     # materialize attachments
     for fname, body in (spec.get("attachments") or {}).items():
-        with open(os.path.join(scratch, fname), "w") as f: f.write(body)
+        p = confined_path(scratch, fname, "attachment")
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "w") as f: f.write(body)
 
     timeout = int(spec.get("timeout", 600))
     try:
@@ -3108,8 +3147,8 @@ def _run_workflow(wf_id, override_inputs=None, exec_mode=None, force_sandbox=Fal
 
     outputs = {}
     for name, rel in (spec.get("outputs") or {}).items():
-        p = os.path.join(out_dir, rel)
-        if not os.path.exists(p): sys.exit("error: declared output missing: %s" % rel)
+        p = confined_path(out_dir, rel, "output")
+        if not os.path.isfile(p): sys.exit("error: declared output missing: %s" % rel)
         outputs[name] = p
     return outputs, spec, scratch, wm, exec_record(mode, image, digest)
 
@@ -3652,7 +3691,7 @@ def cmd_run_skill(a):
     scratch = tempfile.mkdtemp(prefix="commons-skill-")
     try:
         fname = m["content"]["filename"] or (a.id + ".sh")
-        dst = os.path.join(scratch, fname)
+        dst = confined_path(scratch, fname, "skill file")
         shutil.copyfile(blob_read_path(m["content"]["sha256"]), dst)
         os.chmod(dst, 0o755)
         for extra in (a.file or []):
@@ -3684,9 +3723,12 @@ def task_spec(m):
 def task_events(tid):
     """Signed lifecycle events for one task, oldest first, signature-checked.
 
-    An event with a bad or unverifiable signature is dropped, not merely flagged:
-    lifecycle state decides who may do what next, so an unauthenticated event must
-    never be able to move it.
+    An event with a missing, bad or unverifiable signature is dropped, not merely
+    flagged: lifecycle state decides who may do what next, so an unauthenticated
+    event must never be able to move it. Every lifecycle writer refuses to run
+    without a key (`require_signing`), so an unsigned lifecycle line was never
+    written by this tool; it can only have been hand-made or relayed from a peer's
+    unsigned log, and its `addr` is nobody's signed word.
     """
     out = []
     for e, _path in read_ledger_entries():
@@ -3697,9 +3739,10 @@ def task_events(tid):
         # `task` disagrees with its `id` is not trusted to mean either.
         if e.get("id") != tid: continue
         if "task" in e and e.get("task") != tid: continue
-        if e.get("sig"):
-            ok, _ = verify_entry(e, e["sig"], e.get("addr"))
-            if not ok: continue
+        if not e.get("sig") or not e.get("addr"):
+            continue
+        ok, _ = verify_entry(e, e["sig"], e.get("addr"))
+        if not ok: continue
         out.append(e)
     return out
 
