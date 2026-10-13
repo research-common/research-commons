@@ -615,11 +615,14 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
   anyone serving the bytes. Superseded snapshots are often the evidence for their own erratum. A hub that
   must stop serving something does so under its own admission policy (I9).
 - **Exit codes.** `verify`: 0 checked and passed · 1 checked and wrong · 3 could not check (contested, unknown,
-  unchecked, unpinned, unsupported, and a re-run stopped by one of the reader's own limits: `timeout` or
-  another operational cap, reported with the resources used) · 4 nothing to re-run · 5 environment mismatch:
-  the declared environment differs from, or is not available in, the one that ran. The two call for
-  different next steps (raise the limit or accept `unchecked`, versus run where the pinned environment
-  exists). Exit 0 means the requested operation succeeded, not that everything it referenced is valid.
+  unchecked, unpinned, unsupported; a re-run stopped by one of the reader's own limits, `timeout` or another
+  operational cap, reported with the resources used; and a re-run whose step failed or left a declared output
+  missing) · 4 nothing to re-run · 5 environment mismatch: the declared environment differs from, or is not
+  available in, the one that ran. Exit 1 is reserved for a comparison that ran to completion and disagreed; a
+  step that failed compared nothing, and the token says which kind of "could not check" it was. Limits and
+  environments call for different next steps (raise the limit or accept `unchecked`, versus run where the
+  pinned environment exists). Exit 0 means the requested operation succeeded, not that everything it
+  referenced is valid.
 - **Explain.** Every status can be expanded to the statements, policy and checks behind it (I14).
 - **Dry runs** state their side effects: "no registry change" differs from "no fetch, no cache, no quarantine".
 - **Errors** say what failed, what is still known, whether anything was committed, and the narrowest next
