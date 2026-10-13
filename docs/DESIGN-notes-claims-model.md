@@ -266,10 +266,13 @@ Rules:
 - **The observer asserts the class; evidence decides its status.** "This is consensus data" is the observer's
   belief. Whether it holds is computed from other observations and from the reader's own re-checks.
 - **The observation pins its referent.** For chain data that means chain id, block hash (not height) and
-  confirmation depth at capture. For APIs: endpoint, parameters and response hash. For instruments: instrument
+  confirmation depth at capture. For APIs: endpoint, parameters and response hash; for a batch capture, the hash, format and count of a
+  request log carried inside the captured content, listing each request's endpoint, parameters, status, time
+  and response hash. For instruments: instrument
   identity, location and time. For methods: the method edition followed, the execution environment record
   (image digest, platform, harness commit), the measured system's identity and state (model and provider pin,
-  and whatever changes the apparatus under the observer, such as a routing era), and the window (#65). A fork
+  and whatever changes the apparatus under the observer, such as a routing era), the protocol's pinned inputs
+  by hash (scenario edition, seed set, configuration), and the window (#65). A fork
   or a vanished API does not make an observation false. It is still true of what it pinned. What changes is
   whether the referent is still canonical or still available, and that is shown separately. It never counts
   against the observer. A statement whose referent lacks a field its class requires is still a valid signed
@@ -368,8 +371,10 @@ decide who is right.
    observation id. A reader who follows several hubs sees contradictions held elsewhere next to the curated
    hub's corroborations. A curator controls admission to its hub, not the existence of evidence.
 3. **Selection is disclosed beside the grade.** A hub or collection declares how it selects: `curated` (the
-   curator's judgment, the default), `rule-based` (a published inclusion rule others can re-apply), or a
+   curator's judgment), `rule-based` (a published inclusion rule others can re-apply), or a
    `completeness claim` ("every reading from source X in this window", which can be checked and refuted).
+   A hub that declares nothing displays `undeclared`, never a value it did not sign; agreement models treat
+   an undeclared selection as curated, the weakest claim.
 4. **The reader brings the references.** A reader can re-run any corroboration against reference data *it*
    trusts. The project ships **no default reference collections**: they are ordinary collections that anyone
    may curate and readers choose among, consistent with categories being convention rather than protocol (#16).
@@ -398,11 +403,11 @@ the source.
 | licence | SPDX expression, `LicenseRef-*`, or explicit non-open terms; attribution notice (#6, #19). Missing means unknown, not open. |
 | availability | redistribution permission and byte obtainability, separately |
 | replication | `bytes` (public deterministic source named) · `protocol` (re-measurable, never the same bytes; method named) · `none` · undeclared (#1, #7) |
-| sampling | n, dispersion, window (#2) |
+| sampling | n with its unit, per-group n where the design has arms, dispersion, window (#2) |
 | shelf life | publisher-declared validity; age shown at read time (#4) |
 | capture evidence | §5.3.3 level, verified or not |
 | corroboration | §5.3.2 status, scoped |
-| selection | curated · rule-based · completeness claim (§6) |
+| selection | curated · rule-based · completeness claim · undeclared (§6). Missing means undeclared. |
 | referent status | still canonical · `provisional` · `final` · `revised` · `not canonical` · source still available / unknown (§5.3.1) |
 
 | pre-registration | `pre-registered <task edition> (<bound quality>)` · `exploratory` · undeclared (#3). Missing means undeclared, not exploratory. |
@@ -425,7 +430,9 @@ no `holds`: `availability: withheld until <condition>`, where the condition is p
 reference. The reveal is a later `holds`; the bytes match by construction (I1) or the reveal fails. This is
 how a held-out test pool or a season seed is committed now and revealed later. Two cautions belong beside it:
 a commitment proves possession by T, not independence (§9.3), and a commitment to low-entropy content (a
-seed, a one-line rule) is enumerable against its hash, so such content must include a nonce.
+seed, a one-line rule) is enumerable against its hash, so the author should include a nonce. The tool cannot
+tell low-entropy content from high, so this is guidance, not a check: `publish` with `withheld` warns when
+the content is shorter than a documented threshold and proceeds (a heuristic, documented as one, I11).
 
 ## 8. Resources: collections, tasks, series
 
@@ -437,8 +444,12 @@ immutable editions.
 - **Editions.** Each edition is a signed statement by a controller that references its predecessor by hash. It
   carries the full contents: members with roles, member schema (#5), ingest rules, task contract.
 - **Rules read statements.** An edition's ingest rules are predicates over a candidate member's signed
-  statement (its disclosures: sampling, replication, method edition, pre-registration, finality) and its
-  content (forbidden keys, member schema). Every evaluation is `ok`, `fail` or `unchecked`, and `unchecked`
+  statement (its disclosures: sampling, replication, method edition, pre-registration, finality; its
+  provenance; and its referent record, §5.3.1) and its content (forbidden keys, member schema). A rule may
+  also read the edition under formation, meaning the members' statements as that edition would list them, so
+  uniqueness and quota rules can be stated. A set-level rule is evaluated over the whole proposed edition:
+  it never picks a winner by order, and a failure names every member in conflict. Nothing else is in a
+  rule's domain. Every evaluation is `ok`, `fail` or `unchecked`, and `unchecked`
   never passes (I4). A failing rule rejects the membership, never the artifact: the artifact's own statements
   are untouched. The rule language is a profile (§15); the core fixes only what a rule may read and the
   three outcomes. Examples: "at least 24 h of coverage inside the window, the whole window in one routing
@@ -526,9 +537,9 @@ rule before the data. Results that fulfil it display "pre-registered" with the b
 pre-registration proves the plan existed by time T, not that the author hadn't seen the data. An `observed`
 statement can carry `fulfills` to a task edition, so a pre-registered observation campaign is in scope, not
 only derived results. The opposite case is declared, not inferred: `exploratory` is a disclosure value (§7). A
-**departure check** compares the delivered `sampling` disclosure with the contract's declared n and reports
-`conforms`, `departed`, `unchecked` (no structured count) or `not comparable` (unit mismatch). It never moves
-the grade (I6).
+**departure check** compares the delivered `sampling` disclosure with the contract's declared n, per group
+where the contract declares groups, and reports `conforms`, `departed`, `unchecked` (no structured count, or
+no count for a declared group) or `not comparable` (unit mismatch). It never moves the grade (I6).
 
 ### 9.5 Credit
 
@@ -604,9 +615,11 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
   anyone serving the bytes. Superseded snapshots are often the evidence for their own erratum. A hub that
   must stop serving something does so under its own admission policy (I9).
 - **Exit codes.** `verify`: 0 checked and passed · 1 checked and wrong · 3 could not check (contested, unknown,
-  unchecked, unpinned, unsupported) · 4 nothing to re-run · 5 environment mismatch, including a sandbox
-  timeout, which is an operational limit (I8) and is reported as `timeout` with the resources used. Exit 0 means the requested operation succeeded,
-  not that everything it referenced is valid.
+  unchecked, unpinned, unsupported, and a re-run stopped by one of the reader's own limits: `timeout` or
+  another operational cap, reported with the resources used) · 4 nothing to re-run · 5 environment mismatch:
+  the declared environment differs from, or is not available in, the one that ran. The two call for
+  different next steps (raise the limit or accept `unchecked`, versus run where the pinned environment
+  exists). Exit 0 means the requested operation succeeded, not that everything it referenced is valid.
 - **Explain.** Every status can be expanded to the statements, policy and checks behind it (I14).
 - **Dry runs** state their side effects: "no registry change" differs from "no fetch, no cache, no quarantine".
 - **Errors** say what failed, what is still known, whether anything was committed, and the narrowest next
