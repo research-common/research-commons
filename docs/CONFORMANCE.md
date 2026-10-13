@@ -208,7 +208,7 @@ refer to `verify` unless another command is named (§13).
 | C-core-130 | §12 ("scans are bounded and honest", #20), I4 | A forbidden-key or secret scan over an archive where one member is unscannable (unsupported compression, over the scan limit, truncated). | Output names the member as `unscanned` with the limit value; no `clean` or `ok` is printed for the archive. |
 | C-core-131 | §12, I8, I4, I15 | Validation hits a documented size or depth limit mid-run (a provenance graph deeper than the traversal bound; a nested archive beyond the scan limit). | Operational refusal naming the limit and its scope; partial results marked `incomplete`; nothing past the bound reads as checked; the limit value is visible. |
 | C-core-132 | §13 ("closed vocabulary"), I13 | Run every surface over the full fixture set and collect the printed state tokens. | Every token is in the documented table; every rule evaluation prints exactly one of `ok`/`fail`/`unchecked`; a token or code not in the source table fails the build. |
-| C-core-133 | §13 (exit codes), I13 | Fixtures for: checked and passed; checked and wrong; contested; unknown; unchecked; re-run stopped by a reader limit (`timeout`); nothing to re-run; environment mismatch. | `verify` exits 0 / 1 / 3 / 3 / 3 / 3 / 4 / 5 respectively; the documented table is generated from the same source as the code. |
+| C-core-133 | §13 (exit codes), I13 | Fixtures for: checked and passed; checked and wrong; contested; unknown; unchecked; re-run stopped by a reader limit (`timeout`); re-run whose step failed in the pinned environment; nothing to re-run; environment mismatch. | `verify` exits 0 / 1 / 3 / 3 / 3 / 3 / 3 / 4 / 5 respectively; the documented table is generated from the same source as the code. |
 | C-core-134 | I12 | Query one artifact's state, grade, authorship and corroboration status through every shipped surface. | Every surface returns the same tokens for the same statements, policy and evaluator. |
 | C-core-135 | §13 ("exit 0 means the requested operation succeeded"), I13 | An artifact in `contested` state: run a listing, `push` a package containing it, and `verify` it. | Listing and `push` exit 0 and show `contested`; `verify` exits 3; the token is the same word on all three. |
 | C-core-136 | §13 ("explain"), I14 | For every status token shown on any fixture, run `explain`. | Output lists the statements (by hash and signer), policy, evaluator version and time context behind it. |
@@ -238,6 +238,7 @@ refer to `verify` unless another command is named (§13).
 | C-exec-13 | §13 (exit 5, exit 1), §5.2 (`diverged`), I5 | A `bytes` workflow with a pinned environment record; re-run (a) in an environment whose record differs from the pin, (b) in the pinned environment but producing different bytes (input mutated so the test knows which). | (a) `verify` exits 5 with the environment mismatch named; (b) exits 1 and shows `diverged`; in both the earlier `authored`/`reproduced` statements remain visible and unchanged. |
 | C-exec-13a | §13 (exit 3 versus 5) | The same `bytes` workflow re-run (a) where its pinned image is not available, (b) in the pinned environment under a reader wall-time limit lower than the step needs, (c) as (b) with a memory limit instead. | (a) exit 5 naming the environment; (b) token `timeout`, exit 3; (c) token `failed: operational: memory`, exit 3. Each output names its next step: run where the environment exists, or raise the limit. |
 | C-exec-14 | appendix (an API with a revision schedule): "network access lives in `observed`, determinism in `corroborates`" | A second observer re-captures a closed settlement period; the byte comparison with the first observation is then run as a `corroborates` derivation. | The re-capture is recorded as an `observed` statement made outside any sandbox; the comparison runs sandboxed with no network access and emits `corroborates`; a comparison workflow that attempts network access is refused inside the sandbox. |
+| C-exec-15 | §13 (exit 1 reserved; a failed step exits 3), I13, I5 | A `bytes` workflow with a pinned environment record and a pinned `authored` result; re-run in an environment whose record matches the pin, where (a) the step exits non-zero, (b) the step exits 0 but one declared output is missing; control (c): the step completes and produces different bytes. | (a) token `failed: <exit n>`, exit 3; (b) token `incomplete output`, exit 3; (c) `diverged`, exit 1. In (a) and (b) no byte comparison is reported, `explain` states that the determinism claim may be weaker than declared and that the pinned bytes are not shown wrong, and the earlier `authored` statement is unchanged; no statement is emitted on the author's behalf. |
 
 ## Exchange profile
 
@@ -312,7 +313,7 @@ Properties quantify over generated inputs; each is a property test or a static c
 | I10 time grants priority, never authority | C-core-19, C-core-20, C-btc-01, P-06 |
 | I11 honest limits | C-core-07, C-core-76a |
 | I12 one definition per concept | C-core-109, C-core-134 |
-| I13 outputs are a contract | C-core-132, C-core-133, C-core-135, C-exec-13a |
+| I13 outputs are a contract | C-core-132, C-core-133, C-core-135, C-exec-13a, C-exec-15 |
 | I14 explainable, order-independent answers | C-core-02, C-core-04, C-core-18, C-core-83, C-core-84, C-core-86, C-core-93b, C-core-129, C-core-136, C-exch-05, P-01, P-02, P-07, P-08 |
 | I15 hostile input and partial failure stay contained | C-core-12, C-core-94, C-core-122, C-core-131, C-exec-08, C-exec-09, C-exec-10, C-exec-12, C-btc-05 |
 
@@ -324,7 +325,7 @@ Properties quantify over generated inputs; each is a property test or a static c
 | §3.1 the third state | C-core-18, C-core-36 |
 | §4 data model (one signature; statement identity; kinds) | C-core-08 – C-core-15, C-core-26, C-core-83, C-core-142, C-exec-01, C-exec-02, P-02 |
 | §5.1 single-party fields | C-core-16, C-core-17, C-core-142 |
-| §5.2 constructions and derivation groups | C-core-17 – C-core-28, C-core-107, C-exec-01 – C-exec-03, C-exec-13, C-btc-01 – C-btc-03 |
+| §5.2 constructions and derivation groups | C-core-17 – C-core-28, C-core-107, C-exec-01 – C-exec-03, C-exec-13, C-exec-15, C-btc-01 – C-btc-03 |
 | §5.3.1 observation classes, referents, finality | C-core-29 – C-core-44, C-core-73 |
 | §5.3.2 corroboration is a derivation | C-core-43, C-core-45 – C-core-51, P-12 |
 | §5.3.3 capture evidence | C-core-52 – C-core-55 |
@@ -340,7 +341,7 @@ Properties quantify over generated inputs; each is a property test or a static c
 | §10 time | C-core-19, C-core-53, C-core-105 – C-core-107, C-exch-16, C-btc-01 – C-btc-06, P-06 |
 | §11 federation and gates | C-core-09, C-core-12, C-core-14, C-core-86, C-core-108 – C-core-122, C-exec-06, C-exec-07, C-exec-12, P-04, P-05 |
 | §12 execution and storage safety | C-core-84, C-core-86, C-core-95, C-core-123 – C-core-131, C-core-138, C-exec-03, C-exec-06, C-exec-08 – C-exec-11, P-07, P-10 |
-| §13 outputs | C-core-113, C-core-125, C-core-132 – C-core-140, C-exec-11, C-exec-13, C-exec-13a, C-exch-08, C-btc-06, P-09, P-10 |
+| §13 outputs | C-core-113, C-core-125, C-core-132 – C-core-140, C-exec-11, C-exec-13, C-exec-13a, C-exec-15, C-exch-08, C-btc-06, P-09, P-10 |
 | §14 relationship to the alpha | C-core-141 |
 | appendix: two authors, one synthesis | C-core-142, C-btc-01 |
 | appendix: a chain observation across a fork | C-core-33 |
@@ -376,7 +377,7 @@ by that amendment rather than by the note's first text.
 | 4 | C-core-95, C-core-95a | pre-pin check `unchecked`; edition not held | publish with `unchecked` recorded, never admitted on that basis; not held → refuse and name the fetch; never `ok` for a rule that did not run (§8) |
 | 5 | C-core-103 | segment rewritten below `frozen_before` | `REVISED-FROZEN` (§8, §13) |
 | 6 | C-core-85 | merge edition predecessors | names every tip; authorized under each (§8) |
-| 7 | C-exec-11 | timeout | `timeout` token with resources used; `verify` exit 3, could not check (§13; revised in review: first answered as exit 5) |
+| 7 | C-exec-11, C-exec-15 | timeout; a step that fails | `timeout`, cap stops, `failed: <exit n>` and `incomplete output` all exit 3, could not check; 1 is reserved for a completed comparison that disagreed; 5 is environment mismatch only (§13; revised in review: timeout was first answered as exit 5) |
 | 8 | C-core-133 | exit code for `unchecked` | 3 (§13) |
 | 9 | C-core-59 | missing selection disclosure | `undeclared`, treated as curated by agreement models (§6; revised in review: first answered as a bare `curated`) |
 | 10 | (no case) | error-log redaction | errors omit secrets and render peer text inert (§13) |
