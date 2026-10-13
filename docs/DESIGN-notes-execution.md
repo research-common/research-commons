@@ -2,9 +2,9 @@
 
 **Status:** proposed · **Companion to:** the claims-model note (§15, "execution profiles: runtimes,
 confinement mechanism, limits") · **Covers:** that §15 item; claims-model note §4 (`reproduced`), §5.2
-(derivation groups, the environment record), §11 ("admission is not execution"), §12 (the sandbox bullets), §13 (exit 5,
-`timeout`); conformance cases C-exec-01 through C-exec-14, plus C-core-32 (the environment record as a method
-referent) and C-core-133 (exit 5).
+(derivation groups, the environment record), §11 ("admission is not execution"), §12 (the sandbox bullets), §13 (exits 3
+and 5, `timeout`); conformance cases C-exec-01 through C-exec-15 (incl. C-exec-13a), plus C-core-32 (the environment record as a method
+referent) and C-core-133 (exits 3 and 5).
 
 ## 0. Summary
 
@@ -265,11 +265,24 @@ surface that shows the run; the `verify` exit codes are the claims-model note's 
 | `diverged` | it does not | 1 |
 | `unchecked` | no comparison could be made under the declared mode (no comparator; mode undeclared) | 3 |
 | `not comparable` | the comparator ran and reported the pair outside its domain (unit or shape mismatch) | 3 |
-| `incomplete output` | a declared output is missing or not a regular file | 5 |
-| `failed: <exit n>` | the step exited non-zero | 5 |
+| `incomplete output` | a declared output is missing or not a regular file | 3 |
+| `failed: <exit n>` | the step exited non-zero | 3 |
 | `failed: operational: <cap>` | a cap other than wall time stopped the step; resources used recorded | 3 |
 | `timeout` | wall-time cap; container and descendants killed; resources used recorded | 3 |
 | `environment mismatch: <field>` | a field named by `environment_match` differs between pin and re-run | 5 |
+
+Exit 1 is reserved for a comparison that ran to completion and disagreed: a script reads it as "the pinned
+result is refuted". A step that exits non-zero, leaves a declared output missing, or is stopped by a cap has
+compared nothing, so it exits 3 and the token says which kind of "could not check" it was. Exit 5 is only an
+environment mismatch: the environment the pin declares differs from, or is not available in, the one that
+ran. The table is the claims-model note's §13 vocabulary applied to runs.
+
+**A failure in the pinned environment is evidence about the claim, not the bytes.** When a `bytes` workflow's
+re-run fails or leaves outputs missing in an environment that matches the pin, `explain` says in words that the
+determinism claim may be weaker than declared (a hidden dependency, nondeterminism in the step); the pinned
+bytes are not thereby shown wrong, and the earlier statements stay as they are. If the re-run is the author's
+own, the correction is the same as for `diverged` (§5.3): the author amends its `authored` statement to
+`protocol` with a comparator, or to `none`. The tool never makes that amendment on the author's behalf.
 
 A refusal before the step starts (unsafe path, missing grant, unavailable runtime, image digest mismatch) is
 not a result token: it is a refusal in the named class with its scope, and no run record is written.
@@ -391,9 +404,3 @@ the new image digest; derivations under the old pin stay valid under the old pin
 5. **Peak RSS as a requirement.** Under `sandbox` the cgroup makes `peak_rss_bytes` measurable everywhere the
    profile can run. Should `unmeasured` be refused for the sandbox profile (a conformance failure), leaving
    it allowed only under `native`?
-
-6. **Exit code for a step that fails on its own.** A cap or timeout is the reader's limit and exits 3 (claims-model
-   note §13, revised in review). `failed: <exit n>` and `incomplete output` still exit 5, but neither is an
-   environment mismatch in the §13 sense when the environment record matches the pin. Keep them on 5, move
-   them to 1 (checked and wrong, for `bytes` workflows whose pin produced the outputs), or give them their own
-   code?
