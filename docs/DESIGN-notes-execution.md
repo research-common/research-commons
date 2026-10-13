@@ -16,7 +16,8 @@ referent) and C-core-133 (exit 5).
 - The sandbox includes staging. Every host-side join of a peer-supplied name is confined before the step
   starts and when outputs are read back; the refusal is intrinsic and names the path.
 - Caps on CPU, memory, pids, disk and wall time are enforced by the kernel *during* execution. A timeout kills
-  the container and every descendant, cleans staging, and reports `timeout` with resources used (exit 5).
+  the container and every descendant, cleans staging, and reports `timeout` with resources used (exit 3: the
+  reader's own limit stopped the check, so it could not check; exit 5 is reserved for environment mismatch).
 - Every run writes an environment record. It travels on the `authored` statement of a derived artifact and on
   every `reproduced` statement, and `verify` compares it field by field.
 - `bytes` workflows are judged by byte equality; `protocol` workflows by the comparator their own `authored`
@@ -58,7 +59,10 @@ Rules:
    `replication: declared in spec body, ignored`.
 3. **A network requirement makes the workflow an acquisition.** Its outputs are observations, not derivations:
    `run --publish` emits `observed` statements whose capture record is filled from the run (endpoint list,
-   time window, environment record), never `authored` with provenance. They join no derivation group and
+   time window, environment record). A run that makes more than one request writes a request log into its
+   output (endpoint, parameters, status, time and response hash per request) and the statement pins it by
+   hash, format and count (wire-format note §5, source referent), so a capture of thousands of requests is
+   one statement, never `authored` with provenance. They join no derivation group and
    carry no T0/T1. This is the mechanical form of "network access lives in `observed`, determinism in
    `corroborates`" (claims-model note, appendix; C-exec-14). A `network: none` workflow whose step opens a
    connection fails inside the sandbox (§2.1) and the run result is `failed`, never `match`.
@@ -111,10 +115,10 @@ alpha did) may remain as a second check; it is never the only one.
 | cap | mechanism | when tripped | result token | exit (`verify`) |
 |---|---|---|---|---|
 | `cpus` | cgroup cpu quota | throttled, not killed | (none; wall time absorbs it) | |
-| `memory` | cgroup memory limit, no swap | the step is killed by the kernel | `failed: operational: memory` | 5 |
-| `pids` | cgroup pids limit | fork fails inside the container | `failed: operational: pids` | 5 |
-| `disk` | output directory on a size-capped filesystem; scratch tmpfs size | write fails inside the container | `failed: operational: disk` | 5 |
-| `wall_time` | the implementation's timer; on expiry it kills the **container**, not its client process | the container and every descendant are gone before the result is written | `timeout` | 5 |
+| `memory` | cgroup memory limit, no swap | the step is killed by the kernel | `failed: operational: memory` | 3 |
+| `pids` | cgroup pids limit | fork fails inside the container | `failed: operational: pids` | 3 |
+| `disk` | output directory on a size-capped filesystem; scratch tmpfs size | write fails inside the container | `failed: operational: disk` | 3 |
+| `wall_time` | the implementation's timer; on expiry it kills the **container**, not its client process | the container and every descendant are gone before the result is written | `timeout` | 3 |
 
 Cap values come from two places: the spec's resource profile (what the step says it needs) and reader policy
 (the most the reader allows). The run uses the spec's values when they are at or under the policy ceiling. If
@@ -262,8 +266,9 @@ surface that shows the run; the `verify` exit codes are the claims-model note's 
 | `unchecked` | no comparison could be made under the declared mode (no comparator; mode undeclared) | 3 |
 | `not comparable` | the comparator ran and reported the pair outside its domain (unit or shape mismatch) | 3 |
 | `incomplete output` | a declared output is missing or not a regular file | 5 |
-| `failed: <exit n>` · `failed: operational: <cap>` | the step exited non-zero, or a cap other than wall time killed it | 5 |
-| `timeout` | wall-time cap; container and descendants killed; resources used recorded | 5 |
+| `failed: <exit n>` | the step exited non-zero | 5 |
+| `failed: operational: <cap>` | a cap other than wall time stopped the step; resources used recorded | 3 |
+| `timeout` | wall-time cap; container and descendants killed; resources used recorded | 3 |
 | `environment mismatch: <field>` | a field named by `environment_match` differs between pin and re-run | 5 |
 
 A refusal before the step starts (unsafe path, missing grant, unavailable runtime, image digest mismatch) is
@@ -386,3 +391,9 @@ the new image digest; derivations under the old pin stay valid under the old pin
 5. **Peak RSS as a requirement.** Under `sandbox` the cgroup makes `peak_rss_bytes` measurable everywhere the
    profile can run. Should `unmeasured` be refused for the sandbox profile (a conformance failure), leaving
    it allowed only under `native`?
+
+6. **Exit code for a step that fails on its own.** A cap or timeout is the reader's limit and exits 3 (claims-model
+   note §13, revised in review). `failed: <exit n>` and `incomplete output` still exit 5, but neither is an
+   environment mismatch in the §13 sense when the environment record matches the pin. Keep them on 5, move
+   them to 1 (checked and wrong, for `bytes` workflows whose pin produced the outputs), or give them their own
+   code?
