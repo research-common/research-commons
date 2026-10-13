@@ -499,7 +499,13 @@ roots and bind nothing in the new format.
    only the upgraded statement, with the pending proof held locally. The alternative leaves nothing observable
    in the log until upgrade and loses the proof if the author's machine dies first. Decide which.
 2. **Calendar failure at publish.** Default `anchor required` (refuse to publish when no calendar answers) or
-   default `anchor: none` with a warning? The first protects priority; the second protects availability.
+   default `anchor: none` with a warning? The first protects priority; the second protects availability. A
+   third option, raised in review: make the default depend on what the statement's standing rests on.
+   `anchor required` for the kinds whose claim *is* the time bound: an `authored` without provenance
+   (priority, claims-model note §5.2), a statement that `fulfills` a pre-registration task, a `withheld`
+   commitment, and an `observed` declaring `anchored at capture` evidence. `anchor: none` recorded, with a
+   warning, for everything else (other `observed` captures, derivation-group members), so a calendar outage
+   does not stop a capture whose window is closing. Both overridable by local policy; neither silent.
 3. **Chainwork floor and bootstrap.** Ship a pinned mainnet checkpoint in the tool (fast first sync, a trust
    root the project chose) or require genesis sync (slow, no project-chosen trust root)?
 4. **Historical verdicts as display.** Should `verified-historical` show the header time as a time (with a
