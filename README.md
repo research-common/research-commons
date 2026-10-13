@@ -15,7 +15,8 @@ five minutes, with no CLI.
 > **Maintenance mode (since 2026-10-11).** This alpha gets **security fixes only**. The next
 > format is a clean break, proposed for comment in
 > [#69](https://github.com/research-common/research-commons/issues/69)
-> ([`docs/DESIGN-notes-claims-model.md`](https://github.com/research-common/research-commons/pull/70)).
+> ([`docs/DESIGN-notes-claims-model.md`](docs/DESIGN-notes-claims-model.md); conformance cases in
+> [`docs/CONFORMANCE.md`](docs/CONFORMANCE.md)).
 > There will be no importer: hubs will be rebuilt and their data republished under the new format.
 > Don't start a new hub on this version unless you're happy to rebuild it, and treat existing hubs
 > as disposable. Comments on #69 are the most useful contribution right now.
