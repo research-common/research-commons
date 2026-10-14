@@ -12,6 +12,10 @@ This note binds every implementation of the core, not a profile (conformance ope
 file layouts, database engines or directory names; two implementations with different layouts conform if
 every case in this note gives the same answer on both.
 
+Following the wire-format note's standards-first rule (its §0), where this note names a primitive or a
+layout it uses an existing one: POSIX.1-2024 for the filesystem primitives (§2, §7), and the OCI Image
+Layout's blob tree as the recommended (not required) on-disk form (§1.1).
+
 ## 0. Summary
 
 - Three object classes: **blobs** (content-addressed, immutable), **statements** (signed, one file each,
@@ -58,6 +62,18 @@ verification caches, the manifest-like per-artifact summaries the claims-model n
 caches. Projections are never transported, never authoritative, and are recomputed from blobs plus
 statements by `repair` or by a cold start.
 
+### 1.1 Recommended blob layout
+
+An implementation that stores blobs as files should use the blob tree of the OCI Image Layout
+(image-spec `image-layout.md`): `blobs/<alg>/<encoded>`, today always `blobs/sha256/<64 lowercase hex>`, with
+the rule that the content of `blobs/<alg>/<encoded>` hashes to `<alg>:<encoded>`. Two of that layout's rules
+are this note's rules already: the blob directory may hold blobs nothing references (the garbage-collection
+candidates of §6) and may lack blobs that are referenced (external holds, §9). A small version marker at the
+root (OCI uses `oci-layout`, `{"imageLayoutVersion": "1.0.0"}`) lets `fsck` recognise a store and its layout
+version. The OCI `index.json` entry point is not adopted: it would be a shared mutable file with authority,
+which this note rules out. Statements and projections keep their own layout. Paths below are written in this
+form.
+
 **What this rules out.** No shared mutable file is authoritative: no manifest that two keys edit, no
 per-artifact JSON that `publish` rewrites, no index whose absence changes what `verify` prints. A reader that
 finds a projection disagreeing with blobs plus statements treats the projection as stale (§6).
@@ -72,9 +88,9 @@ The install path is the same for a local file, a package member and an external 
    only hash that matters; a hash computed earlier from the source (a manifest field, a `holds` claim, a
    command-line argument) is an **expectation**, not a result.
 3. `fsync` the temporary file. Compare the computed hash with the expectation, if there was one.
-4. If the destination `blobs/<hash>` does not exist: rename the temporary file into place (create-exclusive,
-   so a concurrent installer of the same bytes cannot overwrite; §4.3). `fsync` the containing directory
-   where the platform supports it (§7).
+4. If the destination `blobs/sha256/<hash>` does not exist: rename the temporary file into place
+   (create-exclusive, so a concurrent installer of the same bytes cannot overwrite; §4.3). `fsync` the
+   containing directory where the platform supports it (§7).
 5. If the destination exists: **re-hash the existing file** before using it. If it matches, discard the
    temporary file and reuse. If it does not match, the existing file is corrupt.
 
@@ -328,8 +344,8 @@ conformance result (CONFORMANCE "how a result is recorded"):
 |---|---|---|
 | `file_sync` | `fsync` · `fdatasync` · `none` | what step 2 and step 3 do before rename |
 | `dir_sync` | `fsync` · `none` | whether the containing directory is synced after rename |
-| `rename` | `atomic` · `best-effort` | whether rename-into-place is atomic on the declared filesystem |
-| `exclusive_create` | `link` · `O_EXCL` · `db-unique` · `none` | the create-exclusive primitive behind §2 step 4 and §3 step 3 |
+| `rename` | `atomic` · `best-effort` | whether rename-into-place is atomic on the declared filesystem, as POSIX.1-2024 `rename()` specifies |
+| `exclusive_create` | `link` · `O_EXCL` · `db-unique` · `none` | the create-exclusive primitive behind §2 step 4 and §3 step 3. `link` and `O_EXCL` mean the POSIX.1-2024 `link()` (fails with `EEXIST`) and `open(O_CREAT\|O_EXCL)` semantics |
 | `same_filesystem` | `required` · `checked` · `assumed` | whether the temporary directory is verified to share the destination filesystem |
 | `locks` | `advisory` · `none` | §4.3 |
 | `gc_grace` | duration | §6.1 |
@@ -363,7 +379,10 @@ printed for the parts it did read.
 A `holds` statement may name a location outside any hub (claims-model note §11). Fetching from it:
 
 1. runs the install path of §2 with the statement's hash as the expectation; the location is a hint and the
-   transport is binary-safe (#64);
+   transport is binary-safe (#64). Each location is an RFC 3986 URI (wire-format note §5). When the statement
+   declares the size (`content.bytes`), a fetch that delivers a different number of bytes is refused before
+   the hash is computed, and a fetch that runs past the declared size is cut off there; the OCI descriptor
+   rule ("verify size before digest") applied to a hold;
 2. on match, installs the blob; from then on the local store serves it and every operation treats it exactly
    as a blob from a package (C-core-120: "fetched-and-verified");
 3. on mismatch, refuses (intrinsic), names both hashes and the location, installs nothing, and leaves the
