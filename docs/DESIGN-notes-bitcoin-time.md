@@ -8,6 +8,11 @@ C-core-20, C-core-53, C-core-70, C-core-107, C-exch-16 and P-06 that depend on w
 local receipt → ordering by chain position) is kept intact; what changes is what gets stamped, where the proof
 lives and what the result unlocks.
 
+Standards used here, per the wire-format note's standards-first rule (its §0): the OpenTimestamps detached
+format as implemented by its reference library (§5.1; there is no standards-body specification), Bitcoin
+Core's consensus header rules and BIP 34, 113, 130 and 157 (§6), and CAIP-2 for the display-only chain id
+(§8.1). RFC 3161 time-stamp tokens and Roughtime (RFC 10049) were considered and are out of scope (§16).
+
 Every requirement below is stated as something an implementation does, refuses or displays. "The reader" is
 the implementation evaluating statements on the user's machine; "the author" is the key that signs them.
 
@@ -122,7 +127,7 @@ Before any chain work, the reader checks, in order; the first failure names its 
 | 3 | `stamped_digest` equals the raw hash bytes of `covered` | `invalid-anchor`, refused |
 | 4 | The proof blob named by `proof` is held and its bytes hash to `proof` | `missing-proof` (not a refusal; bound absent) |
 | 5 | Proof bytes within size limit; `proof_format` supported | `unsupported` or operational refusal |
-| 6 | Proof deserializes with the pinned OTS parser under depth/node limits; no trailing bytes | `invalid-proof` |
+| 6 | Proof deserializes per §5.1 under depth/node limits; no trailing bytes | `invalid-proof` |
 | 7 | The proof's declared file digest equals `stamped_digest`; file-hash op is SHA-256 | `invalid-proof` |
 
 A refusal under 1–3 or 5–7 is scoped to the `anchors` statement (C-btc-05): the log's other statements are
@@ -157,6 +162,31 @@ never the lowest `nTime`. A bad or unknown additional candidate does not invalid
 proof that fails checks 5–7 in §4 is invalid as a whole. If an earlier candidate is `unknown-height` and a
 later one is eligible, use the later one and display `earlier attestation at <h> not evaluable`.
 
+### 5.1 The `ots-detached-v1` format
+
+`ots-detached-v1` names the OpenTimestamps detached-timestamp file as implemented by the reference library
+`python-opentimestamps` (`opentimestamps/core/timestamp.py`, `op.py`, `notary.py`, `serialize.py`; values
+below checked against tag `python-opentimestamps-v0.4.5`). OpenTimestamps has no standards-body
+specification; this table is therefore part of the profile, and a parser that differs from it on any row does
+not conform, whichever library it uses.
+
+| Element | Bytes | Rule here |
+|---|---|---|
+| header magic | `00 4f70656e54696d657374616d7073 0000 50726f6f66 00 bf89e2e884e89294` (31 bytes: `\0OpenTimestamps\0\0Proof\0` + 8 bytes) | exact match, else `invalid-proof` |
+| major version | varuint `1` | any other value is `unsupported`, not `invalid-proof` |
+| file-hash op | `08` (sha256), then 32 digest bytes | any other hash op is `invalid-proof` (§4 check 7) |
+| operations | `f0` append, `f1` prepend (each with a varbytes argument, 1–4096 bytes); `f2` reverse; `f3` hexlify; `02` sha1, `03` ripemd160, `08` sha256, `67` keccak256 | any other tag is `invalid-proof`; an op whose result exceeds 4096 bytes is `invalid-proof` |
+| branching | `ff` before every branch except the last | depth ≤ 256 (the library's recursion limit, and §12's) |
+| attestation | `00`, an 8-byte tag, varbytes payload ≤ 8192 bytes, parsed to its exact end | trailing bytes inside a payload are `invalid-proof` |
+| Bitcoin attestation | tag `0588960d73d71901`; payload = varuint height | the only tag that can yield `bitcoin` quality |
+| pending attestation | tag `83dfe30d2ef90c8e`; payload = URI ≤ 1000 bytes from `A–Z a–z 0–9 - . _ / :` | displayed `pending`; never dereferenced (§2) |
+| other attestations | any other tag, including Litecoin `06869a0d73d71b45` | retained as `unsupported attestation`, granting nothing (I5) |
+| end of file | no bytes after the tree | `invalid-proof` |
+
+`varuint` is the library's base-128 little-endian encoding (seven bits per byte, high bit = continuation). The
+library's `master` writes the major version as a single byte while v0.4.5 writes a varuint; for version 1 the
+two are the same byte `01`, and a conforming parser accepts exactly that byte.
+
 ## 6. Chain-provider contract
 
 ### 6.1 Preferred: locally validated headers
@@ -168,14 +198,17 @@ The provider validates, with mainnet parameters: genesis identity or an explicit
 80-byte serialization, hashes and `prev` linkage; compact-target decoding (positive, non-zero,
 non-overflowing, within the PoW limit); actual proof of work; the **exact** retarget history including
 rounding and clamping (a permitted range is not enough); contextual rules (`nTime` above the median of the
-previous 11, version/activation rules of the chosen validator); future-time admission against the local
-clock; cumulative chainwork with greatest-work selection, never longest-by-height; reorg detection; lookup
-by height and by hash.
+previous 11, as Bitcoin Core's `ContextualCheckBlockHeader` enforces it, `time-too-old`; the same
+median-time-past BIP 113 uses; version/activation rules of the chosen validator, e.g. BIP 34 block versions);
+future-time admission against the local clock (Core's `MAX_FUTURE_BLOCK_TIME`, 2 hours, `time-too-new`);
+cumulative chainwork with greatest-work selection, never longest-by-height; reorg detection; lookup by height
+and by hash.
 
-Baseline: full header history from genesis (~80 MB per million headers). Pruned or checkpointed bootstraps
-may be offered with an explicit trust root and retained retarget/MTP context; a height-to-time table is not a
-bootstrap. Transport (P2P or other) is untrusted and never substitutes for validation. The operator chooses
-sources explicitly; there is no automatic discovery.
+Baseline: full header history from genesis (~80 MB per million headers), obtained headers-first (BIP 130
+`sendheaders` announcements; a BIP 157 compact-filter client is an acceptable header source). Pruned or
+checkpointed bootstraps may be offered with an explicit trust root and retained retarget/MTP context; a
+height-to-time table is not a bootstrap. Transport (P2P or other) is untrusted and never substitutes for
+validation. The operator chooses sources explicitly; there is no automatic discovery.
 
 ### 6.2 Optional: operator-controlled node
 
@@ -213,7 +246,7 @@ Defaults an implementation ships; every one is the reader's to change (I9), none
 | network during reads | never | reads touch receiver-local state only |
 | explorer fallback | none | unsupported, not merely disabled |
 | header sources | operator-configured | independent sources recommended; eclipse limit disclosed |
-| chainwork floor / bootstrap | explicit local value | no sender-selected trust root |
+| chainwork floor / bootstrap | explicit local value | no sender-selected trust root. The analogue of Bitcoin Core's `nMinimumChainWork`, which Core ships per release; here the reader sets it, and it is never taken from received data |
 
 Freshness uses the reader's clock and local sync state. A backward clock jump marks the view unavailable for
 live eligibility until a sync succeeds; this is reported as `stale-chain`, an operational state, never a proof
@@ -235,7 +268,7 @@ signer             key
 anchor             statement id of the `anchors` statement
 covered            statement id of the head
 proof              blob hash
-network, genesis_hash
+network, genesis_hash, chain_id (CAIP-2, display only: `bip122:` + the first 32 hex of genesis_hash)
 block_height, block_hash (display order), header_time (nTime, display only), confirmations
 chain_validation   headers-spv | operator-node | operator-node (remote)
 chain_epoch, verified_at (reader-local), policy_fingerprint, verifier_version
@@ -376,9 +409,9 @@ such; the tool never states the rival could not have published earlier.
 
 ## 12. Dependency and implementation boundaries
 
-- OTS parsing uses the reference library (`python-opentimestamps`, LGPL-3.0-or-later) or an equivalent, as a
-  pinned **optional** dependency, never vendored into the Apache-licensed tree. Absence of the dependency
-  leaves every bound `local` and every other command working.
+- OTS parsing uses the reference library (`python-opentimestamps`, LGPL-3.0-or-later) or any parser that meets
+  §5.1, as a pinned **optional** dependency, never vendored into the Apache-licensed tree. Absence of the
+  dependency leaves every bound `local` and every other command working.
 - The header validator is selected by an implementation spike against §6; a bare header parser with a
   per-header PoW check does not qualify. Its supported rules and bootstrap model are documented before a
   headers backend is advertised.
@@ -487,6 +520,9 @@ roots and bind nothing in the new format.
 
 - The wire format of statements and the exact byte encoding of a statement id (wire-format note).
 - Non-OTS timestamping schemes and non-Bitcoin chains; a second `proof_format` value is a separate note.
+  RFC 3161 time-stamp tokens are the likeliest candidate (a trusted-third-party time, so a quality of its own,
+  never `bitcoin`); Roughtime (RFC 10049, Experimental) attests a server's clock, not a digest's existence,
+  and could at most inform the reader's clock checks.
 - Choosing the header-validator dependency (implementation spike, §12).
 - Hub-side structural checks of `anchors` statements beyond the one validation core (claims-model note §11).
 - Any rule that turns commitment order into edit rights; none exists and none is planned (I10).
