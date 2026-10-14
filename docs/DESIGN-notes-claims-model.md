@@ -400,7 +400,7 @@ the source.
 
 | Disclosure | Values |
 |---|---|
-| licence | an SPDX license expression (SPDX 3.0.1 Annex B); terms with no SPDX identifier, open or not, are named by a `LicenseRef-` id whose text the author publishes; attribution notice (#6, #19). Missing or unparsable means unknown, not open. |
+| licence | an SPDX license expression (SPDX 3.0.1 Annex B); terms with no SPDX identifier, open or not, are named by a `LicenseRef-` id and cited the way a finality `rule_source` is (§5.3.1): by hash when the text is held, else by location, shown `cited (text held)` or `cited (location only, unverified)`. Terms whose owner does not allow republishing the text are cited by location. Attribution notice (#6, #19). Missing or unparsable means unknown, not open. |
 | availability | redistribution permission and byte obtainability, separately |
 | replication | `bytes` (public deterministic source named) · `protocol` (re-measurable, never the same bytes; method named) · `none` · undeclared (#1, #7) |
 | sampling | n with its unit, per-group n where the design has arms, dispersion, window (#2) |
@@ -482,10 +482,12 @@ immutable editions.
   never changes the terms retroactively. Endorsing a task in a collection doesn't change either one's id
   (#54).
 - **Growing series** (#8) are resources whose editions append segments, with an explicit `frozen_before`
-  boundary when recent data is still being revised. The boundary is the controller's declaration. Where
+  boundary when recent data is still being revised. The boundary is the controller's declaration, stated in
+  the unit the members' finality rules use (a date, a block height, a settlement run). Where
   segments carry finality rules (§5.3.1), a reader computes the members' finality boundary and shows both:
   "frozen_before 2025-06-01 (declared) · members final to 2025-04-01 (2 segments provisional)". A declared
-  boundary later than the computed one is flagged; `unchecked` when members carry no rule. A series edition
+  boundary later than the computed one is flagged; `unchecked` when members carry no rule; `not comparable`
+  when the declared unit differs from the computed one (never converted). A series edition
   rule may require agreement, so a hub can refuse a premature freeze under its own policy. A controller can
   still freeze a tail the source intends to revise; it cannot do so invisibly. An edition that replaces a
   segment dated before its predecessor's `frozen_before` is shown as `REVISED-FROZEN`; the earlier edition and
@@ -601,6 +603,11 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
   fictionally.
 - **Concurrent writers** never overwrite each other's committed objects. Same-key concurrent appends become a
   visible fork, not a lost line.
+- **Gaps in a log.** A statement whose predecessor the reader does not hold is kept and shown as `detached`,
+  with the missing range named. An `authored` or `observed` is attributed to its signer while detached, but
+  counts toward nothing; every other kind is not evaluated until it chains, because the missing stretch may
+  hold a revocation, a rotation or an earlier edition that changes what it means. Nothing is refused for
+  being detached, and nothing decided while it waited is rewritten when the gap fills.
 - **Caches** are keyed on content digests, policy and evaluator versions, never on file size or modification
   time. Deleting every cache yields the same answers (I14).
 - **Scans are bounded and honest.** Archives are scanned member by member or reported as unscanned (#20). Size
