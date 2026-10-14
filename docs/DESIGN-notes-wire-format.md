@@ -37,7 +37,15 @@ such place says why. A deliberate departure from an adopted standard is named wh
 | one spelling per instant | W3C XML Schema 1.1 Part 2 §3.3.7, `dateTimeCanonicalMap` | adopted for the fraction; departs by admitting second `60` (XSD has no leap seconds) |
 | timescales | FITS 4.0 §9.2.1, Table 30 (Rots et al. 2015, A&A 574, A36) | the non-deprecated codes only (§1.1) |
 | leap seconds | RFC 3339 §5.7; CGPM 2022 Resolution 4 | accepted as written, never normalised |
+| time intervals | ISO 8601 start/end intervals; RFC 9581 §5 | two fields, half-open `[from, to)` (§5 `window`) |
 | content hash | SHA-256, FIPS 180-4 (free text: RFC 6234) | lowercase hex (RFC 4648 §8 base16) |
+| licences | SPDX 3.0.1 Annex B license expressions | stored verbatim; free terms via `LicenseRef-` (§5) |
+| link relations | RFC 8288 §2.1; IANA Link Relations registry | annotation only, read by no resolver (§5 `describes`) |
+| locations of bytes | RFC 3986 URIs | hints, never dereferenced during verification (§5 `holds`) |
+| media types | RFC 6838 | |
+| geographic position | RFC 5870 `geo:` URI (WGS 84, `u=` uncertainty) | GeoJSON is not used: its coordinates are decimals, which §1 forbids |
+| image digest, platform | OCI image-spec descriptor digest; OCI image-index platform values | string form `<os>/<arch>[/<variant>]` (execution note §4) |
+| chain id | CAIP-2 | a label; the referent's block hash is the pin |
 | signature | EIP-191 `personal_sign` over secp256k1 (§4) | kept from the alpha |
 | folded lines in §9 | RFC 8792 §7, single-backslash strategy | |
 
@@ -206,9 +214,10 @@ grants nothing (C-core-13).
 
 | Object | Fields |
 |---|---|
-| `content` | `sha256` hash R · `bytes` integer R · `media_type` string O |
-| `provenance` | `workflow` hash R · `inputs` list of hash R (order preserved) · `environment` object O (`image_digest` string, `platform` string, `harness_commit` string) |
-| disclosures (on `authored`, `observed`) | `licence` string O (SPDX expression or `LicenseRef-*`) · `attribution` string O · `availability` object O (`redistribution` `"permitted"`/`"restricted"`/`"withheld"` R, `obtainable` boolean R, `withheld_until` string O) · `replication` `"bytes"`/`"protocol"`/`"none"` O · `comparator` hash O · `sampling` object O (`n` integer R, the total · `unit` string R, e.g. `runs`, `slots`, `records` · `groups` list of {`name` string R, `n` integer R} O, one per arm, names unique · `window` object O · `dispersion` object O) · `shelf_life_days` integer O · `pre_registration` `"exploratory"` or absent O · `fulfills` object O (`resource` id, `edition` id) · `intended_for` object O (`resource` id R, `edition` id R, `edition_applied` id R, `outcome` `"ok"`/`"unchecked"` R) · `description` string O |
+| `content` | `sha256` hash R · `bytes` integer R · `media_type` string O (an RFC 6838 media type, `type/subtype` with optional parameters, as in an HTTP `Content-Type`) |
+| `provenance` | `workflow` hash R · `inputs` list of hash R (order preserved) · `environment` object O (the environment record's standard forms, execution note §4: `image_digest` an OCI digest, `sha256:` + 64 hex; `platform` `<os>/<arch>[/<variant>]` with Go `GOOS`/`GOARCH` and OCI variant values; `harness_commit` full lowercase commit hex) |
+| `window` | `from` ts R · `to` ts R. Half-open, `[from, to)`: an instant equal to `to` is outside. The start-and-end form of an ISO 8601 time interval and of RFC 9581 §5 periods, written as two fields so each is checked as a time value (§1.1). The same shape wherever a window appears |
+| disclosures (on `authored`, `observed`) | `licence` string O (an SPDX license expression, SPDX 3.0.1 Annex B; terms with no SPDX identifier are named by a `LicenseRef-` id whose text the author publishes as a blob. Stored as written, never case-normalised; an expression the reader cannot parse displays `unknown`, C-core-67) · `attribution` string O · `availability` object O (`redistribution` `"permitted"`/`"restricted"`/`"withheld"` R, `obtainable` boolean R, `withheld_until` string O, a condition in prose or a task or edition reference, claims-model note §7) · `replication` `"bytes"`/`"protocol"`/`"none"` O · `comparator` hash O · `sampling` object O (`n` integer R, the total · `unit` string R, e.g. `runs`, `slots`, `records` · `groups` list of {`name` string R, `n` integer R} O, one per arm, names unique · `window` O · `dispersion` object O) · `shelf_life_days` integer O · `pre_registration` `"exploratory"` or absent O · `fulfills` object O (`resource` id, `edition` id) · `intended_for` object O (`resource` id R, `edition` id R, `edition_applied` id R, `outcome` `"ok"`/`"unchecked"` R) · `description` string O |
 | `finality` | `rule` string R · `rule_source` string O (a hash when the document is held, else a location) · `state_at_capture` object R (`depth` integer, or `run` string, or `captured_at` ts) |
 
 **Kinds**
@@ -216,9 +225,9 @@ grants nothing (C-core-13).
 | `kind` | Body fields |
 |---|---|
 | `authored` | `content` R · `type` string R (`dataset`, `workflow`, `skill`, `synthesis`, `report`, `other`) · `provenance` O · disclosures O · `supersedes` hash O (the author's own earlier blob) · `extends` hash O |
-| `observed` | `content` R · `class` R, exactly one of `exact-bytes` / `source` / `phenomenon` / `method` / `none-yet` (a list, or any second class field, is malformed; C-core-35) · `referent` object R, keys per class: exact-bytes `chain_id` string, `block_hash` hash, `depth` integer; source, either one request (`endpoint` string, `parameters` object, `response_sha256` hash) or a batch (`requests` object: `sha256` hash of a request log carried inside `content`, `format` string naming its layout, `count` integer; each log entry carries endpoint, parameters, status, time and response hash), never both; phenomenon `instrument` string, `location` object, `at` ts, `timescale` string O (§1.1); method `method_edition` id, `environment` object (`image_digest`, `platform`, `harness_commit`), `system` object R with free keys (whatever identifies the measured system and changes the apparatus under the observer, e.g. a model pin, a provider, a routing era; values are strings), `inputs` list of hash O (the protocol's pinned inputs: scenario edition, seed set, configuration; order preserved), `window` object (`from` ts, `to` ts), `timescale` string O (§1.1); none-yet: any · `capture` object R (`at` ts R, `evidence` `"self-asserted"`/`"anchored-at-capture"`/`"witnessed"`/`"device-attested"` R, `operator` string O, `instrument` string O, `witnesses` list of key O, `attestation` object O) · `finality` O (exact-bytes and source only) · disclosures O |
-| `holds` | `content` R · `locations` list of string O (URLs or content-addressed URIs; a hint, never authenticated) |
-| `describes` | `about` object R (exactly one of `content` hash, `statement` id, `resource` id) · `tags` list of string O · `note` string O · `links` list of object O (`rel` string R, one of `content`/`statement`/`resource`/`url` R) |
+| `observed` | `content` R · `class` R, exactly one of `exact-bytes` / `source` / `phenomenon` / `method` / `none-yet` (a list, or any second class field, is malformed; C-core-35) · `referent` object R, keys per class: exact-bytes `chain_id` string (a CAIP-2 chain id, e.g. `bip122:` + the first 32 hex of the genesis block hash), `block_hash` hash, `depth` integer; source, either one request (`endpoint` string, `parameters` object, `response_sha256` hash) or a batch (`requests` object: `sha256` hash of a request log carried inside `content`, `format` string naming its layout, `count` integer; each log entry carries endpoint, parameters, status, time and response hash), never both; phenomenon `instrument` string (a persistent identifier URI when the instrument has one, else free text), `location` string (an RFC 5870 `geo:` URI: WGS 84 latitude, longitude and optional altitude in metres, with `u=` uncertainty in metres; compared per RFC 5870 §3.4.4, numerically, never as text), `place` string O (a human label beside the coordinates), `at` ts, `timescale` string O (§1.1); method `method_edition` id, `environment` object (`image_digest`, `platform`, `harness_commit`), `system` object R with free keys (whatever identifies the measured system and changes the apparatus under the observer, e.g. a model pin, a provider, a routing era; values are strings), `inputs` list of hash O (the protocol's pinned inputs: scenario edition, seed set, configuration; order preserved), `window` (the shared object above), `timescale` string O (§1.1); none-yet: any · `capture` object R (`at` ts R, `evidence` `"self-asserted"`/`"anchored-at-capture"`/`"witnessed"`/`"device-attested"` R, `operator` string O, `instrument` string O, `witnesses` list of key O, `attestation` object O) · `finality` O (exact-bytes and source only) · disclosures O |
+| `holds` | `content` R · `locations` list of string O (RFC 3986 URIs: `https:` URLs or content-addressed URIs; a hint, never authenticated, never dereferenced during verification) |
+| `describes` | `about` object R (exactly one of `content` hash, `statement` id, `resource` id) · `tags` list of string O · `note` string O · `links` list of object O (`rel` string R, one of `content`/`statement`/`resource`/`url` R). `rel` is a relation type registered in the IANA Link Relations registry (compared case-insensitively, RFC 8288 §2.1.1) or an absolute URI (§2.1.2). A link is the signer's annotation and grants nothing: no resolver reads `rel`, so `predecessor-version` on a `describes` is never a supersession |
 | `reproduced` | `of` id R (the `authored` reproduced) · `result` `"match"`/`"diverged"`/`"not-comparable"` R · `content` R (the bytes this run produced) · `provenance` R · `comparator` hash O · `report` hash O (divergence report) |
 | `corroborates` | `of` id R (the `observed`) · `result` id R (the derived corroboration result's `authored`) · `verdict` `"supports"`/`"contradicts"`/`"inconclusive"` R · `model` string R (agreement model name or hash) · `cohort` object R (`rule` string, or `hand_picked` true) · `shares` list of string O (what this shares with the original: feed, operator, instrument) · `cause` string O (for `inconclusive`) |
 | `refutes` | `of` id R · `evidence` hash R · `note` string O |
@@ -359,21 +368,21 @@ sig: 0x2a057f7c29c727ae44e914f39163855f1adf948070bf07840cd7a2ac643d2c0e3b0f\
 ```text
 NOTE: '\' line wrapping per RFC 8792
 
-signed string, 520 bytes:
+signed string, 519 bytes:
 rc/1/describes
 {"alg":"eip191-secp256k1","body":{"about":{"content":"2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b\
 2b2b2b2b2b2b2b2b2b"},"links":[{"content":"7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a\
-7a7a7a","rel":"see-also"}],"note":"line1\nline2\ttab \u0001 ctl","tags":["météo","日本語","\"quoted\""]\
-},"kind":"describes","prev":"8aedd7280a997830c1e64d49c6053a3da49a21b213528be1e618269f97b569c6","rc":\
-"rc/1","seq":3,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:07:00Z"}
-id:  0d5843900399dad623038da22a16a1f51d5c9c7d759d23c637dfa2fa7e76014a
-sig: 0xcdd4fb81a635ad583e75832c2b846a33503b69a86fb738c99f0cc2a3f41bf8fe79d6\
-     baee1c196a1a064b55e70990d56f70c4c0d74c9f339afd184b926f5080401c
+7a7a7a","rel":"related"}],"note":"line1\nline2\ttab \u0001 ctl","tags":["météo","日本語","\"quoted\""]}\
+,"kind":"describes","prev":"8aedd7280a997830c1e64d49c6053a3da49a21b213528be1e618269f97b569c6","rc":"\
+rc/1","seq":3,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:07:00Z"}
+id:  a9b65b15e8ae0ee001997a5205dd29deeafa7aa6ff9d70352ab77f49b62c46c9
+sig: 0x89cd50b9fe07dfdce7483601703a8dcd36d740b5beb5aa07fdbdc5f49953d8f078ab\
+     e1ef8ff238d2d0134c899280e8648087a762a0c8159dc73c1a6cba022da21b
 ```
 
 `météo` is NFC (U+00E9) and is emitted raw, 6 bytes; `\n`, `\t` and `\u0001` are the only escapes. The same
 body with `météo` in NFD (`e` + U+0301) has id
-`b1563de222319d5e33fa58ec60f87573a7c181e388cc51feb78769c76405f58d`: a different statement, by rule (no
+`0292c327ec21dc78a31e0020011349453056533e5a4d26ec0eb03a2e81086878`: a different statement, by rule (no
 normalisation).
 
 **V5 genesis (collection, 2-of-2)**
@@ -385,12 +394,12 @@ signed string, 419 bytes:
 rc/1/genesis
 {"alg":"eip191-secp256k1","body":{"controllers":["0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","0xaba\
 babababababababababababababababababab"],"name":"station-readings","rule":{"k_of_n":{"k":2}},"type":"\
-collection"},"kind":"genesis","prev":"0d5843900399dad623038da22a16a1f51d5c9c7d759d23c637dfa2fa7e7601\
-4a","rc":"rc/1","seq":4,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:08\
+collection"},"kind":"genesis","prev":"a9b65b15e8ae0ee001997a5205dd29deeafa7aa6ff9d70352ab77f49b62c46\
+c9","rc":"rc/1","seq":4,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:08\
 :00Z"}
-id:  4513d8b1f8c66fac5ea3185feb72195fef0dfb71e67c65e5cea5d94a27612d65
-sig: 0x3bc7a3e6c5d509645d542f26db89219f7dd52e6fbf6ac765af7726354b2e667313c1\
-     ce7f9550347b059c9e138ad326475b32dde42fecba2138f8a7dd184d43971b
+id:  ac4ef7c07b6ef48861c6bf1059eedba79e5df52b5b389594d77e256624e90927
+sig: 0x4f3cf2aa0d9cf9464bfacbe940c2c0869ea6845b77bafbc7d4389b80e7f4bd801e2b\
+     51e6ab90699fef2a02758a649efe732a88a2b7fcf9bed7de2e1130f494c91c
 ```
 
 The resource id is this statement's id (C-core-77). `controllers` is a set, sorted by the key order of §1.
@@ -404,14 +413,14 @@ signed string, 639 bytes:
 rc/1/edition
 {"alg":"eip191-secp256k1","body":{"contents":{"frozen_before":"2026-09-01","members":[{"content":"7a\
 7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a","role":"segment"}],"rules":[{"dialec\
-t":"rc-rules/1","expr":"sampling.n >= 30"}],"selection":"rule-based"},"predecessors":["4513d8b1f8c66\
-fac5ea3185feb72195fef0dfb71e67c65e5cea5d94a27612d65"],"resource":"4513d8b1f8c66fac5ea3185feb72195fef\
-0dfb71e67c65e5cea5d94a27612d65"},"kind":"edition","prev":"4513d8b1f8c66fac5ea3185feb72195fef0dfb71e6\
-7c65e5cea5d94a27612d65","rc":"rc/1","seq":5,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","t\
+t":"rc-rules/1","expr":"sampling.n >= 30"}],"selection":"rule-based"},"predecessors":["ac4ef7c07b6ef\
+48861c6bf1059eedba79e5df52b5b389594d77e256624e90927"],"resource":"ac4ef7c07b6ef48861c6bf1059eedba79e\
+5df52b5b389594d77e256624e90927"},"kind":"edition","prev":"ac4ef7c07b6ef48861c6bf1059eedba79e5df52b5b\
+389594d77e256624e90927","rc":"rc/1","seq":5,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","t\
 s":"2026-10-12T20:09:00Z"}
-id:  daa820dcaaa9e2ccbe2c1f0df2693b6fd544723a534d219db213d25f5d840f8e
-sig: 0x1b866dd8c8e5aac55cdc75f9a53e1825a46499e334d3fc8a60afab0428e4b6d42150\
-     76a649074439e880530e1a55d2cffa5038e7fece2f99c22d6d225ddfaa9a1c
+id:  a431080c8b91973d1ef5090ed797b4d0a4f975806375c2699d61806c0bb24ac9
+sig: 0x3edda0c301c0024c56af120e9e09562c6f8c49329b29060c2b48ffbaa7433ce60464\
+     2c6da5b3c1f820f6d432a91d9f5b3f31d38eae50594aa06470e9447564e21b
 ```
 
 Under the 2-of-2 rule this edition is one approval and is not yet the tip (C-core-82).
@@ -423,14 +432,14 @@ NOTE: '\' line wrapping per RFC 8792
 
 signed string, 429 bytes:
 rc/1/anchors
-{"alg":"eip191-secp256k1","body":{"head":"daa820dcaaa9e2ccbe2c1f0df2693b6fd544723a534d219db213d25f5d\
-840f8e","head_seq":5,"proof":{"scheme":"ots","sha256":"d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d\
-0d0d0d0d0d0d0d0d0d0"}},"kind":"anchors","prev":"daa820dcaaa9e2ccbe2c1f0df2693b6fd544723a534d219db213\
-d25f5d840f8e","rc":"rc/1","seq":6,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-1\
+{"alg":"eip191-secp256k1","body":{"head":"a431080c8b91973d1ef5090ed797b4d0a4f975806375c2699d61806c0b\
+b24ac9","head_seq":5,"proof":{"scheme":"ots","sha256":"d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d\
+0d0d0d0d0d0d0d0d0d0"}},"kind":"anchors","prev":"a431080c8b91973d1ef5090ed797b4d0a4f975806375c2699d61\
+806c0bb24ac9","rc":"rc/1","seq":6,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-1\
 0-12T20:10:00Z"}
-id:  da3bcb52749da54467e9756b28fd62faee77b3f97a3eb85f5a349bb242aef10f
-sig: 0xda1e8f7a156da2f3920e238e08deca118de40293cd7ddd33f9a51359f4edf40162fa\
-     2f9f93d17b612820a0e913e1a1b09e2f1a10f6a21803e5cad801c1ca82161b
+id:  af38b02aace72ca6d7bf00536aee65ebb3bfd23da035894a4a16703e4c2aae61
+sig: 0xf6d47c8cf1d2772e9780ebe3bcb83f52fd8c036283cfbfe703b02855fb19e1c308e1\
+     d0412691c6ca7869751f03cd7ddfd35d60548c163eecf485421ea000e97c1c
 ```
 
 The proof bytes are a separate blob; this statement binds the log prefix through `seq` 5 to them. Quality is
@@ -445,12 +454,12 @@ signed string, 435 bytes:
 rc/1/authored
 {"alg":"eip191-secp256k1","body":{"content":{"bytes":10,"sha256":"e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1\
 e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1"},"type":"report","x_escrow":{"until":"2027-01-01"},"x_note":"ignored\
-"},"critical":["x_escrow"],"kind":"authored","prev":"da3bcb52749da54467e9756b28fd62faee77b3f97a3eb85\
-f5a349bb242aef10f","rc":"rc/1","seq":7,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2\
+"},"critical":["x_escrow"],"kind":"authored","prev":"af38b02aace72ca6d7bf00536aee65ebb3bfd23da035894\
+a4a16703e4c2aae61","rc":"rc/1","seq":7,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2\
 026-10-12T20:11:00Z"}
-id:  7f9a7de1059c0ceb3c6dca91c06ae3fa5cdb2d43aba95833976a3a8484d09bfb
-sig: 0xb0d610bd8aa70debccffbf337b6bf8a218ece32c99a057210815a99671e4f0b77a09\
-     e56fdb1a29d31d72669f34b9fd8bdb2b4473244011a403349a53d71c73621b
+id:  c6a734687ef69c3029967bae5d724f9851b497177e12a27595175327440798e0
+sig: 0x535e68f907a23b243b3af54674207321bec66cfca13d773ffe7b841a28ab5d460041\
+     81fcac6bb7b4879ac4eaa878b9c3e45fb1785b390eeb4806e9ba51b59c421c
 ```
 
 A reader without `x_escrow` retains this as `unsupported`; `x_note` alone would be retained and ignored. The
@@ -461,17 +470,17 @@ A reader without `x_escrow` retains this as `unsupported`; `x_note` alone would 
 ```text
 NOTE: '\' line wrapping per RFC 8792
 
-signed string, 575 bytes:
+signed string, 607 bytes:
 rc/1/observed
 {"alg":"eip191-secp256k1","body":{"capture":{"at":"2026-10-12T20:11:58.25Z","evidence":"self-asserte\
 d","instrument":"daq-7"},"class":"phenomenon","content":{"bytes":2048,"sha256":"3c3c3c3c3c3c3c3c3c3c\
 3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c"},"referent":{"at":"2026-10-12T20:12:35.000000012","ins\
-trument":"daq-7","location":{"site":"bench-3"},"timescale":"TAI"}},"kind":"observed","prev":"7f9a7de\
-1059c0ceb3c6dca91c06ae3fa5cdb2d43aba95833976a3a8484d09bfb","rc":"rc/1","seq":8,"signer":"0xf71e7c9cc\
-e990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:12:00Z"}
-id:  84f2c14858e8a86c2e11779b2003a2a399bfa8c167de6af8b3df3424c50e4b78
-sig: 0xc0b9c39b14d40728d5fd2b6b30aa8525bf9d9dff754101f97a9cdf3cdf721eda5935\
-     afd232a04257fbec3021632b46a30de7f426094524a76673239798b1d88e1c
+trument":"daq-7","location":"geo:39.7392,-104.9903,1609;u=5","place":"bench-3","timescale":"TAI"}},"\
+kind":"observed","prev":"c6a734687ef69c3029967bae5d724f9851b497177e12a27595175327440798e0","rc":"rc/\
+1","seq":8,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:12:00Z"}
+id:  ffeb07c25facbeaeb61bccd04af2c6a97d38da961018b65f617dfa4e9bb13fa0
+sig: 0xb3928d959719f26681aa556c1d5e4f0d10b3cf45424685b21d405069fb67d9457547\
+     a0932a6b5b17951ea49083a6604560f26c7e71d72b6528502fdd3dd9dbc81b
 ```
 
 `capture.at` carries a fraction of two digits and the referent `at` one of nine; neither has trailing zeros.
@@ -485,12 +494,12 @@ NOTE: '\' line wrapping per RFC 8792
 signed string, 386 bytes:
 rc/1/describes
 {"alg":"eip191-secp256k1","body":{"about":{"content":"3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c\
-3c3c3c3c3c3c3c3c3c"},"tags":["sort-order"],"x_😀":"astral","x_ｱ":"bmp"},"kind":"describes","prev":"84\
-f2c14858e8a86c2e11779b2003a2a399bfa8c167de6af8b3df3424c50e4b78","rc":"rc/1","seq":9,"signer":"0xf71e\
+3c3c3c3c3c3c3c3c3c"},"tags":["sort-order"],"x_😀":"astral","x_ｱ":"bmp"},"kind":"describes","prev":"ff\
+eb07c25facbeaeb61bccd04af2c6a97d38da961018b65f617dfa4e9bb13fa0","rc":"rc/1","seq":9,"signer":"0xf71e\
 7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:13:00Z"}
-id:  e7808c5576fab7ce4b2cd2081b5df7b7eb34b507e7f625e6e7eccb54d62d938f
-sig: 0xfbaa46b6e4e6acf01688dd3ae30dcdf87fb0d7d179dcbea46052b874ba5f192436de\
-     ff7825cde7f058f69dc1eae3f31ebe72a08d7d3242a450692263056f30b11c
+id:  a739dbfbf38e7b8a8b874ce870e486cf3397f834e6d134729f20eb63af73a74a
+sig: 0x6a0553982ad38b1ad38f2b347fcded38af796e927139211414bb7df570ff15e70511\
+     eac636813cf231fb14bda93339e695f4704100367b38d70dc8f9a679b11d1c
 ```
 
 The two extension keys are `x_` + U+1F600 and `x_` + U+FF71. RFC 8785 compares UTF-16 code units, where
@@ -508,12 +517,12 @@ after. A canonicaliser that sorts by code point produces a different string and 
 | N5 wrong log | V1 delivered into a log named for `0xabab…abab` | intrinsic: `line in another key's log` |
 | N6 tag mismatch | V1's signed string with first line `rc/1/anchors` and V1's `sig` | intrinsic: `bad signature` (recovers a different address) |
 | N7 flipped byte | V1 with `"CC-BY-4.0"` → `"CC-BY-4.1"` and V1's `sig` | intrinsic: `bad signature`; no field displayed as the signer's (C-core-09) |
-| N8 trailing zero | V9 with `capture.at` `…58.250Z`, validly signed over that string; signed string sha256 `8056500bbc0ae257496fbfde7b13e1ff08a543a35fdf4c250a3194f87efaa03e` | intrinsic: malformed statement (`non-canonical time`) |
-| N9 ten digits | V9 with the referent `at` `…35.0000000120` (ten fraction digits), validly signed; sha256 `bfcd0d214b390d3688e7caa83ce8f420c4291a5a19afa0bcd1cc6c3d3e38fe24` | intrinsic: malformed statement (`non-canonical time`) |
-| N10 numeric offset | V9 with `ts` `2026-10-12T20:12:00+00:00`, validly signed; sha256 `1f36cc8b8528b1ab1b138aa94b2955f1faafed391e2f564005cfe073e9dac3a3` | intrinsic: malformed statement (`non-canonical time`) |
-| N11 code-point key order | V10's envelope serialised with keys in code-point order and validly signed over that string; sha256 `0dfc80a55edae211a60f881bbd08b863d3350d1a3445be99929a2ce541262071` | intrinsic: `bad signature` (the reader's JCS form of the envelope is V10's string, which this signature does not cover) |
-| N12 leap second outside UTC | V9 with the TAI referent `at` `2016-12-31T23:59:60`, validly signed; sha256 `95d1b0d8a6531a2e0d3770661dddb4004fce9e3d2f73f05f994c7bda9d302bd3` | intrinsic: malformed statement (second 60 outside UTC) |
-| N13 `Z` on a TAI time | V9 with the referent `at` ending `Z`, validly signed; sha256 `370a8a3236fe5a3e96eca4a6f4611abd4dffe8695b8aeca49edf40d42e63b73a` | intrinsic: malformed statement (`Z` asserts UTC; the referent names `TAI`) |
+| N8 trailing zero | V9 with `capture.at` `…58.250Z`, validly signed over that string; signed string sha256 `3ff74d11000cd30e68483abda4b8972d99ab227558e0ef5b832b38b906e715ab` | intrinsic: malformed statement (`non-canonical time`) |
+| N9 ten digits | V9 with the referent `at` `…35.0000000120` (ten fraction digits), validly signed; sha256 `cd78b9e12894c57f549076d32d109ccaa993bd10635c9fb886079f42de9cfe3d` | intrinsic: malformed statement (`non-canonical time`) |
+| N10 numeric offset | V9 with `ts` `2026-10-12T20:12:00+00:00`, validly signed; sha256 `4c7c5de484aa8e29efd8b0dd73a6df75368f27e1e5a9e9fac8e7f519571c1001` | intrinsic: malformed statement (`non-canonical time`) |
+| N11 code-point key order | V10's envelope serialised with keys in code-point order and validly signed over that string; sha256 `13145d7e06dfb5dacc3555be7d537815a852618fc5af77ac9145c921c6fc9b48` | intrinsic: `bad signature` (the reader's JCS form of the envelope is V10's string, which this signature does not cover) |
+| N12 leap second outside UTC | V9 with the TAI referent `at` `2016-12-31T23:59:60`, validly signed; sha256 `d35ffdbc0029b440b43184edb789686c2e6a090b50c7d1da5fac662871e5539a` | intrinsic: malformed statement (second 60 outside UTC) |
+| N13 `Z` on a TAI time | V9 with the referent `at` ending `Z`, validly signed; sha256 `bf1d06db155049a5c7518c962e9103c381f7f74b7fad09b2dc5cac9a4844922c` | intrinsic: malformed statement (`Z` asserts UTC; the referent names `TAI`) |
 
 Empty content, for §8: `sha256("") = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
 
