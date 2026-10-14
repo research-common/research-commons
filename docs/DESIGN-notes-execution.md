@@ -211,8 +211,9 @@ note fixes the fields and their meaning.
 | field | meaning | required under |
 |---|---|---|
 | `profile` | `sandbox` · `native` | both |
-| `image.reference`, `image.digest` | image name and the per-platform manifest digest actually run | `sandbox` |
-| `platform` | OS and architecture of the execution (`linux/amd64`, …) | both |
+| `image.reference`, `image.digest` | image name and the per-platform manifest digest actually run. `image.digest` is an OCI digest string (OCI image-spec, descriptor §Digests): `sha256:` + 64 lowercase hex | `sandbox` |
+| `platform` | OS and architecture of the execution as `<os>/<arch>[/<variant>]`, with `os` and `arch` from Go's `GOOS`/`GOARCH` values and `variant` from the OCI image-index `platform.variant` list (`linux/amd64`, `linux/arm64/v8`); the string the OCI tooling accepts for `--platform` | both |
+| `harness_commit` | the commit of the harness that launched the run, as full lowercase hex (40 for a SHA-1 repository, 64 for SHA-256), never an abbreviation or a tag | both, when the harness is a repository |
 | `runtime` | container runtime name and version (sandbox); interpreter name and version (native) | both |
 | `interpreter` | the interpreter the step was invoked under, with its version as reported inside the environment | both |
 | `declared_deps` | the spec's dependency declarations, verbatim | both |
@@ -227,6 +228,11 @@ note fixes the fields and their meaning.
 
 Rules:
 
+- **Standard forms.** Following the wire-format note's standards-first rule (its §0), digest and platform
+  use the OCI forms above, so the record holds the strings `docker inspect`, `crane digest` and OCI
+  registries print, and two records compare by string equality. Platform strings are compared as written:
+  `linux/arm64` and `linux/arm64/v8` are different strings, so a record pins the variant whenever the runtime
+  reports one.
 - **Measured, not copied.** `image.digest`, `platform`, `runtime`, `peak_rss_bytes` and `wall_time_ms` are
   taken from the runtime after the run, never from the spec. A value the implementation could not measure is
   written as `unmeasured`, never as zero or as the spec's number.
