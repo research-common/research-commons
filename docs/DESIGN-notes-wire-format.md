@@ -10,7 +10,8 @@ C-core-127, C-core-141, P-02.
 
 - A statement is one JSON object, the **envelope**: `rc`, `kind`, `signer`, `alg`, `seq`, `prev`, `ts`,
   `body`, optional `crit`, and `sig`. Everything except `sig` is signed. Nothing rides outside.
-- The **signed string** is `rc/<major>/<kind>` + LF + the canonical JSON of the envelope minus `sig`.
+- The **signed string** is the DSSE pre-authentication encoding (PAE) of the canonical JSON of the envelope
+  minus `sig`, with payload type `application/vnd.research-commons.<kind>.v<major>+json`.
 - **Statement id** = full lowercase hex sha256 of the signed string. Short forms are display aliases only.
 - **Canonical JSON** is RFC 8785 (JCS) output over the I-JSON (RFC 7493) subset, further restricted to
   integers, with duplicate keys refused, depth ≤ 16, statement ≤ 64 KiB. No Unicode normalisation.
@@ -22,7 +23,8 @@ C-core-127, C-core-141, P-02.
 - `prev` and `seq` are inside the signature, so a same-key fork is two signed lines, not a relayer's edit.
 - Unknown fields are retained and ignored. A `crit` member the reader does not implement makes the whole
   statement `unsupported`: retained, never evaluated. An unknown `rc` major is `unsupported` the same way.
-- Content identity is sha256 of the exact bytes, full hex. Vectors in §9 were computed, not typed.
+- Content identity is sha256 of the exact bytes, written as an OCI digest, `sha256:<64 hex>`. Statement ids
+  are bare 64 hex (§8). Vectors in §9 were computed, not typed.
 
 **Standards first.** Where a published standard already defines something this note needs, the note adopts it
 and states the profile (the subset it allows) instead of writing a rule of its own. A home-grown rule is used
@@ -31,6 +33,7 @@ such place says why. A deliberate departure from an adopted standard is named wh
 
 | Need | Standard adopted | Profile or departure |
 |---|---|---|
+| signed-string framing | DSSE v1.0.2 protocol, PAE | the PAE string is the message the algorithm signs; DSSE's JSON envelope is not used (§2) |
 | canonical JSON | RFC 8785, JSON Canonicalization Scheme (JCS) | output restricted to integers (§1); input refused rather than repaired where §1 says so |
 | JSON subset | RFC 7493, I-JSON §2.2 (number range), §2.3 (unique names) | integers only, \|n\| ≤ 2^53 − 1 |
 | date-time syntax | RFC 3339 §5.6 (an Internet profile of ISO 8601) | `T` and `Z` upper case, no numeric offsets, ≤ 9 fractional digits (§1.1) |
@@ -38,7 +41,7 @@ such place says why. A deliberate departure from an adopted standard is named wh
 | timescales | FITS 4.0 §9.2.1, Table 30 (Rots et al. 2015, A&A 574, A36) | the non-deprecated codes only (§1.1) |
 | leap seconds | RFC 3339 §5.7; CGPM 2022 Resolution 4 | accepted as written, never normalised |
 | time intervals | ISO 8601 start/end intervals; RFC 9581 §5 | two fields, half-open `[from, to)` (§5 `window`) |
-| content hash | SHA-256, FIPS 180-4 (free text: RFC 6234) | lowercase hex (RFC 4648 §8 base16) |
+| content hash | SHA-256, FIPS 180-4 (free text: RFC 6234), written as an OCI image-spec digest | `sha256:` + 64 lowercase hex (RFC 4648 §8 base16); statement ids bare (§8) |
 | licences | SPDX 3.0.1 Annex B license expressions | stored verbatim; free terms via `LicenseRef-` (§5) |
 | link relations | RFC 8288 §2.1; IANA Link Relations registry | annotation only, read by no resolver (§5 `describes`) |
 | locations of bytes | RFC 3986 URIs | hints, never dereferenced during verification (§5 `holds`) |
@@ -133,14 +136,29 @@ uncertainty is not a field yet (§11).
 **What is signed.** Every field except `sig`. The **signed string** is
 
 ```text
-rc/<major>/<kind> LF canonical(envelope without "sig")
+PAE(type, body) = "DSSEv1" SP LEN(type) SP type SP LEN(body) SP body
+type            = "application/vnd.research-commons." kind ".v" major "+json"
+body            = canonical(envelope without "sig")
+SP = one 0x20 byte · LEN = the byte length in decimal ASCII, no leading zeros
 ```
 
-The first line is the **domain tag**. It is derived from `rc` and `kind`, so a statement whose tag does not
-match its own `rc` and `kind` fields cannot verify: a reader that recomputes the tag from the fields and
-recovers a different signer refuses with `bad signature`. The tag keeps a signature over an `authored` from
-ever verifying as an `anchors`, and keeps every other signed object the tool might one day add (a policy
-digest, a local receipt) out of the statement namespace by giving them a different first line.
+This is the pre-authentication encoding of DSSE (Dead Simple Signing Envelope, v1.0.2, protocol.md), the
+framing in-toto, Sigstore, TUF and PyPI attestations sign. The **payload type** is the domain tag. It is
+derived from `rc` and `kind`, so a statement whose type does not match its own `rc` and `kind` fields cannot
+verify: a reader that recomputes the type from the fields and recovers a different signer refuses with
+`bad signature`. The type keeps a signature over an `authored` from ever verifying as an `anchors`, and keeps
+every other signed object the tool might one day add (a policy digest, a local receipt) out of the statement
+namespace by giving it a different type. Both lengths are signed, so no choice of body bytes can shift where
+the type ends.
+
+What is adopted is the framing only. DSSE's JSON envelope (base64 `payload`, `signatures[]`) is not the wire
+form: a statement is one canonical JSON line in its signer's log (§7), with `sig` beside the signed fields.
+DSSE's rule to reject an unsupported payload type is replaced by this note's retain-as-`unsupported` (§6).
+Any DSSE library that accepts a caller-supplied signing function can therefore rebuild the exact bytes a
+statement's signature covers. Under `eip191-secp256k1` the PAE string is the EIP-191 message (§4).
+
+The payload types are vendor-tree media types (RFC 6838 §3.2). They are not registered with IANA yet;
+registration is the project's decision and changes nothing on the wire.
 
 **Why `prev` and `seq` are inside the signature.** In the alpha the chain link was set at commit and left
 outside the signature so that chaining could not invalidate a signature. The claims-model note turns that
@@ -157,8 +175,9 @@ flagged `incoherent` (C-core-106). Both comparisons use parsed times (§1.1).
 
 ## 3. Statement identity
 
-`id = sha256(signed string)`, rendered as 64 lowercase hex characters, with no prefix. The id covers the
-domain tag, every envelope field and the whole body, and excludes `sig`. Consequences, each a test:
+`id = sha256(signed string)`, rendered as 64 lowercase hex characters, with no prefix (§8 says why ids carry
+none). The id covers the payload type, every envelope field and the whole body, and excludes `sig`.
+Consequences, each a test:
 
 - Two statements from one key that differ in one field (a reason, a TTL, an unknown extension) have two ids,
   and neither is a replay of the other (C-core-02a first pair, C-core-11).
@@ -166,13 +185,13 @@ domain tag, every envelope field and the whole body, and excludes `sig`. Consequ
   C-core-10, P-02). The second delivery is a no-op; the stored `sig` is the canonical encoding (§4).
 - Flipping one byte anywhere in the signed string changes the id and breaks the signature (C-core-09).
 - The id of a genesis statement is the resource id (C-core-77); the id of an edition is its edition hash
-  (C-core-78); `prev` and `predecessors` and `head` are ids.
+  (C-core-78); `prev` and `predecessors` and `head` are ids, never digests.
 
-**Display aliases.** A surface may print the first 12 hex characters of an id or a content hash as a label.
-An alias is accepted as input only when exactly one held object matches; zero matches is `not found` and
-two or more is an error that lists every candidate full hash and selects nothing (C-core-03). Aliases are
-never written into a statement: every reference field in §5 is a full hash, and a 12-character value where a
-64-character one is required is a malformed statement.
+**Display aliases.** A surface may print the first 12 hex characters of an id or of a content digest (after
+the `sha256:` prefix) as a label. An alias is accepted as input only when exactly one held object matches;
+zero matches is `not found` and two or more is an error that lists every candidate full hash and selects
+nothing (C-core-03). Aliases are never written into a statement: every reference field in §5 is a full id or
+digest, and a 12-character value where a full one is required is a malformed statement.
 
 ## 4. Signature scheme
 
@@ -180,7 +199,7 @@ One algorithm is required of every implementation, and it is the alpha's primiti
 
 | `alg` | Signed bytes | Signature | Verification |
 |---|---|---|---|
-| `eip191-secp256k1` | EIP-191 `personal_sign`: keccak256 of `"\x19Ethereum Signed Message:\n" + len + msg`, where `msg` is the signed string (§2) as UTF-8 bytes and `len` is its byte length in decimal | 65 bytes `r ‖ s ‖ v` as `0x` + 130 lowercase hex | recover the secp256k1 public key, keccak-derive the address, compare case-insensitively with `signer`; mismatch is `bad signature` (intrinsic) |
+| `eip191-secp256k1` | EIP-191 `personal_sign`: keccak256 of `"\x19Ethereum Signed Message:\n" + len + msg`, where `msg` is the signed string (§2, the PAE string) as UTF-8 bytes and `len` is its byte length in decimal | 65 bytes `r ‖ s ‖ v` as `0x` + 130 lowercase hex | recover the secp256k1 public key, keccak-derive the address, compare case-insensitively with `signer`; mismatch is `bad signature` (intrinsic) |
 
 Rules:
 
@@ -204,39 +223,40 @@ Rules:
 ## 5. Kinds and body fields
 
 Kinds are the closed vocabulary of claims-model note §4; this section fixes their body field names (snake
-case) and types. `R` = required, `O` = optional. `hash` = 64 lowercase hex (sha256). `key` = lowercase `0x` +
-40 hex. `id` = a statement id (hash). `ts` = a time value (§1.1); `date` = an RFC 3339 `full-date`. A kind
-listed here with a missing `R` field is a malformed statement (intrinsic), with one exception the note itself
-makes: an `observed` whose `referent` lacks a field its class requires is valid, admitted, and shown
-`unpinned` (claims-model note §5.3.1). A kind not listed here is stored and displayed as `unknown kind` and
-grants nothing (C-core-13).
+case) and types. `R` = required, `O` = optional. `digest` = a content digest, `sha256:` + 64 lowercase hex
+(§8). `key` = lowercase `0x` + 40 hex. `id` = a statement id, 64 lowercase hex with no prefix (§3). `ts` = a
+time value (§1.1); `date` = an RFC 3339 `full-date`. A kind listed here with a missing `R` field is a
+malformed statement (intrinsic), with one exception the note itself makes: an `observed` whose `referent`
+lacks a field its class requires is valid, admitted, and shown `unpinned` (claims-model note §5.3.1). A kind
+not listed here is stored and displayed as `unknown kind` and grants nothing (C-core-13).
 
 **Shared body objects**
 
 | Object | Fields |
 |---|---|
-| `content` | `sha256` hash R · `bytes` integer R · `media_type` string O (an RFC 6838 media type, `type/subtype` with optional parameters, as in an HTTP `Content-Type`) |
-| `provenance` | `workflow` hash R · `inputs` list of hash R (order preserved) · `environment` object O (the environment record's standard forms, execution note §4: `image_digest` an OCI digest, `sha256:` + 64 hex; `platform` `<os>/<arch>[/<variant>]` with Go `GOOS`/`GOARCH` and OCI variant values; `harness_commit` full lowercase commit hex) |
+| `content` | `digest` digest R · `size` integer R (the exact byte length) · `media_type` string O (an RFC 6838 media type, `type/subtype` with optional parameters, as in an HTTP `Content-Type`) |
+| `provenance` | `workflow` digest R · `inputs` list of digest R (order preserved) · `environment` object O (the environment record's standard forms, execution note §4: `image_digest` an OCI digest, `sha256:` + 64 hex; `platform` `<os>/<arch>[/<variant>]` with Go `GOOS`/`GOARCH` and OCI variant values; `harness_commit` full lowercase commit hex) |
 | `window` | `from` ts R · `to` ts R. Half-open, `[from, to)`: an instant equal to `to` is outside. The start-and-end form of an ISO 8601 time interval and of RFC 9581 §5 periods, written as two fields so each is checked as a time value (§1.1). The same shape wherever a window appears |
-| disclosures (on `authored`, `observed`) | `licence` string O (an SPDX license expression, SPDX 3.0.1 Annex B; terms with no SPDX identifier are named by a `LicenseRef-` id whose text the author publishes as a blob. Stored as written, never case-normalised; an expression the reader cannot parse displays `unknown`, C-core-67) · `attribution` string O · `availability` object O (`redistribution` `"permitted"`/`"restricted"`/`"withheld"` R, `obtainable` boolean R, `withheld_until` string O, a condition in prose or a task or edition reference, claims-model note §7) · `replication` `"bytes"`/`"protocol"`/`"none"` O · `comparator` hash O · `sampling` object O (`n` integer R, the total · `unit` string R, e.g. `runs`, `slots`, `records` · `groups` list of {`name` string R, `n` integer R} O, one per arm, names unique · `window` O · `dispersion` object O) · `shelf_life_days` integer O · `pre_registration` `"exploratory"` or absent O · `fulfills` object O (`resource` id, `edition` id) · `intended_for` object O (`resource` id R, `edition` id R, `edition_applied` id R, `outcome` `"ok"`/`"unchecked"` R) · `description` string O |
-| `finality` | `rule` string R · `rule_source` string O (a hash when the document is held, else a location) · `state_at_capture` object R (`depth` integer, or `run` string, or `captured_at` ts) |
+| disclosures (on `authored`, `observed`) | `licence` string O (an SPDX license expression, SPDX 3.0.1 Annex B; terms with no SPDX identifier are named by a `LicenseRef-` id whose text is cited in `licence_texts`, below. Stored as written, never case-normalised; an expression the reader cannot parse displays `unknown`, C-core-67) · `attribution` string O · `availability` object O (`redistribution` `"permitted"`/`"restricted"`/`"withheld"` R, `obtainable` boolean R, `withheld_until` string O, a condition in prose or a task or edition reference, claims-model note §7) · `replication` `"bytes"`/`"protocol"`/`"none"` O · `comparator` digest O · `sampling` object O (`n` integer R, the total · `unit` string R, e.g. `runs`, `slots`, `records` · `groups` list of {`name` string R, `n` integer R} O, one per arm, names unique · `window` O · `dispersion` object O) · `shelf_life_days` integer O · `pre_registration` `"exploratory"` or absent O · `fulfills` object O (`resource` id, `edition` id) · `intended_for` object O (`resource` id R, `edition` id R, `edition_applied` id R, `outcome` `"ok"`/`"unchecked"` R) · `description` string O |
+| `finality` | `rule` string R · `rule_source` string O (a digest when the document is held, else a location) · `state_at_capture` object R (`depth` integer, or `run` string, or `captured_at` ts) |
+| `licence_texts` (on `authored`, `observed`) | object O mapping each `LicenseRef-` id used in `licence` to its source, as for `rule_source`: a digest when the text is held as a blob, else a location (an RFC 3986 URI). Displayed `cited (text held)` or `cited (location only, unverified)`; an id with no entry is `cited (no source)`. Terms the author may not republish are cited by location |
 
 **Kinds**
 
 | `kind` | Body fields |
 |---|---|
-| `authored` | `content` R · `type` string R (`dataset`, `workflow`, `skill`, `synthesis`, `report`, `other`) · `provenance` O · disclosures O · `supersedes` hash O (the author's own earlier blob) · `extends` hash O |
-| `observed` | `content` R · `class` R, exactly one of `exact-bytes` / `source` / `phenomenon` / `method` / `none-yet` (a list, or any second class field, is malformed; C-core-35) · `referent` object R, keys per class: exact-bytes `chain_id` string (a CAIP-2 chain id, e.g. `bip122:` + the first 32 hex of the genesis block hash), `block_hash` hash, `depth` integer; source, either one request (`endpoint` string, `parameters` object, `response_sha256` hash) or a batch (`requests` object: `sha256` hash of a request log carried inside `content`, `format` string naming its layout, `count` integer; each log entry carries endpoint, parameters, status, time and response hash), never both; phenomenon `instrument` string (a persistent identifier URI when the instrument has one, else free text), `location` string (an RFC 5870 `geo:` URI: WGS 84 latitude, longitude and optional altitude in metres, with `u=` uncertainty in metres; compared per RFC 5870 §3.4.4, numerically, never as text), `place` string O (a human label beside the coordinates), `at` ts, `timescale` string O (§1.1); method `method_edition` id, `environment` object (`image_digest`, `platform`, `harness_commit`), `system` object R with free keys (whatever identifies the measured system and changes the apparatus under the observer, e.g. a model pin, a provider, a routing era; values are strings), `inputs` list of hash O (the protocol's pinned inputs: scenario edition, seed set, configuration; order preserved), `window` (the shared object above), `timescale` string O (§1.1); none-yet: any · `capture` object R (`at` ts R, `evidence` `"self-asserted"`/`"anchored-at-capture"`/`"witnessed"`/`"device-attested"` R, `operator` string O, `instrument` string O, `witnesses` list of key O, `attestation` object O) · `finality` O (exact-bytes and source only) · disclosures O |
+| `authored` | `content` R · `type` string R (`dataset`, `workflow`, `skill`, `synthesis`, `report`, `other`) · `provenance` O · disclosures O · `supersedes` digest O (the author's own earlier blob) · `extends` digest O |
+| `observed` | `content` R · `class` R, exactly one of `exact-bytes` / `source` / `phenomenon` / `method` / `none-yet` (a list, or any second class field, is malformed; C-core-35) · `referent` object R, keys per class: exact-bytes `chain_id` string (a CAIP-2 chain id, e.g. `bip122:` + the first 32 hex of the genesis block hash), `block_hash` string (the block hash in the chain's display form, 64 lowercase hex; it names a block, not bytes this note hashes), `depth` integer; source, either one request (`endpoint` string, `parameters` object, `response_digest` digest) or a batch (`requests` object: `digest` digest of a request log carried inside `content`, `format` string naming its layout, `count` integer; each log entry carries endpoint, parameters, status, time and response digest), never both; phenomenon `instrument` string (a persistent identifier URI when the instrument has one, else free text), `location` string (an RFC 5870 `geo:` URI: WGS 84 latitude, longitude and optional altitude in metres, with `u=` uncertainty in metres; compared per RFC 5870 §3.4.4, numerically, never as text), `place` string O (a human label beside the coordinates), `at` ts, `timescale` string O (§1.1); method `method_edition` id, `environment` object (`image_digest`, `platform`, `harness_commit`), `system` object R with free keys (whatever identifies the measured system and changes the apparatus under the observer, e.g. a model pin, a provider, a routing era; values are strings), `inputs` list of digest O (the protocol's pinned inputs: scenario edition, seed set, configuration; order preserved), `window` (the shared object above), `timescale` string O (§1.1); none-yet: any · `capture` object R (`at` ts R, `evidence` `"self-asserted"`/`"anchored-at-capture"`/`"witnessed"`/`"device-attested"` R, `operator` string O, `instrument` string O, `witnesses` list of key O, `attestation` object O) · `finality` O (exact-bytes and source only) · disclosures O |
 | `holds` | `content` R · `locations` list of string O (RFC 3986 URIs: `https:` URLs or content-addressed URIs; a hint, never authenticated, never dereferenced during verification) |
-| `describes` | `about` object R (exactly one of `content` hash, `statement` id, `resource` id) · `tags` list of string O · `note` string O · `links` list of object O (`rel` string R, one of `content`/`statement`/`resource`/`url` R). `rel` is a relation type registered in the IANA Link Relations registry (compared case-insensitively, RFC 8288 §2.1.1) or an absolute URI (§2.1.2). A link is the signer's annotation and grants nothing: no resolver reads `rel`, so `predecessor-version` on a `describes` is never a supersession |
-| `reproduced` | `of` id R (the `authored` reproduced) · `result` `"match"`/`"diverged"`/`"not-comparable"` R · `content` R (the bytes this run produced) · `provenance` R · `comparator` hash O · `report` hash O (divergence report) |
+| `describes` | `about` object R (exactly one of `content` digest, `statement` id, `resource` id) · `tags` list of string O · `note` string O · `links` list of object O (`rel` string R, one of `content`/`statement`/`resource`/`url` R). `rel` is a relation type registered in the IANA Link Relations registry (compared case-insensitively, RFC 8288 §2.1.1) or an absolute URI (§2.1.2). A link is the signer's annotation and grants nothing: no resolver reads `rel`, so `predecessor-version` on a `describes` is never a supersession |
+| `reproduced` | `of` id R (the `authored` reproduced) · `result` `"match"`/`"diverged"`/`"not-comparable"` R · `content` R (the bytes this run produced) · `provenance` R · `comparator` digest O · `report` digest O (divergence report) |
 | `corroborates` | `of` id R (the `observed`) · `result` id R (the derived corroboration result's `authored`) · `verdict` `"supports"`/`"contradicts"`/`"inconclusive"` R · `model` string R (agreement model name or hash) · `cohort` object R (`rule` string, or `hand_picked` true) · `shares` list of string O (what this shares with the original: feed, operator, instrument) · `cause` string O (for `inconclusive`) |
-| `refutes` | `of` id R · `evidence` hash R · `note` string O |
+| `refutes` | `of` id R · `evidence` digest R · `note` string O |
 | `retracts` | `of` id R (the signer's own `authored`/`observed`) · `reason` string O |
-| `anchors` | `head` id R (a statement in the signer's own log) · `head_seq` integer R · `proof` object R (`scheme` string R, `sha256` hash R of the proof bytes, `quality_claimed` string O). A `head` in another key's log is malformed |
+| `anchors` | `head` id R (a statement in the signer's own log) · `head_seq` integer R · `proof` object R (`scheme` string R, `digest` digest R of the proof bytes, `quality_claimed` string O). A `head` in another key's log is malformed |
 | `genesis` | `type` `"collection"`/`"task"`/`"series"` R · `name` string R · `controllers` list of key R (set) · `rule` object R (`any_one` true, or `k_of_n` {`k` integer}) · `forked_from` id O |
-| `edition` | `resource` id R · `predecessors` list of id R (set; the genesis id for the first edition; several for a merge) · `contents` object R (`members` list of {`content` or `resource` or `statement`, `role` string} O, `schema` hash O, `rules` list of {`dialect` string, `expr` string} O, `contract` object O, `selection` `"curated"`/`"rule-based"`/`"completeness"` O, `frozen_before` string O, `segments` list O, `controllers` and `rule` O for a controller change) |
-| `intent` · `progress` · `withdraw` · `submit` · `decide` | all: `task` id R · `edition` id R. `submit`: `result` hash R, `salt` string O, `self_declared_independence` boolean O. `decide`: `submissions` list of id R, `verdict` `"accept"`/`"reject"` R, `evaluations` list of hash O, `supersedes` id O. `progress`: `note` string O |
+| `edition` | `resource` id R · `predecessors` list of id R (set; the genesis id for the first edition; several for a merge) · `contents` object R (`members` list of {`content` or `resource` or `statement`, `role` string} O, `schema` digest O, `rules` list of {`dialect` string, `expr` string} O, `contract` object O, `selection` `"curated"`/`"rule-based"`/`"completeness"` O, `frozen_before` object O (exactly one of `date` date, `height` integer, `run` string: the same units as `finality.state_at_capture`, so the declared boundary is compared with the boundary the members' finality rules compute in the same unit, and a declared unit different from the computed one is `not comparable`, never converted), `segments` list O, `controllers` and `rule` O for a controller change) |
+| `intent` · `progress` · `withdraw` · `submit` · `decide` | all: `task` id R · `edition` id R. `submit`: `result` digest R, `salt` string O, `self_declared_independence` boolean O. `decide`: `submissions` list of id R, `verdict` `"accept"`/`"reject"` R, `evaluations` list of digest O, `supersedes` id O. `progress`: `note` string O |
 | `rotate_key` · `revoke_key` | `rotate_key`: `successor` key R, `effective` ts O. `revoke_key`: `reason` R, one of `key_compromise` / `superseded` / `cessation_of_operation` / `unspecified` (the RFC 5280 §5.3.1 CRL reason codes that apply to a signing key, in snake case), `note` string O, `effective` ts O. Both are statements by the old key about itself. Only `key_compromise` casts doubt on statements before `effective`; what a reader does with that doubt is its policy (claims-model note §4) |
 
 Every `R` field of a listed kind is checked at every gate by the one validation core (C-core-109). Field
@@ -263,7 +283,7 @@ this table fixes only names, types and presence.
   with a malformed `rc` (not `rc/` + positive integer) is intrinsic malformed.
 - **Minor changes** (new optional field, new `alg`, new kind) do not bump the major, and never reinterpret
   existing signed bytes. A change that would (a required field added, a type changed, a kind's meaning
-  changed) bumps the major, which changes every domain tag.
+  changed) bumps the major, which changes every payload type and so every id.
 
 ## 7. Per-key logs
 
@@ -280,20 +300,42 @@ line contract.
   differ by id is `rewritten history` (intrinsic) for the package, and the held lines stay valid.
 - **Forks.** Two valid lines by K with the same `prev` are both retained and the log shows `FORK` at that
   point (C-core-127). Neither is refused; neither is the tip; later statements choose a branch by `prev`.
-- **Gaps.** A line whose `prev` matches nothing held is retained as `detached` (it may precede a delivery
-  the reader has not received) and chains nothing until its predecessor arrives. It is still that key's
-  signed word; what it grants is computed only once it chains, except that an `authored`/`observed` is
-  attributed to its signer regardless.
+- **Gaps.** A line whose `prev` matches nothing held is retained as `detached`: it may follow statements
+  the reader has not received yet. It is that key's signed word, and nothing more until it chains:
+  - an `authored` or `observed` that is detached is attributed to its signer (the signature alone settles
+    who said it) and is shown, but counts toward no grade, corroboration, quorum, priority or default;
+  - every other kind is retained and shown and is not evaluated at all: a detached `edition` is no
+    approval, a detached `decide` settles nothing, a detached `anchors` bounds nothing, a detached
+    `rotate_key` or `revoke_key` is not yet in force;
+  - the reason is the missing stretch. It may hold a `revoke_key` with `key_compromise`, a `rotate_key`, or
+    an earlier edition, any of which changes what the detached line means; attribution survives that,
+    authority does not;
+  - the display names the gap (`detached: waiting for seq 37–40 of <key>`), and a pull that receives a
+    detached line asks the same source for the missing range before reporting;
+  - once the gap fills, the line is evaluated like any other; nothing about it was decided while it waited.
+  (C-core-143.)
 - **Ordering.** The log's order is `seq`, never file order or `ts`. Duplicates by id are dropped on write.
 - **Anchors** bound only the signer's own prefix up to `head` (C-btc-04); an `anchors` whose `head` is not in
   the signer's log is malformed.
 
 ## 8. Content hashing
 
-A blob's identity is `sha256` over its exact bytes, 64 lowercase hex, no prefix, no transcoding, no
-newline handling (C-core-117). `content.bytes` is the exact length. The empty blob is valid:
-`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`, 0 bytes. A fetched blob is verified
-against the full hash before it is installed; the display alias is never used for that check.
+A blob's identity is its **digest**: SHA-256 over its exact bytes, written in the OCI image-spec digest form
+`sha256:` + 64 lowercase hex, with no transcoding and no newline handling (C-core-117). Upper-case hex, a
+missing prefix, or a prefix other than `sha256:` in an `rc/1` statement is malformed. `content.size` is the
+exact length, and a fetch checks the size before the digest (storage note §9). The empty blob is valid:
+`sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`, size 0. A fetched blob is verified
+against the full digest before it is installed; the display alias is never used for that check. The `content`
+object is therefore an OCI descriptor in all but field spelling (`digest`, `size`, `media_type`), and its
+digest is the name the blob has in an OCI blob tree (`blobs/sha256/<hex>`, storage note §1.1).
+
+**Why content digests carry the algorithm and statement ids do not.** A content digest names bytes that also
+live outside this format, in registries, archives and other stores, where a second algorithm for the same
+bytes is ordinary; the prefix says how to check it, and a future algorithm is a new prefix (a minor change,
+§6). A statement id is the digest of a signed string whose payload type already names the format version
+(§2), and `prev` must equal exactly the id the signer computed. Its algorithm is fixed by the major version,
+and changing it changes every id regardless, so a prefix would be a second place to declare the algorithm
+that could only ever disagree with the first.
 
 ## 9. Test vectors
 
@@ -303,37 +345,37 @@ V1; and each negative vector's exact input bytes with its required result. The b
 that file for reading. Where the two differ, the file is right and this note has a bug.
 
 Computed with Python 3 `hashlib` and the alpha signer (`viem` `signMessage`) in a throwaway directory; every
-hash below is pasted from that run. Each signed string was also checked byte-identical to the output of an
-independent RFC 8785 implementation (the Python `jcs` package) on the parsed envelope. The signing key is the
-**disposable, public** key `sha256("research-commons wire-format test key 1")` as a 32-byte hex scalar, whose
-address is `0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a`. Never use it for anything else. Vectors V1–V8 form
-one log (`seq` 0–7), extended by V9–V10 (`seq` 8–9); each `prev` is the previous vector's id. Long lines are
-folded per RFC 8792 §7 (single backslash): a trailing `\` means the line continues with no newline, and
-leading spaces on the continuation are not part of the content. The only LF in a signed string is the one
-after the domain tag.
+hash below is pasted from that run. Each signed string was also checked byte-identical to two independent
+implementations: an RFC 8785 canonicaliser (the Python `jcs` package) on the parsed envelope, and the DSSE PAE
+function of the Python `securesystemslib` package (1.5.1) on the payload type and canonical body. The signing
+key is the **disposable, public** key `sha256("research-commons wire-format test key 1")` as a 32-byte hex
+scalar, whose address is `0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a`. Never use it for anything else. Vectors
+V1–V8 form one log (`seq` 0–7), extended by V9–V10 (`seq` 8–9); each `prev` is the previous vector's id. Long
+lines are folded per RFC 8792 §7 (single backslash): a trailing `\` means the line continues with no newline,
+and leading spaces on the continuation are not part of the content. A signed string contains no LF: the
+separators are the four spaces of the PAE header.
 
 **V1 authored (derived, with provenance)**
 
 ```text
 NOTE: '\' line wrapping per RFC 8792
 
-signed string, 623 bytes:
-rc/1/authored
-{"alg":"eip191-secp256k1","body":{"availability":{"obtainable":true,"redistribution":"permitted"},"c\
-ontent":{"bytes":4096,"sha256":"2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b"},"\
-licence":"CC-BY-4.0","provenance":{"inputs":["111111111111111111111111111111111111111111111111111111\
-1111111111","2222222222222222222222222222222222222222222222222222222222222222"],"workflow":"c0c0c0c0\
-c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"},"type":"dataset"},"kind":"authored","prev\
-":null,"rc":"rc/1","seq":0,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20\
-:00:00Z"}
-id:  05de3ce4f0f7fadfcc40876f3c1c7148e56e5337707cb568478bbbf2c7be7510
-sig: 0x4e4bf385047f8fc613dfa31f342f8f64c2e33f7de672512b8465b2e49e51613a1120\
-     b36d665741d245cc2c4b8680fbca0c752f523b6f8ca3b8972d73572734a61c
+signed string, 700 bytes:
+DSSEv1 49 application/vnd.research-commons.authored.v1+json 636 {"alg":"eip191-secp256k1","body":{"a\
+vailability":{"obtainable":true,"redistribution":"permitted"},"content":{"digest":"sha256:2b2b2b2b2b\
+2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b","size":4096},"licence":"CC-BY-4.0","provenan\
+ce":{"inputs":["sha256:1111111111111111111111111111111111111111111111111111111111111111","sha256:222\
+2222222222222222222222222222222222222222222222222222222222222"],"workflow":"sha256:c0c0c0c0c0c0c0c0c\
+0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"},"type":"dataset"},"kind":"authored","prev":null,"r\
+c":"rc/1","seq":0,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:00:00Z"}
+id:  4b54e578d523dc33ae9814af7f837f6c2acec48cd2420704788ba866d9b0f1cf
+sig: 0x1ca247faed0dceef2817c7384c20b872c4d75c90689f4eeb70ceda062078a6bd78a1\
+     d362854278c098f826a3f5600197379c0e1e5a199cc93db6a7ab8d4178661b
 ```
 
 Equivalent encodings of this signature, both recovering the same signer, both the same statement (C-core-10):
-`v` as `01` instead of `1c`, and the high-`s` form `0x4e4b…613a` ‖
-`eedf4c9299a8be2dba33d3b4797f0434ae39ad9473d91398073b3119790f0c9b` ‖ `1b`. A reader stores either as V1's
+`v` as `00` instead of `1b`, and the high-`s` form `0x1ca2…a6bd` ‖
+`875e2c9d7abd873f6707d95c0a9ffe678312cec8552f0372821bb6e142f4c8db` ‖ `1c`. A reader stores either as V1's
 `sig` above (§4).
 
 **V2 observed (exact-bytes, chain referent, finality)**
@@ -341,18 +383,18 @@ Equivalent encodings of this signature, both recovering the same signer, both th
 ```text
 NOTE: '\' line wrapping per RFC 8792
 
-signed string, 706 bytes:
-rc/1/observed
-{"alg":"eip191-secp256k1","body":{"capture":{"at":"2026-10-12T20:04:30Z","evidence":"self-asserted",\
-"instrument":"node v27.0","operator":"runner-7"},"class":"exact-bytes","content":{"bytes":812,"sha25\
-6":"7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a"},"finality":{"rule":"confirmat\
-ions>=6","state_at_capture":{"depth":3}},"referent":{"block_hash":"00000000000000000002aaaaaaaaaaaaa\
-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","chain_id":"bip122:000000000019d6689c085ae165831e93","depth":3}},"k\
-ind":"observed","prev":"05de3ce4f0f7fadfcc40876f3c1c7148e56e5337707cb568478bbbf2c7be7510","rc":"rc/1\
-","seq":1,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:05:00Z"}
-id:  e4ff6c2e4b0f1d32a72aa0e52ffaeba8cf49bdee395f175c1ac5ee7db7c0b053
-sig: 0xd0c6f4213e9847a1fc661ba6937f94a3a03136c766ab18055953e8582e0552402620\
-     f0564501640ed92df7b9414744138ee7a22af0a7c6dc916f7c3d38d161411c
+signed string, 762 bytes:
+DSSEv1 49 application/vnd.research-commons.observed.v1+json 698 {"alg":"eip191-secp256k1","body":{"c\
+apture":{"at":"2026-10-12T20:04:30Z","evidence":"self-asserted","instrument":"node v27.0","operator"\
+:"runner-7"},"class":"exact-bytes","content":{"digest":"sha256:7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7\
+a7a7a7a7a7a7a7a7a7a7a7a7a7a","size":812},"finality":{"rule":"confirmations>=6","state_at_capture":{"\
+depth":3}},"referent":{"block_hash":"00000000000000000002aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\
+a","chain_id":"bip122:000000000019d6689c085ae165831e93","depth":3}},"kind":"observed","prev":"4b54e5\
+78d523dc33ae9814af7f837f6c2acec48cd2420704788ba866d9b0f1cf","rc":"rc/1","seq":1,"signer":"0xf71e7c9c\
+ce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:05:00Z"}
+id:  904eca8851b275b994f60e538ead7e59922f77aa1917698a9f33050eed067335
+sig: 0xd02bbb327c29d6515456b02bb7ac22f7d8490b0eb44d4ae1d283907066e4bb99065a\
+     e581680cf6261529628bdd9c77cb97b3792b732be5361e55d835e6cbf7f31b
 ```
 
 No `rule_source`: displayed as `observer's convention`; referent status `provisional (3; final at 6)`.
@@ -362,16 +404,16 @@ No `rule_source`: displayed as `observer's convention`; referent status `provisi
 ```text
 NOTE: '\' line wrapping per RFC 8792
 
-signed string, 448 bytes:
-rc/1/holds
-{"alg":"eip191-secp256k1","body":{"content":{"bytes":4096,"sha256":"2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b\
-2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b"},"locations":["https://mirror.example/blobs/2b2b2b2b2b2b2b2b2b2b2b\
-2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b"]},"kind":"holds","prev":"e4ff6c2e4b0f1d32a72aa0e52ffaeba\
-8cf49bdee395f175c1ac5ee7db7c0b053","rc":"rc/1","seq":2,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c\
-4750e7a","ts":"2026-10-12T20:06:00Z"}
-id:  8aedd7280a997830c1e64d49c6053a3da49a21b213528be1e618269f97b569c6
-sig: 0x2a057f7c29c727ae44e914f39163855f1adf948070bf07840cd7a2ac643d2c0e3b0f\
-     7c17ebc85a86ca84d5ef5f0213093c0658aa2920ccbb7010480308a5f7551c
+signed string, 504 bytes:
+DSSEv1 46 application/vnd.research-commons.holds.v1+json 443 {"alg":"eip191-secp256k1","body":{"cont\
+ent":{"digest":"sha256:2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b","size":4096\
+},"locations":["https://mirror.example/blobs/2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2\
+b2b2b2b2b"]},"kind":"holds","prev":"904eca8851b275b994f60e538ead7e59922f77aa1917698a9f33050eed067335\
+","rc":"rc/1","seq":2,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:06:0\
+0Z"}
+id:  ad1efcc1e1245d4ad674787855fbc037340e06be727d4391fc3ba08d8166e61f
+sig: 0x2e075d84bb675138c01a23ea1a1137244376ae25c2c51e0aed93ef9c9ce6948f63b1\
+     2beb7968dfd3bbe3ba91bcc6a5f052d39a9d96497752031657b225c58ed71c
 ```
 
 **V4 describes (Unicode, control characters, nested lists and objects)**
@@ -379,16 +421,16 @@ sig: 0x2a057f7c29c727ae44e914f39163855f1adf948070bf07840cd7a2ac643d2c0e3b0f\
 ```text
 NOTE: '\' line wrapping per RFC 8792
 
-signed string, 519 bytes:
-rc/1/describes
-{"alg":"eip191-secp256k1","body":{"about":{"content":"2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b\
-2b2b2b2b2b2b2b2b2b"},"links":[{"content":"7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a\
-7a7a7a","rel":"related"}],"note":"line1\nline2\ttab \u0001 ctl","tags":["météo","日本語","\"quoted\""]}\
-,"kind":"describes","prev":"8aedd7280a997830c1e64d49c6053a3da49a21b213528be1e618269f97b569c6","rc":"\
-rc/1","seq":3,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:07:00Z"}
-id:  a9b65b15e8ae0ee001997a5205dd29deeafa7aa6ff9d70352ab77f49b62c46c9
-sig: 0x89cd50b9fe07dfdce7483601703a8dcd36d740b5beb5aa07fdbdc5f49953d8f078ab\
-     e1ef8ff238d2d0134c899280e8648087a762a0c8159dc73c1a6cba022da21b
+signed string, 583 bytes:
+DSSEv1 50 application/vnd.research-commons.describes.v1+json 518 {"alg":"eip191-secp256k1","body":{"\
+about":{"content":"sha256:2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b"},"links"\
+:[{"content":"sha256:7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a","rel":"relate\
+d"}],"note":"line1\nline2\ttab \u0001 ctl","tags":["météo","日本語","\"quoted\""]},"kind":"describes","\
+prev":"ad1efcc1e1245d4ad674787855fbc037340e06be727d4391fc3ba08d8166e61f","rc":"rc/1","seq":3,"signer\
+":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:07:00Z"}
+id:  a79e1a3ac6af2c09a65796aea07860c06045d5945c7a75a82c8d3e9d8b4e41b1
+sig: 0xd0e05a4f2d52d36ce807055c6fe51ec5f259d2093801d1452941749cf16099bc4f5b\
+     759b0410c6645d28d18a73bec230a26e1d07937a69d7e1f049c5170e3ce01b
 ```
 
 `météo` is NFC (U+00E9) and is emitted raw, 6 bytes; `\n`, `\t` and `\u0001` are the only escapes. The same
@@ -401,16 +443,15 @@ normalisation).
 ```text
 NOTE: '\' line wrapping per RFC 8792
 
-signed string, 419 bytes:
-rc/1/genesis
-{"alg":"eip191-secp256k1","body":{"controllers":["0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","0xaba\
-babababababababababababababababababab"],"name":"station-readings","rule":{"k_of_n":{"k":2}},"type":"\
-collection"},"kind":"genesis","prev":"a9b65b15e8ae0ee001997a5205dd29deeafa7aa6ff9d70352ab77f49b62c46\
-c9","rc":"rc/1","seq":4,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:08\
-:00Z"}
-id:  ac4ef7c07b6ef48861c6bf1059eedba79e5df52b5b389594d77e256624e90927
-sig: 0x4f3cf2aa0d9cf9464bfacbe940c2c0869ea6845b77bafbc7d4389b80e7f4bd801e2b\
-     51e6ab90699fef2a02758a649efe732a88a2b7fcf9bed7de2e1130f494c91c
+signed string, 469 bytes:
+DSSEv1 48 application/vnd.research-commons.genesis.v1+json 406 {"alg":"eip191-secp256k1","body":{"co\
+ntrollers":["0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","0xabababababababababababababababababababab\
+"],"name":"station-readings","rule":{"k_of_n":{"k":2}},"type":"collection"},"kind":"genesis","prev":\
+"a79e1a3ac6af2c09a65796aea07860c06045d5945c7a75a82c8d3e9d8b4e41b1","rc":"rc/1","seq":4,"signer":"0xf\
+71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:08:00Z"}
+id:  864c74292cac8b3ffb123c739ab210f3374b4731f2d9343eb2aa189c5fba827f
+sig: 0xcfb40d5361f421448eb71bf02f0689838ce245f1153adb350978a2c1d5d9d3e47ccf\
+     8a5f6903539877eaa65feaf9a5addc7bfb43e7c5191929821518117c26731b
 ```
 
 The resource id is this statement's id (C-core-77). `controllers` is a set, sorted by the key order of §1.
@@ -420,18 +461,18 @@ The resource id is this statement's id (C-core-77). `controllers` is a set, sort
 ```text
 NOTE: '\' line wrapping per RFC 8792
 
-signed string, 639 bytes:
-rc/1/edition
-{"alg":"eip191-secp256k1","body":{"contents":{"frozen_before":"2026-09-01","members":[{"content":"7a\
-7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a","role":"segment"}],"rules":[{"dialec\
-t":"rc-rules/1","expr":"sampling.n >= 30"}],"selection":"rule-based"},"predecessors":["ac4ef7c07b6ef\
-48861c6bf1059eedba79e5df52b5b389594d77e256624e90927"],"resource":"ac4ef7c07b6ef48861c6bf1059eedba79e\
-5df52b5b389594d77e256624e90927"},"kind":"edition","prev":"ac4ef7c07b6ef48861c6bf1059eedba79e5df52b5b\
-389594d77e256624e90927","rc":"rc/1","seq":5,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","t\
-s":"2026-10-12T20:09:00Z"}
-id:  a431080c8b91973d1ef5090ed797b4d0a4f975806375c2699d61806c0bb24ac9
-sig: 0x3edda0c301c0024c56af120e9e09562c6f8c49329b29060c2b48ffbaa7433ce60464\
-     2c6da5b3c1f820f6d432a91d9f5b3f31d38eae50594aa06470e9447564e21b
+signed string, 705 bytes:
+DSSEv1 48 application/vnd.research-commons.edition.v1+json 642 {"alg":"eip191-secp256k1","body":{"co\
+ntents":{"frozen_before":{"date":"2026-09-01"},"members":[{"content":"sha256:7a7a7a7a7a7a7a7a7a7a7a7\
+a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a","role":"segment"}],"rules":[{"dialect":"rc-rules/1","expr\
+":"sampling.n >= 30"}],"selection":"rule-based"},"predecessors":["864c74292cac8b3ffb123c739ab210f337\
+4b4731f2d9343eb2aa189c5fba827f"],"resource":"864c74292cac8b3ffb123c739ab210f3374b4731f2d9343eb2aa189\
+c5fba827f"},"kind":"edition","prev":"864c74292cac8b3ffb123c739ab210f3374b4731f2d9343eb2aa189c5fba827\
+f","rc":"rc/1","seq":5,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:09:\
+00Z"}
+id:  de91bae32078c52cd55500b21ddaeadb7915bbdafe9f8d60059e47d56c570c30
+sig: 0x3d9119a04c479deb2acde04d214f2b5831071283aff46e7bfc49eb7ce9559e3832d5\
+     7f3b1184bd4f6ca27f8bb1bb589c41d7d5f8a6e603b7c41d0a2c4228cdc21c
 ```
 
 Under the 2-of-2 rule this edition is one approval and is not yet the tip (C-core-82).
@@ -441,16 +482,15 @@ Under the 2-of-2 rule this edition is one approval and is not yet the tip (C-cor
 ```text
 NOTE: '\' line wrapping per RFC 8792
 
-signed string, 429 bytes:
-rc/1/anchors
-{"alg":"eip191-secp256k1","body":{"head":"a431080c8b91973d1ef5090ed797b4d0a4f975806375c2699d61806c0b\
-b24ac9","head_seq":5,"proof":{"scheme":"ots","sha256":"d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d\
-0d0d0d0d0d0d0d0d0d0"}},"kind":"anchors","prev":"a431080c8b91973d1ef5090ed797b4d0a4f975806375c2699d61\
-806c0bb24ac9","rc":"rc/1","seq":6,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-1\
-0-12T20:10:00Z"}
-id:  af38b02aace72ca6d7bf00536aee65ebb3bfd23da035894a4a16703e4c2aae61
-sig: 0xf6d47c8cf1d2772e9780ebe3bcb83f52fd8c036283cfbfe703b02855fb19e1c308e1\
-     d0412691c6ca7869751f03cd7ddfd35d60548c163eecf485421ea000e97c1c
+signed string, 486 bytes:
+DSSEv1 48 application/vnd.research-commons.anchors.v1+json 423 {"alg":"eip191-secp256k1","body":{"he\
+ad":"de91bae32078c52cd55500b21ddaeadb7915bbdafe9f8d60059e47d56c570c30","head_seq":5,"proof":{"digest\
+":"sha256:d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0","scheme":"ots"}},"kind":\
+"anchors","prev":"de91bae32078c52cd55500b21ddaeadb7915bbdafe9f8d60059e47d56c570c30","rc":"rc/1","seq\
+":6,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:10:00Z"}
+id:  fc2aa53bff0006025c05d4bdb826a1a79e7cdf59149fdeeefe022e176640e80d
+sig: 0x48daaf1615853bcd7943e493372193938e4c36f7cd93b3ee6a98ae2dbb8553ba4240\
+     dc1cac7501209a0a48fa00cdcf1d2cb8a669052e0fa12fc3eb3f6b64bb181b
 ```
 
 The proof bytes are a separate blob; this statement binds the log prefix through `seq` 5 to them. Quality is
@@ -461,16 +501,15 @@ whatever the reader verifies, never a label here (C-core-107).
 ```text
 NOTE: '\' line wrapping per RFC 8792
 
-signed string, 431 bytes:
-rc/1/authored
-{"alg":"eip191-secp256k1","body":{"content":{"bytes":10,"sha256":"e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1\
-e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1"},"type":"report","x_escrow":{"until":"2027-01-01"},"x_note":"ignored\
-"},"crit":["x_escrow"],"kind":"authored","prev":"af38b02aace72ca6d7bf00536aee65ebb3bfd23da035894a4a1\
-6703e4c2aae61","rc":"rc/1","seq":7,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-\
-10-12T20:11:00Z"}
-id:  eb0ce0e70e18fe840fac529d0eebed784c608f4f07753af0945e8a4250dbdba2
-sig: 0xc1b703b18c1208487c4f4430b2821bf7ad65aef0916f2eb94d1da688d4bf66cb1143\
-     8fca3d8571535dc205f968309b614235828d40939ab2749e8e4ce507b8dd1b
+signed string, 487 bytes:
+DSSEv1 49 application/vnd.research-commons.authored.v1+json 423 {"alg":"eip191-secp256k1","body":{"c\
+ontent":{"digest":"sha256:e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1","size":1\
+0},"type":"report","x_escrow":{"until":"2027-01-01"},"x_note":"ignored"},"crit":["x_escrow"],"kind":\
+"authored","prev":"fc2aa53bff0006025c05d4bdb826a1a79e7cdf59149fdeeefe022e176640e80d","rc":"rc/1","se\
+q":7,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:11:00Z"}
+id:  97296c2e5e1cc833943b702f067da29544ef03ae09af906e15ba733d8764398f
+sig: 0x69a2188be2a7b21a9496f20fc67c54f6bde600fa0a72e0f273344be57891ef127957\
+     c36ccacb466154cea9be7415c09bf9b2909da7bb00118029c906d2982e271c
 ```
 
 A reader without `x_escrow` retains this as `unsupported`; `x_note` alone would be retained and ignored. The
@@ -481,17 +520,17 @@ A reader without `x_escrow` retains this as `unsupported`; `x_note` alone would 
 ```text
 NOTE: '\' line wrapping per RFC 8792
 
-signed string, 607 bytes:
-rc/1/observed
-{"alg":"eip191-secp256k1","body":{"capture":{"at":"2026-10-12T20:11:58.25Z","evidence":"self-asserte\
-d","instrument":"daq-7"},"class":"phenomenon","content":{"bytes":2048,"sha256":"3c3c3c3c3c3c3c3c3c3c\
-3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c"},"referent":{"at":"2026-10-12T20:12:35.000000012","ins\
-trument":"daq-7","location":"geo:39.7392,-104.9903,1609;u=5","place":"bench-3","timescale":"TAI"}},"\
-kind":"observed","prev":"eb0ce0e70e18fe840fac529d0eebed784c608f4f07753af0945e8a4250dbdba2","rc":"rc/\
-1","seq":8,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:12:00Z"}
-id:  b44723757f34959f80c5e887233de863de53cc4216d7ae42a635d050f9cbcff3
-sig: 0x99442bb9a88a7c649a5a0725b34f626d350b3f86187d67befb2fa7f7e31f71b0364c\
-     d0846d630f4c4e1f9669ade121d21d4f0e37bbee8ff1cd18e93e103a13121b
+signed string, 663 bytes:
+DSSEv1 49 application/vnd.research-commons.observed.v1+json 599 {"alg":"eip191-secp256k1","body":{"c\
+apture":{"at":"2026-10-12T20:11:58.25Z","evidence":"self-asserted","instrument":"daq-7"},"class":"ph\
+enomenon","content":{"digest":"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c\
+3c","size":2048},"referent":{"at":"2026-10-12T20:12:35.000000012","instrument":"daq-7","location":"g\
+eo:39.7392,-104.9903,1609;u=5","place":"bench-3","timescale":"TAI"}},"kind":"observed","prev":"97296\
+c2e5e1cc833943b702f067da29544ef03ae09af906e15ba733d8764398f","rc":"rc/1","seq":8,"signer":"0xf71e7c9\
+cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:12:00Z"}
+id:  b0d5761fc890ed6ea143f1e29e9d8debe77ed7bc19f38cde6fd494da0022b203
+sig: 0x3c21dbb37d0c6983353d48a176ca6349b872b59f229bae63fe936e9f7eae0eac2efe\
+     c84e8566142c8a16683665f50f5c6dc97aea61cec052490e797bc2d13c631b
 ```
 
 `capture.at` carries a fraction of two digits and the referent `at` one of nine; neither has trailing zeros.
@@ -502,15 +541,15 @@ The referent names `timescale` `TAI`, so its `at` carries no `Z`; the envelope `
 ```text
 NOTE: '\' line wrapping per RFC 8792
 
-signed string, 386 bytes:
-rc/1/describes
-{"alg":"eip191-secp256k1","body":{"about":{"content":"3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c\
-3c3c3c3c3c3c3c3c3c"},"tags":["sort-order"],"x_😀":"astral","x_ｱ":"bmp"},"kind":"describes","prev":"b4\
-4723757f34959f80c5e887233de863de53cc4216d7ae42a635d050f9cbcff3","rc":"rc/1","seq":9,"signer":"0xf71e\
-7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:13:00Z"}
-id:  618d0a4de6aee775baa534d66e478cbbb99135386b4ee3dcf4e4fa884ebb9ac0
-sig: 0xc220e4fc2d4d5251e958b07014decf648244149ffb1b6402b7b7b7a6d50084b8279f\
-     dd2a220792008eba1496a5d89dc5f511aae14608ea953530a174219cb3091b
+signed string, 443 bytes:
+DSSEv1 50 application/vnd.research-commons.describes.v1+json 378 {"alg":"eip191-secp256k1","body":{"\
+about":{"content":"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c"},"tags":\
+["sort-order"],"x_😀":"astral","x_ｱ":"bmp"},"kind":"describes","prev":"b0d5761fc890ed6ea143f1e29e9d8d\
+ebe77ed7bc19f38cde6fd494da0022b203","rc":"rc/1","seq":9,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1\
+c4750e7a","ts":"2026-10-12T20:13:00Z"}
+id:  5e80f25a49fa7cc73f0a5f2eef185bfccd9d61da3acc8c0da5f798dcc5ccb944
+sig: 0xe9d01a5ac5bfd66c6116265d86c71eadef5fdcd03aacd6509948bb51a01b6c7d1208\
+     bd4cb64f422a6e85292df673f3d62451d7ce7f2ca0d697ae98bf9d589b301b
 ```
 
 The two extension keys are `x_` + U+1F600 and `x_` + U+FF71. RFC 8785 compares UTF-16 code units, where
@@ -523,21 +562,21 @@ signature.
 
 | | Input (exact bytes in the vectors file) | Required result |
 |---|---|---|
-| N1 duplicate key | delivered bytes sha256 `1b51913a895b58843f3b39f1a23bc9c1ad636758743142ba4210fd8d7df71cd8` (764 bytes) | intrinsic: malformed statement (duplicate key "licence"); no line written |
-| N2 NaN | delivered bytes sha256 `4d9ef8a3e2db1d5d92c87b56c0d2ef13053db91d237472d7243f65cee6dcd528` (749 bytes) | intrinsic: malformed statement (non-finite number) |
-| N3 float | delivered bytes sha256 `2a8af3bec319243e4c941b686cff7a0a93448bff12b9d45023b7db27316040c7` (749 bytes) | intrinsic: malformed statement (non-integer number) |
+| N1 duplicate key | delivered bytes sha256 `f4e49971b82b09d6a118d772e3154e07bfda9b4562943bc83420e75194182d6f` (791 bytes) | intrinsic: malformed statement (duplicate key "licence"); no line written |
+| N2 NaN | delivered bytes sha256 `9b5693b6934269bea5839f653b09de0f6ce6ff583ca61c321f02be2e86bdecd3` (776 bytes) | intrinsic: malformed statement (non-finite number) |
+| N3 float | delivered bytes sha256 `96f3c9c3dfd42036ddc606ac615632fbd4b87299f4669fbe21cf2dcaeb576173` (776 bytes) | intrinsic: malformed statement (non-integer number) |
 | N4 depth | delivered bytes sha256 `c6bafac17836da9a173f93b8f303207295a521de73e517ba2a831f05b5ce751d` (103 bytes) | operational: depth limit 16, scope this object |
-| N5 wrong log | delivered bytes sha256 `883486034935409943a590d20b67d300e50431ac275dc52882c248e8d64e82a1` (750 bytes), into the log named for `0xabababababababababababababababababababab` | intrinsic: line in another key's log |
-| N6 tag mismatch | signed string sha256 `7cfc45b81aad2ee3640605c5c2d745e9446bfc7b7df80ade94573b95a399ebef` with the `sig` given | intrinsic: bad signature (recovers a different address) |
-| N7 flipped byte | signed string sha256 `bf185f06f77532fbfc9f927d61c22adf6a807e552cc09a181177306f56875f09` with the `sig` given | intrinsic: bad signature; no field displayed as the signer's (C-core-09) |
-| N8 trailing zero | signed string sha256 `534b866e6055fede4a4123313e7d54795ecd253cf36f49bfa082f79055231bd5` with the `sig` given | intrinsic: malformed statement (non-canonical time) |
-| N9 ten fraction digits | signed string sha256 `4c8c23030ed1c78ab054e75560379a79f72bc6f66116d85ffc29aadd3d8654cf` with the `sig` given | intrinsic: malformed statement (non-canonical time) |
-| N10 numeric offset | signed string sha256 `f85718db2115b64d82e7c7259710c8b90e8850086a1a0dd94f73b1a3da77ede1` with the `sig` given | intrinsic: malformed statement (non-canonical time) |
-| N11 code-point key order | signed string sha256 `7873d015da0eb6c917929ffa3e7141150e8b40d32e2a2b8929cad4d85a07fc69` with the `sig` given | intrinsic: bad signature (the reader's JCS form of the envelope is V10's string, which this signature does not cover) |
-| N12 leap second outside UTC | signed string sha256 `97232888dc4c140bb5e21f5e9d9738cf6fc65ed8d845d2623285d898d6a355bd` with the `sig` given | intrinsic: malformed statement (second 60 outside UTC) |
-| N13 Z on a TAI time | signed string sha256 `7ec7f9bfa5331e55298ef6cc97b6d0690904348e1246d5769db31d1807bbc38a` with the `sig` given | intrinsic: malformed statement (Z asserts UTC; the referent names TAI) |
+| N5 wrong log | delivered bytes sha256 `55ef02a7ae948502be825541bae493bc0a546bd457d050f1dae7b465f8ea863f` (777 bytes), into the log named for `0xabababababababababababababababababababab` | intrinsic: line in another key's log |
+| N6 tag mismatch | signed string sha256 `d5d7bd2dbf3fcadcb02e23e6e356740a33ae2bdbeb28e6d01daabc6cf6834397` with the `sig` given | intrinsic: bad signature (recovers a different address) |
+| N7 flipped byte | signed string sha256 `4e299d080ecd89751f650cfe6263256c578051622b4e10dcb7a6a3a7b80d545e` with the `sig` given | intrinsic: bad signature; no field displayed as the signer's (C-core-09) |
+| N8 trailing zero | signed string sha256 `4d64caf7249cf405d8641bc553a7d419da33fe2342c9750ce1475d423b4570d8` with the `sig` given | intrinsic: malformed statement (non-canonical time) |
+| N9 ten fraction digits | signed string sha256 `056ccd6fbbcaabedeac60c26980edee029801674415a19431b031860bfb4f0a5` with the `sig` given | intrinsic: malformed statement (non-canonical time) |
+| N10 numeric offset | signed string sha256 `123f27ab51b65021f429a39afd76b2e7ad3bbbd5c5ff9f481b3dfa723bd26e07` with the `sig` given | intrinsic: malformed statement (non-canonical time) |
+| N11 code-point key order | signed string sha256 `628c61bfb535cf4640c08404022f964dd70fc439b7cb8632289eeb487d2cc113` with the `sig` given | intrinsic: bad signature (the reader's JCS form of the envelope is V10's string, which this signature does not cover) |
+| N12 leap second outside UTC | signed string sha256 `173b5dfa6f76df98c6a9aad856340ade4dbd6803b5e19d466400557161ad5d77` with the `sig` given | intrinsic: malformed statement (second 60 outside UTC) |
+| N13 Z on a TAI time | signed string sha256 `3d9b0d38479c58a8a7b87042222a1dd9b5198803c40f0e30770336cbeeb50adf` with the `sig` given | intrinsic: malformed statement (Z asserts UTC; the referent names TAI) |
 
-Empty content, for §8: `sha256("") = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+Empty content, for §8: `sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`, size 0.
 
 ## 10. Relationship to the alpha
 
@@ -547,9 +586,9 @@ Empty content, for §8: `sha256("") = e3b0c44298fc1c149afbf4c8996fb92427ae41e464
 | | the v1 `sig` over a five-field subset | left `task`, `result`, `tier`, `reason` and every later field unsigned (#10, #45) |
 | | `sig2` as a second signature beside `sig` | two signatures over one line invite stripping and downgrade; one signature over everything leaves a relayer only omission (claims-model note §2, §14) |
 | | `prev` outside the signature, set at commit | a chain nobody signs is a chain anybody can re-link (§2 above; I3; claims-model note §12) |
-| | the untagged signed string | every statement now begins with `rc/<major>/<kind>`, so no two statement kinds, and no future signed object, share a signing domain |
+| | the untagged signed string | every signed string is now a DSSE PAE string over a per-kind payload type, so no two statement kinds, and no future signed object, share a signing domain |
 | | `ensure_ascii` escaping of non-ASCII | raw UTF-8 is shorter, and one rule ("escape only control characters and the two JSON specials") is easier to implement identically across languages |
-| | short ids in statements | every reference is a full hash (I1); aliases are display only |
+| | short ids in statements | every reference is a full id or digest (I1); aliases are display only |
 | | unsigned lines with `addr: null` | an unsigned line is a local draft, never a statement (claims-model note §11) |
 
 Alpha ledgers and manifests are not readable by this format and are refused as malformed, with no synthesis
@@ -582,20 +621,19 @@ as an optional field (a minor change, §6) modelled on RFC 9581 §3.5.4 and FITS
 - **`crit`** (2026-10-14). Renamed from `critical`, with JOSE's structural rules and one stated departure
   (§6).
 - **Revocation reasons** (2026-10-14). A closed list from RFC 5280 §5.3.1 (§5).
+- **Detached lines** (was Q3, 2026-10-14). Attributed but counted toward nothing (`authored`, `observed`),
+  or not evaluated at all (every other kind), until the line chains; the gap is named (§7).
+- **DSSE framing** (was Q4, 2026-10-14). The signed string is DSSE PAE with a per-kind payload type (§2).
+- **Content digests** (was Q5, 2026-10-14). Content hashes are OCI digests, `sha256:<hex>`; statement ids
+  stay bare, because their algorithm is fixed by the major version (§8).
+- **`frozen_before`** (review, 2026-10-14). Takes the finality-state units (date, height or run) (§5).
+- **Licence texts** (review, 2026-10-14). Cited by digest when held, else by location (§5).
 - **Test vectors as data** (2026-10-14). The normative vectors live in a JSON file beside this note
   (`DESIGN-notes-wire-format.vectors.json`); the blocks in §9 are rendered from it.
 
 **Open.**
 
-1. **A second algorithm at launch.** Ed25519 (RFC 8032) would free implementations from keccak and secp256k1
-   and from the Ethereum address derivation. Add `ed25519` as a second *required* algorithm now, or as the
-   first minor extension once a second implementation exists?
-2. **Detached lines.** §7 attributes an `authored` or `observed` to its signer even while `prev` is
-   unresolved, because attribution is the signature's job and chaining is the time-bound's job. Should any
-   other kind (`anchors`, `edition`) be evaluated at all before it chains?
-3. **Signed-string framing.** Keep `rc/<major>/<kind>` + LF + JSON, or adopt the DSSE pre-authentication
-   encoding (`DSSEv1 <len> <type> <len> <body>`), which is length-prefixed and verifiable by existing DSSE
-   libraries? EIP-191 already length-prefixes the whole message, so the gain arrives with a second algorithm
-   that does not. Changing it later changes every id.
-4. **Hash rendering.** Keep bare 64-hex everywhere, or adopt the OCI digest form `sha256:<hex>` for content
-   hashes (and possibly for statement ids)? The prefix makes the algorithm explicit, at 7 bytes per reference.
+1. **A second algorithm.** Ed25519 (RFC 8032) would free implementations from keccak, secp256k1 and the
+   Ethereum address derivation, and is the key type most agent and DID identities already hold (#17). Add
+   `ed25519` as a second required algorithm in `rc/1`, or as the first minor extension? Either way the
+   signed string is the same PAE string (§2), so only the `signer` grammar and the verification path change.
