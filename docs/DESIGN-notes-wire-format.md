@@ -3,7 +3,8 @@
 **Status:** proposed · **Companion to:** the claims-model note (§15, "wire format") · **Covers:** canonical
 encoding, the statement envelope, statement identity, the signature scheme, the kind vocabulary's field
 names, extensions, per-key logs, content hashing, and test vectors. Serves conformance cases C-core-02a,
-C-core-03, C-core-04, C-core-08 to C-core-14, C-core-77, C-core-83, C-core-117, C-core-127, C-core-141, P-02.
+C-core-03, C-core-04, C-core-08 to C-core-14, C-core-77, C-core-83, C-core-105, C-core-106, C-core-117,
+C-core-127, C-core-141, P-02.
 
 ## 0. Summary
 
@@ -11,14 +12,34 @@ C-core-03, C-core-04, C-core-08 to C-core-14, C-core-77, C-core-83, C-core-117, 
   `body`, optional `critical`, and `sig`. Everything except `sig` is signed. Nothing rides outside.
 - The **signed string** is `rc/<major>/<kind>` + LF + the canonical JSON of the envelope minus `sig`.
 - **Statement id** = full lowercase hex sha256 of the signed string. Short forms are display aliases only.
-- **Canonical JSON** is sorted keys, no whitespace, integers only, UTF-8 as given (no normalisation),
-  duplicate keys refused, depth ≤ 16, statement ≤ 64 KiB.
+- **Canonical JSON** is RFC 8785 (JCS) output over the I-JSON (RFC 7493) subset, further restricted to
+  integers, with duplicate keys refused, depth ≤ 16, statement ≤ 64 KiB. No Unicode normalisation.
+- **Times** are RFC 3339 date-times in one canonical spelling (the XML Schema 1.1 `dateTime` canonical
+  mapping): up to 9 fractional digits, no trailing zeros, UTC with `Z`. A measurement recorded in another
+  timescale names it with a FITS time-scale code. Times are compared parsed, never as text.
 - **One signature**, one required algorithm: `eip191-secp256k1` (the alpha primitive). Any encoding of a
   valid signature over one signed string is the same statement. Unknown `alg` is retained and grants nothing.
 - `prev` and `seq` are inside the signature, so a same-key fork is two signed lines, not a relayer's edit.
 - Unknown fields are retained and ignored. A `critical` member the reader does not implement makes the whole
   statement `unsupported`: retained, never evaluated. An unknown `rc` major is `unsupported` the same way.
 - Content identity is sha256 of the exact bytes, full hex. Vectors in §9 were computed, not typed.
+
+**Standards first.** Where a published standard already defines something this note needs, the note adopts it
+and states the profile (the subset it allows) instead of writing a rule of its own. A home-grown rule is used
+only where no standard fits or where adopting one would break an invariant of the claims-model note, and each
+such place says why. A deliberate departure from an adopted standard is named where it occurs.
+
+| Need | Standard adopted | Profile or departure |
+|---|---|---|
+| canonical JSON | RFC 8785, JSON Canonicalization Scheme (JCS) | output restricted to integers (§1); input refused rather than repaired where §1 says so |
+| JSON subset | RFC 7493, I-JSON §2.2 (number range), §2.3 (unique names) | integers only, \|n\| ≤ 2^53 − 1 |
+| date-time syntax | RFC 3339 §5.6 (an Internet profile of ISO 8601) | `T` and `Z` upper case, no numeric offsets, ≤ 9 fractional digits (§1.1) |
+| one spelling per instant | W3C XML Schema 1.1 Part 2 §3.3.7, `dateTimeCanonicalMap` | adopted for the fraction; departs by admitting second `60` (XSD has no leap seconds) |
+| timescales | FITS 4.0 §9.2.1, Table 30 (Rots et al. 2015, A&A 574, A36) | the non-deprecated codes only (§1.1) |
+| leap seconds | RFC 3339 §5.7; CGPM 2022 Resolution 4 | accepted as written, never normalised |
+| content hash | SHA-256, FIPS 180-4 (free text: RFC 6234) | lowercase hex (RFC 4648 §8 base16) |
+| signature | EIP-191 `personal_sign` over secp256k1 (§4) | kept from the alpha |
+| folded lines in §9 | RFC 8792 §7, single-backslash strategy | |
 
 ## 1. Canonical encoding
 
@@ -28,15 +49,15 @@ disagree on one byte produce different statement ids, so every rule below is a c
 | Rule | Obligation | On violation at parse |
 |---|---|---|
 | encoding | UTF-8, no BOM, no trailing newline | refuses (intrinsic: malformed statement) |
-| object keys | sorted by Unicode code point of the key string (equivalently: by UTF-8 bytes); no duplicates | duplicate key: refuses (intrinsic) |
+| object keys | sorted as RFC 8785 §3.2.3 sorts them: by the key's UTF-16 code units, compared as unsigned integers. This differs from code-point or UTF-8 byte order only for keys holding characters above U+FFFF; V10 in §9 pins the difference. No duplicates (RFC 7493 §2.3) | duplicate key: refuses (intrinsic) |
 | whitespace | none outside strings | not an error on input; canonicalisation removes it |
-| numbers | integers only, `-?(0|[1-9][0-9]*)`, magnitude < 2^53; no fraction, exponent, `NaN`, `Infinity`, `-0` | refuses (intrinsic) |
+| numbers | integers only, `-?(0|[1-9][0-9]*)`, magnitude ≤ 2^53 − 1 (the I-JSON range, RFC 7493 §2.2); no fraction, exponent, `NaN`, `Infinity`, `-0`. A count that can exceed the range (a 64-bit byte count, a large chain height) is a decimal string, as I-JSON recommends | refuses (intrinsic) |
 | decimals | a string plus a unit field: `{"value":"120.0","unit":"degF"}`; the note never interprets the string | n/a |
-| strings | JSON strings; escaped as `\"`, `\\`, `\n`, `\r`, `\t`, `\b`, `\f`, and `\u00XX` for other control characters U+0000–U+001F; every other code point is emitted raw as UTF-8, never `\uXXXX`-escaped; no `/` escaping | invalid UTF-8 or a lone surrogate: refuses (intrinsic) |
+| strings | RFC 8785 §3.2.2.2: `\"`, `\\`, `\b`, `\t`, `\n`, `\f`, `\r`, and lowercase `\u00xx` for the other control characters U+0000–U+001F; every other code point raw as UTF-8, never `\uXXXX`-escaped; no `/` escaping | invalid UTF-8 or a lone surrogate: refuses (intrinsic) |
 | string normalisation | none. Bytes are as the signer gave them. `é` (U+00E9) and `e` + U+0301 are different strings and give different ids | n/a |
 | `null` vs absent | distinct. `"prev":null` is required in a first statement; everywhere else an absent field means "not stated" and a `null` field is refused by that field's schema unless the kind table lists `null` as a value | refuses (intrinsic) where the schema says so |
 | booleans | `true` / `false` | |
-| arrays | order is significant and preserved. A kind that treats a list as a set (`controllers`, `predecessors`, `critical`) says so and refuses duplicates and unsorted members in that list | refuses (intrinsic) |
+| arrays | order is significant and preserved. A kind that treats a list as a set (`controllers`, `predecessors`, `critical`) says so and refuses duplicates and members not sorted by the key order above | refuses (intrinsic) |
 | nesting | depth ≤ 16 (the envelope object is depth 1) | refuses (operational: `depth limit 16`) |
 | size | signed string ≤ 65 536 bytes. The bound is on the statement, not the data: anything list-shaped and large (a per-request fetch log, a member list of thousands) belongs in a blob the statement hashes (§5, source referent) | refuses (operational: `size limit 65536`) |
 | top level | the envelope is an object; anything else is not a statement | refuses (intrinsic) |
@@ -48,9 +69,41 @@ when its canonical form verifies, and is stored canonical; the reader's log hold
 statement. This is why C-core-04 (local tree, hub pull, archive; permuted; duplicated) yields one view: every
 delivery canonicalises to the same bytes and the same id.
 
+Any RFC 8785 implementation produces the canonical bytes of a statement that meets the table: every vector in
+§9 was checked against one. The note's additions sit on either side of JCS. Input that JCS would accept but
+this note refuses (a fraction, a duplicate key, excess depth) is refused before canonicalisation; times are
+checked as field values (§1.1), because JCS never rewrites a string.
+
 Parsers that keep the last duplicate key (most language defaults) do not conform. The conformance test for
 C-core-12 feeds `{"licence":"MIT","licence":"CC0-1.0"}` inside a body and expects an intrinsic refusal with
 the key named, and a reader state digest unchanged before and after.
+
+### 1.1 Time values
+
+Every field this note types as `ts` is one string in one profile. That covers the envelope `ts`, `capture.at`,
+the referent `at`, the window bounds `from` and `to`, `finality.state_at_capture.captured_at`, and the key
+events' `effective`. A field typed `date` (for example `frozen_before`) is an RFC 3339 `full-date`.
+
+| Rule | Obligation | On violation |
+|---|---|---|
+| syntax | RFC 3339 §5.6 `date-time`, with `T` and `Z` in upper case. Offset `Z` only: `+00:00` and other numeric offsets are refused, so an instant has one spelling | refuses (intrinsic: malformed statement) |
+| fraction | 0 to 9 digits after the seconds. Canonical per XML Schema 1.1 `dateTimeCanonicalMap`: no trailing zeros, and no `.` when the fraction is zero. `12:00:00.5Z` conforms; `12:00:00.50Z`, `12:00:00.0Z` and a tenth digit do not | refuses (intrinsic) |
+| leap second | second `60` is admitted at 23:59:60 on the last day of a month (RFC 3339 §5.7), in UTC only, as written. The note keeps no leap-second table and never normalises `:60` to the next minute. CGPM 2022 Resolution 4 ends new leap seconds by 2035; historical data still carries them | refuses (intrinsic) at any other position |
+| timescale | UTC unless the referent says otherwise (below) | |
+| comparison | parsed to (UTC calendar second, nanoseconds), never compared as text: `…00.5Z` sorts after `…00.25Z` though its string sorts before it. A `:60` instant sorts after `:59` and before the next minute | a wrong order is a conformance failure (C-core-105, C-core-106) |
+| precision | an implementation that cannot hold nanoseconds must keep the string; parsing through a millisecond date type silently changes the instant and does not conform. Anything finer than a nanosecond belongs in the content | |
+
+**Timescales.** The envelope `ts` and `capture.at` are always UTC: they are the signer's and the observer's
+clock claims. A phenomenon or method referent may carry `timescale`, a code from FITS 4.0 Table 30, when the
+measured times (the referent `at`, the window bounds) were recorded in another scale. The admitted codes are
+`TAI`, `TT`, `TDB`, `TCG`, `TCB`, `UT1`, `UTC`, `GPS` and `LOCAL`, optionally followed by a realisation in
+parentheses as FITS allows (`TT(BIPM08)`, `UTC(NIST)`). FITS's deprecated codes (`TDT`, `IAT`, `ET`, `GMT`)
+are not admitted. When `timescale` is present and is not `UTC` or a UTC realisation, the referent's times
+carry no `Z`, because `Z` asserts UTC; this is the FITS `datetime` form, and second `60` is refused in those
+scales. `GPS` is admitted although RFC 9581 §3.4 advises converting it to TAI (GPS = TAI − 19 s), because
+physics data arrives labelled that way and the note never converts. A reader compares times in different
+scales only if it holds a conversion; otherwise the comparison is `not comparable`, never a guess. Time
+uncertainty is not a field yet (§11).
 
 ## 2. The envelope
 
@@ -62,7 +115,7 @@ the key named, and a reader state digest unchanged before and after.
   "alg":      "eip191-secp256k1",     signature algorithm (§4)               required
   "seq":      0,                      position in the signer's log (§7)      required
   "prev":     null | "<64 hex>",      id of the signer's previous statement  required (null only at seq 0)
-  "ts":       "2026-10-12T20:00:00Z", signer-asserted time, RFC 3339 UTC, whole seconds, "Z"   required
+  "ts":       "2026-10-12T20:00:00Z", signer-asserted time, UTC, §1.1                      required
   "critical": ["x_escrow"],           extension names the reader must know (§6)   optional
   "body":     { ... },                kind-specific content (§5)             required
   "sig":      "0x<130 hex>"           the signature                          required on the wire
@@ -92,7 +145,7 @@ lines and a reader could not tell a rewrite from a race (C-core-127, C-core-14).
 **`ts` is a claim, not a bound.** It is signed so that it is unambiguously the signer's assertion, and it
 orders nothing on its own (claims-model note §10). A `ts` more than 300 seconds ahead of the writer's clock
 is refused at write time (C-core-105); a `ts` earlier than the `ts` of the statement at `prev` is admitted and
-flagged `incoherent` (C-core-106).
+flagged `incoherent` (C-core-106). Both comparisons use parsed times (§1.1).
 
 ## 3. Statement identity
 
@@ -142,12 +195,12 @@ Rules:
 ## 5. Kinds and body fields
 
 Kinds are the closed vocabulary of claims-model note §4; this section fixes their body field names (snake
-case) and types. `R` = required, `O` = optional. `hash` = 64 lowercase hex (sha256). `key` = lowercase `0x`
-+ 40 hex. `id` = a statement id (hash). `ts` = RFC 3339 UTC, whole seconds, `Z`. A kind listed here with a
-missing `R` field is a malformed statement (intrinsic), with one exception the note itself makes: an
-`observed` whose `referent` lacks a field its class requires is valid, admitted, and shown `unpinned`
-(claims-model note §5.3.1). A kind not listed here is stored and displayed as `unknown kind` and grants
-nothing (C-core-13).
+case) and types. `R` = required, `O` = optional. `hash` = 64 lowercase hex (sha256). `key` = lowercase `0x` +
+40 hex. `id` = a statement id (hash). `ts` = a time value (§1.1); `date` = an RFC 3339 `full-date`. A kind
+listed here with a missing `R` field is a malformed statement (intrinsic), with one exception the note itself
+makes: an `observed` whose `referent` lacks a field its class requires is valid, admitted, and shown
+`unpinned` (claims-model note §5.3.1). A kind not listed here is stored and displayed as `unknown kind` and
+grants nothing (C-core-13).
 
 **Shared body objects**
 
@@ -163,7 +216,7 @@ nothing (C-core-13).
 | `kind` | Body fields |
 |---|---|
 | `authored` | `content` R · `type` string R (`dataset`, `workflow`, `skill`, `synthesis`, `report`, `other`) · `provenance` O · disclosures O · `supersedes` hash O (the author's own earlier blob) · `extends` hash O |
-| `observed` | `content` R · `class` R, exactly one of `exact-bytes` / `source` / `phenomenon` / `method` / `none-yet` (a list, or any second class field, is malformed; C-core-35) · `referent` object R, keys per class: exact-bytes `chain_id` string, `block_hash` hash, `depth` integer; source, either one request (`endpoint` string, `parameters` object, `response_sha256` hash) or a batch (`requests` object: `sha256` hash of a request log carried inside `content`, `format` string naming its layout, `count` integer; each log entry carries endpoint, parameters, status, time and response hash), never both; phenomenon `instrument` string, `location` object, `at` ts; method `method_edition` id, `environment` object (`image_digest`, `platform`, `harness_commit`), `system` object R with free keys (whatever identifies the measured system and changes the apparatus under the observer, e.g. a model pin, a provider, a routing era; values are strings), `inputs` list of hash O (the protocol's pinned inputs: scenario edition, seed set, configuration; order preserved), `window` object (`from` ts, `to` ts); none-yet: any · `capture` object R (`at` ts R, `evidence` `"self-asserted"`/`"anchored-at-capture"`/`"witnessed"`/`"device-attested"` R, `operator` string O, `instrument` string O, `witnesses` list of key O, `attestation` object O) · `finality` O (exact-bytes and source only) · disclosures O |
+| `observed` | `content` R · `class` R, exactly one of `exact-bytes` / `source` / `phenomenon` / `method` / `none-yet` (a list, or any second class field, is malformed; C-core-35) · `referent` object R, keys per class: exact-bytes `chain_id` string, `block_hash` hash, `depth` integer; source, either one request (`endpoint` string, `parameters` object, `response_sha256` hash) or a batch (`requests` object: `sha256` hash of a request log carried inside `content`, `format` string naming its layout, `count` integer; each log entry carries endpoint, parameters, status, time and response hash), never both; phenomenon `instrument` string, `location` object, `at` ts, `timescale` string O (§1.1); method `method_edition` id, `environment` object (`image_digest`, `platform`, `harness_commit`), `system` object R with free keys (whatever identifies the measured system and changes the apparatus under the observer, e.g. a model pin, a provider, a routing era; values are strings), `inputs` list of hash O (the protocol's pinned inputs: scenario edition, seed set, configuration; order preserved), `window` object (`from` ts, `to` ts), `timescale` string O (§1.1); none-yet: any · `capture` object R (`at` ts R, `evidence` `"self-asserted"`/`"anchored-at-capture"`/`"witnessed"`/`"device-attested"` R, `operator` string O, `instrument` string O, `witnesses` list of key O, `attestation` object O) · `finality` O (exact-bytes and source only) · disclosures O |
 | `holds` | `content` R · `locations` list of string O (URLs or content-addressed URIs; a hint, never authenticated) |
 | `describes` | `about` object R (exactly one of `content` hash, `statement` id, `resource` id) · `tags` list of string O · `note` string O · `links` list of object O (`rel` string R, one of `content`/`statement`/`resource`/`url` R) |
 | `reproduced` | `of` id R (the `authored` reproduced) · `result` `"match"`/`"diverged"`/`"not-comparable"` R · `content` R (the bytes this run produced) · `provenance` R · `comparator` hash O · `report` hash O (divergence report) |
@@ -231,15 +284,20 @@ against the full hash before it is installed; the display alias is never used fo
 ## 9. Test vectors
 
 Computed with Python 3 `hashlib` and the alpha signer (`viem` `signMessage`) in a throwaway directory; every
-hash below is pasted from that run. The signing key is the **disposable, public** key
-`sha256("research-commons wire-format test key 1")` as a 32-byte hex scalar, whose address is
-`0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a`. Never use it for anything else. Vectors V1–V8 form one log
-(`seq` 0–7); each `prev` is the previous vector's id. In the signed strings a trailing `\` means the line
-continues with no newline; the only LF in a signed string is the one after the domain tag.
+hash below is pasted from that run. Each signed string was also checked byte-identical to the output of an
+independent RFC 8785 implementation (the Python `jcs` package) on the parsed envelope. The signing key is the
+**disposable, public** key `sha256("research-commons wire-format test key 1")` as a 32-byte hex scalar, whose
+address is `0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a`. Never use it for anything else. Vectors V1–V8 form
+one log (`seq` 0–7), extended by V9–V10 (`seq` 8–9); each `prev` is the previous vector's id. Long lines are
+folded per RFC 8792 §7 (single backslash): a trailing `\` means the line continues with no newline, and
+leading spaces on the continuation are not part of the content. The only LF in a signed string is the one
+after the domain tag.
 
 **V1 authored (derived, with provenance)**
 
 ```text
+NOTE: '\' line wrapping per RFC 8792
+
 signed string, 623 bytes:
 rc/1/authored
 {"alg":"eip191-secp256k1","body":{"availability":{"obtainable":true,"redistribution":"permitted"},"c\
@@ -261,6 +319,8 @@ Equivalent encodings of this signature, both recovering the same signer, both th
 **V2 observed (exact-bytes, chain referent, finality)**
 
 ```text
+NOTE: '\' line wrapping per RFC 8792
+
 signed string, 706 bytes:
 rc/1/observed
 {"alg":"eip191-secp256k1","body":{"capture":{"at":"2026-10-12T20:04:30Z","evidence":"self-asserted",\
@@ -280,6 +340,8 @@ No `rule_source`: displayed as `observer's convention`; referent status `provisi
 **V3 holds (external location)**
 
 ```text
+NOTE: '\' line wrapping per RFC 8792
+
 signed string, 448 bytes:
 rc/1/holds
 {"alg":"eip191-secp256k1","body":{"content":{"bytes":4096,"sha256":"2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b\
@@ -295,6 +357,8 @@ sig: 0x2a057f7c29c727ae44e914f39163855f1adf948070bf07840cd7a2ac643d2c0e3b0f\
 **V4 describes (Unicode, control characters, nested lists and objects)**
 
 ```text
+NOTE: '\' line wrapping per RFC 8792
+
 signed string, 520 bytes:
 rc/1/describes
 {"alg":"eip191-secp256k1","body":{"about":{"content":"2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b\
@@ -315,6 +379,8 @@ normalisation).
 **V5 genesis (collection, 2-of-2)**
 
 ```text
+NOTE: '\' line wrapping per RFC 8792
+
 signed string, 419 bytes:
 rc/1/genesis
 {"alg":"eip191-secp256k1","body":{"controllers":["0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","0xaba\
@@ -327,11 +393,13 @@ sig: 0x3bc7a3e6c5d509645d542f26db89219f7dd52e6fbf6ac765af7726354b2e667313c1\
      ce7f9550347b059c9e138ad326475b32dde42fecba2138f8a7dd184d43971b
 ```
 
-The resource id is this statement's id (C-core-77). `controllers` is a set: here sorted by byte order.
+The resource id is this statement's id (C-core-77). `controllers` is a set, sorted by the key order of §1.
 
 **V6 edition (first edition; rule-based selection; frozen_before)**
 
 ```text
+NOTE: '\' line wrapping per RFC 8792
+
 signed string, 639 bytes:
 rc/1/edition
 {"alg":"eip191-secp256k1","body":{"contents":{"frozen_before":"2026-09-01","members":[{"content":"7a\
@@ -351,6 +419,8 @@ Under the 2-of-2 rule this edition is one approval and is not yet the tip (C-cor
 **V7 anchors**
 
 ```text
+NOTE: '\' line wrapping per RFC 8792
+
 signed string, 429 bytes:
 rc/1/anchors
 {"alg":"eip191-secp256k1","body":{"head":"daa820dcaaa9e2ccbe2c1f0df2693b6fd544723a534d219db213d25f5d\
@@ -369,6 +439,8 @@ whatever the reader verifies, never a label here (C-core-107).
 **V8 authored with an unknown extension and a `critical` member**
 
 ```text
+NOTE: '\' line wrapping per RFC 8792
+
 signed string, 435 bytes:
 rc/1/authored
 {"alg":"eip191-secp256k1","body":{"content":{"bytes":10,"sha256":"e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1\
@@ -384,6 +456,47 @@ sig: 0xb0d610bd8aa70debccffbf337b6bf8a218ece32c99a057210815a99671e4f0b77a09\
 A reader without `x_escrow` retains this as `unsupported`; `x_note` alone would be retained and ignored. The
 `critical` list is sorted and inside the signature.
 
+**V9 observed (phenomenon; sub-second times; a TAI referent)**
+
+```text
+NOTE: '\' line wrapping per RFC 8792
+
+signed string, 575 bytes:
+rc/1/observed
+{"alg":"eip191-secp256k1","body":{"capture":{"at":"2026-10-12T20:11:58.25Z","evidence":"self-asserte\
+d","instrument":"daq-7"},"class":"phenomenon","content":{"bytes":2048,"sha256":"3c3c3c3c3c3c3c3c3c3c\
+3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c"},"referent":{"at":"2026-10-12T20:12:35.000000012","ins\
+trument":"daq-7","location":{"site":"bench-3"},"timescale":"TAI"}},"kind":"observed","prev":"7f9a7de\
+1059c0ceb3c6dca91c06ae3fa5cdb2d43aba95833976a3a8484d09bfb","rc":"rc/1","seq":8,"signer":"0xf71e7c9cc\
+e990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:12:00Z"}
+id:  84f2c14858e8a86c2e11779b2003a2a399bfa8c167de6af8b3df3424c50e4b78
+sig: 0xc0b9c39b14d40728d5fd2b6b30aa8525bf9d9dff754101f97a9cdf3cdf721eda5935\
+     afd232a04257fbec3021632b46a30de7f426094524a76673239798b1d88e1c
+```
+
+`capture.at` carries a fraction of two digits and the referent `at` one of nine; neither has trailing zeros.
+The referent names `timescale` `TAI`, so its `at` carries no `Z`; the envelope `ts` and `capture.at` are UTC.
+
+**V10 describes (key order above U+FFFF)**
+
+```text
+NOTE: '\' line wrapping per RFC 8792
+
+signed string, 386 bytes:
+rc/1/describes
+{"alg":"eip191-secp256k1","body":{"about":{"content":"3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c\
+3c3c3c3c3c3c3c3c3c"},"tags":["sort-order"],"x_😀":"astral","x_ｱ":"bmp"},"kind":"describes","prev":"84\
+f2c14858e8a86c2e11779b2003a2a399bfa8c167de6af8b3df3424c50e4b78","rc":"rc/1","seq":9,"signer":"0xf71e\
+7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:13:00Z"}
+id:  e7808c5576fab7ce4b2cd2081b5df7b7eb34b507e7f625e6e7eccb54d62d938f
+sig: 0xfbaa46b6e4e6acf01688dd3ae30dcdf87fb0d7d179dcbea46052b874ba5f192436de\
+     ff7825cde7f058f69dc1eae3f31ebe72a08d7d3242a450692263056f30b11c
+```
+
+The two extension keys are `x_` + U+1F600 and `x_` + U+FF71. RFC 8785 compares UTF-16 code units, where
+U+1F600 begins with the surrogate 0xD83D and so sorts before U+FF71; code-point or UTF-8 byte order puts it
+after. A canonicaliser that sorts by code point produces a different string and a different id (N11).
+
 **Negative vectors** (each must reach the parser; the test logs the sha256 of the delivered bytes):
 
 | | Delivered bytes (sha256 of the exact bytes) | Required result |
@@ -395,6 +508,12 @@ A reader without `x_escrow` retains this as `unsupported`; `x_note` alone would 
 | N5 wrong log | V1 delivered into a log named for `0xabab…abab` | intrinsic: `line in another key's log` |
 | N6 tag mismatch | V1's signed string with first line `rc/1/anchors` and V1's `sig` | intrinsic: `bad signature` (recovers a different address) |
 | N7 flipped byte | V1 with `"CC-BY-4.0"` → `"CC-BY-4.1"` and V1's `sig` | intrinsic: `bad signature`; no field displayed as the signer's (C-core-09) |
+| N8 trailing zero | V9 with `capture.at` `…58.250Z`, validly signed over that string; signed string sha256 `8056500bbc0ae257496fbfde7b13e1ff08a543a35fdf4c250a3194f87efaa03e` | intrinsic: malformed statement (`non-canonical time`) |
+| N9 ten digits | V9 with the referent `at` `…35.0000000120` (ten fraction digits), validly signed; sha256 `bfcd0d214b390d3688e7caa83ce8f420c4291a5a19afa0bcd1cc6c3d3e38fe24` | intrinsic: malformed statement (`non-canonical time`) |
+| N10 numeric offset | V9 with `ts` `2026-10-12T20:12:00+00:00`, validly signed; sha256 `1f36cc8b8528b1ab1b138aa94b2955f1faafed391e2f564005cfe073e9dac3a3` | intrinsic: malformed statement (`non-canonical time`) |
+| N11 code-point key order | V10's envelope serialised with keys in code-point order and validly signed over that string; sha256 `0dfc80a55edae211a60f881bbd08b863d3350d1a3445be99929a2ce541262071` | intrinsic: `bad signature` (the reader's JCS form of the envelope is V10's string, which this signature does not cover) |
+| N12 leap second outside UTC | V9 with the TAI referent `at` `2016-12-31T23:59:60`, validly signed; sha256 `95d1b0d8a6531a2e0d3770661dddb4004fce9e3d2f73f05f994c7bda9d302bd3` | intrinsic: malformed statement (second 60 outside UTC) |
+| N13 `Z` on a TAI time | V9 with the referent `at` ending `Z`, validly signed; sha256 `370a8a3236fe5a3e96eca4a6f4611abd4dffe8695b8aeca49edf40d42e63b73a` | intrinsic: malformed statement (`Z` asserts UTC; the referent names `TAI`) |
 
 Empty content, for §8: `sha256("") = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
 
@@ -402,7 +521,7 @@ Empty content, for §8: `sha256("") = e3b0c44298fc1c149afbf4c8996fb92427ae41e464
 
 | Kept | Dropped | Why |
 |---|---|---|
-| EIP-191 `personal_sign` over a canonical JSON string; secp256k1 recover-to-address; the lowercase address as identity; `sort_keys` + no-separator JSON | | one maintained primitive, already deployed, already understood; no new crypto (claims-model note §15 asks for a wire format, not a new signature scheme) |
+| EIP-191 `personal_sign` over a canonical JSON string; secp256k1 recover-to-address; the lowercase address as identity; sorted keys + no-separator JSON (now specified as RFC 8785; the alpha's code-point sort agrees with it for every key below U+10000) | | one maintained primitive, already deployed, already understood; no new crypto (claims-model note §15 asks for a wire format, not a new signature scheme) |
 | | the v1 `sig` over a five-field subset | left `task`, `result`, `tier`, `reason` and every later field unsigned (#10, #45) |
 | | `sig2` as a second signature beside `sig` | two signatures over one line invite stripping and downgrade; one signature over everything leaves a relayer only omission (claims-model note §2, §14) |
 | | `prev` outside the signature, set at commit | a chain nobody signs is a chain anybody can re-link (§2 above; I3; claims-model note §12) |
@@ -421,22 +540,37 @@ what makes a bound `bitcoin` quality (#59); the rule dialect named by `edition.c
 the member-schema dialect (rule and schema note); the comparator and agreement-model identifiers named by
 `comparator` and `corroborates.model` (comparison note); attestation object contents under
 `capture.attestation` (attestation note); package and transport framing on `pull`/`push` (storage note);
-size limits larger than the single-statement bound (size policy, #9).
+size limits larger than the single-statement bound (size policy, #9); time uncertainty, which can arrive later
+as an optional field (a minor change, §6) modelled on RFC 9581 §3.5.4 and FITS 4.0 §9.4.3.
 
-## 12. Open questions
+## 12. Decisions and open questions
 
-1. **Integer bound.** This note caps integers at |n| < 2^53 so every JSON parser agrees; a 64-bit
-   `content.bytes` or a chain height above that would have to be a string. Raise to 2^63 and require
-   big-integer parsing, or keep 2^53 and accept string-typed large counts?
-2. **High-`s` signatures.** Accept-and-normalise (this note) lets one statement arrive in several byte forms
-   that a byte-level dedupe will not catch before the id check. Refusing high-`s` outright would make the
-   signature bytes canonical too. Which does the storage note's dedupe path want?
-3. **`ts` precision.** Whole seconds keep the canonical form one string; sub-second capture times would then
-   live only inside `capture.at` of `observed`. Should `capture.at` allow fractional seconds while the
-   envelope `ts` does not?
-4. **A second algorithm at launch.** Ed25519 would free implementations from keccak and secp256k1 and from
-   the Ethereum address derivation. Add `ed25519` as a second *required* algorithm now, or as the first minor
-   extension once a second implementation exists?
-5. **Detached lines.** §7 attributes an `authored` or `observed` to its signer even while `prev` is
+**Decided (2026-10-13).** These were open questions in the first draft.
+
+- **Integer bound** (was Q1). Keep the I-JSON range, \|n\| ≤ 2^53 − 1, and write larger counts as decimal
+  strings, as RFC 7493 §2.2 recommends. No field this note defines needs more, and raising the bound would
+  push big-integer parsing onto every implementation.
+- **Time precision** (was Q3). Every time field allows up to nine fractional digits in one canonical spelling,
+  with an optional FITS timescale on measurement referents (§1.1). The first draft's "whole seconds in `ts`,
+  fractions only in `capture.at`" would have made two time types.
+- **Canonical JSON.** RFC 8785 is the canonicalisation. The first draft's code-point key order differed from
+  it for keys above U+FFFF (V10, N11).
+
+**Open.**
+
+1. **High-`s` signatures.** Accept-and-normalise (§4) lets one statement arrive in several signature byte
+   forms. EIP-2 already refuses high-`s` for Ethereum transactions. Refusing it here would make the signature
+   bytes canonical too, at the cost of C-core-10's "two encodings, one id" becoming a refusal case. A middle
+   option: admit either form, and store only low-`s` with `v` ∈ {27, 28}. Which one?
+2. **A second algorithm at launch.** Ed25519 (RFC 8032) would free implementations from keccak and secp256k1
+   and from the Ethereum address derivation. Add `ed25519` as a second *required* algorithm now, or as the
+   first minor extension once a second implementation exists?
+3. **Detached lines.** §7 attributes an `authored` or `observed` to its signer even while `prev` is
    unresolved, because attribution is the signature's job and chaining is the time-bound's job. Should any
    other kind (`anchors`, `edition`) be evaluated at all before it chains?
+4. **Signed-string framing.** Keep `rc/<major>/<kind>` + LF + JSON, or adopt the DSSE pre-authentication
+   encoding (`DSSEv1 <len> <type> <len> <body>`), which is length-prefixed and verifiable by existing DSSE
+   libraries? EIP-191 already length-prefixes the whole message, so the gain arrives with a second algorithm
+   that does not. Changing it later changes every id.
+5. **Hash rendering.** Keep bare 64-hex everywhere, or adopt the OCI digest form `sha256:<hex>` for content
+   hashes (and possibly for statement ids)? The prefix makes the algorithm explicit, at 7 bytes per reference.
