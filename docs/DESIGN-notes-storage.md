@@ -4,7 +4,7 @@
 **Companion to:** the claims-model note (§15, "storage engine and transaction design")
 **Covers:** the storage bullets of claims-model note §12 (exact bytes, atomic commits, concurrent writers,
 caches, bounded scans) and §11 (external holds, package scope). Serves conformance cases C-core-123 through
-C-core-131, C-core-138, and properties P-07 and P-10; touches P-01 (permutation) where storage order could
+C-core-131 (with C-core-127a, C-core-127b and C-core-129a), C-core-138, and properties P-07 and P-10; touches P-01 (permutation) where storage order could
 otherwise leak into answers. Carries #74 rows 1, 2, 3 and 8 as obligations.
 
 This note binds every implementation of the core, not a profile (conformance open item 11). It fixes
@@ -216,9 +216,15 @@ is a **fork point**:
 - an answer that depends on *which* branch is current (a resource edition from a controller whose log forked
   below it) shows the branch in its explanation and, where the branches conflict, `contested` (claims-model
   note §3.1);
-- the key's owner clears the fork by signing a statement whose predecessor is one tip and whose body
-  supersedes or restates what the other tip said; the other tip remains in the log, displayed as a cleared
-  branch. Nothing is deleted.
+- the key's owner clears the fork by signing a statement whose `prev` is one tip and whose `merges` names
+  every other tip (wire-format note §7). The fork clears when every tip is an ancestor of one statement,
+  the rule a merge edition follows for a resource (claims-model note §8). A statement that follows one tip
+  and names no other leaves `FORK` shown, because following a branch says nothing about whether the signer
+  saw the others (C-core-127a). The cleared branches stay in the log, displayed as merged. Nothing is
+  deleted;
+- a statement whose `merges` names a line the reader does not hold is `detached` until that line arrives,
+  like one whose `prev` is not held (wire-format note §7, "Gaps"; C-core-127b). A branch the
+  owner does not recognise is not merged: the answer to it is `revoke_key` with `key_compromise`.
 
 A fork is never a refusal: no gate may refuse a statement because its signer's log has forked (I7 applies to
 the signer's own relayers too). A fork is also not a claim of misbehaviour; it is what two honest processes
@@ -290,6 +296,11 @@ An entry is dropped (or ignored, which is equivalent) when any of the following 
 6. a `repair` or `fsck --rebuild` that names its projection;
 7. the signature-verification cache entry for any statement in its input set (a verification cache is keyed
    on statement hash plus verifier version only, and holds only "verified" or "failed", never a value).
+
+A conformance run does not rely on that cache. Every signature a case reports on is verified in the run
+under test, starting from a cold store; a cached "verified" is an optimization for daily use, not evidence
+of conformance. One case checks the cache itself: a warm answer equals a cold one, and a changed verifier
+version misses (C-core-129a).
 
 Nothing else invalidates. In particular, the passage of time does not invalidate a time-independent entry,
 and a `gc` (§6) does not invalidate anything, because `gc` removes no input of any valid projection.
@@ -419,18 +430,19 @@ semantics stated in §1 and §5.2.
 
 ## 12. Open questions
 
-1. **Fork clearing.** §4.2 clears a fork by a successor statement naming one tip. Should the clearing
-   statement be required to name *every* tip (as a merge edition must, claims-model note §8), so that a
-   reader can tell "cleared" from "the signer never saw the other branch"?
+1. ~~**Fork clearing.**~~ **Decided:** the clearing statement names every other tip in `merges`, an
+   optional signed envelope field beside the single `prev` (wire-format note §7). "Cleared" then means
+   every tip is an ancestor of one statement, the same rule as a merge edition (claims-model note §8), and a
+   reader can tell "cleared" from "the signer never saw the other branch" (§4.2).
 2. **Grace window versus pending records.** §6.1 protects a step-1 blob by a time window. The alternative
    is a short-lived `intent/` record written before step 1, which removes the window but adds a journal
    write to every publish. Which is the better default for a hub that ingests thousands of packages a day?
 3. **Journal retention.** `done/` records are deleted once projections are rebuilt (§3.4). Keeping them
    indefinitely would give `explain` the operation that installed each statement at no inference cost, at
    the price of unbounded growth. Keep, cap, or delete?
-4. **Verification cache trust.** §5.3 item 7 lets a signature-verification cache carry "verified" across
-   runs keyed on statement hash plus verifier version. Is a cached "verified" acceptable in a conformance
-   result, or must the run under test re-verify every signature it reports on?
+4. ~~**Verification cache trust.**~~ **Decided:** a conformance run re-verifies every signature it reports
+   on, from a cold store; the cache stays for daily use, and C-core-129a checks that it agrees with a cold
+   run (§5.3).
 5. **Release of own `holds`.** §6.2 asks the operator to supersede a `holds` after `gc --release`. Should
    the tool refuse the release until the superseding statement is signed in the same operation, making
    availability and assertion move together?

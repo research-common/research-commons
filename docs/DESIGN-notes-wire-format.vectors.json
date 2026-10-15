@@ -75,6 +75,20 @@
    "bytes": 443,
    "id": "5e80f25a49fa7cc73f0a5f2eef185bfccd9d61da3acc8c0da5f798dcc5ccb944",
    "sig": "0xe9d01a5ac5bfd66c6116265d86c71eadef5fdcd03aacd6509948bb51a01b6c7d1208bd4cb64f422a6e85292df673f3d62451d7ce7f2ca0d697ae98bf9d589b301b"
+  },
+  {
+   "name": "V11",
+   "signed_string": "DSSEv1 46 application/vnd.research-commons.holds.v1+json 443 {\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c\",\"size\":2048},\"locations\":[\"https://mirror.example/blobs/3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c\"]},\"kind\":\"holds\",\"prev\":\"b0d5761fc890ed6ea143f1e29e9d8debe77ed7bc19f38cde6fd494da0022b203\",\"rc\":\"rc/1\",\"seq\":9,\"signer\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\",\"ts\":\"2026-10-12T20:13:00Z\"}",
+   "bytes": 504,
+   "id": "93fe6f768c4188c40a706089d82c5fd29711b9b1e1dfb32d4eaec7b29d561e8d",
+   "sig": "0x40f5612de57ee0a66517000991a358b3b1ccde59eb378a3edc8c9a1393e49df44010fe83e9ade231a9784f2a207fa303530e842f2826412eb134841c23ce89421c"
+  },
+  {
+   "name": "V12",
+   "signed_string": "DSSEv1 50 application/vnd.research-commons.describes.v1+json 427 {\"alg\":\"eip191-secp256k1\",\"body\":{\"about\":{\"content\":\"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c\"},\"tags\":[\"fork-cleared\"]},\"kind\":\"describes\",\"merges\":[\"93fe6f768c4188c40a706089d82c5fd29711b9b1e1dfb32d4eaec7b29d561e8d\"],\"prev\":\"5e80f25a49fa7cc73f0a5f2eef185bfccd9d61da3acc8c0da5f798dcc5ccb944\",\"rc\":\"rc/1\",\"seq\":10,\"signer\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\",\"ts\":\"2026-10-12T20:14:00Z\"}",
+   "bytes": 492,
+   "id": "63dcdd4efdc8b8b1ae8633d4fa5cce0ab12df3f408b4ac5676f61b7bd2095411",
+   "sig": "0x9d9fa533baaa9eee03568acec9ab3d9a10fb22a9a765e5a215fe34543dee3f142f9af6767f0fced279b2ebe8f681b1f082d836379f7a972d4a9be99b8bd9219d1b"
   }
  ],
  "equivalent_encodings": {
