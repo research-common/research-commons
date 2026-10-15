@@ -1,0 +1,46 @@
+# Next-format implementation (Go)
+
+This tree is the new implementation of the format specified in `docs/DESIGN-notes-claims-model.md`,
+`docs/DESIGN-notes-wire-format.md` and the other design notes, built test-first against
+`docs/CONFORMANCE.md`. It lives on the `next` branch and will ship as `0.5.0-alpha.1`. Nothing here is wired
+to a command yet; the alpha CLI under `bin/` and `lib/` is unchanged.
+
+## Build and test
+
+Go is pinned by `go.mod` (`toolchain`); with `GOTOOLCHAIN=auto` (the default) the right toolchain downloads
+on first use. Three runtime dependencies, pinned by `go.sum`: `filippo.io/edwards25519` (Ed25519 point
+checks), `github.com/decred/dcrd/dcrec/secp256k1/v4` (EIP-191 recovery), `golang.org/x/crypto` (keccak256).
+
+```sh
+go test ./...                                                     # everything
+go test -run TestConformanceCases -v ./internal/conformance       # progress against CONFORMANCE.md
+go test -run '^$' -fuzz FuzzRead -fuzztime 60s ./internal/wire    # one fuzz target (also FuzzParse, FuzzTime)
+CGO_ENABLED=0 go build ./...                                      # static build
+```
+
+## Packages
+
+| package | covers |
+|---|---|
+| `canon` | strict JSON reader and RFC 8785 writer (wire §1). The only JSON parser in the module: `encoding/json` is banned by a test, because its defaults (case-insensitive fields, last duplicate wins, invalid UTF-8 repaired) break the format |
+| `rctime` | time values (wire §1.1): one spelling per instant, parsed comparison, FITS timescales, leap seconds as written |
+| `sig` | Ed25519 with the pinned pre-checks, EIP-191 recovery and canonical encoding (wire §4) |
+| `wire` | the envelope, the DSSE PAE signed string, statement ids, `crit`, unknown `rc`/`alg` (wire §2, §3, §6); `Read` for received bytes, `Write` for the writer |
+| `refusal` | typed refusals (class, reason, detail) of claims-model §11 |
+| `conformance` | the harness: case ids from CONFORMANCE.md, vectors from the vectors file |
+| `conformance/fixture` | seeded generator of abstract statement sets for property tests, with shrinking |
+
+## How tests map to CONFORMANCE.md
+
+Every case id in `docs/CONFORMANCE.md` is a subtest of `TestConformanceCases`. A test declares what it checks:
+
+- `conformance.Covers(t, "C-core-105")`: this test checks the case's whole required outcome. The case passes.
+- `conformance.Partial(t, "C-core-12", "what is still unchecked")`: this test checks part of it, usually the
+  layers built so far. The case stays skipped, and the report names both the test and what remains.
+
+Cases nobody declares are skipped as pending. A declaration naming an id the document does not define fails
+the build. The scan is static, so arguments must be string literals.
+
+Negative tests show that their mutation reached the boundary under test (CONFORMANCE.md, "How a result is
+recorded"): a time-rule vector is first checked to carry a valid signature, so only the time rule can refuse
+it. Property tests print the seed and a shrunk fixture on failure.

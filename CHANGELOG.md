@@ -9,7 +9,14 @@ manifest/ledger format version — `commons --version` prints both).
 
 ## [Unreleased]
 
-Nothing yet.
+Work toward `0.5.0-alpha.1`, the first release of the next format. Not wired to a command yet; the alpha CLI is
+unchanged on this branch.
+
+### Added
+- **Go implementation, wire layer** (`internal/`, see `internal/README.md`): strict JSON reader and RFC 8785
+  writer, time values, Ed25519 with the pinned pre-checks and EIP-191 with canonical signature storage, the
+  envelope, DSSE PAE signed string and statement ids. Every vector in `docs/DESIGN-notes-wire-format.vectors.json`
+  runs as a test; every case in `docs/CONFORMANCE.md` is a pending subtest until a test declares it.
 
 ## [0.4.0-alpha.1] - 2026-10-12
 
