@@ -43,7 +43,7 @@ the implementation evaluating statements on the user's machine; "the author" is 
 |---|---|
 | **statement id** | hash of a statement's canonical signed body (claims-model note §4; encoding per the wire-format note) |
 | **covered head** | the statement id an anchor stamps; the last statement of the bounded prefix |
-| **bounded prefix** | the covered head plus every statement reachable from it through signed `prev` links in the same key's log |
+| **bounded prefix** | the covered head plus every statement reachable from it through signed `prev` and `merges` links in the same key's log |
 | **`anchors` statement** | a statement in the signer's own log carrying `covered`, `stamped_digest`, `proof` (blob hash), `proof_format`, and `calendars` (informational) |
 | **bound** | the reader's conclusion "statement S existed by chain position P", at a quality the reader assigns |
 
@@ -53,9 +53,11 @@ Rules:
    Any other key's ids listed in its body receive no bound and are shown as `no anchor`; a proof whose
    stamped digest is another key's statement id is reported `invalid for <signer>` and ignored (C-btc-04).
 2. **Coverage is the signed `prev` chain.** Statement S is covered by anchor A iff S is the covered head or
-   is reached from it by following `prev` through verified signatures. File position, line count and
-   timestamps play no part. A break in the chain (missing statement, failed signature) ends coverage at the
-   break; the reader shows `coverage ends at <id>`.
+   is reached from it by following `prev`, and `merges` where a line carries it (wire-format note §7),
+   through verified signatures. A line's id commits to every id it names, so an anchor taken after a fork
+   is cleared covers both branches; one taken on a single branch before clearing covers that branch only.
+   File position, line count and timestamps play no part. A break in the chain (missing statement, failed
+   signature) ends coverage at the break; the reader shows `coverage ends at <id>`.
 3. **The anchor chains after its head.** A valid `anchors` statement has the covered head in its own prefix
    (the head is reachable from the anchor's `prev`). An anchor whose head is not in its prefix is malformed
    and refused (intrinsic); the signer cannot bound a statement it has not yet appended.

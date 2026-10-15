@@ -602,7 +602,9 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
   half-published artifact. A projection that fails after a commit is reported as needing repair, not rolled back
   fictionally.
 - **Concurrent writers** never overwrite each other's committed objects. Same-key concurrent appends become a
-  visible fork, not a lost line.
+  visible fork, not a lost line. The key's owner clears it with a line that names every other tip beside its
+  predecessor; as for editions (§8), a fork clears when every tip is an ancestor of one line, and following
+  one branch alone does not clear it.
 - **Gaps in a log.** A statement whose predecessor the reader does not hold is kept and shown as `detached`,
   with the missing range named. An `authored` or `observed` is attributed to its signer while detached, but
   counts toward nothing; every other kind is not evaluated until it chains, because the missing stretch may
