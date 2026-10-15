@@ -53,9 +53,11 @@ type Draft struct {
 	Kind string
 	Seq  int64
 	Prev string // "" means null
-	TS   string
-	Crit []string
-	Body *canon.Object
+	// Merges is written as given (a test may need an unsorted list); nil or empty means absent.
+	Merges []string
+	TS     string
+	Crit   []string
+	Body   *canon.Object
 }
 
 // Envelope returns the envelope without sig for key k.
@@ -73,6 +75,13 @@ func (d Draft) Envelope(k Key) *canon.Object {
 		"alg": canon.String(k.Alg()), "seq": canon.Int(d.Seq), "prev": prev, "ts": canon.String(d.TS),
 		"body": d.Body,
 	}}
+	if len(d.Merges) > 0 {
+		m := canon.Array{}
+		for _, id := range d.Merges {
+			m = append(m, canon.String(id))
+		}
+		o.Members["merges"] = m
+	}
 	if len(d.Crit) > 0 {
 		c := canon.Array{}
 		for _, n := range d.Crit {

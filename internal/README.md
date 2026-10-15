@@ -25,7 +25,9 @@ CGO_ENABLED=0 go build ./...                                      # static build
 | `canon` | strict JSON reader and RFC 8785 writer (wire §1). The only JSON parser in the module: `encoding/json` is banned by a test, because its defaults (case-insensitive fields, last duplicate wins, invalid UTF-8 repaired) break the format |
 | `rctime` | time values (wire §1.1): one spelling per instant, parsed comparison, FITS timescales, leap seconds as written |
 | `sig` | Ed25519 with the pinned pre-checks, EIP-191 recovery and canonical encoding (wire §4) |
-| `wire` | the envelope, the DSSE PAE signed string, statement ids, `crit`, unknown `rc`/`alg` (wire §2, §3, §6); `Read` for received bytes, `Write` for the writer |
+| `wire` | the envelope (incl. `merges`), the DSSE PAE signed string, statement ids, `crit`, unknown `rc`/`alg` (wire §2, §3, §6); the per-kind body schema (wire §5), the one validation core every gate will call; `Read` for received bytes, `Write` for the writer |
+| `dag` | forks and their clearing over signed predecessor links: the one definition of "fork" and "cleared" shared by key logs and resource editions (claims-model I12, §8; wire §7) |
+| `keylog` | per-key logs (wire §7, storage §4): ownership, duplicates, chained vs detached with the gap named, forks and `merges`, incoherent `ts`, log-relative refusals; every answer a function of the held set, so delivery order changes nothing |
 | `refusal` | typed refusals (class, reason, detail) of claims-model §11 |
 | `conformance` | the harness: case ids from CONFORMANCE.md, vectors from the vectors file |
 | `conformance/fixture` | seeded generator of abstract statement sets for property tests, with shrinking |

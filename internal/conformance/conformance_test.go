@@ -128,7 +128,7 @@ func TestVectorsLoad(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Counts as published in wire-format note §9; a change to the file must change this test on purpose.
-	if len(v.Positive) != 10 || len(v.Negative) != 13 || len(v.EdPositive) != 2 || len(v.EdNegative) != 13 {
+	if len(v.Positive) != 12 || len(v.Negative) != 13 || len(v.EdPositive) != 2 || len(v.EdNegative) != 13 {
 		t.Fatalf("vectors: %d positive, %d negative, %d ed25519 positive, %d ed25519 negative",
 			len(v.Positive), len(v.Negative), len(v.EdPositive), len(v.EdNegative))
 	}

@@ -5,7 +5,8 @@
 // Read is the single entry point for received bytes. It refuses with a typed refusal (package refusal) or
 // returns a Statement whose Status says whether it can be evaluated (Valid) or is retained without
 // interpretation (Unsupported). The checks run in a fixed order so that a negative test can show which
-// boundary refused it: parse (size, depth, JSON subset) → envelope fields → body time values → signature.
+// boundary refused it: parse (size, depth, JSON subset) → envelope fields → body schema → body time values →
+// signature.
 package wire
 
 import (
@@ -41,6 +42,9 @@ const (
 	Valid Status = "valid"
 	// Unsupported: retained and chained, never evaluated (unknown rc major, unknown alg, unimplemented crit).
 	Unsupported Status = "unsupported"
+	// UnknownKind: a validly signed statement of a kind §5 does not list. Stored and displayed as an unknown
+	// kind; it grants nothing (C-core-13).
+	UnknownKind Status = "unknown kind"
 )
 
 // Statement is a statement as the reader holds it.
@@ -55,6 +59,8 @@ type Statement struct {
 	Alg    string
 	Seq    int64
 	Prev   string // "" when null
+	// Merges lists the other tips of the signer's own log this line absorbs (§7), sorted; nil when absent.
+	Merges []string
 	TS     rctime.Time
 	Crit   []string
 	Body   *canon.Object
@@ -68,6 +74,9 @@ type Statement struct {
 	// Verified is true when the signature was checked. Unsupported statements under an unknown rc major or
 	// unknown alg are retained unverified.
 	Verified bool
+	// Unpinned names the referent fields an observed statement's class requires and the statement lacks. Such
+	// a statement is valid and admitted; its referent status reads unpinned (§5, claims-model note §5.3.1).
+	Unpinned []string
 
 	env *canon.Object // the envelope without sig
 }
@@ -209,6 +218,11 @@ func fromEnvelope(full *canon.Object) (*Statement, error) {
 	default:
 		return nil, refusal.Malformed("prev is neither null nor a string")
 	}
+	if m, present := env.Get("merges"); present {
+		if s.Merges, err = mergesList(m, s.Seq, s.Prev); err != nil {
+			return nil, err
+		}
+	}
 	tsS, err := str(env, "ts")
 	if err != nil {
 		return nil, err
@@ -242,12 +256,21 @@ func fromEnvelope(full *canon.Object) (*Statement, error) {
 		return s, nil
 	}
 
-	// Body time values are field rules of §1.1; they are checked on every statement this reader can evaluate.
+	// The body schema (§5) and then the body time values (§1.1, on fields the schema has typed as strings) are
+	// checked on every statement this reader can evaluate.
 	// A statement whose crit names an extension this reader lacks is evaluated under no interpretation (§6),
 	// so its body is not read.
 	if len(s.Crit) == 0 {
+		known, unpinned, err := checkBody(s.Kind, body)
+		if err != nil {
+			return nil, err
+		}
 		if err := checkBodyTimes(s.Kind, body); err != nil {
 			return nil, err
+		}
+		s.Unpinned = unpinned
+		if !known {
+			s.Status, s.Why = UnknownKind, s.Kind
 		}
 	}
 
@@ -286,6 +309,34 @@ func (s *Statement) verify(sigS string) error {
 		s.Sig = sigS
 	}
 	return nil
+}
+
+// mergesList checks the line-local rules §7 gives merges: a non-empty, sorted, duplicate-free list of statement
+// ids that never contains prev. The rules that need the rest of the log (each entry a line by the same key with
+// a lower seq) are the log's (package keylog).
+func mergesList(v canon.Value, seq int64, prev string) ([]string, error) {
+	a, ok := v.(canon.Array)
+	if !ok || len(a) == 0 {
+		return nil, refusal.Malformed("merges is not a non-empty list")
+	}
+	if seq == 0 {
+		return nil, refusal.Malformed("merges at seq 0: no earlier line to absorb")
+	}
+	out := make([]string, 0, len(a))
+	for i, e := range a {
+		id, ok := e.(canon.String)
+		if !ok || !reID.MatchString(string(id)) {
+			return nil, refusal.Malformed("merges entry is not a statement id")
+		}
+		if string(id) == prev {
+			return nil, refusal.Malformed("merges contains prev %s", prev)
+		}
+		if i > 0 && canon.CompareKeys(out[i-1], string(id)) >= 0 {
+			return nil, refusal.Malformed("merges is not sorted and duplicate-free")
+		}
+		out = append(out, string(id))
+	}
+	return out, nil
 }
 
 // critList checks the structure §6 gives crit: a non-empty, sorted, duplicate-free list of body member

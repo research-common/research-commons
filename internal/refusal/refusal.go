@@ -25,6 +25,8 @@ const (
 	BadSignature       = "bad signature"
 	DepthLimit         = "depth limit"
 	SizeLimit          = "size limit"
+	// WrongLog: a line whose signer is not the key the log is named for (wire-format note §7, ownership rule).
+	WrongLog = "line in another key's log"
 )
 
 // Refusal is an error that names its class, its reason and what it applies to.

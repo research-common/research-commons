@@ -99,20 +99,31 @@ func TestPositiveVectors(t *testing.T) {
 	}
 }
 
-// TestVectorChain: V1–V10 are one log, E1–E2 another; each prev is the previous vector's id and seq steps by 1.
+// TestVectorChain: V1–V12 are one log, E1–E2 another. Every prev and every merges entry names an earlier
+// vector of the same log and seq is prev's plus 1. V11 is a second line after V9, so the log forks at seq 9;
+// V12 follows V10 and names V11 in merges (§7, §9).
 func TestVectorChain(t *testing.T) {
 	v := vectors(t)
 	for _, log := range [][]conformance.Vector{v.Positive, v.EdPositive} {
-		prev := ""
+		seqOf := map[string]int64{}
 		for i, x := range log {
 			st, err := Read(lineFor(t, x.SignedString, x.Sig))
 			if err != nil {
 				t.Fatal(err)
 			}
-			if st.Seq != int64(i) || st.Prev != prev {
-				t.Fatalf("%s: seq %d prev %q, want %d %q", x.Name, st.Seq, st.Prev, i, prev)
+			if i == 0 {
+				if st.Seq != 0 || st.Prev != "" {
+					t.Fatalf("%s: seq %d prev %q, want a genesis line", x.Name, st.Seq, st.Prev)
+				}
+			} else if ps, ok := seqOf[st.Prev]; !ok || st.Seq != ps+1 {
+				t.Fatalf("%s: seq %d prev %q does not follow an earlier vector", x.Name, st.Seq, st.Prev)
 			}
-			prev = st.ID
+			for _, m := range st.Merges {
+				if ms, ok := seqOf[m]; !ok || ms >= st.Seq {
+					t.Fatalf("%s: merges %s is not an earlier vector with a lower seq", x.Name, m)
+				}
+			}
+			seqOf[st.ID] = st.Seq
 		}
 	}
 }
@@ -209,7 +220,7 @@ func TestDeliveredNegatives(t *testing.T) {
 
 // TestN5WrongLog: the line itself is V1, valid; the refusal belongs to the log's ownership rule (§7).
 func TestN5WrongLog(t *testing.T) {
-	conformance.Partial(t, "C-core-14", "the ownership refusal and the unchanged chain need the per-key log (build step 5)")
+	// The ownership refusal itself is keylog.TestOwnership (C-core-14); this checks the vector's premise.
 	v := vectors(t)
 	n5 := v.Negative[4]
 	if n5.Name != "N5" {
@@ -222,7 +233,6 @@ func TestN5WrongLog(t *testing.T) {
 	if st.Signer == n5.Log {
 		t.Fatal("N5 is delivered into its own signer's log; the vector is broken")
 	}
-	t.Skip("build step 5: ownership rule refuses a line whose signer is not the log's key")
 }
 
 // TestSignedStringNegatives: N6–N13 and NE13 pair a signed string with a signature.
