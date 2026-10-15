@@ -209,6 +209,7 @@ refer to `verify` unless another command is named (§13).
 | C-core-131 | §12, I8, I4, I15 | Validation hits a documented size or depth limit mid-run (a provenance graph deeper than the traversal bound; a nested archive beyond the scan limit). | Operational refusal naming the limit and its scope; partial results marked `incomplete`; nothing past the bound reads as checked; the limit value is visible. |
 | C-core-132 | §13 ("closed vocabulary"), I13 | Run every surface over the full fixture set and collect the printed state tokens. | Every token is in the documented table; every rule evaluation prints exactly one of `ok`/`fail`/`unchecked`; a token or code not in the source table fails the build. |
 | C-core-133 | §13 (exit codes), I13 | Fixtures for: checked and passed; checked and wrong; contested; unknown; unchecked; re-run stopped by a reader limit (`timeout`); re-run whose step failed in the pinned environment; nothing to re-run; environment mismatch. | `verify` exits 0 / 1 / 3 / 3 / 3 / 3 / 3 / 4 / 5 respectively; the documented table is generated from the same source as the code. |
+| C-core-133a | §13 (exit 2), I13 | Each command run with (a) an unknown option, (b) an argument of the wrong shape (an id that is not an id), (c) a policy file that is present but unparseable, (d) an explicit help request. Control: (e) a well-formed `verify` with no Bitcoin backend configured, on a fixture whose bound would need one. Snapshot the root before and after (a)–(c). | (a)–(c) exit 2 with a problem-details error, `committed` false, and the root unchanged; no partial result is printed. (d) exits 0. (e) exits 3 with `backend-unconfigured`, not 2: a capability that is not configured is a state, not a failed invocation. No fixture in the suite exits 1 except a completed comparison that disagreed. |
 | C-core-134 | §11 (one validation core), §13 (closed vocabulary), I12 | Query one artifact's state, grade, authorship and corroboration status through every shipped surface. | Every surface returns the same tokens for the same statements, policy and evaluator. |
 | C-core-135 | §13 ("exit 0 means the requested operation succeeded"), I13 | An artifact in `contested` state: run a listing, `push` a package containing it, and `verify` it. | Listing and `push` exit 0 and show `contested`; `verify` exits 3; the token is the same word on all three. |
 | C-core-136 | §13 ("explain"), I14 | For every status token shown on any fixture, run `explain`. | Output lists the statements (by hash and signer), policy, evaluator version and time context behind it. |
@@ -315,7 +316,7 @@ Properties quantify over generated inputs; each is a property test or a static c
 | I10 time grants priority, never authority | C-core-19, C-core-20, C-btc-01, P-06 |
 | I11 honest limits | C-core-07, C-core-76a |
 | I12 one definition per concept | C-core-109, C-core-134 |
-| I13 outputs are a contract | C-core-132, C-core-133, C-core-135, C-exec-13a, C-exec-15 |
+| I13 outputs are a contract | C-core-132, C-core-133, C-core-133a, C-core-135, C-exec-13a, C-exec-15 |
 | I14 explainable, order-independent answers | C-core-02, C-core-04, C-core-18, C-core-83, C-core-84, C-core-86, C-core-93b, C-core-129, C-core-136, C-exch-05, P-01, P-02, P-07, P-08 |
 | I15 hostile input and partial failure stay contained | C-core-12, C-core-94, C-core-122, C-core-131, C-exec-08, C-exec-09, C-exec-10, C-exec-12, C-btc-05 |
 
@@ -343,7 +344,7 @@ Properties quantify over generated inputs; each is a property test or a static c
 | §10 time | C-core-19, C-core-53, C-core-105 – C-core-107, C-exch-16, C-btc-01 – C-btc-06, P-06 |
 | §11 federation and gates | C-core-04, C-core-09, C-core-12, C-core-14, C-core-143, C-core-86, C-core-108 – C-core-122, C-core-134, C-exec-06, C-exec-07, C-exec-12, P-04, P-05 |
 | §12 execution and storage safety | C-core-84, C-core-86, C-core-95, C-core-123 – C-core-131, C-core-138, C-core-143, C-exec-03, C-exec-06, C-exec-08 – C-exec-11, C-exec-14, P-07, P-10 |
-| §13 outputs | C-core-06, C-core-113, C-core-125, C-core-132 – C-core-140, C-exec-11, C-exec-13, C-exec-13a, C-exec-15, C-exch-08, C-btc-06, P-08, P-09, P-10 |
+| §13 outputs | C-core-06, C-core-113, C-core-125, C-core-132 – C-core-140 (incl. C-core-133a), C-exec-11, C-exec-13, C-exec-13a, C-exec-15, C-exch-08, C-btc-06, P-08, P-09, P-10 |
 | §14 relationship to the alpha | C-core-141 |
 | appendix: two authors, one synthesis | C-core-142, C-btc-01 |
 | appendix: a chain observation across a fork | C-core-33 |
@@ -367,8 +368,8 @@ Properties quantify over generated inputs; each is a property test or a static c
 
 ## Open items
 
-Drafting these cases found eleven places where the note was silent, and review of the cases found three more
-(items 12–14). Each was answered by an amendment to the note in the same review cycle; the list stays here so a reader of the cases can see which rows were decided
+Drafting these cases found eleven places where the note was silent, review of the cases found three more
+(items 12–14), and the standards survey behind the wire-format note found one (item 15). Each was answered by an amendment to the note; the list stays here so a reader of the cases can see which rows were decided
 by that amendment rather than by the note's first text.
 
 | # | case | question | answer in the note |
@@ -387,3 +388,4 @@ by that amendment rather than by the note's first text.
 | 12 | C-core-93a, C-core-93b | rule domain: the note's own examples read the referent record and the edition under formation | both in the domain; set-level rules evaluated over the whole proposed edition, never by order (§8) |
 | 13 | C-core-76a | an untestable "must include a nonce" | guidance plus a documented size-threshold warning (§7, I11) |
 | 14 | C-core-31, C-exch-17 | batch captures; units and arms in sampling | in-content request log in the source referent (§5.3.1); `unit` and per-group n (§7, §9.4) |
+| 15 | C-core-133a | exit code for a bad option, a malformed argument or an unparseable policy | 2 on every command, before any work, nothing committed; an unconfigured optional capability is a state token and exits 3; help exits 0 (§13) |
