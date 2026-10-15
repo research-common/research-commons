@@ -45,6 +45,10 @@ format is being designed in the open in #69. Until it settles:
   issue anyway: it gets the `next-format` label and becomes a requirement or test case for the
   new format.
 
+The new format's implementation is built on the **`next` branch**, test-first against
+`docs/CONFORMANCE.md`, and will be released as `0.5.0-alpha.1`. `main` keeps the alpha and the
+merged design notes until `next` replaces it.
+
 ## What a change must pass
 
 1. **The full test suite.** `tests/run-all.sh` — hermetic, clears ambient
@@ -79,6 +83,12 @@ What that means for you:
   if your own commits aren't signed.
 - **One logical change per PR.** Squashing means a PR is the smallest unit `git bisect`
   or `git revert` can work with. Split unrelated changes into separate PRs.
+
+**`next`** requires signed commits and linear history, and refuses force-pushes and deletion.
+These rules bind maintainers too. It does not require a review, so maintainers may push signed
+commits to it directly while the build is solo. History there can't be rewritten and has no merge
+commits, so a change that lands on `main` reaches `next` by fast-forward while `next` has no commits
+of its own, and after that as a new signed commit (a cherry-pick), never by a merge or a rebase.
 
 ## Ground rules that are load-bearing
 

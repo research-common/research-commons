@@ -28,6 +28,13 @@ can and should move at different rates: tool `0.2.0` → `0.2.1` → `0.3.0` whi
 
 ## Bump rules while `<1.0.0`
 
+The next format (a clean break, built on the `next` branch) is released as **`0.5.0-alpha.1`**, a
+MINOR bump under the rules below rather than `1.0.0-alpha.1`. That format is not yet frozen: building
+it will amend the design notes, and several of their questions are still open. `1.0.0` is kept to
+mean that the format is frozen. The clean break is signalled by the format tag (`rc/1`), the
+changelog and the README, not by the tool's major number. Security fixes to the alpha, if any, ship
+as `0.4.x`.
+
 - **PATCH** (`0.2.0` → `0.2.1`): bug fixes with no CLI/output/exit-code surface change a script
   could reasonably depend on.
 - **MINOR** (`0.2.x` → `0.3.0`): new subcommands/flags, new artifact types, any change — even
@@ -46,7 +53,10 @@ comparing as strings.
 
 ### Criteria for `1.0.0`
 
-A proposal, not a schedule — final go/no-go is the project owner's call:
+A proposal, not a schedule — final go/no-go is the project owner's call. These criteria were
+written for the alpha format; criterion 1 assumes an `rc.v1` → `rc.v2` migration, which the next
+format's clean break (no importer) rules out. They will be rewritten for the next format; until
+then they describe the alpha line only.
 
 1. The `SCHEMA_MAJOR` compatibility policy has been exercised at least once (a real `rc.v1` →
    `rc.v2` migration has happened and the grandfathering path was tested against real data).
