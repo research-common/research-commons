@@ -198,5 +198,146 @@
     "sig": "0xf3727e37cd855bc4f1bf776da25052c6e425be85af6c5f2fdbbea497dee010f737cc6f5339ce464dab552d267c479f8af49253df690d92a4832849cb713b8d4d1b"
    }
   }
- ]
+ ],
+ "ed25519": {
+  "key": {
+   "derivation": "seed = sha256(\"research-commons wire-format test key 2 (ed25519)\"); RFC 8032 key from that seed",
+   "seed": "863aa2e3f4be6fc6393bc0bcb135ea0afbb8bc8e3d88c9adf1ad62e2e42ee914",
+   "public": "f9e6e12ad6036f6c19ebe6c6cf64f4e26c40b63eeab2cd19f4dd947657b25fe5",
+   "signer": "ed25519:f9e6e12ad6036f6c19ebe6c6cf64f4e26c40b63eeab2cd19f4dd947657b25fe5"
+  },
+  "positive": [
+   {
+    "name": "E1",
+    "signed_string": "DSSEv1 49 application/vnd.research-commons.authored.v1+json 331 {\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e\",\"size\":512},\"licence\":\"CC0-1.0\",\"type\":\"dataset\"},\"kind\":\"authored\",\"prev\":null,\"rc\":\"rc/1\",\"seq\":0,\"signer\":\"ed25519:f9e6e12ad6036f6c19ebe6c6cf64f4e26c40b63eeab2cd19f4dd947657b25fe5\",\"ts\":\"2026-10-14T18:00:00Z\"}",
+    "bytes": 395,
+    "id": "37614f5d085342c609e50383f78cf89564326616a1e0535440d67dc9af5c44d2",
+    "sig": "f64e85a9a341fd25c9918c0a2db3505e740b4b64841c4835e3e5539edfa0f7a23f20b691c33cfee0e9cfb8a223fba1af143e8626238428e4a0e9eaa8cae3ad03"
+   },
+   {
+    "name": "E2",
+    "signed_string": "DSSEv1 51 application/vnd.research-commons.rotate_key.v1+json 348 {\"alg\":\"ed25519\",\"body\":{\"effective\":\"2026-10-14T18:01:00.5Z\",\"successor\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\"},\"kind\":\"rotate_key\",\"prev\":\"37614f5d085342c609e50383f78cf89564326616a1e0535440d67dc9af5c44d2\",\"rc\":\"rc/1\",\"seq\":1,\"signer\":\"ed25519:f9e6e12ad6036f6c19ebe6c6cf64f4e26c40b63eeab2cd19f4dd947657b25fe5\",\"ts\":\"2026-10-14T18:01:00.5Z\"}",
+    "bytes": 414,
+    "id": "a3a49f04392a3f969be4226f0a2ab45788ede846605749c633e9cfa6a81ae262",
+    "sig": "04c41721f540bc834196689ef30ac85271ea8b32bb64031d324de43eb3daff84ac12eca38c0f9da1898659fd0fe24e3473760bddeb7e39b94972e7c3e427b409"
+   }
+  ],
+  "negative": [
+   {
+    "name": "NE1",
+    "source": "ed25519-speccheck case 0 (Apache-2.0, novifinancial/ed25519-speccheck)",
+    "public_key": "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa",
+    "message_hex": "8c93255d71dcab10e8f379c26200f3c7bd5f09d9bc3068d3ef4edeb4853022b6",
+    "sig": "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a0000000000000000000000000000000000000000000000000000000000000000",
+    "expect": "bad signature",
+    "pinned_rule_refuses_at": "step 3 (not in the prime-order subgroup)"
+   },
+   {
+    "name": "NE2",
+    "source": "ed25519-speccheck case 1 (Apache-2.0, novifinancial/ed25519-speccheck)",
+    "public_key": "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa",
+    "message_hex": "9bd9f44f4dcc75bd531b56b2cd280b0bb38fc1cd6d1230e14861d861de092e79",
+    "sig": "f7badec5b8abeaf699583992219b7b223f1df3fbbea919844e3f7c554a43dd43a5bb704786be79fc476f91d3f3f89b03984d8068dcf1bb7dfc6637b45450ac04",
+    "expect": "bad signature",
+    "pinned_rule_refuses_at": "step 3 (not in the prime-order subgroup)"
+   },
+   {
+    "name": "NE3",
+    "source": "ed25519-speccheck case 2 (Apache-2.0, novifinancial/ed25519-speccheck)",
+    "public_key": "f7badec5b8abeaf699583992219b7b223f1df3fbbea919844e3f7c554a43dd43",
+    "message_hex": "aebf3f2601a0c8c5d39cc7d8911642f740b78168218da8471772b35f9d35b9ab",
+    "sig": "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa8c4bd45aecaca5b24fb97bc10ac27ac8751a7dfe1baff8b953ec9f5833ca260e",
+    "expect": "bad signature",
+    "pinned_rule_refuses_at": "step 3 (not in the prime-order subgroup)"
+   },
+   {
+    "name": "NE4",
+    "source": "ed25519-speccheck case 3 (Apache-2.0, novifinancial/ed25519-speccheck)",
+    "public_key": "cdb267ce40c5cd45306fa5d2f29731459387dbf9eb933b7bd5aed9a765b88d4d",
+    "message_hex": "9bd9f44f4dcc75bd531b56b2cd280b0bb38fc1cd6d1230e14861d861de092e79",
+    "sig": "9046a64750444938de19f227bb80485e92b83fdb4b6506c160484c016cc1852f87909e14428a7a1d62e9f22f3d3ad7802db02eb2e688b6c52fcd6648a98bd009",
+    "expect": "bad signature",
+    "pinned_rule_refuses_at": "step 3 (not in the prime-order subgroup)"
+   },
+   {
+    "name": "NE5",
+    "source": "ed25519-speccheck case 4 (Apache-2.0, novifinancial/ed25519-speccheck)",
+    "public_key": "cdb267ce40c5cd45306fa5d2f29731459387dbf9eb933b7bd5aed9a765b88d4d",
+    "message_hex": "e47d62c63f830dc7a6851a0b1f33ae4bb2f507fb6cffec4011eaccd55b53f56c",
+    "sig": "160a1cb0dc9c0258cd0a7d23e94d8fa878bcb1925f2c64246b2dee1796bed5125ec6bc982a269b723e0668e540911a9a6a58921d6925e434ab10aa7940551a09",
+    "expect": "bad signature",
+    "pinned_rule_refuses_at": "step 3 (not in the prime-order subgroup)"
+   },
+   {
+    "name": "NE6",
+    "source": "ed25519-speccheck case 5 (Apache-2.0, novifinancial/ed25519-speccheck)",
+    "public_key": "cdb267ce40c5cd45306fa5d2f29731459387dbf9eb933b7bd5aed9a765b88d4d",
+    "message_hex": "e47d62c63f830dc7a6851a0b1f33ae4bb2f507fb6cffec4011eaccd55b53f56c",
+    "sig": "21122a84e0b5fca4052f5b1235c80a537878b38f3142356b2c2384ebad4668b7e40bc836dac0f71076f9abe3a53f9c03c1ceeeddb658d0030494ace586687405",
+    "expect": "bad signature",
+    "pinned_rule_refuses_at": "step 3 (not in the prime-order subgroup)"
+   },
+   {
+    "name": "NE7",
+    "source": "ed25519-speccheck case 6 (Apache-2.0, novifinancial/ed25519-speccheck)",
+    "public_key": "442aad9f089ad9e14647b1ef9099a1ff4798d78589e66f28eca69c11f582a623",
+    "message_hex": "85e241a07d148b41e47d62c63f830dc7a6851a0b1f33ae4bb2f507fb6cffec40",
+    "sig": "e96f66be976d82e60150baecff9906684aebb1ef181f67a7189ac78ea23b6c0e547f7690a0e2ddcd04d87dbc3490dc19b3b3052f7ff0538cb68afb369ba3a514",
+    "expect": "bad signature",
+    "pinned_rule_refuses_at": "step 1 (S >= L)"
+   },
+   {
+    "name": "NE8",
+    "source": "ed25519-speccheck case 7 (Apache-2.0, novifinancial/ed25519-speccheck)",
+    "public_key": "442aad9f089ad9e14647b1ef9099a1ff4798d78589e66f28eca69c11f582a623",
+    "message_hex": "85e241a07d148b41e47d62c63f830dc7a6851a0b1f33ae4bb2f507fb6cffec40",
+    "sig": "8ce5b96c8f26d0ab6c47958c9e68b937104cd36e13c33566acd2fe8d38aa19427e71f98a473474f2f13f06f97c20d58cc3f54b8bd0d272f42b695dd7e89a8c22",
+    "expect": "bad signature",
+    "pinned_rule_refuses_at": "step 1 (S >= L)"
+   },
+   {
+    "name": "NE9",
+    "source": "ed25519-speccheck case 8 (Apache-2.0, novifinancial/ed25519-speccheck)",
+    "public_key": "f7badec5b8abeaf699583992219b7b223f1df3fbbea919844e3f7c554a43dd43",
+    "message_hex": "9bedc267423725d473888631ebf45988bad3db83851ee85c85e241a07d148b41",
+    "sig": "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff03be9678ac102edcd92b0210bb34d7428d12ffc5df5f37e359941266a4e35f0f",
+    "expect": "bad signature",
+    "pinned_rule_refuses_at": "step 3 (not in the prime-order subgroup)"
+   },
+   {
+    "name": "NE10",
+    "source": "ed25519-speccheck case 9 (Apache-2.0, novifinancial/ed25519-speccheck)",
+    "public_key": "f7badec5b8abeaf699583992219b7b223f1df3fbbea919844e3f7c554a43dd43",
+    "message_hex": "9bedc267423725d473888631ebf45988bad3db83851ee85c85e241a07d148b41",
+    "sig": "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffca8c5b64cd208982aa38d4936621a4775aa233aa0505711d8fdcfdaa943d4908",
+    "expect": "bad signature",
+    "pinned_rule_refuses_at": "step 3 (not in the prime-order subgroup)"
+   },
+   {
+    "name": "NE11",
+    "source": "ed25519-speccheck case 10 (Apache-2.0, novifinancial/ed25519-speccheck)",
+    "public_key": "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "message_hex": "e96b7021eb39c1a163b6da4e3093dcd3f21387da4cc4572be588fafae23c155b",
+    "sig": "a9d55260f765261eb9b84e106f665e00b867287a761990d7135963ee0a7d59dca5bb704786be79fc476f91d3f3f89b03984d8068dcf1bb7dfc6637b45450ac04",
+    "expect": "bad signature",
+    "pinned_rule_refuses_at": "step 2 (not a valid RFC 8032 point encoding)"
+   },
+   {
+    "name": "NE12",
+    "source": "ed25519-speccheck case 11 (Apache-2.0, novifinancial/ed25519-speccheck)",
+    "public_key": "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "message_hex": "39a591f5321bbe07fd5a23dc2f39d025d74526615746727ceefd6e82ae65c06f",
+    "sig": "a9d55260f765261eb9b84e106f665e00b867287a761990d7135963ee0a7d59dca5bb704786be79fc476f91d3f3f89b03984d8068dcf1bb7dfc6637b45450ac04",
+    "expect": "bad signature",
+    "pinned_rule_refuses_at": "step 2 (not a valid RFC 8032 point encoding)"
+   },
+   {
+    "name": "NE13",
+    "title": "alg / signer mismatch",
+    "signed_string": "DSSEv1 49 application/vnd.research-commons.authored.v1+json 340 {\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e\",\"size\":512},\"licence\":\"CC0-1.0\",\"type\":\"dataset\"},\"kind\":\"authored\",\"prev\":null,\"rc\":\"rc/1\",\"seq\":0,\"signer\":\"ed25519:f9e6e12ad6036f6c19ebe6c6cf64f4e26c40b63eeab2cd19f4dd947657b25fe5\",\"ts\":\"2026-10-14T18:00:00Z\"}",
+    "sig": "4e6848ae0d9e9f4beb22881ffdc79e9981c66d51ba784ab068872e1e9eaa8f20fee8bea2933cc14fe7088a80f99254b9e85f148710d8d9c5d72e30ee2f5d5d0e",
+    "expect": "intrinsic: malformed statement (alg eip191-secp256k1 with an ed25519: signer)"
+   }
+  ]
+ }
 }

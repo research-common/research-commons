@@ -18,7 +18,8 @@ C-core-127, C-core-141, P-02.
 - **Times** are RFC 3339 date-times in one canonical spelling (the XML Schema 1.1 `dateTime` canonical
   mapping): up to 9 fractional digits, no trailing zeros, UTC with `Z`. A measurement recorded in another
   timescale names it with a FITS time-scale code. Times are compared parsed, never as text.
-- **One signature**, one required algorithm: `eip191-secp256k1` (the alpha primitive). Any encoding of a
+- **One signature**, two required algorithms: `ed25519` (the default for new keys) and `eip191-secp256k1`
+  (the alpha primitive, kept for blockchain-linked identities). Every reader verifies both. Any encoding of a
   valid signature over one signed string is the same statement. Unknown `alg` is retained and grants nothing.
 - `prev` and `seq` are inside the signature, so a same-key fork is two signed lines, not a relayer's edit.
 - Unknown fields are retained and ignored. A `crit` member the reader does not implement makes the whole
@@ -49,7 +50,7 @@ such place says why. A deliberate departure from an adopted standard is named wh
 | geographic position | RFC 5870 `geo:` URI (WGS 84, `u=` uncertainty) | GeoJSON is not used: its coordinates are decimals, which §1 forbids |
 | image digest, platform | OCI image-spec descriptor digest; OCI image-index platform values | string form `<os>/<arch>[/<variant>]` (execution note §4) |
 | chain id | CAIP-2 | a label; the referent's block hash is the pin |
-| signature | EIP-191 `personal_sign` over secp256k1 (§4) | kept from the alpha |
+| signature | Ed25519, RFC 8032 §5.1 (pure), verified per FIPS 186-5 §7.7 with SP 800-186 App. D.1.3.2 key validation; EIP-191 `personal_sign` over secp256k1 | both required; one pinned Ed25519 verification rule (§4); EIP-191 kept from the alpha |
 | folded lines in §9 | RFC 8792 §7, single-backslash strategy | |
 
 ## 1. Canonical encoding
@@ -195,18 +196,49 @@ digest, and a 12-character value where a full one is required is a malformed sta
 
 ## 4. Signature scheme
 
-One algorithm is required of every implementation, and it is the alpha's primitive, kept unchanged:
+Two algorithms are required of every implementation. Every reader verifies both; a writer signs with one.
 
-| `alg` | Signed bytes | Signature | Verification |
-|---|---|---|---|
-| `eip191-secp256k1` | EIP-191 `personal_sign`: keccak256 of `"\x19Ethereum Signed Message:\n" + len + msg`, where `msg` is the signed string (§2, the PAE string) as UTF-8 bytes and `len` is its byte length in decimal | 65 bytes `r ‖ s ‖ v` as `0x` + 130 lowercase hex | recover the secp256k1 public key, keccak-derive the address, compare case-insensitively with `signer`; mismatch is `bad signature` (intrinsic) |
+| `alg` | `signer` | Signed bytes | Signature | Verification |
+|---|---|---|---|---|
+| `ed25519` | `ed25519:` + 64 lowercase hex, the 32-byte RFC 8032 public key | the signed string (§2, the PAE string) as UTF-8 bytes, signed by pure Ed25519 (RFC 8032 §5.1.6; no prehash, no context) | 64 bytes `R ‖ S` as 128 lowercase hex (no `0x`) | the pinned rule below; failure is `bad signature` (intrinsic) |
+| `eip191-secp256k1` | `0x` + 40 lowercase hex, the Ethereum address | EIP-191 `personal_sign`: keccak256 of `"\x19Ethereum Signed Message:\n" + len + msg`, where `msg` is the signed string (§2, the PAE string) as UTF-8 bytes and `len` is its byte length in decimal | 65 bytes `r ‖ s ‖ v` as `0x` + 130 lowercase hex | recover the secp256k1 public key, keccak-derive the address, compare with `signer`; mismatch is `bad signature` (intrinsic) |
+
+`alg` and the `signer` prefix must agree: an `ed25519` statement whose `signer` is an address, or the reverse,
+is malformed. **New keys default to `ed25519`.** `eip191-secp256k1` is for identities linked to a blockchain
+account: a person signing from a hardware wallet, or an agent that holds custody of its own assets and pays or
+is paid for work. Neither is ranked above the other by any rule in this note.
+
+**Ed25519 verification is pinned.** RFC 8032 permits two verification equations and leaves key validation
+open, and deployed libraries disagree on crafted signatures: on the twelve edge cases of the
+`ed25519-speccheck` suite, OpenSSL, BoringSSL, Go and pyca accept cases 0–3 and 11, libsodium accepts only
+case 3, and ZIP-215 verifiers accept 0–5 and 8–11. Two readers that disagree on whether a signature is valid
+would hold different logs, so a conforming reader uses exactly this rule (FIPS 186-5 §7.7, with the full
+public-key validation of SP 800-186 App. D.1.3.2 applied to both points):
+
+1. `S`, the second 32 bytes read little-endian, is below the group order `L`; otherwise refuse.
+2. `A` (the public key) and `R` (the first 32 bytes) are canonical encodings: the low 255 bits, read
+   little-endian, are below p = 2^255 − 19. Each decodes to a curve point.
+3. `A` and `R` are each in the prime-order subgroup: not the identity, and `[L]P` is the identity. This
+   refuses every small-order and mixed-order point.
+4. The equation `[S]B = R + [k]A` holds, with `k` = SHA-512(`R ‖ A ‖ M`) read little-endian.
+
+Step 2 uses RFC 8032 §5.1.3 decoding as written: an `x` of zero with the sign bit set is not a valid encoding.
+Steps 1–3 are cheap checks a reader runs before any stock verifier; step 4 is then the same in every library,
+because a prime-order `A` and `R` make the cofactored and cofactorless equations agree. Under this rule all
+twelve speccheck cases are refused (OpenSSL alone accepts five of them), and honest signatures from any RFC
+8032 signer verify. Checked for this note with OpenSSL 3.5 (Node), pyca `cryptography` 50 and `@noble/curves`
+1.9 in front of the pre-checks, and an independent Python implementation of steps 1–3. A reader that cannot
+run the pre-checks does not conform. The speccheck cases are in the vectors file as negative vectors (§9).
 
 Rules:
 
-- **`signer` is the identity.** It is the lowercase `0x` + 40-hex address. A statement whose `signer` differs
-  from the recovered address is refused as `bad signature`, which is also how "signer names A but signed by B"
-  fails (C-core-14). Checksummed or uppercase `signer` is malformed (canonical form is lowercase).
-- **Equivalent encodings are one statement, stored in one form.** `v` may arrive as 27/28 or 0/1; `s` may
+- **`signer` is the identity.** A statement whose signature does not verify under its `signer` (for
+  `eip191-secp256k1`, whose recovered address differs from it) is refused as `bad signature`, which is also
+  how "signer names A but signed by B" fails (C-core-14). Upper-case hex and EIP-55 checksummed addresses are
+  malformed: the canonical form is lowercase.
+- **Equivalent encodings are one statement, stored in one form.** An Ed25519 signature has exactly one
+  encoding under the pinned rule (step 1 refuses `S ≥ L`), so the question arises only for
+  `eip191-secp256k1`. There, `v` may arrive as 27/28 or 0/1; `s` may
   arrive in high form (above n/2, the form EIP-2 refuses for Ethereum transactions). A reader accepts every
   valid encoding, verifies it, and writes the **canonical encoding**: low-`s` and `v` ∈ {27, 28}. The id,
   which does not include `sig`, is the same either way. So every reader's log holds the same bytes for a
@@ -216,19 +248,92 @@ Rules:
   grants nothing, counts in no projection, and is not an error on `pull`. Adding an algorithm is a minor
   format change; a reader implementing it later re-evaluates retained lines (I5).
 - **The key is a commons identity, not a payment wallet.** EIP-191 prefixing guarantees a statement can never
-  be a valid transaction; the reverse discipline (never reuse a wallet key as a commons key) is the signer's.
+  be a valid transaction; the reverse discipline (never reuse a wallet key as a commons key) is the signer's,
+  and §4.1 gives the reasons. An identity that wants to be linked to its payment account says so explicitly.
+- **How a key was made is invisible here.** A randomly generated key and one derived from a seed phrase
+  produce the same `signer` and the same signatures; no rule in this note can tell them apart or depends on
+  the difference. §4.1 is guidance for writers, not a conformance requirement.
 - **Private keys never appear** in any statement, log, error or test fixture other than disposable keys
-  minted for a test run. The vector key in §9 is derivable from a public string and is therefore public.
+  minted for a test run. The vector keys in §9 are derivable from public strings and are therefore public.
+
+### 4.1 Key generation and custody (guidance)
+
+Nothing in this subsection is checked by a reader. It is what the reference tool does and recommends.
+
+- **Ed25519 keys are generated from a 32-byte seed, and the seed is what is stored** (RFC 8032 §5.1.5: the
+  signing scalar is derived from a hash of the seed). Keeping the seed, not only the expanded scalar, keeps a
+  post-quantum migration path open (§4.2).
+- **Deriving keys from a seed phrase is optional.** A holder who wants one backup for several keys may derive
+  them from a BIP-39 mnemonic: Ed25519 keys by SLIP-0010, which derives hardened children only and keeps each
+  child a seed; secp256k1 keys by BIP-32 on **hardened paths only** (BIP-32 itself warns that a parent
+  extended public key plus any non-hardened child private key reveals the parent private key and the whole
+  tree below it). A Commons key gets its own branch, never an asset account's path. ERC-1581 proposed such a
+  branch for non-wallet keys (`m/43'/60'/1581'/…`) but is stagnant; the reference tool names its path in its
+  own documentation and treats it as a convention, not a format.
+- **The mnemonic is the identity.** Whoever holds it can sign as every key derived from it, past and future.
+  For an agent it belongs in the same custody as the agent's funds, never in a configuration file.
+- **Rotation after compromise uses fresh entropy.** A `rotate_key` to a successor derived from the same seed
+  is fine for routine rotation; after a `revoke_key` with reason `key_compromise`, a successor from the same
+  seed is compromised with it.
+- **Never reuse a payment key as a Commons key.** Four reasons:
+  1. *Exposure.* A Commons key signs often and from automated code; a custody key should sign rarely, ideally
+     on a device after review. One key means a leak anywhere in the busier path is a leak of the funds.
+  2. *Permanent linkage.* Every statement publishes its `signer`, and logs are append-only and replicated. A
+     payment key would tie the whole research record to the account's full financial history, irreversibly.
+  3. *Coupled recovery.* A compromised Commons key is answered by `revoke_key`; a compromised payment key by
+     moving funds at once. One key turns two recoveries into one emergency, and hands an attacker who came in
+     through the signing path the assets as well.
+  4. *Signing-oracle risk.* EIP-191's prefix stops a statement being a transaction, but a signer that holds a
+     wallet key and signs messages for Commons can be induced to sign other messages with financial effect
+     (EIP-712 permits and approvals, for example). A Commons signer should hold no key that can.
+- **Linking an identity to its account, deliberately.** An identity that wants the link either derives both
+  keys from one seed on separate hardened branches (one backup, a link it can prove when it chooses), or
+  publishes it once: the Commons key signs a `describes` naming the account address, and the account signs a
+  matching message. Either way each key keeps its own exposure and its own revocation.
+
+### 4.2 Quantum horizon
+
+Both required algorithms rest on elliptic-curve discrete logarithms, which a large enough quantum computer
+breaks (Shor's algorithm): given a public key, it recovers the private key. Every statement publishes the
+public key (`ed25519`) or lets anyone recover it (`eip191-secp256k1`), so both are fully exposed from the
+first signature. NIST's transition draft (IR 8547 ipd, Table 2) lists ECDSA and EdDSA as quantum-vulnerable
+and disallows both after 2035. Ed25519 has one structural advantage: its private key is a hash of a seed, so a
+holder can later prove knowledge of the seed in zero knowledge with a quantum-safe proof system and authorize
+a new key, even after the old public key is broken (Baldimtsi, Chalkias et al., "Post-Quantum Readiness in
+EdDSA Chains", FC 2026). BIP-32 secp256k1 keys offer no such witness. That is research today, not a mechanism
+here.
+
+What protects this format does not depend on the curve:
+
+1. **Anchors outlast signatures.** An `anchors` bound verified to a block before a break proves the covered
+   prefix existed then. A forger after a break can sign new statements but cannot place them under an earlier
+   anchor. Proof-of-work and SHA-256 are not broken by Shor; Grover's algorithm halves SHA-256's preimage
+   security to 128 bits.
+2. **Rotation to a post-quantum algorithm before a break.** `ml-dsa-65` (ML-DSA, FIPS 204, final since August
+   2024; public key 1 952 bytes, signature 3 309 bytes) is reserved as the next `alg` value. Adding it is a
+   minor change (§6): the PAE string is algorithm-neutral and readers retain unknown algorithms as
+   `unsupported`. Holders migrate with the existing `rotate_key`, signed by the classical key while it is
+   still trustworthy. The sizes fit the 64 KiB statement bound.
+3. **A cutoff policy.** After a date a reader's policy names, a classical signature counts only where a
+   verified anchor from before that date covers it; later classical statements are shown
+   `quantum-unprotected` and grant nothing. The mechanism needs nothing new (anchors and policy already
+   exist); the date is open (§12).
+
+For `eip191-secp256k1` identities the migration also depends on the linked chain's own post-quantum plans,
+which are unsettled (EIP-7932, a registry for additional signature algorithms, is a draft). The holder's
+Commons key and its assets face the same problem and can migrate together.
+
 
 ## 5. Kinds and body fields
 
 Kinds are the closed vocabulary of claims-model note §4; this section fixes their body field names (snake
 case) and types. `R` = required, `O` = optional. `digest` = a content digest, `sha256:` + 64 lowercase hex
-(§8). `key` = lowercase `0x` + 40 hex. `id` = a statement id, 64 lowercase hex with no prefix (§3). `ts` = a
-time value (§1.1); `date` = an RFC 3339 `full-date`. A kind listed here with a missing `R` field is a
-malformed statement (intrinsic), with one exception the note itself makes: an `observed` whose `referent`
-lacks a field its class requires is valid, admitted, and shown `unpinned` (claims-model note §5.3.1). A kind
-not listed here is stored and displayed as `unknown kind` and grants nothing (C-core-13).
+(§8). `key` = a `signer` value of either algorithm (§4): `ed25519:` + 64 lowercase hex, or `0x` + 40 lowercase
+hex. `id` = a statement id, 64 lowercase hex with no prefix (§3). `ts` = a time value (§1.1); `date` = an RFC
+3339 `full-date`. A kind listed here with a missing `R` field is a malformed statement (intrinsic), with one
+exception the note itself makes: an `observed` whose `referent` lacks a field its class requires is valid,
+admitted, and shown `unpinned` (claims-model note §5.3.1). A kind not listed here is stored and displayed as
+`unknown kind` and grants nothing (C-core-13).
 
 **Shared body objects**
 
@@ -341,7 +446,9 @@ that could only ever disagree with the first.
 
 The normative vectors are the JSON file `DESIGN-notes-wire-format.vectors.json` beside this note: each
 positive vector's exact signed string, byte count, id and signature; the equivalent signature encodings of
-V1; and each negative vector's exact input bytes with its required result. The blocks below are rendered from
+V1; the Ed25519 log (E1–E2) with its key; and each negative vector's exact input bytes with its required
+result. The Ed25519 edge cases NE1–NE12 are the `ed25519-speccheck` suite (Apache-2.0), copied with their
+source named. The blocks below are rendered from
 that file for reading. Where the two differ, the file is right and this note has a bug.
 
 Computed with Python 3 `hashlib` and the alpha signer (`viem` `signMessage`) in a throwaway directory; every
@@ -556,6 +663,42 @@ The two extension keys are `x_` + U+1F600 and `x_` + U+FF71. RFC 8785 compares U
 U+1F600 begins with the surrogate 0xD83D and so sorts before U+FF71; code-point or UTF-8 byte order puts it
 after. A canonicaliser that sorts by code point produces a different string and a different id (N11).
 
+**Ed25519 vectors.** A second log, signed by a second disposable public key: seed = sha256 of
+`research-commons wire-format test key 2 (ed25519)`, public key
+`f9e6e12ad6036f6c19ebe6c6cf64f4e26c40b63eeab2cd19f4dd947657b25fe5`. E2 rotates that key to the secp256k1 test
+key, so rotation across algorithms is exercised. Ed25519 signatures are bare hex, with no `0x`.
+
+**E1 authored (ed25519)**
+
+```text
+NOTE: '\' line wrapping per RFC 8792
+
+signed string, 395 bytes:
+DSSEv1 49 application/vnd.research-commons.authored.v1+json 331 {"alg":"ed25519","body":{"content":{\
+"digest":"sha256:5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e","size":512},"lice\
+nce":"CC0-1.0","type":"dataset"},"kind":"authored","prev":null,"rc":"rc/1","seq":0,"signer":"ed25519\
+:f9e6e12ad6036f6c19ebe6c6cf64f4e26c40b63eeab2cd19f4dd947657b25fe5","ts":"2026-10-14T18:00:00Z"}
+id:  37614f5d085342c609e50383f78cf89564326616a1e0535440d67dc9af5c44d2
+sig: f64e85a9a341fd25c9918c0a2db3505e740b4b64841c4835e3e5539edfa0f7a2\
+     3f20b691c33cfee0e9cfb8a223fba1af143e8626238428e4a0e9eaa8cae3ad03
+```
+
+**E2 rotate_key (ed25519 → eip191-secp256k1; fractional `ts`)**
+
+```text
+NOTE: '\' line wrapping per RFC 8792
+
+signed string, 414 bytes:
+DSSEv1 51 application/vnd.research-commons.rotate_key.v1+json 348 {"alg":"ed25519","body":{"effectiv\
+e":"2026-10-14T18:01:00.5Z","successor":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a"},"kind":"rotate\
+_key","prev":"37614f5d085342c609e50383f78cf89564326616a1e0535440d67dc9af5c44d2","rc":"rc/1","seq":1,\
+"signer":"ed25519:f9e6e12ad6036f6c19ebe6c6cf64f4e26c40b63eeab2cd19f4dd947657b25fe5","ts":"2026-10-14\
+T18:01:00.5Z"}
+id:  a3a49f04392a3f969be4226f0a2ab45788ede846605749c633e9cfa6a81ae262
+sig: 04c41721f540bc834196689ef30ac85271ea8b32bb64031d324de43eb3daff84\
+     ac12eca38c0f9da1898659fd0fe24e3473760bddeb7e39b94972e7c3e427b409
+```
+
 **Negative vectors.** The exact input bytes of each are in the vectors file; the table names them by hash.
 `delivered` inputs are handed to the parser as stored log lines; the others pair a signed string with a
 signature.
@@ -575,6 +718,8 @@ signature.
 | N11 code-point key order | signed string sha256 `628c61bfb535cf4640c08404022f964dd70fc439b7cb8632289eeb487d2cc113` with the `sig` given | intrinsic: bad signature (the reader's JCS form of the envelope is V10's string, which this signature does not cover) |
 | N12 leap second outside UTC | signed string sha256 `173b5dfa6f76df98c6a9aad856340ade4dbd6803b5e19d466400557161ad5d77` with the `sig` given | intrinsic: malformed statement (second 60 outside UTC) |
 | N13 Z on a TAI time | signed string sha256 `3d9b0d38479c58a8a7b87042222a1dd9b5198803c40f0e30770336cbeeb50adf` with the `sig` given | intrinsic: malformed statement (Z asserts UTC; the referent names TAI) |
+| NE1–NE12 Ed25519 edge cases | the twelve `ed25519-speccheck` cases (small-order and mixed-order points, `S ≥ L`, non-canonical encodings), key, message and signature in the vectors file | intrinsic: bad signature; each refused by step 1 or 3 of the pinned rule (§4), as the file records |
+| NE13 alg / signer mismatch | E1 with `alg` `eip191-secp256k1`, signed by the Ed25519 key over that string; signed string sha256 `3f3015a8d6f763f449d9b7f306acff3a8bd5b3bfc610645b55577b8d6f98a5dc` | intrinsic: malformed statement (`alg` and `signer` disagree) |
 
 Empty content, for §8: `sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`, size 0.
 
@@ -616,6 +761,9 @@ as an optional field (a minor change, §6) modelled on RFC 9581 §3.5.4 and FITS
   fractions only in `capture.at`" would have made two time types.
 - **Canonical JSON.** RFC 8785 is the canonicalisation. The first draft's code-point key order differed from
   it for keys above U+FFFF (V10, N11).
+- **Two required algorithms** (was Q2, 2026-10-14). `ed25519`, the default for new keys, with a pinned
+  verification rule; and `eip191-secp256k1` for blockchain-linked identities (§4). Key generation, custody and
+  linking are guidance (§4.1); the post-quantum plan is §4.2.
 - **Signature encodings** (was Q1, 2026-10-14). Accept every valid encoding; store the canonical one (low-`s`,
   `v` ∈ {27, 28}), so logs are byte-identical across readers (§4).
 - **`crit`** (2026-10-14). Renamed from `critical`, with JOSE's structural rules and one stated departure
@@ -633,7 +781,8 @@ as an optional field (a minor change, §6) modelled on RFC 9581 §3.5.4 and FITS
 
 **Open.**
 
-1. **A second algorithm.** Ed25519 (RFC 8032) would free implementations from keccak, secp256k1 and the
-   Ethereum address derivation, and is the key type most agent and DID identities already hold (#17). Add
-   `ed25519` as a second required algorithm in `rc/1`, or as the first minor extension? Either way the
-   signed string is the same PAE string (§2), so only the `signer` grammar and the verification path change.
+1. **The quantum cutoff.** §4.2 names the mechanism: after a cutoff date, classical signatures count only
+   under a verified earlier anchor. Should the format ship a default date (for instance NIST's 2035), or leave
+   it to each reader's policy with no default? Before then: which ML-DSA parameter set (`-44` or `-65`) is the
+   reserved value, and should a dual-signature form (classical + ML-DSA on one statement) exist for the
+   transition?
