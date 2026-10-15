@@ -400,7 +400,7 @@ the source.
 
 | Disclosure | Values |
 |---|---|
-| licence | SPDX expression, `LicenseRef-*`, or explicit non-open terms; attribution notice (#6, #19). Missing means unknown, not open. |
+| licence | an SPDX license expression (SPDX 3.0.1 Annex B); terms with no SPDX identifier, open or not, are named by a `LicenseRef-` id and cited the way a finality `rule_source` is (§5.3.1): by hash when the text is held, else by location, shown `cited (text held)` or `cited (location only, unverified)`. Terms whose owner does not allow republishing the text are cited by location. Attribution notice (#6, #19). Missing or unparsable means unknown, not open. |
 | availability | redistribution permission and byte obtainability, separately |
 | replication | `bytes` (public deterministic source named) · `protocol` (re-measurable, never the same bytes; method named) · `none` · undeclared (#1, #7) |
 | sampling | n with its unit, per-group n where the design has arms, dispersion, window (#2) |
@@ -482,10 +482,12 @@ immutable editions.
   never changes the terms retroactively. Endorsing a task in a collection doesn't change either one's id
   (#54).
 - **Growing series** (#8) are resources whose editions append segments, with an explicit `frozen_before`
-  boundary when recent data is still being revised. The boundary is the controller's declaration. Where
+  boundary when recent data is still being revised. The boundary is the controller's declaration, stated in
+  the unit the members' finality rules use (a date, a block height, a settlement run). Where
   segments carry finality rules (§5.3.1), a reader computes the members' finality boundary and shows both:
   "frozen_before 2025-06-01 (declared) · members final to 2025-04-01 (2 segments provisional)". A declared
-  boundary later than the computed one is flagged; `unchecked` when members carry no rule. A series edition
+  boundary later than the computed one is flagged; `unchecked` when members carry no rule; `not comparable`
+  when the declared unit differs from the computed one (never converted). A series edition
   rule may require agreement, so a hub can refuse a premature freeze under its own policy. A controller can
   still freeze a tail the source intends to revise; it cannot do so invisibly. An edition that replaces a
   segment dated before its predecessor's `frozen_before` is shown as `REVISED-FROZEN`; the earlier edition and
@@ -560,7 +562,8 @@ separately, under rules the reader chooses, with denominators shown. No transfer
 | "existed by T" for capture evidence and pre-registration | shown as `(local, self-declared)` | shown as a time |
 | ownership, edit rights, independence | never | never |
 
-Timestamps more than a few minutes in the future of the writer's clock are refused at write time. A line whose
+Timestamps more than 300 seconds in the future of the writer's clock are refused at write time; the bound is
+a documented default in the writer's policy, printed with the refusal. A line whose
 timestamp precedes the line it chains after is flagged incoherent, and its bound is discarded.
 
 ## 11. Federation and gates
@@ -600,6 +603,11 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
   fictionally.
 - **Concurrent writers** never overwrite each other's committed objects. Same-key concurrent appends become a
   visible fork, not a lost line.
+- **Gaps in a log.** A statement whose predecessor the reader does not hold is kept and shown as `detached`,
+  with the missing range named. An `authored` or `observed` is attributed to its signer while detached, but
+  counts toward nothing; every other kind is not evaluated until it chains, because the missing stretch may
+  hold a revocation, a rotation or an earlier edition that changes what it means. Nothing is refused for
+  being detached, and nothing decided while it waited is rewritten when the gap fills.
 - **Caches** are keyed on content digests, policy and evaluator versions, never on file size or modification
   time. Deleting every cache yields the same answers (I14).
 - **Scans are bounded and honest.** Archives are scanned member by member or reported as unscanned (#20). Size
@@ -627,7 +635,14 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
 - **Dry runs** state their side effects: "no registry change" differs from "no fetch, no cache, no quarantine".
 - **Errors** say what failed, what is still known, whether anything was committed, and the narrowest next
   step, never a blanket `--force`. Error output and logs never include key material or secrets, and render
-  peer-supplied text inert.
+  peer-supplied text inert. In machine-readable form an error is an RFC 9457 problem-details object (`type`,
+  `title`, `detail`) with four extension members: `class` (intrinsic, reader policy, operational), `scope`
+  (the statement, package or blob it applies to), `committed` (whether anything landed) and `next` (the
+  narrowest next step). The same object serves a CLI's JSON output and a hub's HTTP error body. Peer-supplied
+  text goes in an extension member as a JSON string, never interpolated into `title` or `detail`.
+- **Exit-code range.** Codes are small integers below 64, so they never collide with the shell's reserved
+  values (126, 127, and 128 plus a signal number; POSIX.1-2024 §2.8.2) or with `sysexits.h`, which is
+  deprecated upstream and not used.
 
 ## 14. Relationship to the alpha
 
