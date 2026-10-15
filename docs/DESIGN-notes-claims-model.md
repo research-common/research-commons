@@ -631,6 +631,14 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
   environments call for different next steps (raise the limit or accept `unchecked`, versus run where the
   pinned environment exists). Exit 0 means the requested operation succeeded, not that everything it
   referenced is valid.
+- **Exit 2: the command did not start.** On every command, 2 means the invocation or the reader's own
+  configuration could not be acted on: an unknown option, a malformed argument (an id that is not an id), a
+  policy or configuration file that is present but unreadable or unparseable. Arguments and configuration are
+  validated before any work starts, so exit 2 never accompanies partial results and nothing is committed; the
+  error is still the problem-details object below, with `committed` false. Conditions about a particular
+  artifact or check are never 2, even when they stem from configuration: an optional capability that is
+  simply not configured (no Bitcoin backend, say) is a state token and exits 3. No other condition exits 2,
+  so exit 1 stays reserved for a completed comparison that disagreed. An explicit request for help exits 0.
 - **Explain.** Every status can be expanded to the statements, policy and checks behind it (I14).
 - **Dry runs** state their side effects: "no registry change" differs from "no fetch, no cache, no quarantine".
 - **Errors** say what failed, what is still known, whether anything was committed, and the narrowest next
@@ -642,7 +650,8 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
   text goes in an extension member as a JSON string, never interpolated into `title` or `detail`.
 - **Exit-code range.** Codes are small integers below 64, so they never collide with the shell's reserved
   values (126, 127, and 128 plus a signal number; POSIX.1-2024 §2.8.2) or with `sysexits.h`, which is
-  deprecated upstream and not used.
+  deprecated upstream and not used. No command emits 126 or above. The split of 0, 1 and 2 follows `grep`,
+  `diff` and `cmp` (0 same, 1 different, 2 trouble), so a script that already knows those reads ours.
 
 ## 14. Relationship to the alpha
 
