@@ -203,8 +203,11 @@ refer to `verify` unless another command is named (§13).
 | C-core-125 | §12 ("atomic commits"), §13 | Inject a crash at each commit boundary of `publish` (blob, statement, log line, index). | After recovery, state is either the previous state or the complete operation; `status` reports what was committed; no half-published artifact resolves or is listed. |
 | C-core-126 | §12 (projection failure "reported as needing repair, not rolled back"), I2 | Crash after the statement commit but before an index/cache projection; then run repair. | The operation is reported as committed and `needs repair`; repair recomputes the projection; nothing is rolled back; no statement without a verified signature is produced or shown as anyone's word. |
 | C-core-127 | §12 ("same-key concurrent appends become a visible fork"), I3 | Two processes append to key `A`'s log concurrently from the same sequence point. | Both lines retained; the log shows `FORK` at that point; no line is lost or overwritten. |
+| C-core-127a | §12 ("a fork clears when every tip is an ancestor of one line"), §8, I3, I12 | After C-core-127 (tips `L` and `S` at one point of key `A`'s log): (a) `A` signs a line with `prev` = `S` and no other tip named; (b) `A` signs a line with `prev` = `S` naming `L` as a merged tip; (c) a three-way fork, with a line naming only one of the two other tips; (d) a line naming as merged tip its own predecessor, a duplicate, an unsorted list, a line of another key, or a line with a `seq` not lower than its own. Permute delivery. | (a) `FORK` is still shown at that point, naming `L` and `S`. (b) `FORK` clears; both branches remain resolvable and are displayed as merged; the clearing line's `seq` is `S`'s plus 1. (c) `FORK` still shown, naming the unmerged tip. (d) Each is refused, intrinsic: malformed statement, scoped to that line; `A`'s log is otherwise unchanged. Every permutation gives the same display. "Cleared" is computed by the same function as for a resource (C-core-85). |
+| C-core-127b | §12 (gaps in a log; a fork clears when every tip is an ancestor of one line), I3, I5 | As C-core-127a (b), delivered to a reader that holds the clearing line and `S` but not `L`; then `L` arrives. Variant: `L` is a `rotate_key`. | Before: the clearing line is `detached: waiting for` `L` (named by id), evaluated under the gap rules of C-core-143; no `FORK` is shown, because the reader has not seen one. After: `L` is installed, the fork is shown as cleared, and the clearing line is evaluated; in the variant, the rotation applies to lines after `L` as the log orders them. Nothing decided while waiting is rewritten. |
 | C-core-128 | §12 ("concurrent writers never overwrite each other's committed objects") | Two processes publish the same content concurrently. | Both complete or one reports the object already committed; one blob and two statements; committed bytes are never overwritten. |
 | C-core-129 | §12 (caches keyed on digests, policy and evaluator), I14 | Warm cache; rewrite a statement file to different valid content with identical size and mtime; change policy; change evaluator version; finally restore a backup of blobs + statements with every cache and index removed. | Each answer equals a cold rebuild and reflects the content change; the explanation cites the changed input; after restore, indexes rebuild without prompting and all answers equal the pre-backup answers. |
+| C-core-129a | §12 (caches keyed on digests, policy and evaluator), I4, I14 | Run the suite's signature-bearing cases twice: once from a cold store, once with every signature-verification cache entry pre-populated as "verified" (including for one statement whose signature is in fact invalid); then change the verifier version. | Every reported verification in the conformance record was computed in the run under test; the pre-populated "verified" for the invalid statement is never reported as verified; warm and cold runs give identical answers; a changed verifier version misses every cache entry. |
 | C-core-130 | §12 ("scans are bounded and honest", #20), I4 | A forbidden-key or secret scan over an archive where one member is unscannable (unsupported compression, over the scan limit, truncated). | Output names the member as `unscanned` with the limit value; no `clean` or `ok` is printed for the archive. |
 | C-core-131 | §12, I8, I4, I15 | Validation hits a documented size or depth limit mid-run (a provenance graph deeper than the traversal bound; a nested archive beyond the scan limit). | Operational refusal naming the limit and its scope; partial results marked `incomplete`; nothing past the bound reads as checked; the limit value is visible. |
 | C-core-132 | §13 ("closed vocabulary"), I13 | Run every surface over the full fixture set and collect the printed state tokens. | Every token is in the documented table; every rule evaluation prints exactly one of `ok`/`fail`/`unchecked`; a token or code not in the source table fails the build. |
@@ -306,8 +309,8 @@ Properties quantify over generated inputs; each is a property test or a static c
 |---|---|
 | I1 content is self-certifying | C-core-03, C-core-75, C-core-76, C-core-117, C-core-124 |
 | I2 attribution | C-core-09, C-core-14, C-core-15, C-core-17, C-core-29, C-core-126 |
-| I3 per-key append-only history | C-core-08, C-core-78, C-core-103, C-core-127, C-exch-20 |
-| I4 no false assurance | C-core-01, C-core-25, C-core-52, C-core-57, C-core-69, C-core-90, C-core-92, C-core-95, C-core-107, C-core-130, C-core-131, C-exch-08, C-btc-06, P-09 |
+| I3 per-key append-only history | C-core-08, C-core-78, C-core-103, C-core-127, C-core-127a, C-core-127b, C-exch-20 |
+| I4 no false assurance | C-core-01, C-core-25, C-core-52, C-core-57, C-core-69, C-core-90, C-core-92, C-core-95, C-core-107, C-core-130, C-core-129a, C-core-131, C-exch-08, C-btc-06, P-09 |
 | I5 evidence retained; irrelevant additions don't interfere | C-core-05, C-core-06, C-exec-13, C-exch-20, P-03, P-08 |
 | I6 disclosure never grades | C-core-64, C-core-65, C-core-73, C-exch-17 |
 | I7 no third-party veto | C-core-05, C-core-08, C-core-81, C-core-88, C-core-98, P-03, P-04 |
@@ -315,7 +318,7 @@ Properties quantify over generated inputs; each is a property test or a static c
 | I9 reader sovereignty | C-core-81, C-core-96, C-core-111, C-core-114, C-core-116, C-core-140, P-05, P-11 |
 | I10 time grants priority, never authority | C-core-19, C-core-20, C-btc-01, P-06 |
 | I11 honest limits | C-core-07, C-core-76a |
-| I12 one definition per concept | C-core-109, C-core-134 |
+| I12 one definition per concept | C-core-109, C-core-127a, C-core-134 |
 | I13 outputs are a contract | C-core-132, C-core-133, C-core-133a, C-core-135, C-exec-13a, C-exec-15 |
 | I14 explainable, order-independent answers | C-core-02, C-core-04, C-core-18, C-core-83, C-core-84, C-core-86, C-core-93b, C-core-129, C-core-136, C-exch-05, P-01, P-02, P-07, P-08 |
 | I15 hostile input and partial failure stay contained | C-core-12, C-core-94, C-core-122, C-core-131, C-exec-08, C-exec-09, C-exec-10, C-exec-12, C-btc-05 |
@@ -343,7 +346,7 @@ Properties quantify over generated inputs; each is a property test or a static c
 | §9.5 credit | C-exch-19, C-exch-20 |
 | §10 time | C-core-19, C-core-53, C-core-105 – C-core-107, C-exch-16, C-btc-01 – C-btc-06, P-06 |
 | §11 federation and gates | C-core-04, C-core-09, C-core-12, C-core-14, C-core-143, C-core-86, C-core-108 – C-core-122, C-core-134, C-exec-06, C-exec-07, C-exec-12, P-04, P-05 |
-| §12 execution and storage safety | C-core-84, C-core-86, C-core-95, C-core-123 – C-core-131, C-core-138, C-core-143, C-exec-03, C-exec-06, C-exec-08 – C-exec-11, C-exec-14, P-07, P-10 |
+| §12 execution and storage safety | C-core-84, C-core-86, C-core-95, C-core-123 – C-core-131 (incl. C-core-127a, C-core-127b, C-core-129a), C-core-138, C-core-143, C-exec-03, C-exec-06, C-exec-08 – C-exec-11, C-exec-14, P-07, P-10 |
 | §13 outputs | C-core-06, C-core-113, C-core-125, C-core-132 – C-core-140 (incl. C-core-133a), C-exec-11, C-exec-13, C-exec-13a, C-exec-15, C-exch-08, C-btc-06, P-08, P-09, P-10 |
 | §14 relationship to the alpha | C-core-141 |
 | appendix: two authors, one synthesis | C-core-142, C-btc-01 |
@@ -359,17 +362,18 @@ Properties quantify over generated inputs; each is a property test or a static c
 |---|---|---|
 | 1 | hash-then-copy | C-core-123, C-core-124 |
 | 2 | non-atomic multi-step writes | C-core-125, C-core-126 |
-| 3 | same-key append race | C-core-127 |
+| 3 | same-key append race | C-core-127, C-core-127a, C-core-127b |
 | 4 | event identity over a field subset | C-core-02a |
 | 5 | timestamp-ordered settlement fold | C-exch-05, C-exch-06 |
 | 6 | `receipt`/`tee` labels as proof | C-exch-09 |
 | 7 | `pull --force` scope and dry-run side effects | C-core-121a, C-core-137 |
-| 8 | stat-keyed caches | C-core-129 |
+| 8 | stat-keyed caches | C-core-129, C-core-129a |
 
 ## Open items
 
 Drafting these cases found eleven places where the note was silent, review of the cases found three more
-(items 12–14), and the standards survey behind the wire-format note found one (item 15). Each was answered by an amendment to the note; the list stays here so a reader of the cases can see which rows were decided
+(items 12–14), the standards survey behind the wire-format note found one (item 15), and the storage note's
+open questions two more (items 16–17). Each was answered by an amendment to the note; the list stays here so a reader of the cases can see which rows were decided
 by that amendment rather than by the note's first text.
 
 | # | case | question | answer in the note |
@@ -389,3 +393,5 @@ by that amendment rather than by the note's first text.
 | 13 | C-core-76a | an untestable "must include a nonce" | guidance plus a documented size-threshold warning (§7, I11) |
 | 14 | C-core-31, C-exch-17 | batch captures; units and arms in sampling | in-content request log in the source referent (§5.3.1); `unit` and per-group n (§7, §9.4) |
 | 15 | C-core-133a | exit code for a bad option, a malformed argument or an unparseable policy | 2 on every command, before any work, nothing committed; an unconfigured optional capability is a state token and exits 3; help exits 0 (§13) |
+| 16 | C-core-127a, C-core-127b | how a same-key fork clears; telling "cleared" from "never saw the other branch" | the clearing line names every other tip beside its predecessor; cleared = every tip an ancestor of one line, as for editions; a named tip not held makes the line detached (§12, §8) |
+| 17 | C-core-129a | may a conformance result rely on a cached "verified" | no: every reported signature is verified in the run under test; the cache must agree with a cold run (§12) |

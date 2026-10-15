@@ -4,12 +4,12 @@
 encoding, the statement envelope, statement identity, the signature scheme, the kind vocabulary's field
 names, extensions, per-key logs, content hashing, and test vectors. Serves conformance cases C-core-02a,
 C-core-03, C-core-04, C-core-08 to C-core-14, C-core-77, C-core-83, C-core-105, C-core-106, C-core-117,
-C-core-127, C-core-141, C-core-143, C-core-144, P-02.
+C-core-127, C-core-127a, C-core-127b, C-core-141, C-core-143, C-core-144, P-02.
 
 ## 0. Summary
 
 - A statement is one JSON object, the **envelope**: `rc`, `kind`, `signer`, `alg`, `seq`, `prev`, `ts`,
-  `body`, optional `crit`, and `sig`. Everything except `sig` is signed. Nothing rides outside.
+  `body`, optional `merges` and `crit`, and `sig`. Everything except `sig` is signed. Nothing rides outside.
 - The **signed string** is the DSSE pre-authentication encoding (PAE) of the canonical JSON of the envelope
   minus `sig`, with payload type `application/vnd.research-commons.<kind>.v<major>+json`.
 - **Statement id** = full lowercase hex sha256 of the signed string. Short forms are display aliases only.
@@ -22,6 +22,7 @@ C-core-127, C-core-141, C-core-143, C-core-144, P-02.
   (the alpha primitive, kept for blockchain-linked identities). Every reader verifies both. Any encoding of a
   valid signature over one signed string is the same statement. Unknown `alg` is retained and grants nothing.
 - `prev` and `seq` are inside the signature, so a same-key fork is two signed lines, not a relayer's edit.
+  A later line clears the fork by naming the other tips in `merges`, also signed (§7).
 - Unknown fields are retained and ignored. A `crit` member the reader does not implement makes the whole
   statement `unsupported`: retained, never evaluated. An unknown `rc` major is `unsupported` the same way.
 - Content identity is sha256 of the exact bytes, written as an OCI digest, `sha256:<64 hex>`. Statement ids
@@ -127,6 +128,7 @@ uncertainty is not a field yet (§11).
   "alg":      "eip191-secp256k1",     signature algorithm (§4)               required
   "seq":      0,                      position in the signer's log (§7)      required
   "prev":     null | "<64 hex>",      id of the signer's previous statement  required (null only at seq 0)
+  "merges":   ["<64 hex>"],           other tips of the signer's own log (§7)  optional
   "ts":       "2026-10-12T20:00:00Z", signer-asserted time, UTC, §1.1                      required
   "crit":     ["x_escrow"],           extension names the reader must know (§6)   optional
   "body":     { ... },                kind-specific content (§5)             required
@@ -168,6 +170,12 @@ around: a per-key log is "a hash chain only that key extends" (I3), and a same-k
 signed, two lines that both chain after one id are two signed statements by the same key, a `FORK` the key
 cannot disown and a relayer cannot manufacture by re-linking. With `prev` outside, a relayer could re-chain
 lines and a reader could not tell a rewrite from a race (C-core-127, C-core-14).
+
+**Why `merges` is beside `prev`, not instead of it.** A log is a chain with occasional forks, not a general
+graph: `prev` stays one id, so `seq` continuity, gap detection and the single-chain reading are unchanged, and
+a fork's other tips are named in a separate list. The idea is Ethereum's ommers (a block names one parent and,
+separately, other blocks it has seen), with the difference that every id in `merges` is the signer's own line,
+so naming it is the signer's word that the branch is theirs (§7).
 
 **`ts` is a claim, not a bound.** It is signed so that it is unambiguously the signer's assertion, and it
 orders nothing on its own (claims-model note §10). A `ts` more than 300 seconds ahead of the writer's clock
@@ -406,6 +414,17 @@ line contract.
   differ by id is `rewritten history` (intrinsic) for the package, and the held lines stay valid.
 - **Forks.** Two valid lines by K with the same `prev` are both retained and the log shows `FORK` at that
   point (C-core-127). Neither is refused; neither is the tip; later statements choose a branch by `prev`.
+- **Clearing a fork: `merges`.** A line may carry `merges`, a list of ids of other statements in K's own log
+  that it absorbs, beside its single `prev`. It is a set: non-empty, sorted, no duplicates, never containing
+  `prev`, and every entry a statement by K with a `seq` lower than this line's. `seq` is still `prev`'s plus 1.
+  A `merges` that breaks a rule is malformed (intrinsic). A fork **clears** when every tip at it is an
+  ancestor of one line through `prev` and `merges` links: the rule a merge edition follows for a resource
+  (claims-model note §8), so "cleared" means one thing for logs and resources (C-core-127a). A line that
+  follows one tip and names no other leaves the fork shown: following a branch is not acknowledging the
+  others. Naming a line is the signer's statement that it is theirs; a branch the signer does not recognise
+  is answered with `revoke_key` (`key_compromise`), not merged. An entry the reader does not hold makes the
+  line `detached` exactly as an unresolved `prev` does (C-core-127b). V11–V12 in §9 are a fork and its
+  clearing.
 - **Gaps.** A line whose `prev` matches nothing held is retained as `detached`: it may follow statements
   the reader has not received yet. It is that key's signed word, and nothing more until it chains:
   - an `authored` or `observed` that is detached is attributed to its signer (the signature alone settles
@@ -458,7 +477,9 @@ implementations: an RFC 8785 canonicaliser (the Python `jcs` package) on the par
 function of the Python `securesystemslib` package (1.5.1) on the payload type and canonical body. The signing
 key is the **disposable, public** key `sha256("research-commons wire-format test key 1")` as a 32-byte hex
 scalar, whose address is `0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a`. Never use it for anything else. Vectors
-V1–V8 form one log (`seq` 0–7), extended by V9–V10 (`seq` 8–9); each `prev` is the previous vector's id. Long
+V1–V8 form one log (`seq` 0–7), extended by V9–V10 (`seq` 8–9); each `prev` is the previous vector's id. V11
+is a second line after V9 (`seq` 9), so the log forks there; V12 (`seq` 10) follows V10 and names V11 in
+`merges`, which clears the fork. Long
 lines are folded per RFC 8792 §7 (single backslash): a trailing `\` means the line continues with no newline,
 and leading spaces on the continuation are not part of the content. A signed string contains no LF: the
 separators are the four spaces of the PAE header.
@@ -664,6 +685,39 @@ The two extension keys are `x_` + U+1F600 and `x_` + U+FF71. RFC 8785 compares U
 U+1F600 begins with the surrogate 0xD83D and so sorts before U+FF71; code-point or UTF-8 byte order puts it
 after. A canonicaliser that sorts by code point produces a different string and a different id (N11).
 
+**V11 holds (a second line after V9: the log forks at seq 9)**
+
+```text
+NOTE: '\' line wrapping per RFC 8792
+
+signed string, 504 bytes:
+DSSEv1 46 application/vnd.research-commons.holds.v1+json 443 {"alg":"eip191-secp256k1","body":{"cont\
+ent":{"digest":"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c","size":2048\
+},"locations":["https://mirror.example/blobs/3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3\
+c3c3c3c3c"]},"kind":"holds","prev":"b0d5761fc890ed6ea143f1e29e9d8debe77ed7bc19f38cde6fd494da0022b203\
+","rc":"rc/1","seq":9,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:13:0\
+0Z"}
+id:  93fe6f768c4188c40a706089d82c5fd29711b9b1e1dfb32d4eaec7b29d561e8d
+sig: 0x40f5612de57ee0a66517000991a358b3b1ccde59eb378a3edc8c9a1393e49df44010\
+     fe83e9ade231a9784f2a207fa303530e842f2826412eb134841c23ce89421c
+```
+
+**V12 describes (`merges`: clears the fork; `prev` = V10, `merges` = [V11])**
+
+```text
+NOTE: '\' line wrapping per RFC 8792
+
+signed string, 492 bytes:
+DSSEv1 50 application/vnd.research-commons.describes.v1+json 427 {"alg":"eip191-secp256k1","body":{"\
+about":{"content":"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c"},"tags":\
+["fork-cleared"]},"kind":"describes","merges":["93fe6f768c4188c40a706089d82c5fd29711b9b1e1dfb32d4eae\
+c7b29d561e8d"],"prev":"5e80f25a49fa7cc73f0a5f2eef185bfccd9d61da3acc8c0da5f798dcc5ccb944","rc":"rc/1"\
+,"seq":10,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:14:00Z"}
+id:  63dcdd4efdc8b8b1ae8633d4fa5cce0ab12df3f408b4ac5676f61b7bd2095411
+sig: 0x9d9fa533baaa9eee03568acec9ab3d9a10fb22a9a765e5a215fe34543dee3f142f9a\
+     f6767f0fced279b2ebe8f681b1f082d836379f7a972d4a9be99b8bd9219d1b
+```
+
 **Ed25519 vectors.** A second log, signed by a second disposable public key: seed = sha256 of
 `research-commons wire-format test key 2 (ed25519)`, public key
 `f9e6e12ad6036f6c19ebe6c6cf64f4e26c40b63eeab2cd19f4dd947657b25fe5`. E2 rotates that key to the secp256k1 test
@@ -770,6 +824,10 @@ as an optional field (a minor change, §6) modelled on RFC 9581 §3.5.4 and FITS
 - **`crit`** (2026-10-14). Renamed from `critical`, with JOSE's structural rules and one stated departure
   (§6).
 - **Revocation reasons** (2026-10-14). A closed list from RFC 5280 §5.3.1 (§5).
+- **Fork clearing** (storage note Q1, 2026-10-14). An optional signed `merges` list beside the single `prev`
+  names the other tips a line absorbs; a fork clears when every tip is an ancestor of one line, as for
+  editions. Chosen over making `prev` a list, which would have broken `seq` continuity, every vector and the
+  single-chain reading for a case that is the exception (§2, §7; V11–V12).
 - **Detached lines** (was Q3, 2026-10-14). Attributed but counted toward nothing (`authored`, `observed`),
   or not evaluated at all (every other kind), until the line chains; the gap is named (§7).
 - **DSSE framing** (was Q4, 2026-10-14). The signed string is DSSE PAE with a per-kind payload type (§2).
