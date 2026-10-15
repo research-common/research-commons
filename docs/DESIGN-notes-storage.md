@@ -380,7 +380,7 @@ A `holds` statement may name a location outside any hub (claims-model note §11)
 
 1. runs the install path of §2 with the statement's hash as the expectation; the location is a hint and the
    transport is binary-safe (#64). Each location is an RFC 3986 URI (wire-format note §5). When the statement
-   declares the size (`content.bytes`), a fetch that delivers a different number of bytes is refused before
+   declares the size (`content.size`), a fetch that delivers a different number of bytes is refused before
    the hash is computed, and a fetch that runs past the declared size is cut off there; the OCI descriptor
    rule ("verify size before digest") applied to a hold;
 2. on match, installs the blob; from then on the local store serves it and every operation treats it exactly
