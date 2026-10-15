@@ -4,7 +4,7 @@
 encoding, the statement envelope, statement identity, the signature scheme, the kind vocabulary's field
 names, extensions, per-key logs, content hashing, and test vectors. Serves conformance cases C-core-02a,
 C-core-03, C-core-04, C-core-08 to C-core-14, C-core-77, C-core-83, C-core-105, C-core-106, C-core-117,
-C-core-127, C-core-141, P-02.
+C-core-127, C-core-141, C-core-143, C-core-144, P-02.
 
 ## 0. Summary
 
@@ -314,10 +314,11 @@ What protects this format does not depend on the curve:
    minor change (§6): the PAE string is algorithm-neutral and readers retain unknown algorithms as
    `unsupported`. Holders migrate with the existing `rotate_key`, signed by the classical key while it is
    still trustworthy. The sizes fit the 64 KiB statement bound.
-3. **A cutoff policy.** After a date a reader's policy names, a classical signature counts only where a
-   verified anchor from before that date covers it; later classical statements are shown
-   `quantum-unprotected` and grant nothing. The mechanism needs nothing new (anchors and policy already
-   exist); the date is open (§12).
+3. **A possible cutoff policy.** A reader's policy could name a date after which a classical signature
+   counts only where a verified anchor from before that date covers it, showing later classical statements as
+   `quantum-unprotected`. The mechanism would need nothing new (anchors and policy already exist). Whether to
+   adopt it, and with what date, is deliberately left open (§12): the state of post-quantum research does not
+   yet support choosing a cutoff, and the question is for participants to discuss.
 
 For `eip191-secp256k1` identities the migration also depends on the linked chain's own post-quantum plans,
 which are unsettled (EIP-7932, a registry for additional signature algorithms, is a draft). The holder's
@@ -781,8 +782,15 @@ as an optional field (a minor change, §6) modelled on RFC 9581 §3.5.4 and FITS
 
 **Open.**
 
-1. **The quantum cutoff.** §4.2 names the mechanism: after a cutoff date, classical signatures count only
-   under a verified earlier anchor. Should the format ship a default date (for instance NIST's 2035), or leave
-   it to each reader's policy with no default? Before then: which ML-DSA parameter set (`-44` or `-65`) is the
-   reserved value, and should a dual-signature form (classical + ML-DSA on one statement) exist for the
-   transition?
+1. **The quantum horizon (open for discussion).** The project does not yet take a position on a cutoff for
+   classical signatures; the current state of post-quantum research does not support selecting one, and this
+   question is open so participants can discuss it. Questions for that discussion:
+   - Should the format ever ship a default cutoff date, or leave any cutoff to each reader's policy? What
+     evidence (a demonstrated cryptanalytically relevant quantum computer, a standards body's deadline such as
+     NIST IR 8547's 2035, or something else) should trigger one?
+   - Which ML-DSA parameter set should be the reserved value (`ml-dsa-44` or `ml-dsa-65`), or should the
+     choice wait, given FN-DSA (FIPS 206) is still in draft?
+   - Should a statement be able to carry two signatures (classical and post-quantum) during a transition, and
+     what would that do to statement identity and the one-signature rule?
+   - Should Ed25519 holders be encouraged to keep their seeds specifically for the zero-knowledge migration
+     route (§4.2), while that research matures?
