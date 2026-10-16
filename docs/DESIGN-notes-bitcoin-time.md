@@ -81,8 +81,14 @@ unsigned prefixes, `sig2`, anchor JSON records and `.root` files. The next forma
 2. Compute `stamped_digest` = the raw hash bytes of `H` (no hex, no trailing newline, no framing).
 3. Submit `stamped_digest` to each configured calendar. Calendar URLs are the author's local policy. A
    calendar that fails to answer within the local timeout is skipped; if every calendar fails, `publish`
-   either refuses (`anchor required` policy) or continues with `anchor: none` recorded, per local policy.
-   It never proceeds silently.
+   either refuses (`anchor required`) or continues with `anchor: none` recorded and a warning. It never
+   proceeds silently. The default depends on what the statement's standing rests on (§17, decided 2):
+   `anchor required` for an `authored` without `provenance` (its priority is the time bound, claims-model
+   note §5.2), a statement carrying `fulfills` (a pre-registration is only worth its bound), an `authored` or
+   `observed` whose `availability.redistribution` is `withheld` (a commitment to bytes not yet released), and
+   an `observed` whose `capture.evidence` is `anchored-at-capture`; `anchor: none` with a warning for every
+   other statement (other `observed` captures, members of a derivation group), so a calendar outage does not
+   stop a capture whose window is closing. Local policy may override either default; neither is silent.
 4. Store the returned pending proof as a blob; its id is the hash of the exact proof bytes.
 5. Append an `anchors` statement: `covered = H`, `stamped_digest`, `proof = <blob hash>`,
    `proof_format = ots-detached-v1`, `calendars = [...]`.
@@ -91,6 +97,10 @@ unsigned prefixes, `sig2`, anchor JSON records and `.root` files. The next forma
 A copier who observes the push (C-btc-03) can at best stamp its own `authored` statement afterwards; any
 verified bound it obtains is at the same or a later chain position, and "same block" is `contested`, never a
 win for the copier (C-btc-02).
+
+**Pending proofs go in the log** (§17, decided 1). The step-5 `anchors` statement carries the pending proof,
+so the stamp-before-transport order is observable to everyone (C-btc-03) and the proof survives the loss of
+the author's machine as soon as anything has been pushed.
 
 **Upgrade.** `anchor upgrade` (explicit, networked) fetches the completed attestation from the calendar,
 stores the upgraded proof as a new blob and appends a second `anchors` statement for the same head. Readers
@@ -209,7 +219,9 @@ and by hash.
 Baseline: full header history from genesis (~80 MB per million headers), obtained headers-first (BIP 130
 `sendheaders` announcements; a BIP 157 compact-filter client is an acceptable header source). Pruned or
 checkpointed bootstraps may be offered with an explicit trust root and retained retarget/MTP context; a
-height-to-time table is not a bootstrap. Transport (P2P or other) is untrusted and never substitutes for
+height-to-time table is not a bootstrap. **The tool ships no checkpoint** (§17, decided 3): a checkpoint or
+chainwork floor is a value the reader configures and the bootstrap identity names, so no trust root is
+chosen by the project, and a reader that sets none syncs from genesis. Transport (P2P or other) is untrusted and never substitutes for
 validation. The operator chooses sources explicitly; there is no automatic discovery.
 
 ### 6.2 Optional: operator-controlled node
@@ -530,7 +542,19 @@ roots and bind nothing in the new format.
 - Any rule that turns commitment order into edit rights; none exists and none is planned (I10).
 - Receipt sharing between readers (would reintroduce transported verdicts).
 
-## 17. Open questions
+## 17. Decisions and open questions
+
+**Decided (2026-10-16).**
+
+1. **Pending anchors in the log.** Kept: the pending proof is appended before transport and the upgraded
+   proof in a second `anchors` statement (§2). Holding the pending proof locally would leave nothing
+   observable until upgrade and lose the proof with the author's machine.
+2. **Calendar failure at publish.** The default depends on the statement's standing (§2 step 3): `anchor
+   required` where the claim is the time bound, `anchor: none` with a warning elsewhere; both overridable.
+3. **Chainwork floor and bootstrap.** No checkpoint ships with the tool; the floor and any checkpoint are
+   explicit local values (§6.1, §7). Genesis sync is the default.
+
+The questions below were asked in the first draft. 1–3 are recorded above; 4 and 5 are still open.
 
 1. **Pending anchors in the log.** §2 appends an `anchors` statement with a pending proof before transport so
    that C-btc-03 is observable, then a second one on upgrade. Alternative: stamp before transport but append
