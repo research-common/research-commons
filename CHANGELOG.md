@@ -23,6 +23,12 @@ unchanged on this branch.
   `merges`, keep a line whose predecessor is missing as `detached` with the gap named, and flag `incoherent`
   times. Fork clearing for logs and for resource editions is one function.
 
+- **Local store and commit protocol.** Blobs install from a temporary on the same filesystem and are
+  re-hashed before reuse; a corrupt stored copy is quarantined, never read. Every write is one operation
+  whose journal record is the commit point; a crash at any point recovers to the previous state or the complete
+  operation on the next open. A failed projection leaves the operation `committed, needs repair`. The store
+  prints what it guarantees (`fsync`, `link`, same filesystem).
+
 ### Fixed
 - **Wire-format vector V5** listed its `controllers` set unsorted, which the note's own set rule refuses. Sorted
   and re-chained (V5–V12 and N8–N13 change; #88).
