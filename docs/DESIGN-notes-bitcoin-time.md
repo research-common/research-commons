@@ -254,13 +254,22 @@ Defaults an implementation ships; every one is the reader's to change (I9), none
 |---|---|---|
 | network | mainnet only | testnet/signet/regtest headers are refused as production evidence |
 | validation mode | `headers-spv` | node optional |
-| minimum confirmations | 6 | `tip_height − height + 1 ≥ 6` |
+| minimum confirmations | 6 | `tip_height − height + 1 ≥ 6`: below it a bound is `insufficient-confirmations` |
+| settled depth | 144 (about a day) | confirmations, counted in the last validated view, past which a bound keeps `bitcoin` quality when that view is no longer fresh (§9.4) |
+| priority margin | 0 | extra blocks the earlier bound must lead by to rank (§8.3); same block is always a tie |
 | maximum view age | 1 h | since last successful validated sync or readiness check |
 | maximum tip age | 6 h | operational stale-tip refusal, not a consensus rule |
 | network during reads | never | reads touch receiver-local state only |
 | explorer fallback | none | unsupported, not merely disabled |
 | header sources | operator-configured | independent sources recommended; eclipse limit disclosed |
 | chainwork floor / bootstrap | explicit local value | no sender-selected trust root. The analogue of Bitcoin Core's `nMinimumChainWork`, which Core ships per release; here the reader sets it, and it is never taken from received data |
+
+**Finality is the reader's policy.** Bitcoin finality is economic and probabilistic: no depth makes a block
+irreversible, each further block makes reversal more expensive. The three depth settings above are the
+reader's view of that, never a property of the evidence, and received data cannot change them. Two readers
+with different depths can therefore disagree about priority between close claims; each discloses the policy
+it used (`policy_fingerprint`, §8.1). A depth protects against reorganisation only: a reader whose header
+sources are all eclipsed is not protected by any depth (§3).
 
 Freshness uses the reader's clock and local sync state. A backward clock jump marks the view unavailable for
 live eligibility until a sync succeeds; this is reported as `stale-chain`, an operational state, never a proof
@@ -315,12 +324,14 @@ Computed separately from any display sort, and returned by `explain`:
 
 | Relation | When |
 |---|---|
-| `earlier-commitment` | both `bitcoin` on the same network and accepted chain view; lower height, or same height and the reader's deterministic tie rule on block hash is **not** applied (same block is a tie) |
+| `earlier-commitment` | both `bitcoin` on the same network and accepted chain view, and the earlier bound's height is lower by more than the priority margin (§7; default 0, so any lower height). Same height is a tie: no rule on block hash is applied |
+| `within-margin` | both `bitcoin`, different heights, but the gap is within a non-zero priority margin |
 | `same-block` | same accepted height and hash |
 | `unverified` | either side is `local`, `none`, or any non-`verified` state |
 | `incomparable` | different networks, or either side `orphaned`/`stale-chain` |
 
-Only `earlier-commitment` ranks. `same-block` and `unverified` resolve to `contested` for priority. A
+Only `earlier-commitment` ranks. `same-block`, `within-margin` and `unverified` resolve to `contested` for
+priority; `explain` names which, and for `within-margin` the gap and the margin. A
 `bitcoin` bound always outranks a `local` assertion in evidentiary order, and the display never infers that
 the `local` party actually came later. Where one claimant is verified and another is unverified, the display
 is "earliest **verified** claim", with the rival shown as `later claimant` (C-btc-01 (b)) but never as
@@ -372,7 +383,11 @@ Verification against a stored header snapshot can succeed offline. The reader re
 whether freshness policy holds:
 
 - fresh validated snapshot → `verified`, live `bitcoin` quality, no network request;
-- old snapshot → `verified-historical`: the cryptographic binding is shown, priority is not computed from it;
+- old snapshot in which the block already had at least the settled depth (§7) → `verified`, `bitcoin`
+  quality, displayed `as of <last sync>`; it ranks for priority. A reorganisation that deep would have to
+  have happened since the sync, and the display says when that was;
+- old snapshot in which the block was shallower → `verified-historical`: the header time is shown as a time,
+  labelled `as of <last sync>`, and priority is not computed from it;
 - no snapshot or no backend → `backend-unconfigured` / `backend-unavailable`, quality `local` or `none`.
 
 `--offline` refuses every network call. Without it, reads still make none; only `anchor headers sync` and
@@ -493,7 +508,9 @@ CONFORMANCE.md; the rest are this note's supplementary regressions.
 | C-btc-15 | longer-by-height, lower-chainwork fork; equal-work tips | fork not selected; equal work reported unresolved, no live eligibility |
 | C-btc-16 | testnet/signet/regtest provider under mainnet policy | refused as production evidence |
 | C-btc-17 | 5 vs 6 confirmations | `insufficient-confirmations` vs `verified` |
-| C-btc-18 | stale tip, old snapshot, clock rollback, backend down; snapshot changes mid-batch | historical or `local`, never live; one retry or `incomplete` |
+| C-btc-17a | old snapshot (past maximum view age); the block had 143 vs 144 confirmations in it; then minimum confirmations set to 200 | 143: `verified-historical`, time shown `as of <sync>`, no priority, exit 3; 144: `verified`, `bitcoin` `as of <sync>`, ranks, exit 0; at 200 both `insufficient-confirmations` |
+| C-btc-17b | rival `authored`, verified at heights n and n+3; priority margin 0, then 3 | margin 0: `earlier-commitment`, default author; margin 3: `within-margin`, `contested`, exit 3, `explain` names gap 3 and margin 3 |
+| C-btc-18 | stale tip, old snapshot below settled depth, clock rollback, backend down; snapshot changes mid-batch | historical or `local`, never live; one retry or `incomplete` |
 | C-btc-19 | withheld-availability commitment at C < rival's P, bytes public before C | no independence or quorum credit; readiness `unknown` |
 
 ### 14.4 Receipts, reorgs, consumers
@@ -544,7 +561,7 @@ roots and bind nothing in the new format.
 
 ## 17. Decisions and open questions
 
-**Decided (2026-10-16).**
+**Decided (2026-10-16).** All five.
 
 1. **Pending anchors in the log.** Kept: the pending proof is appended before transport and the upgraded
    proof in a second `anchors` statement (§2). Holding the pending proof locally would leave nothing
@@ -554,7 +571,15 @@ roots and bind nothing in the new format.
 3. **Chainwork floor and bootstrap.** No checkpoint ships with the tool; the floor and any checkpoint are
    explicit local values (§6.1, §7). Genesis sync is the default.
 
-The questions below were asked in the first draft. 1–3 are recorded above; 4 and 5 are still open.
+4. **Historical verdicts as display.** Folded into one local finality policy (§7): a bound whose block had at
+   least the settled depth (default 144) in the last validated view keeps `bitcoin` quality when that view
+   is old, displayed `as of <last sync>`; a shallower one is `verified-historical`, shown as a time with that
+   label and never used for priority (§9.4). "Verified" is never permanent: every read re-checks (§9.3).
+5. **Confirmation depth versus priority ties.** A local priority margin (default 0): the earlier bound ranks
+   only if it leads by more than the margin, otherwise `within-margin` → `contested` (§8.3). The default
+   keeps honest near-simultaneous publishers ordered; a cautious reader raises it.
+
+The questions as first asked:
 
 1. **Pending anchors in the log.** §2 appends an `anchors` statement with a pending proof before transport so
    that C-btc-03 is observable, then a second one on upgrade. Alternative: stamp before transport but append
