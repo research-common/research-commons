@@ -4,7 +4,7 @@
 **Companion to:** the claims-model note (§15, "storage engine and transaction design")
 **Covers:** the storage bullets of claims-model note §12 (exact bytes, atomic commits, concurrent writers,
 caches, bounded scans) and §11 (external holds, package scope). Serves conformance cases C-core-123 through
-C-core-131 (with C-core-127a, C-core-127b and C-core-129a), C-core-138, and properties P-07 and P-10; touches P-01 (permutation) where storage order could
+C-core-131 (with C-core-127a, C-core-127b and C-core-129a), C-core-138, C-core-145, and properties P-07 and P-10; touches P-01 (permutation) where storage order could
 otherwise leak into answers. Carries #74 rows 1, 2, 3 and 8 as obligations.
 
 This note binds every implementation of the core, not a profile (conformance open item 11). It fixes
@@ -139,6 +139,7 @@ unreferenced blob.
 | `run --publish` | output blobs + `authored` or `reproduced` + `holds` | execution record complete |
 | `pull` (package) | the package's **admitted set**: every blob and statement the validation core admitted | validation ran over the whole package first (claims-model note §11); refusals are reported with package scope; the admitted set is committed as one unit |
 | anchor, claim, submit, settle, retract, corroborate | one statement each | as the owning note specifies |
+| `gc --release <hash>` | `holds` with `withdrawn: true`; the blob is deleted after step 4 | the operator's current `holds` for the hash is a serving one (§6.2) |
 
 An operation that needs two keys (a k-of-n edition) is two operations: each controller's statement is its
 own unit. The edition is authorized when the reader holds enough of them, which is a view, not a write.
@@ -328,9 +329,12 @@ Deleting a local blob changes **availability**: the hash remains a valid referen
 remains valid, and every other holder's copy is unaffected. The tool therefore:
 
 - refuses to delete a blob the operator's own current `holds` references unless the request names the hash
-  (`gc --release <hash>`), and on release reminds the operator that the `holds` statement still asserts
-  serving and that the honest next step is a superseding `holds` that withdraws availability (the wire-format
-  note names the field);
+  (`gc --release <hash>`). A release signs a `holds` with `withdrawn: true` (wire-format note §5) and deletes
+  the blob **in one operation**: the withdrawal is the operation's statement, the blob is removed only after
+  the commit point, and a crash leaves either the blob and no withdrawal, or the withdrawal and a blob `gc`
+  may then remove. Availability and assertion move together; a release that cannot sign (no key, signing
+  refused) deletes nothing. A blob held under no current `holds` of the operator's (never served, or already
+  withdrawn) needs no release;
 - never deletes a statement for any reason, including retraction (claims-model note §13: retraction is
   display) or a takedown; a hub that must stop serving bytes deletes the blob under its own admission policy
   and keeps the statements;
@@ -443,6 +447,7 @@ semantics stated in §1 and §5.2.
 4. ~~**Verification cache trust.**~~ **Decided:** a conformance run re-verifies every signature it reports
    on, from a cold store; the cache stays for daily use, and C-core-129a checks that it agrees with a cold
    run (§5.3).
-5. **Release of own `holds`.** §6.2 asks the operator to supersede a `holds` after `gc --release`. Should
-   the tool refuse the release until the superseding statement is signed in the same operation, making
-   availability and assertion move together?
+5. ~~**Release of own `holds`.**~~ **Decided (2026-10-16):** `gc --release` signs a `holds` with
+   `withdrawn: true` and deletes the blob in one operation (§6.2), so availability and assertion move
+   together. Chosen over a reminder after the fact, which left a signed claim to serve bytes the operator had
+   already deleted.
