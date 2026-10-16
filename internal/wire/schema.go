@@ -323,7 +323,6 @@ var kinds = map[string][]field{
 		opt("contract", anyObject()),
 		opt("selection", enum("curated", "rule-based", "completeness")),
 		opt("frozen_before", exactlyOne([]field{opt("date", date()), opt("height", integer()), opt("run", text())})),
-		opt("segments", list(func(canon.Value, string, *schemaCtx) error { return nil })),
 		opt("controllers", set(key(), false)),
 		opt("rule", ruleObj),
 	))},
