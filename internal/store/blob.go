@@ -27,6 +27,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"time"
 
 	"github.com/research-common/research-commons/internal/refusal"
 )
@@ -111,6 +112,13 @@ func (s *Store) placeVerified(tmp, dst string, want Digest) (BlobResult, error) 
 	}
 	have, herr := hashFile(dst)
 	if herr == nil && have == want {
+		// Reuse refreshes the grace window (§6.1.1): the window is measured from the last install or reuse, so
+		// an old unreferenced blob a new operation is about to name is not a gc candidate between step 1 and
+		// step 2. The blob's mtime is the window's clock; content is never touched.
+		now := time.Now()
+		if err := os.Chtimes(dst, now, now); err != nil {
+			return "", err
+		}
 		return Reused, nil
 	}
 	if err := s.quarantine(dst, "blob"); err != nil {

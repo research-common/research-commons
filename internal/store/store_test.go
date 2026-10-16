@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/conformance"
@@ -82,9 +83,16 @@ func TestInstallBlob(t *testing.T) {
 	if err != nil || res != Installed || d != digestOf(data) {
 		t.Fatal(d, res, err)
 	}
-	// Same bytes again: reused after a re-hash, not rewritten.
+	// Same bytes again: reused after a re-hash, not rewritten, and the grace window restarts (§6.1.1).
+	old := time.Now().Add(-72 * time.Hour)
+	if err := os.Chtimes(s.blobPath(d), old, old); err != nil {
+		t.Fatal(err)
+	}
 	if _, res, err := s.InstallBlob(bytes.NewReader(data), d); err != nil || res != Reused {
 		t.Fatal(res, err)
+	}
+	if fi, err := os.Stat(s.blobPath(d)); err != nil || time.Since(fi.ModTime()) > time.Minute {
+		t.Fatalf("reuse did not restart the grace window: %v %v", fi.ModTime(), err)
 	}
 	f, err := s.OpenBlob(d)
 	if err != nil {
