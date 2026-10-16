@@ -139,7 +139,7 @@ func TestVectorLog(t *testing.T) {
 			t.Fatalf("%s is %s", Short(ln.St.ID), ln.State)
 		}
 	}
-	want := []dag.Fork{{At: ids[8], Branches: sorted(ids[9], ids[10]), Tips: []string{ids[11]}, Cleared: true, ClearedBy: []string{ids[11]}}}
+	want := []dag.Fork{{At: ids[8], Branches: sorted(ids[9], ids[10]), Tips: []string{ids[11]}, ClearedBy: ids[11]}}
 	if fmt.Sprint(view.Forks) != fmt.Sprint(want) || !slices.Equal(view.Tips, []string{ids[11]}) {
 		t.Fatalf("forks %+v tips %v\n%s", view.Forks, view.Tips, view.Render())
 	}
@@ -208,7 +208,7 @@ func TestFork(t *testing.T) {
 	l := mk(a, 2, base[1].id, 0xaa, "")
 	sl := mk(a, 2, base[1].id, 0xbb, "")
 	out, v := renderAll(t, a, append(base, l, sl), nil)
-	if len(v.Lines) != 4 || len(v.Forks) != 1 || v.Forks[0].Cleared || !slices.Equal(v.Forks[0].Branches, sorted(l.id, sl.id)) {
+	if len(v.Lines) != 4 || len(v.Forks) != 1 || v.Forks[0].Cleared() || !slices.Equal(v.Forks[0].Branches, sorted(l.id, sl.id)) {
 		t.Fatalf("%s", out)
 	}
 	if !strings.Contains(out, "FORK at "+Short(base[1].id)) || len(v.Tips) != 2 {
@@ -228,7 +228,7 @@ func TestForkClearing(t *testing.T) {
 	t.Run("a follows one tip", func(t *testing.T) {
 		n := mk(a, 3, S.id, 0xcc, "")
 		out, v := renderAll(t, a, []line{base[0], base[1], L, S, n}, nil)
-		if len(v.Forks) != 1 || v.Forks[0].Cleared || !slices.Equal(v.Forks[0].Tips, sorted(L.id, n.id)) {
+		if len(v.Forks) != 1 || v.Forks[0].Cleared() || !slices.Equal(v.Forks[0].Tips, sorted(L.id, n.id)) {
 			t.Fatalf("%s", out)
 		}
 		if !strings.Contains(out, "FORK at "+Short(P)+": branches "+strings.Join(shorts(sorted(L.id, S.id)), ",")) {
@@ -238,7 +238,7 @@ func TestForkClearing(t *testing.T) {
 	t.Run("b names the other tip", func(t *testing.T) {
 		m := mk(a, 3, S.id, 0xcc, "", L.id)
 		out, v := renderAll(t, a, []line{base[0], base[1], L, S, m}, nil)
-		if len(v.Forks) != 1 || !v.Forks[0].Cleared || !slices.Equal(v.Forks[0].ClearedBy, []string{m.id}) ||
+		if len(v.Forks) != 1 || !v.Forks[0].Cleared() || v.Forks[0].ClearedBy != m.id ||
 			!slices.Equal(v.Tips, []string{m.id}) || len(v.Lines) != 5 {
 			t.Fatalf("%s", out)
 		}
@@ -250,7 +250,7 @@ func TestForkClearing(t *testing.T) {
 		T := mk(a, 2, P, 0xdd, "")
 		m := mk(a, 3, S.id, 0xcc, "", L.id)
 		out, v := renderAll(t, a, []line{base[1], L, S, T, m}, func(s *Store) { deliver(t, s, a, base[0]) })
-		if len(v.Forks) != 1 || v.Forks[0].Cleared || !slices.Contains(v.Forks[0].Tips, T.id) {
+		if len(v.Forks) != 1 || v.Forks[0].Cleared() || !slices.Contains(v.Forks[0].Tips, T.id) {
 			t.Fatalf("%s", out)
 		}
 	})
@@ -379,7 +379,7 @@ func TestMergeWaitsForUnheldTip(t *testing.T) {
 	}
 	deliver(t, s, a, L)
 	v = s.Log(a.Signer()).View()
-	if len(v.Forks) != 1 || !v.Forks[0].Cleared {
+	if len(v.Forks) != 1 || !v.Forks[0].Cleared() {
 		t.Fatalf("%s", v.Render())
 	}
 	for _, ln := range v.Lines {
@@ -451,20 +451,109 @@ func TestPrevSeqMismatch(t *testing.T) {
 	wantRefused(t, err, refusal.MalformedStatement, "seq is prev's plus 1")
 }
 
-// TestUnverifiedRetained: an unknown rc major or alg is retained and shown, never placed (it cannot draw a
-// FORK on anyone's log, because nothing about it is verified).
+// unknownAlg builds a well-formed line of key k under an algorithm no reader implements: its id is computable
+// (the PAE hash does not depend on the alg), its signature cannot be checked.
+func unknownAlg(k wire.Key, seq int64, prev string, tag byte) line {
+	env := wire.Draft{Kind: "holds", Seq: seq, Prev: prev, TS: fmt.Sprintf("2026-10-15T00:%02d:00Z", seq), Body: holds(tag)}.Envelope(k)
+	env.Members["alg"] = canon.String("ml-dsa-65")
+	id := wire.ID(wire.PAE(wire.PayloadType("holds", wire.Major), canon.Encode(env)))
+	env.Keys = append(env.Keys, "sig")
+	env.Members["sig"] = canon.String("00")
+	return line{canon.Encode(env), id}
+}
+
+// TestUnverifiedRetained: an unknown rc major or alg is retained and shown. An unknown-alg line nobody of
+// its key vouches for is never placed: it cannot draw a FORK on the log.
 func TestUnverifiedRetained(t *testing.T) {
 	k := key("A")
 	base := chain(k, 2)
 	b, _ := wire.Sign(wire.Draft{RC: "rc/2", Kind: "holds", Seq: 1, Prev: base[0].id, TS: "2026-10-15T00:00:00Z", Body: holds(7)}, k)
+	rogue := unknownAlg(k, 1, base[0].id, 8) // a second line after seq 0, by someone without A's key
 	s := NewStore()
 	deliver(t, s, k, base...)
-	if _, err := s.Log(k.Signer()).Add(b); err != nil {
-		t.Fatal(err)
-	}
+	deliver(t, s, k, line{b, ""}, rogue)
 	v := s.Log(k.Signer()).View()
-	if len(v.Forks) != 0 || len(v.Retained) != 1 || !strings.Contains(v.Render(), "unsupported: rc/2") {
+	if len(v.Forks) != 0 || len(v.Retained) != 2 || !strings.Contains(v.Render(), "unsupported: rc/2") ||
+		!strings.Contains(v.Render(), "unsupported: alg ml-dsa-65") {
 		t.Fatalf("%s", v.Render())
+	}
+}
+
+// TestVouchedUnknownAlgChains: a verified line of the key naming an unknown-alg line in prev places it, so
+// the verified line and everything after it chain (§6: "a valid signed line and still chains"). Vouching is
+// transitive through prev, works through merges, and is the same in every delivery order.
+func TestVouchedUnknownAlgChains(t *testing.T) {
+	k := key("A")
+	l0 := mk(k, 0, "", 0, "")
+	u1 := unknownAlg(k, 1, l0.id, 1)
+	u2 := unknownAlg(k, 2, u1.id, 2)
+	l3 := mk(k, 3, u2.id, 3, "")
+	l4 := mk(k, 4, l3.id, 4, "")
+	out, v := renderAll(t, k, []line{l0, u1, u2, l3, l4}, nil)
+	if len(v.Lines) != 5 || len(v.Retained) != 0 || len(v.Forks) != 0 {
+		t.Fatalf("%s", out)
+	}
+	for _, ln := range v.Lines {
+		if ln.State != Chained {
+			t.Fatalf("%s", out)
+		}
+	}
+	if !strings.Contains(out, "[unsupported: alg ml-dsa-65]") {
+		t.Fatalf("a vouched line must still show as unsupported:\n%s", out)
+	}
+	// Without u2, l3 waits for it by seq: the gap is real.
+	s := NewStore()
+	deliver(t, s, k, l0, u1, l3)
+	if ln := s.Log(k.Signer()).View().Lines; ln[len(ln)-1].State != Detached {
+		t.Fatal("l3 chained across a missing line")
+	}
+	// Through merges: a fork whose second branch is an unknown-alg line clears when a verified line names it.
+	f := unknownAlg(k, 1, l0.id, 9)
+	l1 := mk(k, 1, l0.id, 1, "")
+	m := mk(k, 2, l1.id, 2, "", f.id)
+	out, v = renderAll(t, k, []line{l0, l1, f, m}, nil)
+	if len(v.Forks) != 1 || !v.Forks[0].Cleared() || v.Forks[0].ClearedBy != m.id {
+		t.Fatalf("%s", out)
+	}
+	// Another key's unknown-alg line is never placed in A's log: A's line naming it is a link to another key's
+	// line, refused and scoped to that line (its id covers its signer field, so the owner is known).
+	other := unknownAlg(key("B"), 1, l0.id, 5)
+	s = NewStore()
+	deliver(t, s, k, l0)
+	_, err := s.Log(k.Signer()).Add(other.bytes)
+	wantRefused(t, err, refusal.WrongLog, "in the log of "+k.Signer())
+	_, _ = s.Log(key("B").Signer()).Add(other.bytes) // held in B's log, as it should be
+	_, err = s.Log(k.Signer()).Add(mk(k, 2, other.id, 6, "").bytes)
+	wantRefused(t, err, refusal.MalformedStatement, "prev names a line of another key")
+	if v := s.Log(k.Signer()).View(); len(v.Lines) != 1 {
+		t.Fatalf("%s", v.Render())
+	}
+}
+
+// TestUnknownMajorDedupe: two deliveries of one rc/2 line differing only in whitespace and key order are one
+// retained entry (P-02), though the reader cannot compute its id.
+func TestUnknownMajorDedupe(t *testing.T) {
+	k := key("A")
+	b, _ := wire.Sign(wire.Draft{RC: "rc/2", Kind: "holds", Seq: 0, TS: "2026-10-15T00:00:00Z", Body: holds(7)}, k)
+	o, _ := canon.Parse(b)
+	obj := o.(*canon.Object)
+	var messy strings.Builder
+	messy.WriteString("{ ")
+	for i := len(obj.Keys) - 1; i >= 0; i-- {
+		fmt.Fprintf(&messy, "%q : %s", obj.Keys[i], canon.Encode(obj.Members[obj.Keys[i]]))
+		if i > 0 {
+			messy.WriteString(" , ")
+		}
+	}
+	messy.WriteString(" }")
+	s := NewStore()
+	for _, x := range [][]byte{b, []byte(messy.String())} {
+		if _, err := s.Log(k.Signer()).Add(x); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n := len(s.Log(k.Signer()).View().Retained); n != 1 {
+		t.Fatalf("%d retained entries", n)
 	}
 }
 

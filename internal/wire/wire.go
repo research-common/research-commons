@@ -126,8 +126,19 @@ var (
 	envFields = []string{"rc", "kind", "signer", "alg", "seq", "prev", "ts", "body"}
 )
 
+// MaxLine bounds a received line before it is parsed (I15: a hostile line is refused before the parser walks
+// it). The canonical envelope can exceed its input only through the escapes JCS writes for control characters
+// (one byte becomes six), plus the PAE prefix, so any line that could yield a signed string within
+// MaxSignedString is at most this long: a longer one is refused as the same operational size limit without
+// being parsed. Lines between the two bounds are parsed and then held to MaxSignedString exactly.
+const MaxLine = 6*MaxSignedString + 1024
+
 // Read parses, validates and verifies one received statement.
 func Read(line []byte) (*Statement, error) {
+	if len(line) > MaxLine {
+		return nil, &refusal.Refusal{Class: refusal.Operational, Reason: refusal.SizeLimit,
+			Detail: "size limit " + strconv.Itoa(MaxSignedString) + " (line of " + strconv.Itoa(len(line)) + " bytes refused before parsing)"}
+	}
 	v, err := canon.Parse(line)
 	if err != nil {
 		return nil, err

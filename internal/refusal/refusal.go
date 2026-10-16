@@ -15,7 +15,8 @@ const (
 	Intrinsic Class = "intrinsic"
 	// Operational: a documented limit of this reader was reached (size, depth). Another reader may accept it.
 	Operational Class = "operational"
-	// Policy: the reader's own policy refused it (trust floor, admission rule).
+	// Policy: the reader's (or, at write time, the writer's) own policy refused it (trust floor, admission rule,
+	// the future-ts bound).
 	Policy Class = "reader policy"
 )
 

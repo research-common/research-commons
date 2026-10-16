@@ -295,6 +295,17 @@ func TestSizeLimit(t *testing.T) {
 	refused(t, err, refusal.Operational, refusal.SizeLimit, "size limit 65536")
 }
 
+// TestSizePrecheck: a line far beyond any signed string the bound admits is refused (operational: size limit)
+// before it is parsed: even one that would not parse is refused for size, not for its syntax.
+func TestSizePrecheck(t *testing.T) {
+	huge := append([]byte(`{"x":"`), bytes.Repeat([]byte("a"), MaxLine)...)
+	_, err := Read(huge) // unterminated: a parser would refuse it as malformed
+	refused(t, err, refusal.Operational, refusal.SizeLimit, "refused before parsing")
+	// A line just under MaxLine is parsed (and here refused for what it is).
+	_, err = Read(huge[:MaxLine])
+	refused(t, err, refusal.Intrinsic, refusal.MalformedStatement, "")
+}
+
 // TestFutureTimestamp: the writer refuses a ts more than 300 s ahead of its clock and accepts 299 s.
 func TestFutureTimestamp(t *testing.T) {
 	conformance.Covers(t, "C-core-105")
@@ -306,7 +317,7 @@ func TestFutureTimestamp(t *testing.T) {
 		return x
 	}
 	_, err := Write(at(time.Hour), k, now)
-	refused(t, err, refusal.Intrinsic, "future timestamp", "scope this statement")
+	refused(t, err, refusal.Policy, "future timestamp", "writer policy: max future skew 300 s")
 	if _, err := Write(at(299*time.Second), k, now); err != nil {
 		t.Fatalf("299 s ahead refused: %v", err)
 	}
@@ -314,7 +325,7 @@ func TestFutureTimestamp(t *testing.T) {
 		t.Fatalf("300 s ahead refused (the bound is more than 300 s): %v", err)
 	}
 	_, err = Write(at(301*time.Second), k, now)
-	refused(t, err, refusal.Intrinsic, "future timestamp", "")
+	refused(t, err, refusal.Policy, "future timestamp", "")
 }
 
 // TestNonCanonicalInputStoredCanonical: a received line with whitespace and reordered keys is admitted when

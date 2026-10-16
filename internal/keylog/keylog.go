@@ -58,9 +58,12 @@ type Log struct {
 	key   string
 	store *Store
 	lines map[string]*wire.Statement // by id: every line kept, including ones View refuses
-	// retained are lines this reader keeps without placing them: an rc major it does not implement (nothing
-	// in the envelope is read) or an alg it cannot verify. They are shown, never chained: an unverified line
-	// placed in the graph would let anyone draw a FORK on any key's log.
+	// retained are lines this reader cannot verify: an rc major it does not implement (nothing in the
+	// envelope is read) or an alg it lacks. An unknown-alg line is placed in the log once it is vouched: a
+	// verified line of this key names its id in prev or merges, directly or through other vouched lines.
+	// That naming is the key's signed word that the line is theirs, and the id pins the line's own links, so
+	// it chains as §6 promises ("a valid signed line and still chains"). An unvouched line is shown and never
+	// placed, so nobody can draw a FORK on another key's log with lines they made up.
 	retained map[string]*wire.Statement
 }
 
@@ -75,12 +78,24 @@ func (l *Log) Add(line []byte) (*wire.Statement, error) {
 		return nil, err
 	}
 	if !st.Verified {
+		// Ownership applies to what the envelope claims, verified or not: a line naming another signer is
+		// never kept in this log. (An unknown-major line's signer is not read; it is kept where delivered.)
+		if st.Signer != "" && st.Signer != l.key {
+			return nil, &refusal.Refusal{Class: refusal.Intrinsic, Reason: refusal.WrongLog,
+				Detail: fmt.Sprintf("signer %s in the log of %s; scope this line", st.Signer, l.key)}
+		}
 		if l.retained == nil {
 			l.retained = map[string]*wire.Statement{}
 		}
 		key := st.ID
-		if key == "" { // unknown rc major: no id computed; key the retained copy by its stored bytes
-			key = "unparsed:" + wire.ID(line)
+		if key == "" {
+			// Unknown rc major: this reader cannot compute its statement id (the id function is the major's,
+			// wire-format note §8). Key it by the hash of its canonical form, so two deliveries differing only
+			// in whitespace or key order are one retained entry (P-02).
+			key = "rc-other:" + wire.ID(st.Line())
+		} else {
+			// The id covers the signer field, so whoever holds a line with this id holds that signer's claim.
+			l.store.owner[st.ID] = st.Signer
 		}
 		l.retained[key] = st
 		return st, nil
@@ -148,14 +163,15 @@ type View struct {
 // View computes the log's state from its lines.
 func (l *Log) View() View {
 	v := View{Key: l.key}
+	nodes := l.nodes()
 	refused := map[string]*refusal.Refusal{}
-	for _, st := range l.lines {
-		if r := l.relativeRule(st); r != nil {
+	for _, st := range nodes {
+		if r := l.relativeRule(st, nodes); r != nil {
 			refused[st.ID] = r
 		}
 	}
 	held := func(id string) (*wire.Statement, bool) {
-		st, ok := l.lines[id]
+		st, ok := nodes[id]
 		if !ok || refused[id] != nil {
 			return nil, false
 		}
@@ -167,7 +183,7 @@ func (l *Log) View() View {
 	chained := map[string]bool{}
 	for changed := true; changed; {
 		changed = false
-		for id, st := range l.lines {
+		for id, st := range nodes {
 			if chained[id] || refused[id] != nil {
 				continue
 			}
@@ -181,8 +197,8 @@ func (l *Log) View() View {
 		}
 	}
 
-	preds := map[string][]string{}
-	for id, st := range l.lines {
+	graph := map[string]dag.Node{}
+	for id, st := range nodes {
 		if refused[id] != nil {
 			v.Refused = append(v.Refused, Refused{st, refused[id]})
 			continue
@@ -190,41 +206,44 @@ func (l *Log) View() View {
 		ln := Line{St: st, State: Chained}
 		if !chained[id] {
 			ln.State = Detached
-			ln.Waiting = l.gap(st, held, chained)
+			ln.Waiting = gap(st, held, chained, nodes)
 		}
 		if p, ok := held(st.Prev); ok && rctime.Compare(st.TS, p.TS) < 0 {
 			ln.Incoherent = true
 		}
 		v.Lines = append(v.Lines, ln)
 		if chained[id] {
-			var ps []string
+			var nd dag.Node
 			if st.Prev != "" {
-				ps = append(ps, st.Prev)
+				nd.Branch = []string{st.Prev}
 			}
-			preds[id] = append(ps, st.Merges...)
+			nd.Join = st.Merges
+			graph[id] = nd
 		}
 	}
 	slices.SortFunc(v.Lines, func(a, b Line) int { return cmpSeqID(a.St, b.St) })
 	slices.SortFunc(v.Refused, func(a, b Refused) int { return cmpSeqID(a.St, b.St) })
-	for _, st := range l.retained {
-		v.Retained = append(v.Retained, st)
+	for k, st := range l.retained {
+		if _, placed := nodes[k]; !placed {
+			v.Retained = append(v.Retained, st)
+		}
 	}
 	slices.SortFunc(v.Retained, func(a, b *wire.Statement) int { return strings.Compare(a.ID+a.Why, b.ID+b.Why) })
-	v.Forks = dag.Forks(preds)
-	v.Tips = dag.Tips(preds)
+	v.Forks = dag.Forks(graph)
+	v.Tips = dag.Tips(graph)
 	return v
 }
 
 // relativeRule applies the §7 rules that need other lines. It looks only at lines held (in any log), so it
 // is the same whatever order they arrived in.
-func (l *Log) relativeRule(st *wire.Statement) *refusal.Refusal {
+func (l *Log) relativeRule(st *wire.Statement, nodes map[string]*wire.Statement) *refusal.Refusal {
 	mal := func(f string, a ...any) *refusal.Refusal {
 		r := refusal.Malformed(f, a...)
 		r.Detail += "; scope this line"
 		return r
 	}
 	if st.Prev != "" {
-		if p, ok := l.lines[st.Prev]; ok && p.Seq != st.Seq-1 {
+		if p, ok := nodes[st.Prev]; ok && p.Seq != st.Seq-1 {
 			return mal("seq %d after prev at seq %d: seq is prev's plus 1", st.Seq, p.Seq)
 		}
 		if o, ok := l.store.owner[st.Prev]; ok && o != l.key {
@@ -232,7 +251,7 @@ func (l *Log) relativeRule(st *wire.Statement) *refusal.Refusal {
 		}
 	}
 	for _, m := range st.Merges {
-		if p, ok := l.lines[m]; ok && p.Seq >= st.Seq {
+		if p, ok := nodes[m]; ok && p.Seq >= st.Seq {
 			return mal("merges names a line at seq %d, not lower than this line's seq %d", p.Seq, st.Seq)
 		}
 		if o, ok := l.store.owner[m]; ok && o != l.key {
@@ -240,6 +259,40 @@ func (l *Log) relativeRule(st *wire.Statement) *refusal.Refusal {
 		}
 	}
 	return nil
+}
+
+// nodes is every line the view places: the verified lines, plus every unknown-alg line of this key vouched
+// for by them (see Log.retained). Vouching is a fixed point over prev and merges links: a vouched line's own
+// links are pinned by the id the voucher signed, so they vouch in turn.
+func (l *Log) nodes() map[string]*wire.Statement {
+	out := make(map[string]*wire.Statement, len(l.lines))
+	var queue []string
+	for id, st := range l.lines {
+		out[id] = st
+		queue = append(queue, links(st)...)
+	}
+	for len(queue) > 0 {
+		id := queue[len(queue)-1]
+		queue = queue[:len(queue)-1]
+		if _, done := out[id]; done {
+			continue
+		}
+		st, ok := l.retained[id]
+		if !ok || st.Signer != l.key { // Add already keeps other signers out; checked again so vouching never crosses keys
+			continue
+		}
+		out[id] = st
+		queue = append(queue, links(st)...)
+	}
+	return out
+}
+
+func links(st *wire.Statement) []string {
+	var out []string
+	if st.Prev != "" {
+		out = append(out, st.Prev)
+	}
+	return append(out, st.Merges...)
 }
 
 func (v View) refusalOf(id string) *refusal.Refusal {
@@ -254,7 +307,7 @@ func (v View) refusalOf(id string) *refusal.Refusal {
 // gap explains why st is detached: walk down prev while lines are held; where the walk stops, the stretch
 // from the highest chained seq below it (+1) to the stop is missing. Unheld merges entries are named by id;
 // a held but detached merges entry contributes its own gap.
-func (l *Log) gap(st *wire.Statement, held func(string) (*wire.Statement, bool), chained map[string]bool) Gap {
+func gap(st *wire.Statement, held func(string) (*wire.Statement, bool), chained map[string]bool, nodes map[string]*wire.Statement) Gap {
 	var g Gap
 	addSeq := func(from, to int64) {
 		if !g.HasSeq || from < g.FromSeq {
@@ -275,7 +328,7 @@ func (l *Log) gap(st *wire.Statement, held func(string) (*wire.Statement, bool),
 			if p, ok := held(x.Prev); ok {
 				walk(p, seen)
 			} else {
-				addSeq(l.highestChainedBelow(x.Seq, chained)+1, x.Seq-1)
+				addSeq(highestChainedBelow(x.Seq, chained, nodes)+1, x.Seq-1)
 			}
 		}
 		for _, m := range x.Merges {
@@ -295,10 +348,10 @@ func (l *Log) gap(st *wire.Statement, held func(string) (*wire.Statement, bool),
 	return g
 }
 
-func (l *Log) highestChainedBelow(seq int64, chained map[string]bool) int64 {
+func highestChainedBelow(seq int64, chained map[string]bool, nodes map[string]*wire.Statement) int64 {
 	best := int64(-1)
 	for id := range chained {
-		if s := l.lines[id].Seq; s < seq && s > best {
+		if s := nodes[id].Seq; s < seq && s > best {
 			best = s
 		}
 	}
@@ -358,12 +411,8 @@ func (v View) Render() string {
 		for i, x := range f.Branches {
 			br[i] = Short(x)
 		}
-		if f.Cleared {
-			cb := make([]string, len(f.ClearedBy))
-			for i, x := range f.ClearedBy {
-				cb[i] = Short(x)
-			}
-			fmt.Fprintf(&b, "  FORK at %s: branches %s, cleared by %s (merged)\n", at, strings.Join(br, ","), strings.Join(cb, ","))
+		if f.Cleared() {
+			fmt.Fprintf(&b, "  FORK at %s: branches %s, cleared by %s (merged)\n", at, strings.Join(br, ","), Short(f.ClearedBy))
 		} else {
 			tp := make([]string, len(f.Tips))
 			for i, x := range f.Tips {

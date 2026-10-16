@@ -116,8 +116,10 @@ func Write(d Draft, k Key, now time.Time) (*Statement, error) {
 	limit := now.Add(MaxFutureSkew)
 	lim := rctime.Time{Sec: limit.Unix(), Nanos: int32(limit.Nanosecond())}
 	if rctime.Compare(ts, lim) > 0 {
-		return nil, &refusal.Refusal{Class: refusal.Intrinsic, Reason: "future timestamp",
-			Detail: "ts " + d.TS + " is more than 300 s ahead of the writer's clock; scope this statement"}
+		// The bound is the writer's own policy (claims-model §10: "a documented default in the writer's policy,
+		// printed with the refusal"); no reader refuses such a line (C-core-106 flags it), so it is not intrinsic.
+		return nil, &refusal.Refusal{Class: refusal.Policy, Reason: "future timestamp",
+			Detail: "ts " + d.TS + " is more than 300 s ahead of the writer's clock (writer policy: max future skew 300 s); scope this statement"}
 	}
 	line, _ := Sign(d, k)
 	return Read(line)

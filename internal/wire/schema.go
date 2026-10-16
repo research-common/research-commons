@@ -2,6 +2,7 @@ package wire
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/research-common/research-commons/internal/canon"
@@ -369,7 +370,30 @@ func checkBody(kind string, body *canon.Object) (known bool, unpinned []string, 
 	if err := checkFields(body, "body", ctx, fields); err != nil {
 		return true, nil, err
 	}
+	if kind == "genesis" {
+		return true, nil, satisfiable(body, "body")
+	}
 	return true, nil, nil
+}
+
+// satisfiable refuses a genesis whose rule no set of its controllers can ever meet: no controllers, or a
+// k_of_n with k < 1 or k > n. Such a statement cannot mean what its kind means (a resource some key can
+// extend), which is the intrinsic class (claims-model §11), and refusing it at the gate is a better answer
+// than a resource that silently never accepts an edition. A controller-change edition is checked against the
+// previous edition by the resource rules, not here: its controllers and rule are optional and partial.
+func satisfiable(body *canon.Object, p string) error {
+	ctrl := body.Members["controllers"].(canon.Array)
+	if len(ctrl) == 0 {
+		return bad(p+".controllers", "is empty: no key could ever extend this resource")
+	}
+	rule := body.Members["rule"].(*canon.Object)
+	if kn, ok := rule.Get("k_of_n"); ok {
+		k := int64(kn.(*canon.Object).Members["k"].(canon.Int))
+		if k < 1 || k > int64(len(ctrl)) {
+			return bad(p+".rule.k_of_n.k", "is "+strconv.FormatInt(k, 10)+" with "+itoa(len(ctrl))+" controllers: no set of controllers satisfies it")
+		}
+	}
+	return nil
 }
 
 func checkObserved(body *canon.Object, ctx *schemaCtx) error {
