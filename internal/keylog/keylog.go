@@ -378,10 +378,12 @@ func Short(id string) string {
 
 // Render is the log display: one line per placed statement, then forks and refusals. It is a function of the
 // view only, so two views with the same content render identically. Tokens are FORK, cleared, detached,
-// incoherent, refused, unsupported (claims-model note §13).
+// incoherent, refused, unsupported (claims-model note §13). Key events are listed with whether each is in
+// force, and a line after an in-force event names it ("after <id>").
 func (v View) Render() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "log %s\n", v.Key)
+	ks := v.KeyState()
 	for _, ln := range v.Lines {
 		fmt.Fprintf(&b, "  seq %d %s %s", ln.St.Seq, Short(ln.St.ID), ln.St.Kind)
 		if len(ln.St.Merges) > 0 {
@@ -400,8 +402,10 @@ func (v View) Render() string {
 		if ln.Incoherent {
 			b.WriteString(" incoherent")
 		}
+		b.WriteString(ks.afterTag(ln.St.ID))
 		b.WriteString("\n")
 	}
+	ks.render(&b)
 	for _, f := range v.Forks {
 		at := "the first line"
 		if f.At != "" {

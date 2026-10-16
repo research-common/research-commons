@@ -358,7 +358,7 @@ func shorts(ids []string) []string {
 // TestMergeWaitsForUnheldTip: C-core-127b. The reader holds S and the clearing line M, not L. M is detached
 // naming L; no FORK is shown. When L arrives, the fork shows as cleared and M chains.
 func TestMergeWaitsForUnheldTip(t *testing.T) {
-	conformance.Partial(t, "C-core-127b", "detached naming L, no FORK, then cleared on arrival: checked; the rotate_key variant (rotation applies to lines after L) needs key events in the resolver")
+	conformance.Partial(t, "C-core-127b", "detached naming L, no FORK, then cleared on arrival: checked; the rotate_key variant is TestRotationWaitsForMergedTip; evaluating the clearing line needs the resolver")
 	a := key("A")
 	base := chain(a, 2)
 	L := mk(a, 2, base[1].id, 0xaa, "")
