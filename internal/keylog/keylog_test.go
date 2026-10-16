@@ -530,6 +530,55 @@ func TestVouchedUnknownAlgChains(t *testing.T) {
 	}
 }
 
+// TestOtherMajorChains: under the linkage contract (wire §6) a line of another major has an id this reader
+// computes and links it reads, so a verified line of the key naming it places it, and the key's log continues
+// across the major in both directions. Unvouched it is retained and never placed; a line of another major in
+// the wrong key's log is refused like any other; a malformed linkage field is malformed.
+func TestOtherMajorChains(t *testing.T) {
+	k := key("A")
+	l0 := mk(k, 0, "", 0, "")
+	b1, id1 := wire.Sign(wire.Draft{RC: "rc/2", Kind: "holds", Seq: 1, Prev: l0.id, TS: "2026-10-16T00:00:00Z", Body: holds(7)}, k)
+	n1 := line{b1, id1}
+	l2 := mk(k, 2, id1, 2, "")
+	l3 := mk(k, 3, l2.id, 3, "")
+	out, v := renderAll(t, k, []line{l0, n1, l2, l3}, nil)
+	if len(v.Lines) != 4 || len(v.Retained) != 0 || len(v.Forks) != 0 {
+		t.Fatalf("%s", out)
+	}
+	for _, ln := range v.Lines {
+		if ln.State != Chained {
+			t.Fatalf("%s", out)
+		}
+	}
+	if !strings.Contains(out, "[unsupported: rc/2]") {
+		t.Fatalf("a placed rc/2 line still shows as unsupported:\n%s", out)
+	}
+	st, err := wire.Read(b1)
+	if err != nil || st.ID != id1 || st.Verified || st.Kind != "holds" || st.Prev != l0.id {
+		t.Fatalf("%+v %v", st, err)
+	}
+	// Unvouched (nothing names it), it is retained and draws no FORK beside a verified seq 1.
+	s := NewStore()
+	deliver(t, s, k, l0, mk(k, 1, l0.id, 1, ""), n1)
+	if v := s.Log(k.Signer()).View(); len(v.Forks) != 0 || len(v.Retained) != 1 {
+		t.Fatalf("%s", v.Render())
+	}
+	// Another key's rc/2 line is refused in A's log.
+	bo, _ := wire.Sign(wire.Draft{RC: "rc/2", Kind: "holds", Seq: 0, TS: "2026-10-16T00:00:00Z", Body: holds(8)}, key("B"))
+	_, err = NewStore().Log(k.Signer()).Add(bo)
+	wantRefused(t, err, refusal.WrongLog, "in the log of "+k.Signer())
+	// A linkage field that breaks the contract is malformed, whatever the major.
+	bad, _ := wire.Sign(wire.Draft{RC: "rc/2", Kind: "holds", Seq: 1, TS: "2026-10-16T00:00:00Z", Body: holds(9)}, k)
+	_, err = wire.Read(bad)
+	wantRefused(t, err, refusal.MalformedStatement, "prev null at seq 1")
+	bad, _ = wire.Sign(wire.Draft{RC: "rc/2", Kind: "holds", Seq: 1, Prev: "sha256:" + l0.id, TS: "2026-10-16T00:00:00Z", Body: holds(9)}, k)
+	_, err = wire.Read(bad)
+	wantRefused(t, err, refusal.MalformedStatement, "is not a statement id")
+	bad, _ = wire.Sign(wire.Draft{RC: "rc/2", Kind: "holds", Seq: 0, Prev: l0.id, TS: "2026-10-16T00:00:00Z", Body: holds(9)}, k)
+	_, err = wire.Read(bad)
+	wantRefused(t, err, refusal.MalformedStatement, "prev set at seq 0")
+}
+
 // TestUnknownMajorDedupe: two deliveries of one rc/2 line differing only in whitespace and key order are one
 // retained entry (P-02), though the reader cannot compute its id.
 func TestUnknownMajorDedupe(t *testing.T) {

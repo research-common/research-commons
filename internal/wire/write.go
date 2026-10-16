@@ -2,6 +2,7 @@ package wire
 
 import (
 	"encoding/hex"
+	"strconv"
 	"time"
 
 	"github.com/research-common/research-commons/internal/canon"
@@ -99,8 +100,11 @@ func (d Draft) Envelope(k Key) *canon.Object {
 // not validate the draft: a test that needs a malformed but validly signed statement builds it here.
 func Sign(d Draft, k Key) (line []byte, id string) {
 	env := d.Envelope(k)
-	kind := d.Kind
-	ss := PAE(PayloadType(kind, Major), canon.Encode(env))
+	major := Major
+	if m := reRC.FindStringSubmatch(d.RC); m != nil {
+		major, _ = strconv.Atoi(m[1]) // the payload type names the draft's own major (wire §2, §6)
+	}
+	ss := PAE(PayloadType(d.Kind, major), canon.Encode(env))
 	env.Keys = append(env.Keys, "sig")
 	env.Members["sig"] = canon.String(k.Sign(ss))
 	return canon.Encode(env), ID(ss)
