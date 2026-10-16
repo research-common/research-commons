@@ -573,7 +573,7 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
 - **One validation core.** `pull`, hub CI, `push` and the pre-pin check at `publish` (§8) call one validation
   function. They differ only in what history they hold and whose policy applies (I12).
 - **Refusal classes (I8).** *Intrinsic:* hash mismatch, bad signature, malformed statement (including one
-  asserting more than one observation class), a line in another key's log, rewritten history, unsafe paths,
+  asserting more than one observation class), a line in another key's log, unsafe paths,
   anything outside the data surface. *Reader policy:* trust floors,
   executable admission, hub rules. *Operational:* size and resource limits. Everything else is admitted and
   labelled.
