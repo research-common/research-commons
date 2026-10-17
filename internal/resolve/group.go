@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/keylog"
 )
 
@@ -17,11 +18,45 @@ import (
 //
 // Bytes are read against the replication mode and comparator the workflow's own `authored` declares, which the
 // derivers inherit: the workflow blob's single-party defaults, resolved like any blob's. A workflow whose
-// authorship is contested has no default mode, so its group is `unchecked` (fail closed, I4).
+// authorship is contested has no default; its groups use the mode and comparator only when every claimant of
+// the workflow declares the same pair, and are otherwise `unchecked` (fail closed, I4). A rival can therefore
+// never raise a group's grade, and can lower it only by disagreeing, visibly.
+//
+// Under `bytes` a run is graded by its own output: T0 when another run produced the same bytes, `diverged`
+// when none did. Under a comparator a run is T1 when it matched at least one other output (partners named),
+// and the group summary says whether all runs agree. A blob's step is the strongest evidence any group holds
+// for its bytes, so authorship never hides a group (artifact.go, grade).
 //
 // Comparisons are the reader's own (I9): a comparator runs under the reader's Comparator, never taken from a
 // runner's `reproduced` token, which is shown as that runner's claim. The default runs nothing, so every
 // `protocol` comparison of different bytes is `unchecked`.
+//
+// A comparator is asked about each unordered pair of outputs once per resolver, always with the pair in digest
+// order, and its answer is reused for every view (pair). That assumes what a comparator must be for T1 to mean
+// anything: deterministic and symmetric. The tool cannot check either; it can only make sure an asymmetric
+// comparator is asked one way round, so the answer cannot depend on which blob was viewed first (I14).
+
+type cmpResult struct{ result, why string }
+
+// pair returns the comparator's result for outputs a and b, asking the reader's Comparator at most once per
+// unordered pair (see the package comment above on determinism and symmetry).
+func (r *Resolver) pair(comparator, a, b string) (string, string) {
+	if b < a {
+		a, b = b, a
+	}
+	k := [3]string{comparator, a, b}
+	r.cmpMu.Lock()
+	v, ok := r.cmpRuns[k]
+	r.cmpMu.Unlock()
+	if !ok {
+		x, why := r.cmp.Compare(comparator, a, b)
+		v = cmpResult{x, why}
+		r.cmpMu.Lock()
+		r.cmpRuns[k] = v
+		r.cmpMu.Unlock()
+	}
+	return v.result, v.why
+}
 
 // Comparator runs a declared comparator on two outputs. Result is "match", "diverged", "not comparable" or
 // "unchecked" (it could not run); why explains the last two.
@@ -115,7 +150,15 @@ type Run struct {
 	// Result is this run's step: a tier or a token. Partners are the runs whose outputs it matched.
 	Grade    Grade
 	Partners []string
+	// Says is a `reproduced` run's own `result` token, Env its environment record (canonical JSON, "" when
+	// absent; an `authored` run's environment rides on its provenance). Both are the runner's signed word,
+	// shown beside the reader's Grade and never graded (claims I2, I9; decisions A5).
+	Says, Env string
 }
+
+// trustLine is what a run shows for the reader's trust in its signer. The resolver takes no trust policy yet
+// (claims §5.3.2 "holds and trusts" needs the same input), so it says so rather than imply either answer.
+const trustLine = "your trust in this key: not configured"
 
 // Group is the view of one derivation group.
 type Group struct {
@@ -128,11 +171,17 @@ type Group struct {
 	Outputs                    []string // distinct output digests, sorted
 	Token                      string   // the group display
 	Explain                    []string
+	only                       string // set when only one output's runs were graded (group)
 }
 
 // Group resolves the derivation group of provenance p.
-func (r *Resolver) Group(p *Provenance) *Group {
-	g := &Group{Provenance: p, Mode: "undeclared"}
+func (r *Resolver) Group(p *Provenance) *Group { return r.group(p, "") }
+
+// group resolves the group of p. With only set, it grades only the runs whose output is only, comparing that
+// output with the others until the first match (verify's question, Resolver.Verify); the group's token and the
+// other runs' grades are then left unset, and the view is never rendered.
+func (r *Resolver) group(p *Provenance, only string) *Group {
+	g := &Group{Provenance: p, Mode: "undeclared", only: only}
 	authored := map[string]bool{}
 	for _, q := range r.byKind["authored"] {
 		if !q.Counts() || provenance(q.St.Body).key() != p.key() {
@@ -143,14 +192,15 @@ func (r *Resolver) Group(p *Provenance) *Group {
 			continue
 		}
 		authored[q.St.ID] = true
-		g.Runs = append(g.Runs, Run{Signer: q.St.Signer, Statement: q.St.ID, Kind: "authored", Output: contentDigest(q.St.Body)})
+		g.Runs = append(g.Runs, Run{Signer: q.St.Signer, Statement: q.St.ID, Kind: "authored", Output: contentDigest(q.St.Body), Env: envOf(q.St.Body)})
 		if !slices.Contains(g.Derivers, q.St.Signer) {
 			g.Derivers = append(g.Derivers, q.St.Signer)
 		}
 	}
 	for _, q := range r.byKind["reproduced"] {
 		if q.Counts() && authored[str(q.St.Body, "of")] && provenance(q.St.Body).key() == p.key() {
-			g.Runs = append(g.Runs, Run{Signer: q.St.Signer, Statement: q.St.ID, Kind: "reproduced", Output: contentDigest(q.St.Body)})
+			g.Runs = append(g.Runs, Run{Signer: q.St.Signer, Statement: q.St.ID, Kind: "reproduced", Output: contentDigest(q.St.Body),
+				Says: str(q.St.Body, "result"), Env: envOf(q.St.Body)})
 		}
 	}
 	slices.Sort(g.Derivers)
@@ -169,7 +219,17 @@ func (r *Resolver) Group(p *Provenance) *Group {
 	case wf.State == NoClaim:
 		g.ModeFrom = "the workflow " + shortDigest(p.Workflow) + " has no authored statement held"
 	case wf.Default == nil:
-		g.ModeFrom = "the workflow's authorship is " + string(wf.State) + ", so it declares no default replication"
+		// every claimant of the workflow declaring the same mode and comparator is an answer whoever authored
+		// it first; any disagreement (an absent value included) fails closed (decisions A7)
+		if mode, comparator, n, ok := r.agreedMode(wf); ok {
+			g.Mode, g.Comparator = mode, comparator
+			if g.Mode == "" {
+				g.Mode = "undeclared"
+			}
+			g.ModeFrom = fmt.Sprintf("the workflow's authorship is %s; all %d claimants of wf-%s declare the same replication and comparator", wf.State, n, shortDigest(p.Workflow))
+		} else {
+			g.ModeFrom = "the workflow's authorship is " + string(wf.State) + " and its claimants do not all declare the same replication and comparator, so it declares no default replication"
+		}
 	default:
 		f := wf.Field("replication")
 		if v, ok := f.Default(); ok {
@@ -183,8 +243,20 @@ func (r *Resolver) Group(p *Provenance) *Group {
 		if v, ok := wf.Field("comparator").Default(); ok {
 			g.Comparator = strings.Trim(v, `"`)
 		}
+		if why := r.modeAmended(wf); why != "" {
+			g.Explain = append(g.Explain, why)
+		}
 	}
 	r.compare(g)
+	for _, run := range g.Runs {
+		if says, mine := run.Says, readerResult(run.Grade); says != "" && mine != "" && says != mine {
+			g.Explain = append(g.Explain, fmt.Sprintf("%s %s signed %q; this reader's comparison: %q (shown, never graded: claims §5.2)",
+				shortKey(run.Signer), keylog.Short(run.Statement), says, mine))
+		}
+	}
+	if len(g.Runs) > 1 && g.only == "" && !slices.ContainsFunc(g.Runs, func(run Run) bool { return run.Signer != g.Runs[0].Signer }) {
+		g.Explain = append(g.Explain, "re-derived by its author only: the re-run shows the bytes reproduce, not that anyone else got them (independence is claims §9.3's question)")
+	}
 	return g
 }
 
@@ -211,6 +283,7 @@ func (r *Resolver) compare(g *Group) {
 	case len(g.Runs) < 2:
 		set(func(int) Grade { return Grade{Why: NotRederived} })
 		g.Token = fmt.Sprintf("derived by %d, not re-derived", k)
+		g.Explain = append(g.Explain, "no second run of this provenance is held, so the derivation is unchecked; a re-run by the reader, or a `reproduced` by anyone, is what checks it")
 	case g.Mode == "bytes" && len(g.Outputs) == 1:
 		set(func(int) Grade { return Grade{Tier: "T0"} })
 		g.Token = fmt.Sprintf("derived by %d: byte-identical re-derivation (T0)", k)
@@ -259,53 +332,230 @@ func (r *Resolver) compare(g *Group) {
 	}
 }
 
-// compareProtocol runs the comparator on each pair of different outputs. A run whose output matched another
-// output is T1 under the comparator, with its partners listed (tolerance is not transitive, so partners are
-// named, never chained, claims §9.3). A run that compared against every other output and matched none is
-// diverged; otherwise not comparable or unchecked.
+// compareProtocol grades runs under a declared comparator. A run is T1 when its output matched at least one
+// other output, with its partners listed; it is diverged when every comparison it took part in ran and disagreed;
+// otherwise not comparable or unchecked. Tolerance is not transitive, so matches are never chained (claims §9.3):
+// the token says "all n runs match" only when every pair of outputs matched, and otherwise flags matching runs
+// that do not agree with each other, naming the pairs in explain.
 func (r *Resolver) compareProtocol(g *Group) {
-	type res struct{ result, why string }
-	pair := map[[2]string]res{}
+	if g.only != "" {
+		grade, _ := r.row(g, g.only, true)
+		for i := range g.Runs {
+			if g.Runs[i].Output == g.only {
+				g.Runs[i].Grade = grade
+			}
+		}
+		return
+	}
 	for i, a := range g.Outputs {
 		for _, b := range g.Outputs[i+1:] {
-			x, why := r.cmp.Compare(g.Comparator, a, b)
-			pair[[2]string{a, b}], pair[[2]string{b, a}] = res{x, why}, res{x, why}
-			if x == "unchecked" || x == "not comparable" {
+			if x, why := r.pair(g.Comparator, a, b); x == "unchecked" || x == "not comparable" {
 				g.Explain = append(g.Explain, fmt.Sprintf("%s vs %s: %s (%s)", shortDigest(a), shortDigest(b), x, why))
 			}
 		}
 	}
+	rows := map[string]Grade{}
+	partners := map[string][]string{}
+	for _, o := range g.Outputs {
+		rows[o], partners[o] = r.row(g, o, false)
+	}
 	match, diverged := 0, 0
 	for i := range g.Runs {
 		run := &g.Runs[i]
-		var results []string
-		for _, o := range g.Outputs {
-			if o == run.Output {
-				continue
-			}
-			p := pair[[2]string{run.Output, o}]
-			results = append(results, p.result)
-			if p.result == "match" {
-				run.Partners = append(run.Partners, o)
-			}
-		}
+		run.Grade, run.Partners = rows[run.Output], partners[run.Output]
 		switch {
-		case len(run.Partners) > 0:
-			run.Grade = Grade{Tier: "T1", Under: g.Comparator}
+		case run.Grade.Tier == "T1":
 			match++
-		case !slices.ContainsFunc(results, func(s string) bool { return s != "diverged" }):
-			run.Grade = Grade{Why: DivergedToken}
+		case run.Grade.Why == DivergedToken:
 			diverged++
-		case slices.Contains(results, "not comparable"):
-			run.Grade = Grade{Why: NotComparable}
-		default:
-			run.Grade = Grade{Why: UncheckedToken}
 		}
 	}
-	g.Token = fmt.Sprintf("derived by %d: %d match, %d diverged", len(g.Derivers), match, diverged)
+
+	// do the outputs that matched something agree with each other?
+	var matched []string
+	for _, o := range g.Outputs {
+		if len(partners[o]) > 0 {
+			matched = append(matched, o)
+		}
+	}
+	pairs, apart, unknown := 0, 0, 0
+	for i, a := range matched {
+		for _, b := range matched[i+1:] {
+			pairs++
+			switch x, _ := r.pair(g.Comparator, a, b); x {
+			case "match":
+			case "diverged":
+				apart++
+				g.Explain = append(g.Explain, fmt.Sprintf("%s vs %s: diverged, though each matched another run (tolerance is not transitive; matches are never chained, claims §9.3)", shortDigest(a), shortDigest(b)))
+			default:
+				unknown++
+			}
+		}
+	}
+	k := len(g.Derivers)
+	if match == len(g.Runs) && apart+unknown == 0 {
+		g.Token = fmt.Sprintf("derived by %d: all %d runs match under %s", k, match, shortDigest(g.Comparator))
+		return
+	}
+	g.Token = fmt.Sprintf("derived by %d: %d match, %d diverged", k, match, diverged)
 	if other := len(g.Runs) - match - diverged; other > 0 {
 		g.Token += fmt.Sprintf(", %d unchecked", other)
 	}
+	if apart+unknown > 0 {
+		lead := "matching runs not all compared with each other"
+		if apart > 0 {
+			lead = "matching runs do not all agree"
+		}
+		var parts []string
+		if apart > 0 {
+			parts = append(parts, fmt.Sprintf("%d of %d pairs among them diverged", apart, pairs))
+		}
+		if unknown > 0 {
+			parts = append(parts, fmt.Sprintf("%d of %d unchecked", unknown, pairs))
+		}
+		g.Token += fmt.Sprintf("; %s (%s; %s)", lead, plural(clusters(r, g, matched), "cluster"), strings.Join(parts, ", "))
+	}
+}
+
+// row grades output o against every other output of g: T1 with its partners when it matched any, diverged
+// when every comparison ran and disagreed, else not comparable or unchecked. lazy stops at the first match,
+// which decides the grade; the partners are then incomplete.
+func (r *Resolver) row(g *Group, o string, lazy bool) (Grade, []string) {
+	var partners []string
+	n, apart, notComparable := 0, 0, false
+	for _, x := range g.Outputs {
+		if x == o {
+			continue
+		}
+		n++
+		switch res, _ := r.pair(g.Comparator, o, x); res {
+		case "match":
+			partners = append(partners, x)
+			if lazy {
+				return Grade{Tier: "T1", Under: g.Comparator}, partners
+			}
+		case "diverged":
+			apart++
+		case "not comparable":
+			notComparable = true
+		}
+	}
+	switch {
+	case len(partners) > 0:
+		return Grade{Tier: "T1", Under: g.Comparator}, partners
+	case apart == n:
+		return Grade{Why: DivergedToken}, nil
+	case notComparable:
+		return Grade{Why: NotComparable}, nil
+	}
+	return Grade{Why: UncheckedToken}, nil
+}
+
+// clusters counts the connected components of the match graph over outputs (each matched output with its
+// partners). Components can chain, so this is a count for the summary, never a claim that a cluster agrees.
+func clusters(r *Resolver, g *Group, outputs []string) int {
+	seen := map[string]bool{}
+	n := 0
+	for _, o := range outputs {
+		if seen[o] {
+			continue
+		}
+		n++
+		stack := []string{o}
+		seen[o] = true
+		for len(stack) > 0 {
+			x := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			for _, y := range outputs {
+				if !seen[y] {
+					if res, _ := r.pair(g.Comparator, x, y); res == "match" {
+						seen[y] = true
+						stack = append(stack, y)
+					}
+				}
+			}
+		}
+	}
+	return n
+}
+
+func plural(n int, word string) string {
+	if n == 1 {
+		return "1 " + word
+	}
+	return fmt.Sprintf("%d %ss", n, word)
+}
+
+// agreedMode reports the replication and comparator every current `authored` of every claimant of the workflow
+// declares, when they all declare the same pair ("" for an absent value, which disagrees with any declared
+// one), and how many claimants there are.
+func (r *Resolver) agreedMode(wf *Artifact) (mode, comparator string, n int, ok bool) {
+	first := true
+	for _, c := range wf.Claims {
+		n++
+		for _, st := range c.current {
+			m, k := str(st.Body, "replication"), str(st.Body, "comparator")
+			if first {
+				mode, comparator, first = m, k, false
+			} else if m != mode || k != comparator {
+				return "", "", n, false
+			}
+		}
+	}
+	return mode, comparator, n, !first
+}
+
+// modeAmended names the amendment when the workflow's default claim amends a statement that declared another
+// replication or comparator: every group under the workflow is read under the current one (execution §5.2,
+// the author's correction after a divergence), and the reader should see why its grades moved.
+func (r *Resolver) modeAmended(wf *Artifact) string {
+	for _, c := range wf.Default.Claims {
+		for _, cur := range c.current {
+			for _, old := range c.Amends[cur.ID] {
+				p, ok := r.byID[old]
+				if !ok {
+					continue
+				}
+				if str(p.St.Body, "replication") != str(cur.Body, "replication") || str(p.St.Body, "comparator") != str(cur.Body, "comparator") {
+					return fmt.Sprintf("the workflow's author amended its replication or comparator (%s amends %s); every group under it is read under the current declaration",
+						keylog.Short(cur.ID), keylog.Short(old))
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// readerResult maps a run's grade to the `reproduced` result vocabulary (wire §5: match, diverged,
+// not-comparable), or "" when the reader made no comparison that maps to one.
+func readerResult(g Grade) string {
+	switch {
+	case g.Tier != "", g.Why == IdenticalProto:
+		return "match"
+	case g.Why == DivergedToken:
+		return "diverged"
+	case g.Why == NotComparable:
+		return "not-comparable"
+	}
+	return ""
+}
+
+// envOf is a statement's environment record as canonical JSON: a `reproduced`'s or an `authored`'s
+// provenance.environment. "" when absent.
+func envOf(b *canon.Object) string {
+	p, ok := b.Get("provenance")
+	if !ok {
+		return ""
+	}
+	po, ok := p.(*canon.Object)
+	if !ok {
+		return ""
+	}
+	e, ok := po.Get("environment")
+	if !ok {
+		return ""
+	}
+	return string(canon.Encode(e))
 }
 
 // stepOf is the grade of the step that produced output d: the best grade among the runs with that output (a
@@ -337,6 +587,15 @@ func (g *Group) render(indent string) string {
 			fmt.Fprintf(&b, " (matched %s)", strings.Join(ps, ","))
 		}
 		b.WriteString("\n")
+		if run.Says != "" {
+			fmt.Fprintf(&b, "%s    runner says: %s\n", indent, run.Says)
+		}
+		if run.Env != "" {
+			fmt.Fprintf(&b, "%s    environment (runner's record): %s\n", indent, run.Env)
+		}
+		if run.Says != "" || run.Env != "" {
+			fmt.Fprintf(&b, "%s    %s\n", indent, trustLine)
+		}
 	}
 	for _, x := range g.Explain {
 		fmt.Fprintf(&b, "%s  explain: %s\n", indent, x)
@@ -344,8 +603,8 @@ func (g *Group) render(indent string) string {
 	return b.String()
 }
 
-// grade computes a's step, chain grade and leaf summary (claims §7). The step comes from the group of the
-// default unit (or the only claimant's provenance). The chain grade is the weakest step over the derivation
+// grade computes a's step, chain grade and leaf summary (claims §7). The step comes from the strongest group
+// among the claimant units with provenance (groups), whatever the authorship state. The chain grade is the weakest step over the derivation
 // inputs that are themselves derived; leaves (observations, constructions without provenance) are not steps
 // and are summarised beside the grade. A blob that is the evidence of a counted `refutes` is graded on its own
 // derivation only (exempt from the weakest-link rule).
@@ -360,7 +619,7 @@ func (r *Resolver) grade(a *Artifact, visiting map[string]bool) {
 		a.Step, a.Grade = Grade{Why: NotHeld}, Grade{Why: NotHeld}
 		return
 	}
-	r.groups(a)
+	r.groups(a, "")
 	a.Grade = a.Step
 	if a.Group == nil {
 		return
@@ -419,7 +678,7 @@ func (r *Resolver) grade(a *Artifact, visiting map[string]bool) {
 // workflow reproduces the bytes does not depend on who authored them first, so authorship (contested, or a
 // claimant without provenance ranked first) never hides a group's evidence: a statement that bears only on
 // authorship cannot change the grade (I5).
-func (r *Resolver) groups(a *Artifact) {
+func (r *Resolver) groups(a *Artifact, only string) {
 	units := make([]*Unit, 0, len(a.Units))
 	if a.Default != nil && a.Default.Provenance != nil {
 		units = append(units, a.Default)
@@ -430,7 +689,7 @@ func (r *Resolver) groups(a *Artifact) {
 		}
 	}
 	for _, u := range units {
-		g := r.Group(u.Provenance)
+		g := r.group(u.Provenance, only)
 		a.Groups = append(a.Groups, g)
 		if step := g.stepOf(a.Digest); a.Group == nil || step.evidence() > a.Step.evidence() {
 			a.Group, a.Step = g, step

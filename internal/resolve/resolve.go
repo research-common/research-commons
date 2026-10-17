@@ -13,6 +13,7 @@ package resolve
 
 import (
 	"slices"
+	"sync"
 
 	"github.com/research-common/research-commons/internal/keylog"
 	"github.com/research-common/research-commons/internal/wire"
@@ -53,13 +54,17 @@ type Resolver struct {
 	// time and cmp are the reader's own verifiers (I9): time evidence (§10) and comparator runs (§5.2).
 	time TimeVerifier
 	cmp  Comparator
+	// cmpMu guards cmpRuns: each comparator result this resolver obtained, keyed by comparator and the unordered
+	// pair of outputs, so every pair runs at most once per snapshot whichever blobs are viewed (group.go, pair).
+	cmpMu   sync.Mutex
+	cmpRuns map[[3]string]cmpResult
 }
 
 // New indexes every placed line of every log in s. With no options the reader verifies no proof format and
 // runs no comparator, so no bound orders anything and no comparison is made.
 func New(s *keylog.Store, opts ...Option) *Resolver {
 	r := &Resolver{logs: s, chained: map[string]map[string]*wire.Statement{}, byID: map[string]*Placed{}, byKind: map[string][]*Placed{}, keys: map[string]keylog.KeyState{},
-		time: NoTimeVerifier{}, cmp: NoComparator{}}
+		time: NoTimeVerifier{}, cmp: NoComparator{}, cmpRuns: map[[3]string]cmpResult{}}
 	for _, o := range opts {
 		o(r)
 	}

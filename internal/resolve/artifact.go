@@ -256,6 +256,7 @@ func (r *Resolver) authorship(d string) *Artifact {
 		r.priority(a)
 	}
 	a.Fields = r.fields(a)
+	a.Explain = append(a.Explain, forked(a)...)
 	a.Holders = r.holders(d)
 	a.Held = r.held(a)
 	return a
@@ -355,6 +356,27 @@ func (r *Resolver) priority(a *Artifact) {
 			a.Explain = append(a.Explain, fmt.Sprintf("later claimant %s (%s); priority is credit for publishing first, not evidence of copying (claims §5.2)", u.describe(), why))
 		}
 	}
+}
+
+// forked explains a key whose log is forked and which holds two current `authored` on the blob, one per
+// branch (claims §5.1, a forked log; decisions A3). The reader reads every branch: nothing is frozen at the fork.
+// When they disagree, a field (same provenance) or the authorship (two provenances) is contested, and clearing
+// the fork with `merges` alone does not choose: an `authored` whose history holds both branches amends both.
+func forked(a *Artifact) []string {
+	cur := map[string][]string{}
+	for _, c := range a.Claims {
+		cur[c.Signer] = append(cur[c.Signer], c.Current...)
+	}
+	var out []string
+	for _, k := range sortedKeys(cur) {
+		if ids := cur[k]; len(ids) > 1 {
+			slices.Sort(ids)
+			out = append(out, fmt.Sprintf("%s holds %d current authored on this blob on separate branches of its log (%s): every branch counts, and nothing is frozen at the fork; "+
+				"a field or provenance they disagree on stays contested until one authored whose history holds both branches amends them (a merge that is not an authored amends nothing)",
+				shortKey(k), len(ids), shorts(ids)))
+		}
+	}
+	return out
 }
 
 // fields resolves every single-party field.
@@ -472,11 +494,25 @@ func (r *Resolver) held(a *Artifact) []*Placed {
 	return out
 }
 
+// Verify is `verify` for blob d from the statements held: the answer Artifact(d).VerifyExit() gives, computed
+// with only what the exit needs. It skips the chain grade (inputs are not this blob's step) and compares d's own
+// output with the others until the first match, so it costs at most k-1 comparator runs in a group of k outputs
+// where the full view costs k(k-1)/2 (claims §13; the full view stays the one `show` and `explain` use).
+func (r *Resolver) Verify(d string) (int, []string) {
+	a := r.authorship(d)
+	if a.State != NoClaim {
+		r.groups(a, d)
+	}
+	return a.VerifyExit()
+}
+
 // VerifyExit is `verify` for the blob from the statements held (claims §13; execution §5.2 tokens): 1 when a
 // completed comparison disagreed (a diverged derivation step), else 3 when anything could not be checked (no
-// claim, contested authorship, a contested field, an unchecked or not comparable step), else 0. A step nobody
-// re-derived yet contributes nothing here: the held statements show no comparison either way, and re-running
-// it is the execution layer's part of `verify`. Why lists each cause.
+// claim, contested authorship, a contested field, an unchecked or not comparable step, or a derivation nobody
+// re-derived), else 0. A derived blob's claim is "this workflow on these inputs produced these bytes", and exit 0
+// means it was checked: by a second run in its group, or by the reader's own re-run, which is the execution
+// layer's part of `verify` and replaces this answer when it runs. A construction without provenance makes no
+// such claim, so a sole author with nothing contested exits 0 (C-core-17). Why lists each cause.
 func (a *Artifact) VerifyExit() (int, []string) {
 	var why []string
 	switch a.State {
@@ -492,7 +528,7 @@ func (a *Artifact) VerifyExit() (int, []string) {
 		switch a.Step.Why {
 		case DivergedToken:
 			return 1, append([]string{"derivation: diverged"}, why...)
-		case UncheckedToken, NotComparable:
+		case UncheckedToken, NotComparable, NotRederived:
 			why = append(why, "derivation: "+a.Step.Why)
 		}
 	}
