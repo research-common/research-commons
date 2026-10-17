@@ -24,7 +24,8 @@ C-core-127, C-core-127a, C-core-127b, C-core-141, C-core-143, C-core-144, P-02.
 - `prev` and `seq` are inside the signature, so a same-key fork is two signed lines, not a relayer's edit.
   A later line clears the fork by naming the other tips in `merges`, also signed (§7).
 - Unknown fields are retained and ignored. A `crit` member the reader does not implement makes the whole
-  statement `unsupported`: retained, never evaluated. An unknown `rc` major is `unsupported` the same way.
+  statement `unsupported`: retained, never evaluated. An unknown `rc` major is `unsupported` the same way,
+  and still chains: the id formula and the link fields are the same in every major (§6, linkage contract).
 - Content identity is sha256 of the exact bytes, written as an OCI digest, `sha256:<64 hex>`. Statement ids
   are bare 64 hex (§8). Vectors in §9 were computed, not typed.
 
@@ -194,7 +195,7 @@ Consequences, each a test:
   C-core-10, P-02). The second delivery is a no-op; the stored `sig` is the canonical encoding (§4).
 - Flipping one byte anywhere in the signed string changes the id and breaks the signature (C-core-09).
 - The id of a genesis statement is the resource id (C-core-77); the id of an edition is its edition hash
-  (C-core-78); `prev` and `predecessors` and `head` are ids, never digests.
+  (C-core-78); `prev`, `predecessors` and `covered` are ids, never digests.
 
 **Display aliases.** A surface may print the first 12 hex characters of an id or of a content digest (after
 the `sha256:` prefix) as a label. An alias is accepted as input only when exactly one held object matches;
@@ -254,7 +255,10 @@ Rules:
   of one signature verifying to one id; each is stored as V1's `sig`.
 - **Unknown `alg`.** Retained in the signer's log as `unsupported`, displayed as such, never evaluated: it
   grants nothing, counts in no projection, and is not an error on `pull`. Adding an algorithm is a minor
-  format change; a reader implementing it later re-evaluates retained lines (I5).
+  format change; a reader implementing it later re-evaluates retained lines (I5). Such a line is **placed**
+  in the log (so later lines can chain through it) when a verified line of the same key names it in `prev`
+  or `merges`, directly or through other placed lines: the naming is the key's signed word, and the line's
+  id pins its own links. A line nobody of its key vouches for is retained but never placed.
 - **The key is a commons identity, not a payment wallet.** EIP-191 prefixing guarantees a statement can never
   be a valid transaction; the reverse discipline (never reuse a wallet key as a commons key) is the signer's,
   and §4.1 gives the reasons. An identity that wants to be linked to its payment account says so explicitly.
@@ -367,7 +371,7 @@ admitted, and shown `unpinned` (claims-model note §5.3.1). A kind not listed he
 | `corroborates` | `of` id R (the `observed`) · `result` id R (the derived corroboration result's `authored`) · `verdict` `"supports"`/`"contradicts"`/`"inconclusive"` R · `model` string R (agreement model name or hash) · `cohort` object R (`rule` string, or `hand_picked` true) · `shares` list of string O (what this shares with the original: feed, operator, instrument) · `cause` string O (for `inconclusive`) |
 | `refutes` | `of` id R · `evidence` digest R · `note` string O |
 | `retracts` | `of` id R (the signer's own `authored`/`observed`) · `reason` string O |
-| `anchors` | `head` id R (a statement in the signer's own log) · `head_seq` integer R · `proof` object R (`scheme` string R, `digest` digest R of the proof bytes, `quality_claimed` string O). A `head` in another key's log is malformed |
+| `anchors` | `covered` id R (the covered head: a statement in the signer's own log, reachable from this line's `prev`) · `proof` digest R (the proof bytes, a blob) · `proof_format` string R (a registered proof format; `ots-detached-v1`, the OpenTimestamps detached proof profiled by the Bitcoin-time note, is the only one today; an unknown value leaves the anchor `unsupported`, granting nothing) · `services` list of string O (RFC 3986 URIs of the timestamping services the author submitted to, for OpenTimestamps its calendars; informational, never dereferenced by a reader). What a proof format stamps is the raw 32 bytes of `covered`. A `covered` outside the signer's log is malformed; there is no quality field (a quality is what the reader verified) |
 | `genesis` | `type` `"collection"`/`"task"`/`"series"` R · `name` string R · `controllers` list of key R (set) · `rule` object R (`any_one` true, or `k_of_n` {`k` integer}) · `forked_from` id O |
 | `edition` | `resource` id R · `predecessors` list of id R (set; the genesis id for the first edition; several for a merge) · `contents` object R (`members` list of {`content` or `resource` or `statement`, `role` string} O, `schema` digest O, `rules` list of {`dialect` string, `expr` string} O, `contract` object O, `selection` `"curated"`/`"rule-based"`/`"completeness"` O, `frozen_before` object O (exactly one of `date` date, `height` integer, `run` string: the same units as `finality.state_at_capture`, so the declared boundary is compared with the boundary the members' finality rules compute in the same unit, and a declared unit different from the computed one is `not comparable`, never converted), `controllers` and `rule` O for a controller change) |
 | `intent` · `progress` · `withdraw` · `submit` · `decide` | all: `task` id R · `edition` id R. `submit`: `result` digest R, `salt` string O, `self_declared_independence` boolean O. `decide`: `submissions` list of id R, `verdict` `"accept"`/`"reject"` R, `evaluations` list of digest O, `supersedes` id O. `progress`: `note` string O |
@@ -395,6 +399,22 @@ this table fixes only names, types and presence.
 - **Format tag.** `rc/<major>`. A reader implements one major. A statement with another major is
   `unsupported` in the same way: retained, chained, never evaluated, never an error on `pull`. A statement
   with a malformed `rc` (not `rc/` + positive integer) is intrinsic malformed.
+- **Linkage contract (every major).** These never change with the major version, so a reader of one major
+  places and chains the statements of any other:
+  1. the id is `sha256` of the DSSE PAE string (§2, §3), with payload type
+     `application/vnd.research-commons.<kind>.v<major>+json`;
+  2. the signed body is the RFC 8785 canonical envelope without `sig`;
+  3. `signer`, `seq`, `prev` and `merges` keep their names, types and meaning (§2, §7), and the ownership rule
+     (§7) applies to them.
+
+  A reader computes the id of a statement in another major from those rules, places it in the signer's log
+  by `seq`, `prev` and `merges`, and evaluates nothing else about it: its signature is not checked (the
+  `alg` set may differ), so it is `unsupported` and attributed to nobody, and it is placed exactly as an
+  unknown-`alg` line is, when a verified line of the same key names it (§4). The payload type names the major, so ids from two majors never collide. A
+  key's log continues across a major: its first line in the new major names its last line in the old one in
+  `prev`. Everything else in the envelope and every body may change in a new major. A change to anything in
+  this list is not a major bump but a new format: a new log per key, linked from the old log by a signed
+  pointer, as a key rotation is.
 - **Minor changes** (new optional field, new `alg`, new kind) do not bump the major, and never reinterpret
   existing signed bytes. A change that would (a required field added, a type changed, a kind's meaning
   changed) bumps the major, which changes every payload type and so every id.
@@ -442,7 +462,7 @@ line contract.
   - once the gap fills, the line is evaluated like any other; nothing about it was decided while it waited.
   (C-core-143.)
 - **Ordering.** The log's order is `seq`, never file order or `ts`. Duplicates by id are dropped on write.
-- **Anchors** bound only the signer's own prefix up to `head` (C-btc-04); an `anchors` whose `head` is not in
+- **Anchors** bound only the signer's own prefix up to `covered` (C-btc-04); an `anchors` whose `covered` is not in
   the signer's log is malformed.
 
 ## 8. Content hashing
@@ -460,9 +480,9 @@ digest is the name the blob has in an OCI blob tree (`blobs/sha256/<hex>`, stora
 live outside this format, in registries, archives and other stores, where a second algorithm for the same
 bytes is ordinary; the prefix says how to check it, and a future algorithm is a new prefix (a minor change,
 §6). A statement id is the digest of a signed string whose payload type already names the format version
-(§2), and `prev` must equal exactly the id the signer computed. Its algorithm is fixed by the major version,
-and changing it changes every id regardless, so a prefix would be a second place to declare the algorithm
-that could only ever disagree with the first.
+(§2), and `prev` must equal exactly the id the signer computed. Its algorithm is fixed for every major by the
+linkage contract (§6), and changing it would change every id regardless, so a prefix would be a second place to
+declare the algorithm that could only ever disagree with the first.
 
 ## 9. Test vectors
 
@@ -613,19 +633,20 @@ Under the 2-of-2 rule this edition is one approval and is not yet the tip (C-cor
 ```text
 NOTE: '\' line wrapping per RFC 8792
 
-signed string, 486 bytes:
-DSSEv1 48 application/vnd.research-commons.anchors.v1+json 423 {"alg":"eip191-secp256k1","body":{"he\
-ad":"d2f0f88c80d213380013db13143f426c237ff963bad37e6e1727fc88d17a18a6","head_seq":5,"proof":{"digest\
-":"sha256:d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0","scheme":"ots"}},"kind":\
-"anchors","prev":"d2f0f88c80d213380013db13143f426c237ff963bad37e6e1727fc88d17a18a6","rc":"rc/1","seq\
-":6,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:10:00Z"}
-id:  a42057d247e4a50abcc008f3a14cdca2b882c8eb5f03dd53338fc0fd7b8023a2
-sig: 0x5580595cdc359e5d64975aa8145a2e2361d77f9f2b4a0c5eca1ed57a6eac31947348\
-     40acc20ce2b276314c1e049cd33884de8f3fa3f557372d402f1862c45aa21c
+signed string, 532 bytes:
+DSSEv1 48 application/vnd.research-commons.anchors.v1+json 469 {"alg":"eip191-secp256k1","body":{"co\
+vered":"d2f0f88c80d213380013db13143f426c237ff963bad37e6e1727fc88d17a18a6","proof":"sha256:d0d0d0d0d0\
+d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0","proof_format":"ots-detached-v1","services":\
+["https://a.pool.opentimestamps.org"]},"kind":"anchors","prev":"d2f0f88c80d213380013db13143f426c237f\
+f963bad37e6e1727fc88d17a18a6","rc":"rc/1","seq":6,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e\
+7a","ts":"2026-10-12T20:10:00Z"}
+id:  8f9e56970d8b98dee6d8b6bef13adef9d76730eb495fb76b20e211ee1aded085
+sig: 0xdb3974fb393635ee2b3442188405e943ccd9e92541424e3f7b875ee31f56ee5f2314\
+     51eeb5f2378ff1a729532d04aa7bd1a0b99b6a88b533d811f74716fd986c1b
 ```
 
-The proof bytes are a separate blob; this statement binds the log prefix through `seq` 5 to them. Quality is
-whatever the reader verifies, never a label here (C-core-107).
+The proof bytes are a separate blob; this statement binds the log prefix through `seq` 5 (the covered head,
+V6) to them. Quality is whatever the reader verifies, never a label here (C-core-107).
 
 **V8 authored with an unknown extension and a `crit` member**
 
@@ -636,11 +657,11 @@ signed string, 487 bytes:
 DSSEv1 49 application/vnd.research-commons.authored.v1+json 423 {"alg":"eip191-secp256k1","body":{"c\
 ontent":{"digest":"sha256:e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1","size":1\
 0},"type":"report","x_escrow":{"until":"2027-01-01"},"x_note":"ignored"},"crit":["x_escrow"],"kind":\
-"authored","prev":"a42057d247e4a50abcc008f3a14cdca2b882c8eb5f03dd53338fc0fd7b8023a2","rc":"rc/1","se\
+"authored","prev":"8f9e56970d8b98dee6d8b6bef13adef9d76730eb495fb76b20e211ee1aded085","rc":"rc/1","se\
 q":7,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:11:00Z"}
-id:  c61a26d775bea90d0a9fc4ff8cbee1814d0df4231476b999807bbb15783f1ffe
-sig: 0x4b5e370c444e37468d269a15f129c831d5ef531c2ac3b7342663e2aafd60954f46b1\
-     4af3b1eeeb5c9f528082861d8485f343f88ec57b20deb48c9bb945fec0b41c
+id:  b95979911cb863cb79cc9c71a924d11a29e573eb0fb4a5b204fd2573742fa1ae
+sig: 0x687393f3b50204961e1ea30352bcefc102e51256dc2196853af8105f13217808384e\
+     42af135ff955c91d75f5b500ef1763cedbaeab29b6b9c78cc7d8845e74201b
 ```
 
 A reader without `x_escrow` retains this as `unsupported`; `x_note` alone would be retained and ignored. The
@@ -656,12 +677,12 @@ DSSEv1 49 application/vnd.research-commons.observed.v1+json 599 {"alg":"eip191-s
 apture":{"at":"2026-10-12T20:11:58.25Z","evidence":"self-asserted","instrument":"daq-7"},"class":"ph\
 enomenon","content":{"digest":"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c\
 3c","size":2048},"referent":{"at":"2026-10-12T20:12:35.000000012","instrument":"daq-7","location":"g\
-eo:39.7392,-104.9903,1609;u=5","place":"bench-3","timescale":"TAI"}},"kind":"observed","prev":"c61a2\
-6d775bea90d0a9fc4ff8cbee1814d0df4231476b999807bbb15783f1ffe","rc":"rc/1","seq":8,"signer":"0xf71e7c9\
+eo:39.7392,-104.9903,1609;u=5","place":"bench-3","timescale":"TAI"}},"kind":"observed","prev":"b9597\
+9911cb863cb79cc9c71a924d11a29e573eb0fb4a5b204fd2573742fa1ae","rc":"rc/1","seq":8,"signer":"0xf71e7c9\
 cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:12:00Z"}
-id:  4e40b242c22abd1e25dd66d1b597740a570684b5303f21505cfe2f3970dfd5d1
-sig: 0x450cb66ec3ea92322f88f85988a38ef4c743118712d71e9bf1b43017e705ce4f232a\
-     3bc088041f87b6d2541fa2ed14278c31b1ec700b91ed8f0c271817e671071b
+id:  b606fd96f5f4508df56f351be6a05540bedffd9a01d018d54bd645046e324330
+sig: 0x926abf9ac3875377442885c55f9179b29adc911bf53abb83eb7e3ad8ac8a1379085b\
+     049f37af9fb00c7bd1103099017fb0c8b66632ad22cc1dde9e849c5c8a771b
 ```
 
 `capture.at` carries a fraction of two digits and the referent `at` one of nine; neither has trailing zeros.
@@ -675,12 +696,12 @@ NOTE: '\' line wrapping per RFC 8792
 signed string, 443 bytes:
 DSSEv1 50 application/vnd.research-commons.describes.v1+json 378 {"alg":"eip191-secp256k1","body":{"\
 about":{"content":"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c"},"tags":\
-["sort-order"],"x_😀":"astral","x_ｱ":"bmp"},"kind":"describes","prev":"4e40b242c22abd1e25dd66d1b59774\
-0a570684b5303f21505cfe2f3970dfd5d1","rc":"rc/1","seq":9,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1\
+["sort-order"],"x_😀":"astral","x_ｱ":"bmp"},"kind":"describes","prev":"b606fd96f5f4508df56f351be6a055\
+40bedffd9a01d018d54bd645046e324330","rc":"rc/1","seq":9,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1\
 c4750e7a","ts":"2026-10-12T20:13:00Z"}
-id:  2934ba2da8ee5063fc90663df62c42ff1d199ffee0c736ce30c4228099285464
-sig: 0x5d68a05e1073f87eb2f44d5efe67f246ba7502b071183dbee8d061ffd672178874e4\
-     48c0ae2a1e3425c427891e523ddf51a2ef46d9b6ce388209d892ffe296771b
+id:  3e794363cea65559d06dcd3284f6485862a7b55ba076623e39677400167654c5
+sig: 0x6c780edfda9127556610c1520a02c6ca840e87a428801640069c1f82f1ba07861dc6\
+     16efe534d9fee5d6fd2018da3a7257f854462a25196e1d537addfcda510b1b
 ```
 
 The two extension keys are `x_` + U+1F600 and `x_` + U+FF71. RFC 8785 compares UTF-16 code units, where
@@ -696,12 +717,12 @@ signed string, 504 bytes:
 DSSEv1 46 application/vnd.research-commons.holds.v1+json 443 {"alg":"eip191-secp256k1","body":{"cont\
 ent":{"digest":"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c","size":2048\
 },"locations":["https://mirror.example/blobs/3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3\
-c3c3c3c3c"]},"kind":"holds","prev":"4e40b242c22abd1e25dd66d1b597740a570684b5303f21505cfe2f3970dfd5d1\
+c3c3c3c3c"]},"kind":"holds","prev":"b606fd96f5f4508df56f351be6a05540bedffd9a01d018d54bd645046e324330\
 ","rc":"rc/1","seq":9,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:13:0\
 0Z"}
-id:  5f41645385d09db842d8dd895befbb9b572b04eda8f94eac2aa595ca3a4cfa95
-sig: 0xaf1113fa024caf714eb1b5a305aae01b5c17a3007bc61da4ec9a6fcb1bddd69f5146\
-     34c878fa9bd5d4f1bd201ce4e3b5bc5578a7237a1ff07b4cec1da31334d91c
+id:  756bfd0c8ee8ad6957b0339c98518e6a29a4e011bbae5e143e02f7cd110f6b6d
+sig: 0x8712c663ad1f37b558694f652d9f0cf0053174452a43bf5fd4e4a7bf5a6e2c99426c\
+     78e580479eeb8d20836cb2cd4129810e1c1b4d15905cbbea3522a1110d741b
 ```
 
 **V12 describes (`merges`: clears the fork; `prev` = V10, `merges` = [V11])**
@@ -712,12 +733,12 @@ NOTE: '\' line wrapping per RFC 8792
 signed string, 492 bytes:
 DSSEv1 50 application/vnd.research-commons.describes.v1+json 427 {"alg":"eip191-secp256k1","body":{"\
 about":{"content":"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c"},"tags":\
-["fork-cleared"]},"kind":"describes","merges":["5f41645385d09db842d8dd895befbb9b572b04eda8f94eac2aa5\
-95ca3a4cfa95"],"prev":"2934ba2da8ee5063fc90663df62c42ff1d199ffee0c736ce30c4228099285464","rc":"rc/1"\
+["fork-cleared"]},"kind":"describes","merges":["756bfd0c8ee8ad6957b0339c98518e6a29a4e011bbae5e143e02\
+f7cd110f6b6d"],"prev":"3e794363cea65559d06dcd3284f6485862a7b55ba076623e39677400167654c5","rc":"rc/1"\
 ,"seq":10,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:14:00Z"}
-id:  d392b1a8ccf1863fdeb7e31f8eb0d0aca3e6edffbe275a5513d2523d847d142c
-sig: 0xcd5d92c076353d07099b2c60b01d0d5c399c174eccafe1f9876e3e0336e3fb402319\
-     7c9832280d39ff26dd24edf0f2610c04009d581332daabd141892ffe37a41c
+id:  8c68d874259e25737e7e663a8662e0cc8dc24427816af268734f8657b8064a42
+sig: 0x36eeea0d8ec6d36858a0a02dbec526ddacc28f1329df22256134c524f402d10312db\
+     baf7b6549a4e303a5cf1d9566b4798fc1d7254bf0a989b311f1f35ac6aa61b
 ```
 
 **Ed25519 vectors.** A second log, signed by a second disposable public key: seed = sha256 of
@@ -769,12 +790,12 @@ signature.
 | N5 wrong log | delivered bytes sha256 `55ef02a7ae948502be825541bae493bc0a546bd457d050f1dae7b465f8ea863f` (777 bytes), into the log named for `0xabababababababababababababababababababab` | intrinsic: line in another key's log |
 | N6 tag mismatch | signed string sha256 `d5d7bd2dbf3fcadcb02e23e6e356740a33ae2bdbeb28e6d01daabc6cf6834397` with the `sig` given | intrinsic: bad signature (recovers a different address) |
 | N7 flipped byte | signed string sha256 `4e299d080ecd89751f650cfe6263256c578051622b4e10dcb7a6a3a7b80d545e` with the `sig` given | intrinsic: bad signature; no field displayed as the signer's (C-core-09) |
-| N8 trailing zero | signed string sha256 `4d8720a696c1bb8f52f5cc650be75bdf6c28a378ab0d32d68a1f1c6c022b19c3` with the `sig` given | intrinsic: malformed statement (non-canonical time) |
-| N9 ten fraction digits | signed string sha256 `2bf4f4130e2700fcf509d6fac22428876294a6e8a848aa2853304499afe2ec49` with the `sig` given | intrinsic: malformed statement (non-canonical time) |
-| N10 numeric offset | signed string sha256 `152b2ba31a8c90d9e3f2c3a3e316f61db3bf9fde9cd1c1916e723a184fe61a2f` with the `sig` given | intrinsic: malformed statement (non-canonical time) |
-| N11 code-point key order | signed string sha256 `92c867bb561894f8c0b9ae88c12bf6015140a941a5ee41eae7244d373918d806` with the `sig` given | intrinsic: bad signature (the reader's JCS form of the envelope is V10's string, which this signature does not cover) |
-| N12 leap second outside UTC | signed string sha256 `d90c0da150951419e1211482c1fd699bda3b6e72ba3dd14611790363521a617a` with the `sig` given | intrinsic: malformed statement (second 60 outside UTC) |
-| N13 Z on a TAI time | signed string sha256 `42e1050c97c7c95c5b09aec9e9085204daed3f27fcd9d3b50b1e3b4839420b85` with the `sig` given | intrinsic: malformed statement (Z asserts UTC; the referent names TAI) |
+| N8 trailing zero | signed string sha256 `04e1cbedfb253857c93f54952b97b048d88560f952d39dec7c081561062f1bc5` with the `sig` given | intrinsic: malformed statement (non-canonical time) |
+| N9 ten fraction digits | signed string sha256 `519b3114e95c7bf9edffbb76c851ca58f0ed90f775857b6e36047853f331dd80` with the `sig` given | intrinsic: malformed statement (non-canonical time) |
+| N10 numeric offset | signed string sha256 `e269718bd8c970baa5bab7a201f835d21957617fdcf1e5c8c2b76b94fcb0fbdb` with the `sig` given | intrinsic: malformed statement (non-canonical time) |
+| N11 code-point key order | signed string sha256 `5322d633d95e186a2cadee9e25dce8eabc6131a63daf5c69ae17fda6b606dfcd` with the `sig` given | intrinsic: bad signature (the reader's JCS form of the envelope is V10's string, which this signature does not cover) |
+| N12 leap second outside UTC | signed string sha256 `d82077cc9db761ea0faf3f6b323e42de1c17bf4f4305eabbc122b51663eac510` with the `sig` given | intrinsic: malformed statement (second 60 outside UTC) |
+| N13 Z on a TAI time | signed string sha256 `7afd098707189e04fd5f83a481d866431c4681a1799a079fec52f015fecca675` with the `sig` given | intrinsic: malformed statement (Z asserts UTC; the referent names TAI) |
 | NE1–NE12 Ed25519 edge cases | the twelve `ed25519-speccheck` cases (small-order and mixed-order points, `S ≥ L`, non-canonical encodings), key, message and signature in the vectors file | intrinsic: bad signature; each refused by step 1 or 3 of the pinned rule (§4), as the file records |
 | NE13 alg / signer mismatch | E1 with `alg` `eip191-secp256k1`, signed by the Ed25519 key over that string; signed string sha256 `3f3015a8d6f763f449d9b7f306acff3a8bd5b3bfc610645b55577b8d6f98a5dc` | intrinsic: malformed statement (`alg` and `signer` disagree) |
 
@@ -845,6 +866,17 @@ as an optional field (a minor change, §6) modelled on RFC 9581 §3.5.4 and FITS
   "packages make no completeness claims" (claims-model note §11, C-core-01).
 - **Test vectors as data** (2026-10-14). The normative vectors live in a JSON file beside this note
   (`DESIGN-notes-wire-format.vectors.json`); the blocks in §9 are rendered from it.
+- **Ids and links across majors** (2026-10-16, review of #87). The id formula, the canonical signed body and
+  the link fields `signer`, `seq`, `prev`, `merges` are fixed for every major (§6, linkage contract), so a
+  reader chains through statements of a major it does not implement. Chosen over a new log per key at every
+  major, which would leave old readers nothing linking a key's two logs. No catch-all metadata field: unknown
+  envelope and body fields are already retained and signed (§6), and `crit` covers the ones a reader must not
+  ignore.
+- **`anchors` is format-neutral** (2026-10-16, review of #89). `covered`, `proof`, `proof_format`, `services`
+  (§5); the Bitcoin-time note profiles `ots-detached-v1`, and another timestamping service is a new
+  `proof_format` with its own note and its own quality, never `bitcoin`. Dropped from the first draft: `head_seq`
+  (derivable), `quality_claimed` (a claim grants nothing), and the Bitcoin-time draft's `stamped_digest`
+  (always the raw bytes of `covered`, so it could only ever disagree).
 
 **Open.**
 
