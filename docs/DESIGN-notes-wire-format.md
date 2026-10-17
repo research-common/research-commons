@@ -574,13 +574,13 @@ NOTE: '\' line wrapping per RFC 8792
 
 signed string, 469 bytes:
 DSSEv1 48 application/vnd.research-commons.genesis.v1+json 406 {"alg":"eip191-secp256k1","body":{"co\
-ntrollers":["0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","0xabababababababababababababababababababab\
+ntrollers":["0xabababababababababababababababababababab","0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\
 "],"name":"station-readings","rule":{"k_of_n":{"k":2}},"type":"collection"},"kind":"genesis","prev":\
 "a79e1a3ac6af2c09a65796aea07860c06045d5945c7a75a82c8d3e9d8b4e41b1","rc":"rc/1","seq":4,"signer":"0xf\
 71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:08:00Z"}
-id:  864c74292cac8b3ffb123c739ab210f3374b4731f2d9343eb2aa189c5fba827f
-sig: 0xcfb40d5361f421448eb71bf02f0689838ce245f1153adb350978a2c1d5d9d3e47ccf\
-     8a5f6903539877eaa65feaf9a5addc7bfb43e7c5191929821518117c26731b
+id:  9503bbd1fa92407b021011915c5da74a09594ce8186970cf92df3931f502d8b9
+sig: 0xfbb1de8a7df20fa6b39a0e422d68cc4eeb8d457bc3c6840da28487e4d84826746807\
+     6e661869a506d4d44e4cb9b2ade2a0d2a17ff33f7c5d9bb713a4c109ae841c
 ```
 
 The resource id is this statement's id (C-core-77). `controllers` is a set, sorted by the key order of §1.
@@ -594,14 +594,14 @@ signed string, 705 bytes:
 DSSEv1 48 application/vnd.research-commons.edition.v1+json 642 {"alg":"eip191-secp256k1","body":{"co\
 ntents":{"frozen_before":{"date":"2026-09-01"},"members":[{"content":"sha256:7a7a7a7a7a7a7a7a7a7a7a7\
 a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a","role":"segment"}],"rules":[{"dialect":"rc-rules/1","expr\
-":"sampling.n >= 30"}],"selection":"rule-based"},"predecessors":["864c74292cac8b3ffb123c739ab210f337\
-4b4731f2d9343eb2aa189c5fba827f"],"resource":"864c74292cac8b3ffb123c739ab210f3374b4731f2d9343eb2aa189\
-c5fba827f"},"kind":"edition","prev":"864c74292cac8b3ffb123c739ab210f3374b4731f2d9343eb2aa189c5fba827\
-f","rc":"rc/1","seq":5,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:09:\
+":"sampling.n >= 30"}],"selection":"rule-based"},"predecessors":["9503bbd1fa92407b021011915c5da74a09\
+594ce8186970cf92df3931f502d8b9"],"resource":"9503bbd1fa92407b021011915c5da74a09594ce8186970cf92df393\
+1f502d8b9"},"kind":"edition","prev":"9503bbd1fa92407b021011915c5da74a09594ce8186970cf92df3931f502d8b\
+9","rc":"rc/1","seq":5,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:09:\
 00Z"}
-id:  de91bae32078c52cd55500b21ddaeadb7915bbdafe9f8d60059e47d56c570c30
-sig: 0x3d9119a04c479deb2acde04d214f2b5831071283aff46e7bfc49eb7ce9559e3832d5\
-     7f3b1184bd4f6ca27f8bb1bb589c41d7d5f8a6e603b7c41d0a2c4228cdc21c
+id:  d2f0f88c80d213380013db13143f426c237ff963bad37e6e1727fc88d17a18a6
+sig: 0xd61de142c5e72aef3bb6883fb6816739e8f8aecab7f31212efaa1caa8d330db16b5c\
+     cc869c8dcf7ff83a960ebe28000d1291e59dfa9827bfa5cfdcd7cdc361311c
 ```
 
 Under the 2-of-2 rule this edition is one approval and is not yet the tip (C-core-82).
@@ -613,13 +613,13 @@ NOTE: '\' line wrapping per RFC 8792
 
 signed string, 486 bytes:
 DSSEv1 48 application/vnd.research-commons.anchors.v1+json 423 {"alg":"eip191-secp256k1","body":{"he\
-ad":"de91bae32078c52cd55500b21ddaeadb7915bbdafe9f8d60059e47d56c570c30","head_seq":5,"proof":{"digest\
+ad":"d2f0f88c80d213380013db13143f426c237ff963bad37e6e1727fc88d17a18a6","head_seq":5,"proof":{"digest\
 ":"sha256:d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0","scheme":"ots"}},"kind":\
-"anchors","prev":"de91bae32078c52cd55500b21ddaeadb7915bbdafe9f8d60059e47d56c570c30","rc":"rc/1","seq\
+"anchors","prev":"d2f0f88c80d213380013db13143f426c237ff963bad37e6e1727fc88d17a18a6","rc":"rc/1","seq\
 ":6,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:10:00Z"}
-id:  fc2aa53bff0006025c05d4bdb826a1a79e7cdf59149fdeeefe022e176640e80d
-sig: 0x48daaf1615853bcd7943e493372193938e4c36f7cd93b3ee6a98ae2dbb8553ba4240\
-     dc1cac7501209a0a48fa00cdcf1d2cb8a669052e0fa12fc3eb3f6b64bb181b
+id:  a42057d247e4a50abcc008f3a14cdca2b882c8eb5f03dd53338fc0fd7b8023a2
+sig: 0x5580595cdc359e5d64975aa8145a2e2361d77f9f2b4a0c5eca1ed57a6eac31947348\
+     40acc20ce2b276314c1e049cd33884de8f3fa3f557372d402f1862c45aa21c
 ```
 
 The proof bytes are a separate blob; this statement binds the log prefix through `seq` 5 to them. Quality is
@@ -634,11 +634,11 @@ signed string, 487 bytes:
 DSSEv1 49 application/vnd.research-commons.authored.v1+json 423 {"alg":"eip191-secp256k1","body":{"c\
 ontent":{"digest":"sha256:e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1","size":1\
 0},"type":"report","x_escrow":{"until":"2027-01-01"},"x_note":"ignored"},"crit":["x_escrow"],"kind":\
-"authored","prev":"fc2aa53bff0006025c05d4bdb826a1a79e7cdf59149fdeeefe022e176640e80d","rc":"rc/1","se\
+"authored","prev":"a42057d247e4a50abcc008f3a14cdca2b882c8eb5f03dd53338fc0fd7b8023a2","rc":"rc/1","se\
 q":7,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:11:00Z"}
-id:  97296c2e5e1cc833943b702f067da29544ef03ae09af906e15ba733d8764398f
-sig: 0x69a2188be2a7b21a9496f20fc67c54f6bde600fa0a72e0f273344be57891ef127957\
-     c36ccacb466154cea9be7415c09bf9b2909da7bb00118029c906d2982e271c
+id:  c61a26d775bea90d0a9fc4ff8cbee1814d0df4231476b999807bbb15783f1ffe
+sig: 0x4b5e370c444e37468d269a15f129c831d5ef531c2ac3b7342663e2aafd60954f46b1\
+     4af3b1eeeb5c9f528082861d8485f343f88ec57b20deb48c9bb945fec0b41c
 ```
 
 A reader without `x_escrow` retains this as `unsupported`; `x_note` alone would be retained and ignored. The
@@ -654,12 +654,12 @@ DSSEv1 49 application/vnd.research-commons.observed.v1+json 599 {"alg":"eip191-s
 apture":{"at":"2026-10-12T20:11:58.25Z","evidence":"self-asserted","instrument":"daq-7"},"class":"ph\
 enomenon","content":{"digest":"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c\
 3c","size":2048},"referent":{"at":"2026-10-12T20:12:35.000000012","instrument":"daq-7","location":"g\
-eo:39.7392,-104.9903,1609;u=5","place":"bench-3","timescale":"TAI"}},"kind":"observed","prev":"97296\
-c2e5e1cc833943b702f067da29544ef03ae09af906e15ba733d8764398f","rc":"rc/1","seq":8,"signer":"0xf71e7c9\
+eo:39.7392,-104.9903,1609;u=5","place":"bench-3","timescale":"TAI"}},"kind":"observed","prev":"c61a2\
+6d775bea90d0a9fc4ff8cbee1814d0df4231476b999807bbb15783f1ffe","rc":"rc/1","seq":8,"signer":"0xf71e7c9\
 cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:12:00Z"}
-id:  b0d5761fc890ed6ea143f1e29e9d8debe77ed7bc19f38cde6fd494da0022b203
-sig: 0x3c21dbb37d0c6983353d48a176ca6349b872b59f229bae63fe936e9f7eae0eac2efe\
-     c84e8566142c8a16683665f50f5c6dc97aea61cec052490e797bc2d13c631b
+id:  4e40b242c22abd1e25dd66d1b597740a570684b5303f21505cfe2f3970dfd5d1
+sig: 0x450cb66ec3ea92322f88f85988a38ef4c743118712d71e9bf1b43017e705ce4f232a\
+     3bc088041f87b6d2541fa2ed14278c31b1ec700b91ed8f0c271817e671071b
 ```
 
 `capture.at` carries a fraction of two digits and the referent `at` one of nine; neither has trailing zeros.
@@ -673,12 +673,12 @@ NOTE: '\' line wrapping per RFC 8792
 signed string, 443 bytes:
 DSSEv1 50 application/vnd.research-commons.describes.v1+json 378 {"alg":"eip191-secp256k1","body":{"\
 about":{"content":"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c"},"tags":\
-["sort-order"],"x_😀":"astral","x_ｱ":"bmp"},"kind":"describes","prev":"b0d5761fc890ed6ea143f1e29e9d8d\
-ebe77ed7bc19f38cde6fd494da0022b203","rc":"rc/1","seq":9,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1\
+["sort-order"],"x_😀":"astral","x_ｱ":"bmp"},"kind":"describes","prev":"4e40b242c22abd1e25dd66d1b59774\
+0a570684b5303f21505cfe2f3970dfd5d1","rc":"rc/1","seq":9,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1\
 c4750e7a","ts":"2026-10-12T20:13:00Z"}
-id:  5e80f25a49fa7cc73f0a5f2eef185bfccd9d61da3acc8c0da5f798dcc5ccb944
-sig: 0xe9d01a5ac5bfd66c6116265d86c71eadef5fdcd03aacd6509948bb51a01b6c7d1208\
-     bd4cb64f422a6e85292df673f3d62451d7ce7f2ca0d697ae98bf9d589b301b
+id:  2934ba2da8ee5063fc90663df62c42ff1d199ffee0c736ce30c4228099285464
+sig: 0x5d68a05e1073f87eb2f44d5efe67f246ba7502b071183dbee8d061ffd672178874e4\
+     48c0ae2a1e3425c427891e523ddf51a2ef46d9b6ce388209d892ffe296771b
 ```
 
 The two extension keys are `x_` + U+1F600 and `x_` + U+FF71. RFC 8785 compares UTF-16 code units, where
@@ -694,12 +694,12 @@ signed string, 504 bytes:
 DSSEv1 46 application/vnd.research-commons.holds.v1+json 443 {"alg":"eip191-secp256k1","body":{"cont\
 ent":{"digest":"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c","size":2048\
 },"locations":["https://mirror.example/blobs/3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3\
-c3c3c3c3c"]},"kind":"holds","prev":"b0d5761fc890ed6ea143f1e29e9d8debe77ed7bc19f38cde6fd494da0022b203\
+c3c3c3c3c"]},"kind":"holds","prev":"4e40b242c22abd1e25dd66d1b597740a570684b5303f21505cfe2f3970dfd5d1\
 ","rc":"rc/1","seq":9,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:13:0\
 0Z"}
-id:  93fe6f768c4188c40a706089d82c5fd29711b9b1e1dfb32d4eaec7b29d561e8d
-sig: 0x40f5612de57ee0a66517000991a358b3b1ccde59eb378a3edc8c9a1393e49df44010\
-     fe83e9ade231a9784f2a207fa303530e842f2826412eb134841c23ce89421c
+id:  5f41645385d09db842d8dd895befbb9b572b04eda8f94eac2aa595ca3a4cfa95
+sig: 0xaf1113fa024caf714eb1b5a305aae01b5c17a3007bc61da4ec9a6fcb1bddd69f5146\
+     34c878fa9bd5d4f1bd201ce4e3b5bc5578a7237a1ff07b4cec1da31334d91c
 ```
 
 **V12 describes (`merges`: clears the fork; `prev` = V10, `merges` = [V11])**
@@ -710,12 +710,12 @@ NOTE: '\' line wrapping per RFC 8792
 signed string, 492 bytes:
 DSSEv1 50 application/vnd.research-commons.describes.v1+json 427 {"alg":"eip191-secp256k1","body":{"\
 about":{"content":"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c"},"tags":\
-["fork-cleared"]},"kind":"describes","merges":["93fe6f768c4188c40a706089d82c5fd29711b9b1e1dfb32d4eae\
-c7b29d561e8d"],"prev":"5e80f25a49fa7cc73f0a5f2eef185bfccd9d61da3acc8c0da5f798dcc5ccb944","rc":"rc/1"\
+["fork-cleared"]},"kind":"describes","merges":["5f41645385d09db842d8dd895befbb9b572b04eda8f94eac2aa5\
+95ca3a4cfa95"],"prev":"2934ba2da8ee5063fc90663df62c42ff1d199ffee0c736ce30c4228099285464","rc":"rc/1"\
 ,"seq":10,"signer":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a","ts":"2026-10-12T20:14:00Z"}
-id:  63dcdd4efdc8b8b1ae8633d4fa5cce0ab12df3f408b4ac5676f61b7bd2095411
-sig: 0x9d9fa533baaa9eee03568acec9ab3d9a10fb22a9a765e5a215fe34543dee3f142f9a\
-     f6767f0fced279b2ebe8f681b1f082d836379f7a972d4a9be99b8bd9219d1b
+id:  d392b1a8ccf1863fdeb7e31f8eb0d0aca3e6edffbe275a5513d2523d847d142c
+sig: 0xcd5d92c076353d07099b2c60b01d0d5c399c174eccafe1f9876e3e0336e3fb402319\
+     7c9832280d39ff26dd24edf0f2610c04009d581332daabd141892ffe37a41c
 ```
 
 **Ed25519 vectors.** A second log, signed by a second disposable public key: seed = sha256 of
@@ -767,12 +767,12 @@ signature.
 | N5 wrong log | delivered bytes sha256 `55ef02a7ae948502be825541bae493bc0a546bd457d050f1dae7b465f8ea863f` (777 bytes), into the log named for `0xabababababababababababababababababababab` | intrinsic: line in another key's log |
 | N6 tag mismatch | signed string sha256 `d5d7bd2dbf3fcadcb02e23e6e356740a33ae2bdbeb28e6d01daabc6cf6834397` with the `sig` given | intrinsic: bad signature (recovers a different address) |
 | N7 flipped byte | signed string sha256 `4e299d080ecd89751f650cfe6263256c578051622b4e10dcb7a6a3a7b80d545e` with the `sig` given | intrinsic: bad signature; no field displayed as the signer's (C-core-09) |
-| N8 trailing zero | signed string sha256 `4d64caf7249cf405d8641bc553a7d419da33fe2342c9750ce1475d423b4570d8` with the `sig` given | intrinsic: malformed statement (non-canonical time) |
-| N9 ten fraction digits | signed string sha256 `056ccd6fbbcaabedeac60c26980edee029801674415a19431b031860bfb4f0a5` with the `sig` given | intrinsic: malformed statement (non-canonical time) |
-| N10 numeric offset | signed string sha256 `123f27ab51b65021f429a39afd76b2e7ad3bbbd5c5ff9f481b3dfa723bd26e07` with the `sig` given | intrinsic: malformed statement (non-canonical time) |
-| N11 code-point key order | signed string sha256 `628c61bfb535cf4640c08404022f964dd70fc439b7cb8632289eeb487d2cc113` with the `sig` given | intrinsic: bad signature (the reader's JCS form of the envelope is V10's string, which this signature does not cover) |
-| N12 leap second outside UTC | signed string sha256 `173b5dfa6f76df98c6a9aad856340ade4dbd6803b5e19d466400557161ad5d77` with the `sig` given | intrinsic: malformed statement (second 60 outside UTC) |
-| N13 Z on a TAI time | signed string sha256 `3d9b0d38479c58a8a7b87042222a1dd9b5198803c40f0e30770336cbeeb50adf` with the `sig` given | intrinsic: malformed statement (Z asserts UTC; the referent names TAI) |
+| N8 trailing zero | signed string sha256 `4d8720a696c1bb8f52f5cc650be75bdf6c28a378ab0d32d68a1f1c6c022b19c3` with the `sig` given | intrinsic: malformed statement (non-canonical time) |
+| N9 ten fraction digits | signed string sha256 `2bf4f4130e2700fcf509d6fac22428876294a6e8a848aa2853304499afe2ec49` with the `sig` given | intrinsic: malformed statement (non-canonical time) |
+| N10 numeric offset | signed string sha256 `152b2ba31a8c90d9e3f2c3a3e316f61db3bf9fde9cd1c1916e723a184fe61a2f` with the `sig` given | intrinsic: malformed statement (non-canonical time) |
+| N11 code-point key order | signed string sha256 `92c867bb561894f8c0b9ae88c12bf6015140a941a5ee41eae7244d373918d806` with the `sig` given | intrinsic: bad signature (the reader's JCS form of the envelope is V10's string, which this signature does not cover) |
+| N12 leap second outside UTC | signed string sha256 `d90c0da150951419e1211482c1fd699bda3b6e72ba3dd14611790363521a617a` with the `sig` given | intrinsic: malformed statement (second 60 outside UTC) |
+| N13 Z on a TAI time | signed string sha256 `42e1050c97c7c95c5b09aec9e9085204daed3f27fcd9d3b50b1e3b4839420b85` with the `sig` given | intrinsic: malformed statement (Z asserts UTC; the referent names TAI) |
 | NE1–NE12 Ed25519 edge cases | the twelve `ed25519-speccheck` cases (small-order and mixed-order points, `S ≥ L`, non-canonical encodings), key, message and signature in the vectors file | intrinsic: bad signature; each refused by step 1 or 3 of the pinned rule (§4), as the file records |
 | NE13 alg / signer mismatch | E1 with `alg` `eip191-secp256k1`, signed by the Ed25519 key over that string; signed string sha256 `3f3015a8d6f763f449d9b7f306acff3a8bd5b3bfc610645b55577b8d6f98a5dc` | intrinsic: malformed statement (`alg` and `signer` disagree) |
 

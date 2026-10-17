@@ -36,59 +36,59 @@
   },
   {
    "name": "V5",
-   "signed_string": "DSSEv1 48 application/vnd.research-commons.genesis.v1+json 406 {\"alg\":\"eip191-secp256k1\",\"body\":{\"controllers\":[\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\",\"0xabababababababababababababababababababab\"],\"name\":\"station-readings\",\"rule\":{\"k_of_n\":{\"k\":2}},\"type\":\"collection\"},\"kind\":\"genesis\",\"prev\":\"a79e1a3ac6af2c09a65796aea07860c06045d5945c7a75a82c8d3e9d8b4e41b1\",\"rc\":\"rc/1\",\"seq\":4,\"signer\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\",\"ts\":\"2026-10-12T20:08:00Z\"}",
+   "signed_string": "DSSEv1 48 application/vnd.research-commons.genesis.v1+json 406 {\"alg\":\"eip191-secp256k1\",\"body\":{\"controllers\":[\"0xabababababababababababababababababababab\",\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\"],\"name\":\"station-readings\",\"rule\":{\"k_of_n\":{\"k\":2}},\"type\":\"collection\"},\"kind\":\"genesis\",\"prev\":\"a79e1a3ac6af2c09a65796aea07860c06045d5945c7a75a82c8d3e9d8b4e41b1\",\"rc\":\"rc/1\",\"seq\":4,\"signer\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\",\"ts\":\"2026-10-12T20:08:00Z\"}",
    "bytes": 469,
-   "id": "864c74292cac8b3ffb123c739ab210f3374b4731f2d9343eb2aa189c5fba827f",
-   "sig": "0xcfb40d5361f421448eb71bf02f0689838ce245f1153adb350978a2c1d5d9d3e47ccf8a5f6903539877eaa65feaf9a5addc7bfb43e7c5191929821518117c26731b"
+   "id": "9503bbd1fa92407b021011915c5da74a09594ce8186970cf92df3931f502d8b9",
+   "sig": "0xfbb1de8a7df20fa6b39a0e422d68cc4eeb8d457bc3c6840da28487e4d848267468076e661869a506d4d44e4cb9b2ade2a0d2a17ff33f7c5d9bb713a4c109ae841c"
   },
   {
    "name": "V6",
-   "signed_string": "DSSEv1 48 application/vnd.research-commons.edition.v1+json 642 {\"alg\":\"eip191-secp256k1\",\"body\":{\"contents\":{\"frozen_before\":{\"date\":\"2026-09-01\"},\"members\":[{\"content\":\"sha256:7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a\",\"role\":\"segment\"}],\"rules\":[{\"dialect\":\"rc-rules/1\",\"expr\":\"sampling.n >= 30\"}],\"selection\":\"rule-based\"},\"predecessors\":[\"864c74292cac8b3ffb123c739ab210f3374b4731f2d9343eb2aa189c5fba827f\"],\"resource\":\"864c74292cac8b3ffb123c739ab210f3374b4731f2d9343eb2aa189c5fba827f\"},\"kind\":\"edition\",\"prev\":\"864c74292cac8b3ffb123c739ab210f3374b4731f2d9343eb2aa189c5fba827f\",\"rc\":\"rc/1\",\"seq\":5,\"signer\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\",\"ts\":\"2026-10-12T20:09:00Z\"}",
+   "signed_string": "DSSEv1 48 application/vnd.research-commons.edition.v1+json 642 {\"alg\":\"eip191-secp256k1\",\"body\":{\"contents\":{\"frozen_before\":{\"date\":\"2026-09-01\"},\"members\":[{\"content\":\"sha256:7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a\",\"role\":\"segment\"}],\"rules\":[{\"dialect\":\"rc-rules/1\",\"expr\":\"sampling.n >= 30\"}],\"selection\":\"rule-based\"},\"predecessors\":[\"9503bbd1fa92407b021011915c5da74a09594ce8186970cf92df3931f502d8b9\"],\"resource\":\"9503bbd1fa92407b021011915c5da74a09594ce8186970cf92df3931f502d8b9\"},\"kind\":\"edition\",\"prev\":\"9503bbd1fa92407b021011915c5da74a09594ce8186970cf92df3931f502d8b9\",\"rc\":\"rc/1\",\"seq\":5,\"signer\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\",\"ts\":\"2026-10-12T20:09:00Z\"}",
    "bytes": 705,
-   "id": "de91bae32078c52cd55500b21ddaeadb7915bbdafe9f8d60059e47d56c570c30",
-   "sig": "0x3d9119a04c479deb2acde04d214f2b5831071283aff46e7bfc49eb7ce9559e3832d57f3b1184bd4f6ca27f8bb1bb589c41d7d5f8a6e603b7c41d0a2c4228cdc21c"
+   "id": "d2f0f88c80d213380013db13143f426c237ff963bad37e6e1727fc88d17a18a6",
+   "sig": "0xd61de142c5e72aef3bb6883fb6816739e8f8aecab7f31212efaa1caa8d330db16b5ccc869c8dcf7ff83a960ebe28000d1291e59dfa9827bfa5cfdcd7cdc361311c"
   },
   {
    "name": "V7",
-   "signed_string": "DSSEv1 48 application/vnd.research-commons.anchors.v1+json 423 {\"alg\":\"eip191-secp256k1\",\"body\":{\"head\":\"de91bae32078c52cd55500b21ddaeadb7915bbdafe9f8d60059e47d56c570c30\",\"head_seq\":5,\"proof\":{\"digest\":\"sha256:d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0\",\"scheme\":\"ots\"}},\"kind\":\"anchors\",\"prev\":\"de91bae32078c52cd55500b21ddaeadb7915bbdafe9f8d60059e47d56c570c30\",\"rc\":\"rc/1\",\"seq\":6,\"signer\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\",\"ts\":\"2026-10-12T20:10:00Z\"}",
+   "signed_string": "DSSEv1 48 application/vnd.research-commons.anchors.v1+json 423 {\"alg\":\"eip191-secp256k1\",\"body\":{\"head\":\"d2f0f88c80d213380013db13143f426c237ff963bad37e6e1727fc88d17a18a6\",\"head_seq\":5,\"proof\":{\"digest\":\"sha256:d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0\",\"scheme\":\"ots\"}},\"kind\":\"anchors\",\"prev\":\"d2f0f88c80d213380013db13143f426c237ff963bad37e6e1727fc88d17a18a6\",\"rc\":\"rc/1\",\"seq\":6,\"signer\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\",\"ts\":\"2026-10-12T20:10:00Z\"}",
    "bytes": 486,
-   "id": "fc2aa53bff0006025c05d4bdb826a1a79e7cdf59149fdeeefe022e176640e80d",
-   "sig": "0x48daaf1615853bcd7943e493372193938e4c36f7cd93b3ee6a98ae2dbb8553ba4240dc1cac7501209a0a48fa00cdcf1d2cb8a669052e0fa12fc3eb3f6b64bb181b"
+   "id": "a42057d247e4a50abcc008f3a14cdca2b882c8eb5f03dd53338fc0fd7b8023a2",
+   "sig": "0x5580595cdc359e5d64975aa8145a2e2361d77f9f2b4a0c5eca1ed57a6eac3194734840acc20ce2b276314c1e049cd33884de8f3fa3f557372d402f1862c45aa21c"
   },
   {
    "name": "V8",
-   "signed_string": "DSSEv1 49 application/vnd.research-commons.authored.v1+json 423 {\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1\",\"size\":10},\"type\":\"report\",\"x_escrow\":{\"until\":\"2027-01-01\"},\"x_note\":\"ignored\"},\"crit\":[\"x_escrow\"],\"kind\":\"authored\",\"prev\":\"fc2aa53bff0006025c05d4bdb826a1a79e7cdf59149fdeeefe022e176640e80d\",\"rc\":\"rc/1\",\"seq\":7,\"signer\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\",\"ts\":\"2026-10-12T20:11:00Z\"}",
+   "signed_string": "DSSEv1 49 application/vnd.research-commons.authored.v1+json 423 {\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1\",\"size\":10},\"type\":\"report\",\"x_escrow\":{\"until\":\"2027-01-01\"},\"x_note\":\"ignored\"},\"crit\":[\"x_escrow\"],\"kind\":\"authored\",\"prev\":\"a42057d247e4a50abcc008f3a14cdca2b882c8eb5f03dd53338fc0fd7b8023a2\",\"rc\":\"rc/1\",\"seq\":7,\"signer\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\",\"ts\":\"2026-10-12T20:11:00Z\"}",
    "bytes": 487,
-   "id": "97296c2e5e1cc833943b702f067da29544ef03ae09af906e15ba733d8764398f",
-   "sig": "0x69a2188be2a7b21a9496f20fc67c54f6bde600fa0a72e0f273344be57891ef127957c36ccacb466154cea9be7415c09bf9b2909da7bb00118029c906d2982e271c"
+   "id": "c61a26d775bea90d0a9fc4ff8cbee1814d0df4231476b999807bbb15783f1ffe",
+   "sig": "0x4b5e370c444e37468d269a15f129c831d5ef531c2ac3b7342663e2aafd60954f46b14af3b1eeeb5c9f528082861d8485f343f88ec57b20deb48c9bb945fec0b41c"
   },
   {
    "name": "V9",
-   "signed_string": "DSSEv1 49 application/vnd.research-commons.observed.v1+json 599 {\"alg\":\"eip191-secp256k1\",\"body\":{\"capture\":{\"at\":\"2026-10-12T20:11:58.25Z\",\"evidence\":\"self-asserted\",\"instrument\":\"daq-7\"},\"class\":\"phenomenon\",\"content\":{\"digest\":\"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c\",\"size\":2048},\"referent\":{\"at\":\"2026-10-12T20:12:35.000000012\",\"instrument\":\"daq-7\",\"location\":\"geo:39.7392,-104.9903,1609;u=5\",\"place\":\"bench-3\",\"timescale\":\"TAI\"}},\"kind\":\"observed\",\"prev\":\"97296c2e5e1cc833943b702f067da29544ef03ae09af906e15ba733d8764398f\",\"rc\":\"rc/1\",\"seq\":8,\"signer\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\",\"ts\":\"2026-10-12T20:12:00Z\"}",
+   "signed_string": "DSSEv1 49 application/vnd.research-commons.observed.v1+json 599 {\"alg\":\"eip191-secp256k1\",\"body\":{\"capture\":{\"at\":\"2026-10-12T20:11:58.25Z\",\"evidence\":\"self-asserted\",\"instrument\":\"daq-7\"},\"class\":\"phenomenon\",\"content\":{\"digest\":\"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c\",\"size\":2048},\"referent\":{\"at\":\"2026-10-12T20:12:35.000000012\",\"instrument\":\"daq-7\",\"location\":\"geo:39.7392,-104.9903,1609;u=5\",\"place\":\"bench-3\",\"timescale\":\"TAI\"}},\"kind\":\"observed\",\"prev\":\"c61a26d775bea90d0a9fc4ff8cbee1814d0df4231476b999807bbb15783f1ffe\",\"rc\":\"rc/1\",\"seq\":8,\"signer\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\",\"ts\":\"2026-10-12T20:12:00Z\"}",
    "bytes": 663,
-   "id": "b0d5761fc890ed6ea143f1e29e9d8debe77ed7bc19f38cde6fd494da0022b203",
-   "sig": "0x3c21dbb37d0c6983353d48a176ca6349b872b59f229bae63fe936e9f7eae0eac2efec84e8566142c8a16683665f50f5c6dc97aea61cec052490e797bc2d13c631b"
+   "id": "4e40b242c22abd1e25dd66d1b597740a570684b5303f21505cfe2f3970dfd5d1",
+   "sig": "0x450cb66ec3ea92322f88f85988a38ef4c743118712d71e9bf1b43017e705ce4f232a3bc088041f87b6d2541fa2ed14278c31b1ec700b91ed8f0c271817e671071b"
   },
   {
    "name": "V10",
-   "signed_string": "DSSEv1 50 application/vnd.research-commons.describes.v1+json 378 {\"alg\":\"eip191-secp256k1\",\"body\":{\"about\":{\"content\":\"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c\"},\"tags\":[\"sort-order\"],\"x_😀\":\"astral\",\"x_ｱ\":\"bmp\"},\"kind\":\"describes\",\"prev\":\"b0d5761fc890ed6ea143f1e29e9d8debe77ed7bc19f38cde6fd494da0022b203\",\"rc\":\"rc/1\",\"seq\":9,\"signer\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\",\"ts\":\"2026-10-12T20:13:00Z\"}",
+   "signed_string": "DSSEv1 50 application/vnd.research-commons.describes.v1+json 378 {\"alg\":\"eip191-secp256k1\",\"body\":{\"about\":{\"content\":\"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c\"},\"tags\":[\"sort-order\"],\"x_😀\":\"astral\",\"x_ｱ\":\"bmp\"},\"kind\":\"describes\",\"prev\":\"4e40b242c22abd1e25dd66d1b597740a570684b5303f21505cfe2f3970dfd5d1\",\"rc\":\"rc/1\",\"seq\":9,\"signer\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\",\"ts\":\"2026-10-12T20:13:00Z\"}",
    "bytes": 443,
-   "id": "5e80f25a49fa7cc73f0a5f2eef185bfccd9d61da3acc8c0da5f798dcc5ccb944",
-   "sig": "0xe9d01a5ac5bfd66c6116265d86c71eadef5fdcd03aacd6509948bb51a01b6c7d1208bd4cb64f422a6e85292df673f3d62451d7ce7f2ca0d697ae98bf9d589b301b"
+   "id": "2934ba2da8ee5063fc90663df62c42ff1d199ffee0c736ce30c4228099285464",
+   "sig": "0x5d68a05e1073f87eb2f44d5efe67f246ba7502b071183dbee8d061ffd672178874e448c0ae2a1e3425c427891e523ddf51a2ef46d9b6ce388209d892ffe296771b"
   },
   {
    "name": "V11",
-   "signed_string": "DSSEv1 46 application/vnd.research-commons.holds.v1+json 443 {\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c\",\"size\":2048},\"locations\":[\"https://mirror.example/blobs/3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c\"]},\"kind\":\"holds\",\"prev\":\"b0d5761fc890ed6ea143f1e29e9d8debe77ed7bc19f38cde6fd494da0022b203\",\"rc\":\"rc/1\",\"seq\":9,\"signer\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\",\"ts\":\"2026-10-12T20:13:00Z\"}",
+   "signed_string": "DSSEv1 46 application/vnd.research-commons.holds.v1+json 443 {\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c\",\"size\":2048},\"locations\":[\"https://mirror.example/blobs/3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c\"]},\"kind\":\"holds\",\"prev\":\"4e40b242c22abd1e25dd66d1b597740a570684b5303f21505cfe2f3970dfd5d1\",\"rc\":\"rc/1\",\"seq\":9,\"signer\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\",\"ts\":\"2026-10-12T20:13:00Z\"}",
    "bytes": 504,
-   "id": "93fe6f768c4188c40a706089d82c5fd29711b9b1e1dfb32d4eaec7b29d561e8d",
-   "sig": "0x40f5612de57ee0a66517000991a358b3b1ccde59eb378a3edc8c9a1393e49df44010fe83e9ade231a9784f2a207fa303530e842f2826412eb134841c23ce89421c"
+   "id": "5f41645385d09db842d8dd895befbb9b572b04eda8f94eac2aa595ca3a4cfa95",
+   "sig": "0xaf1113fa024caf714eb1b5a305aae01b5c17a3007bc61da4ec9a6fcb1bddd69f514634c878fa9bd5d4f1bd201ce4e3b5bc5578a7237a1ff07b4cec1da31334d91c"
   },
   {
    "name": "V12",
-   "signed_string": "DSSEv1 50 application/vnd.research-commons.describes.v1+json 427 {\"alg\":\"eip191-secp256k1\",\"body\":{\"about\":{\"content\":\"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c\"},\"tags\":[\"fork-cleared\"]},\"kind\":\"describes\",\"merges\":[\"93fe6f768c4188c40a706089d82c5fd29711b9b1e1dfb32d4eaec7b29d561e8d\"],\"prev\":\"5e80f25a49fa7cc73f0a5f2eef185bfccd9d61da3acc8c0da5f798dcc5ccb944\",\"rc\":\"rc/1\",\"seq\":10,\"signer\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\",\"ts\":\"2026-10-12T20:14:00Z\"}",
+   "signed_string": "DSSEv1 50 application/vnd.research-commons.describes.v1+json 427 {\"alg\":\"eip191-secp256k1\",\"body\":{\"about\":{\"content\":\"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c\"},\"tags\":[\"fork-cleared\"]},\"kind\":\"describes\",\"merges\":[\"5f41645385d09db842d8dd895befbb9b572b04eda8f94eac2aa595ca3a4cfa95\"],\"prev\":\"2934ba2da8ee5063fc90663df62c42ff1d199ffee0c736ce30c4228099285464\",\"rc\":\"rc/1\",\"seq\":10,\"signer\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\",\"ts\":\"2026-10-12T20:14:00Z\"}",
    "bytes": 492,
-   "id": "63dcdd4efdc8b8b1ae8633d4fa5cce0ab12df3f408b4ac5676f61b7bd2095411",
-   "sig": "0x9d9fa533baaa9eee03568acec9ab3d9a10fb22a9a765e5a215fe34543dee3f142f9af6767f0fced279b2ebe8f681b1f082d836379f7a972d4a9be99b8bd9219d1b"
+   "id": "d392b1a8ccf1863fdeb7e31f8eb0d0aca3e6edffbe275a5513d2523d847d142c",
+   "sig": "0xcd5d92c076353d07099b2c60b01d0d5c399c174eccafe1f9876e3e0336e3fb4023197c9832280d39ff26dd24edf0f2610c04009d581332daabd141892ffe37a41c"
   }
  ],
  "equivalent_encodings": {
@@ -163,8 +163,8 @@
    "title": "trailing zero",
    "expect": "intrinsic: malformed statement (non-canonical time)",
    "verify": {
-    "signed_string": "DSSEv1 49 application/vnd.research-commons.observed.v1+json 599 {\"alg\":\"eip191-secp256k1\",\"body\":{\"capture\":{\"at\":\"2026-10-12T20:11:58.250Z\",\"evidence\":\"self-asserted\",\"instrument\":\"daq-7\"},\"class\":\"phenomenon\",\"content\":{\"digest\":\"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c\",\"size\":2048},\"referent\":{\"at\":\"2026-10-12T20:12:35.000000012\",\"instrument\":\"daq-7\",\"location\":\"geo:39.7392,-104.9903,1609;u=5\",\"place\":\"bench-3\",\"timescale\":\"TAI\"}},\"kind\":\"observed\",\"prev\":\"97296c2e5e1cc833943b702f067da29544ef03ae09af906e15ba733d8764398f\",\"rc\":\"rc/1\",\"seq\":8,\"signer\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\",\"ts\":\"2026-10-12T20:12:00Z\"}",
-    "sig": "0x1dab5f637a2c95e1e9b4e4dc12c647ceead231231e007a148b124b3127353e0d6c7b2d13d200a676eaffec36580c2c3d140379206414e73e2c69a6bfd14c49131b"
+    "signed_string": "DSSEv1 49 application/vnd.research-commons.observed.v1+json 599 {\"alg\":\"eip191-secp256k1\",\"body\":{\"capture\":{\"at\":\"2026-10-12T20:11:58.250Z\",\"evidence\":\"self-asserted\",\"instrument\":\"daq-7\"},\"class\":\"phenomenon\",\"content\":{\"digest\":\"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c\",\"size\":2048},\"referent\":{\"at\":\"2026-10-12T20:12:35.000000012\",\"instrument\":\"daq-7\",\"location\":\"geo:39.7392,-104.9903,1609;u=5\",\"place\":\"bench-3\",\"timescale\":\"TAI\"}},\"kind\":\"observed\",\"prev\":\"c61a26d775bea90d0a9fc4ff8cbee1814d0df4231476b999807bbb15783f1ffe\",\"rc\":\"rc/1\",\"seq\":8,\"signer\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\",\"ts\":\"2026-10-12T20:12:00Z\"}",
+    "sig": "0xa40bf670785ca0a67fbfc0f9af79dc4679ec8f8636fdac490dc07008137d69a25cac33ef27e315b4d4d579f2f958a67bd42b3f7581ae7dd8c564c0cb93ccec561b"
    }
   },
   {
@@ -172,8 +172,8 @@
    "title": "ten fraction digits",
    "expect": "intrinsic: malformed statement (non-canonical time)",
    "verify": {
-    "signed_string": "DSSEv1 49 application/vnd.research-commons.observed.v1+json 599 {\"alg\":\"eip191-secp256k1\",\"body\":{\"capture\":{\"at\":\"2026-10-12T20:11:58.25Z\",\"evidence\":\"self-asserted\",\"instrument\":\"daq-7\"},\"class\":\"phenomenon\",\"content\":{\"digest\":\"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c\",\"size\":2048},\"referent\":{\"at\":\"2026-10-12T20:12:35.0000000120\",\"instrument\":\"daq-7\",\"location\":\"geo:39.7392,-104.9903,1609;u=5\",\"place\":\"bench-3\",\"timescale\":\"TAI\"}},\"kind\":\"observed\",\"prev\":\"97296c2e5e1cc833943b702f067da29544ef03ae09af906e15ba733d8764398f\",\"rc\":\"rc/1\",\"seq\":8,\"signer\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\",\"ts\":\"2026-10-12T20:12:00Z\"}",
-    "sig": "0xd423eb4b896f3de12d1fd4eb8bc9a854baaea2f751a6deb3b9714c19d276cd3766965b779de1e21cae01c691c9480e901bfc66a9c786b8435c3e0312dd8bf2a21b"
+    "signed_string": "DSSEv1 49 application/vnd.research-commons.observed.v1+json 599 {\"alg\":\"eip191-secp256k1\",\"body\":{\"capture\":{\"at\":\"2026-10-12T20:11:58.25Z\",\"evidence\":\"self-asserted\",\"instrument\":\"daq-7\"},\"class\":\"phenomenon\",\"content\":{\"digest\":\"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c\",\"size\":2048},\"referent\":{\"at\":\"2026-10-12T20:12:35.0000000120\",\"instrument\":\"daq-7\",\"location\":\"geo:39.7392,-104.9903,1609;u=5\",\"place\":\"bench-3\",\"timescale\":\"TAI\"}},\"kind\":\"observed\",\"prev\":\"c61a26d775bea90d0a9fc4ff8cbee1814d0df4231476b999807bbb15783f1ffe\",\"rc\":\"rc/1\",\"seq\":8,\"signer\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\",\"ts\":\"2026-10-12T20:12:00Z\"}",
+    "sig": "0x2cdf303990dd10ba2b60d3753646a1996370dde3d788a2e708c935a69023a92566d3ee39aa549e8afb5b78ce045475c2ee092d0a4bc7dc83120767d9324bf3e31c"
    }
   },
   {
@@ -181,8 +181,8 @@
    "title": "numeric offset",
    "expect": "intrinsic: malformed statement (non-canonical time)",
    "verify": {
-    "signed_string": "DSSEv1 49 application/vnd.research-commons.observed.v1+json 599 {\"alg\":\"eip191-secp256k1\",\"body\":{\"capture\":{\"at\":\"2026-10-12T20:11:58.25Z\",\"evidence\":\"self-asserted\",\"instrument\":\"daq-7\"},\"class\":\"phenomenon\",\"content\":{\"digest\":\"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c\",\"size\":2048},\"referent\":{\"at\":\"2026-10-12T20:12:35.000000012\",\"instrument\":\"daq-7\",\"location\":\"geo:39.7392,-104.9903,1609;u=5\",\"place\":\"bench-3\",\"timescale\":\"TAI\"}},\"kind\":\"observed\",\"prev\":\"97296c2e5e1cc833943b702f067da29544ef03ae09af906e15ba733d8764398f\",\"rc\":\"rc/1\",\"seq\":8,\"signer\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\",\"ts\":\"2026-10-12T20:12:00+00:00\"}",
-    "sig": "0xb1a828a8088590b9eb35f48839029c47a9d34427e37ff739f27a5c4fd076e9541573934868d1c9ba6a0355345a17dfdc7ecdb97e4f46d6e6d15a66215ca130c31b"
+    "signed_string": "DSSEv1 49 application/vnd.research-commons.observed.v1+json 599 {\"alg\":\"eip191-secp256k1\",\"body\":{\"capture\":{\"at\":\"2026-10-12T20:11:58.25Z\",\"evidence\":\"self-asserted\",\"instrument\":\"daq-7\"},\"class\":\"phenomenon\",\"content\":{\"digest\":\"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c\",\"size\":2048},\"referent\":{\"at\":\"2026-10-12T20:12:35.000000012\",\"instrument\":\"daq-7\",\"location\":\"geo:39.7392,-104.9903,1609;u=5\",\"place\":\"bench-3\",\"timescale\":\"TAI\"}},\"kind\":\"observed\",\"prev\":\"c61a26d775bea90d0a9fc4ff8cbee1814d0df4231476b999807bbb15783f1ffe\",\"rc\":\"rc/1\",\"seq\":8,\"signer\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\",\"ts\":\"2026-10-12T20:12:00+00:00\"}",
+    "sig": "0x4e13514a08221b667c82a42a9fa54b43d86ee60514fce6e8715c5cbcb105884d1f35c7e172b4ceaa7920d740530c699936b0e734bdc0215d57839f1987296a251c"
    }
   },
   {
@@ -190,8 +190,8 @@
    "title": "code-point key order",
    "expect": "intrinsic: bad signature (the reader's JCS form of the envelope is V10's string, which this signature does not cover)",
    "verify": {
-    "signed_string": "DSSEv1 50 application/vnd.research-commons.describes.v1+json 378 {\"alg\":\"eip191-secp256k1\",\"body\":{\"about\":{\"content\":\"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c\"},\"tags\":[\"sort-order\"],\"x_ｱ\":\"bmp\",\"x_😀\":\"astral\"},\"kind\":\"describes\",\"prev\":\"b0d5761fc890ed6ea143f1e29e9d8debe77ed7bc19f38cde6fd494da0022b203\",\"rc\":\"rc/1\",\"seq\":9,\"signer\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\",\"ts\":\"2026-10-12T20:13:00Z\"}",
-    "sig": "0x11c9bf4a07532cc7ac1e96242d1f44844d7c80d2ba86dc83603a80d578ba29a82c8154394c516d6ef07122cd0df6fd8cfb3b6bf632e97e25d2bc97664d6ed52c1b"
+    "signed_string": "DSSEv1 50 application/vnd.research-commons.describes.v1+json 378 {\"alg\":\"eip191-secp256k1\",\"body\":{\"about\":{\"content\":\"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c\"},\"tags\":[\"sort-order\"],\"x_ｱ\":\"bmp\",\"x_😀\":\"astral\"},\"kind\":\"describes\",\"prev\":\"4e40b242c22abd1e25dd66d1b597740a570684b5303f21505cfe2f3970dfd5d1\",\"rc\":\"rc/1\",\"seq\":9,\"signer\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\",\"ts\":\"2026-10-12T20:13:00Z\"}",
+    "sig": "0x850e007f1b2879224f6accb908482af70590d24cbc622e9c088ffd0ee1196d095c442cee8121a0f1b7dff5c1bd31259d65cd6ad5f1f974c1a06a80a6c861074e1b"
    }
   },
   {
@@ -199,8 +199,8 @@
    "title": "leap second outside UTC",
    "expect": "intrinsic: malformed statement (second 60 outside UTC)",
    "verify": {
-    "signed_string": "DSSEv1 49 application/vnd.research-commons.observed.v1+json 599 {\"alg\":\"eip191-secp256k1\",\"body\":{\"capture\":{\"at\":\"2026-10-12T20:11:58.25Z\",\"evidence\":\"self-asserted\",\"instrument\":\"daq-7\"},\"class\":\"phenomenon\",\"content\":{\"digest\":\"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c\",\"size\":2048},\"referent\":{\"at\":\"2016-12-31T23:59:60\",\"instrument\":\"daq-7\",\"location\":\"geo:39.7392,-104.9903,1609;u=5\",\"place\":\"bench-3\",\"timescale\":\"TAI\"}},\"kind\":\"observed\",\"prev\":\"97296c2e5e1cc833943b702f067da29544ef03ae09af906e15ba733d8764398f\",\"rc\":\"rc/1\",\"seq\":8,\"signer\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\",\"ts\":\"2026-10-12T20:12:00Z\"}",
-    "sig": "0x7aac8dc6a363448a954958fe7bfacdb76ea0cbc16f95f0c0a0dfb199abcadc771308e71841b4df59aafb84ef3c786df3e2e32d6721ca51ed0821ddd8ab33f8dd1c"
+    "signed_string": "DSSEv1 49 application/vnd.research-commons.observed.v1+json 599 {\"alg\":\"eip191-secp256k1\",\"body\":{\"capture\":{\"at\":\"2026-10-12T20:11:58.25Z\",\"evidence\":\"self-asserted\",\"instrument\":\"daq-7\"},\"class\":\"phenomenon\",\"content\":{\"digest\":\"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c\",\"size\":2048},\"referent\":{\"at\":\"2016-12-31T23:59:60\",\"instrument\":\"daq-7\",\"location\":\"geo:39.7392,-104.9903,1609;u=5\",\"place\":\"bench-3\",\"timescale\":\"TAI\"}},\"kind\":\"observed\",\"prev\":\"c61a26d775bea90d0a9fc4ff8cbee1814d0df4231476b999807bbb15783f1ffe\",\"rc\":\"rc/1\",\"seq\":8,\"signer\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\",\"ts\":\"2026-10-12T20:12:00Z\"}",
+    "sig": "0x95baea86205e8d23989cde6021a1bcb6c6ac209f20be598914c654cc8bb04a0d557d9b32b1dc611b3463d0535c1c088f813af04ec2e8434d97bca68d5a4ba3571b"
    }
   },
   {
@@ -208,8 +208,8 @@
    "title": "Z on a TAI time",
    "expect": "intrinsic: malformed statement (Z asserts UTC; the referent names TAI)",
    "verify": {
-    "signed_string": "DSSEv1 49 application/vnd.research-commons.observed.v1+json 599 {\"alg\":\"eip191-secp256k1\",\"body\":{\"capture\":{\"at\":\"2026-10-12T20:11:58.25Z\",\"evidence\":\"self-asserted\",\"instrument\":\"daq-7\"},\"class\":\"phenomenon\",\"content\":{\"digest\":\"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c\",\"size\":2048},\"referent\":{\"at\":\"2026-10-12T20:12:35.000000012Z\",\"instrument\":\"daq-7\",\"location\":\"geo:39.7392,-104.9903,1609;u=5\",\"place\":\"bench-3\",\"timescale\":\"TAI\"}},\"kind\":\"observed\",\"prev\":\"97296c2e5e1cc833943b702f067da29544ef03ae09af906e15ba733d8764398f\",\"rc\":\"rc/1\",\"seq\":8,\"signer\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\",\"ts\":\"2026-10-12T20:12:00Z\"}",
-    "sig": "0xf3727e37cd855bc4f1bf776da25052c6e425be85af6c5f2fdbbea497dee010f737cc6f5339ce464dab552d267c479f8af49253df690d92a4832849cb713b8d4d1b"
+    "signed_string": "DSSEv1 49 application/vnd.research-commons.observed.v1+json 599 {\"alg\":\"eip191-secp256k1\",\"body\":{\"capture\":{\"at\":\"2026-10-12T20:11:58.25Z\",\"evidence\":\"self-asserted\",\"instrument\":\"daq-7\"},\"class\":\"phenomenon\",\"content\":{\"digest\":\"sha256:3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c\",\"size\":2048},\"referent\":{\"at\":\"2026-10-12T20:12:35.000000012Z\",\"instrument\":\"daq-7\",\"location\":\"geo:39.7392,-104.9903,1609;u=5\",\"place\":\"bench-3\",\"timescale\":\"TAI\"}},\"kind\":\"observed\",\"prev\":\"c61a26d775bea90d0a9fc4ff8cbee1814d0df4231476b999807bbb15783f1ffe\",\"rc\":\"rc/1\",\"seq\":8,\"signer\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\",\"ts\":\"2026-10-12T20:12:00Z\"}",
+    "sig": "0x92793c96cb115b681ed40d7cc157f9ca4fe929e7e1cb9ac425ee71b9de31624a106d32762c0e31da1608a556732b7dd7c16d8dba1da1fe4da74e5e2742a57ff51c"
    }
   }
  ],
