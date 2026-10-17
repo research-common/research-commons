@@ -26,6 +26,9 @@ var (
 	reKey    = regexp.MustCompile(`^(0x[0-9a-f]{40}|ed25519:[0-9a-f]{64})$`)
 	reHex64  = regexp.MustCompile(`^[0-9a-f]{64}$`)
 	reCommit = regexp.MustCompile(`^([0-9a-f]{40}|[0-9a-f]{64})$`)
+	// reToken is a revoke_key reason: any bounded token, so a reason this reader does not know is still a
+	// well-formed revocation (it reads as hard, claims-model note §4.1) and never fails open as malformed.
+	reToken = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 )
 
 // rule checks one value at path. ctx collects unpinned referent fields.
@@ -331,9 +334,10 @@ var kinds = map[string][]field{
 	"submit":   with(taskRef, req("result", digest()), opt("salt", text()), opt("self_declared_independence", boolean())),
 	"decide": with(taskRef, req("submissions", list(id())), req("verdict", enum("accept", "reject")),
 		opt("evaluations", list(digest())), opt("supersedes", id())),
-	"rotate_key": {req("successor", key()), opt("effective", ts())},
-	"revoke_key": {req("reason", enum("key_compromise", "superseded", "cessation_of_operation", "unspecified")),
-		opt("note", text()), opt("effective", ts())},
+	"withdraw_approval": {req("resource", id()), req("edition", id())},
+	"rotate_key":        {req("successor", key())},
+	"revoke_key": {req("reason", pattern(reToken, "a reason token ([a-z][a-z0-9_]{0,63})")),
+		opt("last_good", id()), opt("note", text())},
 }
 
 // Observation classes and the referent fields each requires (§5). A missing one is unpinned, not malformed.

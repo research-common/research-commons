@@ -9,7 +9,7 @@ import (
 // checkBodyTimes applies §1.1 to every body field the kind table (§5) types as ts or date. It checks the
 // fields that are present; whether a required field is missing is the kind schema's job, not this one's.
 //
-// UTC fields: capture.at, finality.state_at_capture.captured_at, effective, and window bounds outside a
+// UTC fields: capture.at, finality.state_at_capture.captured_at, and window bounds outside a
 // referent (sampling.window). Referent fields (referent.at, referent.window.from/to) are in the referent's
 // timescale, UTC when it names none. frozen_before.date is a full-date.
 func checkBodyTimes(kind string, body *canon.Object) error {
@@ -43,8 +43,6 @@ func checkBodyTimes(kind string, body *canon.Object) error {
 		return samplingWindow(body)
 	case "authored":
 		return samplingWindow(body)
-	case "rotate_key", "revoke_key":
-		return utcAt(body, "effective")
 	case "edition":
 		if s, ok, err := strAt(body, "contents", "frozen_before", "date"); err != nil {
 			return err
