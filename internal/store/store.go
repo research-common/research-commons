@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 const layoutMarker = `{"layout":"rc-store/1"}`
@@ -48,7 +49,7 @@ type Store struct {
 // Open opens (creating if needed) the store at root and replays the journal (§3.4).
 func Open(root string, opt Options) (*Store, error) {
 	s := &Store{root: root, opt: opt}
-	for _, d := range []string{"blobs/sha256", "statements", "journal/pending", "journal/done", "quarantine", "tmp"} {
+	for _, d := range []string{"blobs/sha256", "statements", "journal/pending", "journal/done", "quarantine", "retained", "tmp"} {
 		if err := os.MkdirAll(filepath.Join(root, d), 0o755); err != nil {
 			return nil, err
 		}
@@ -69,10 +70,44 @@ func Open(root string, opt Options) (*Store, error) {
 	if !s.sameFS && sameFSKnown {
 		return nil, fmt.Errorf("store %s: tmp/ is not on the blob store's filesystem; rename into place would not be atomic", root)
 	}
+	if err := s.sweepTmp(time.Now()); err != nil {
+		return nil, err
+	}
 	if err := s.recover(); err != nil {
 		return nil, err
 	}
 	return s, nil
+}
+
+// tmpGrace is how old a temporary must be before Open removes it. Nothing references a temporary (a crash
+// between creating it and linking it into place leaves it behind), but the store takes no locks, so another
+// process may be writing one right now; the age gate leaves in-flight writes alone. A write stalled longer
+// than this loses its temporary and fails at the link (nothing is installed, nothing corrupted).
+const tmpGrace = 24 * time.Hour
+
+// sweepTmp removes temporaries last modified before now - tmpGrace. It runs before journal replay; no
+// committed state lives in tmp/.
+func (s *Store) sweepTmp(now time.Time) error {
+	ents, err := os.ReadDir(s.dir("tmp"))
+	if err != nil {
+		return err
+	}
+	for _, e := range ents {
+		fi, err := e.Info()
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if now.Sub(fi.ModTime()) > tmpGrace {
+			if err := os.Remove(s.dir("tmp", e.Name())); err != nil && !errors.Is(err, fs.ErrNotExist) {
+				return err
+			}
+			s.Recovered = append(s.Recovered, RecoveryEvent{What: "removed temporary", Detail: e.Name()})
+		}
+	}
+	return nil
 }
 
 // Root is the store's directory.

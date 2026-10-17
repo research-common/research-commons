@@ -236,6 +236,10 @@ func TestCrashAtEveryPoint(t *testing.T) {
 					t.Fatalf("no crash at %s: %v", point, err)
 				}
 				committed := point != AfterBlobs
+				// The caller can tell "nothing committed" from "committed, install incomplete" (§3.5).
+				if out.Committed != committed || committed != strings.Contains(err.Error(), "committed, pending install") {
+					t.Fatalf("crash at %s: Committed=%v, err %q", point, out.Committed, err)
+				}
 				// Before reopening: what is visible, and what status reports.
 				visible, _ := s.Statements()
 				st, _ := s.Status()
@@ -467,5 +471,105 @@ func TestLayoutMarker(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(root, "rc-store"), []byte(`{"layout":"rc-store/9"}`), 0o644)
 	if _, err := Open(root, Options{NoSync: true}); err == nil {
 		t.Fatal("unknown layout opened")
+	}
+}
+
+// TestCorruptStatementFile: a file under statements/<signer>/<id> that does not read to that id (corrupted on
+// disk) never makes the store unopenable (I15, §3.4). Replay of a pending record quarantines it and installs
+// the verified line; so does a fresh Commit. A file that reads to the same id under another valid encoding
+// is the same statement and stays.
+func TestCorruptStatementFile(t *testing.T) {
+	root := t.TempDir()
+	k := testKey("A")
+	l0, id0 := authored(k, 0, "", []byte("x"))
+	st, _ := wire.Read(l0)
+	path := filepath.Join(root, "statements", signerDir(st.Signer), id0)
+	corrupt := func() {
+		t.Helper()
+		_ = os.Chmod(path, 0o644)
+		if err := os.WriteFile(path, []byte(`{"not":"a statement"}`), 0o444); err != nil {
+			t.Fatal(err)
+		}
+	}
+	quarantined := func(want int) {
+		t.Helper()
+		qs, _ := filepath.Glob(filepath.Join(root, "quarantine", "statement-"+id0+"-*"))
+		if len(qs) != want {
+			t.Fatalf("%d quarantined statement files, want %d", len(qs), want)
+		}
+	}
+
+	// Replay path: crash after the record, corrupt the installed file, reopen.
+	s := open(t, root, Options{NoSync: true, crash: func(p string) error {
+		if p == AfterInstall {
+			return ErrCrash
+		}
+		return nil
+	}})
+	d, _, _ := s.InstallBlob(strings.NewReader("x"), "")
+	if out, err := s.Commit("publish", [][]byte{l0}, []Digest{d}); !out.Committed || !errors.Is(err, ErrCrash) {
+		t.Fatal(out, err)
+	}
+	corrupt()
+	s2, err := Open(root, Options{NoSync: true})
+	if err != nil {
+		t.Fatalf("a corrupt statement file made the store unopenable: %v", err)
+	}
+	if sts, _ := s2.Statements(); !bytes.Equal(sts[id0], l0) {
+		t.Fatal("verified line not installed over the corrupt copy")
+	}
+	var replaced bool
+	for _, ev := range s2.Recovered {
+		replaced = replaced || (ev.What == "replaced statement" && strings.HasPrefix(ev.Detail, id0))
+	}
+	if !replaced {
+		t.Fatalf("recovery did not report the replacement: %v", s2.Recovered)
+	}
+	quarantined(1)
+
+	// Commit path.
+	corrupt()
+	out, err := s2.Commit("publish", [][]byte{l0}, []Digest{d})
+	if err != nil || !slices.Equal(out.Replaced, []string{id0}) {
+		t.Fatal(out, err)
+	}
+	quarantined(2)
+
+	// Same statement, another encoding of the file (not canonical, still reads to the id): kept, success.
+	_ = os.Chmod(path, 0o644)
+	if err := os.WriteFile(path, append(append([]byte(" "), l0...), '\n'), 0o444); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := s2.Commit("publish", [][]byte{l0}, []Digest{d}); err != nil || out.Replaced != nil {
+		t.Fatal(out, err)
+	}
+	quarantined(2)
+}
+
+// TestTmpSweep: Open removes temporaries older than the grace window (a crash between CreateTemp and the link
+// leaves one nothing references) and leaves young ones alone (another process may be writing).
+func TestTmpSweep(t *testing.T) {
+	root := t.TempDir()
+	open(t, root, Options{NoSync: true})
+	old, young := filepath.Join(root, "tmp", "blob-old"), filepath.Join(root, "tmp", "blob-young")
+	for _, p := range []string{old, young} {
+		if err := os.WriteFile(p, []byte("partial"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	past := time.Now().Add(-tmpGrace - time.Minute)
+	_ = os.Chtimes(old, past, past)
+	s := open(t, root, Options{NoSync: true})
+	if _, err := os.Stat(old); err == nil {
+		t.Fatal("stale temporary kept")
+	}
+	if _, err := os.Stat(young); err != nil {
+		t.Fatal("young temporary removed")
+	}
+	if len(s.Recovered) != 1 || s.Recovered[0].What != "removed temporary" {
+		t.Fatal(s.Recovered)
+	}
+	if fi, err := os.Stat(filepath.Join(root, "retained")); err != nil || !fi.IsDir() {
+		t.Fatal("retained/ not reserved in the layout")
 	}
 }

@@ -100,11 +100,18 @@ const (
 // ErrCrash is what a crash hook returns to abort an operation at a commit point.
 var ErrCrash = errors.New("injected crash")
 
-// Outcome reports a committed operation.
+// Outcome reports an operation. Committed says whether it reached its commit point (its record is in
+// pending/ or later): the line between "nothing happened" and "it happened, maybe not all installed yet".
 type Outcome struct {
 	Op string
+	// Committed is true once the record exists. An error with Committed set means the operation is committed
+	// and its install is incomplete; the next Open (or Repair) replays it (§3.4). Status reports it as
+	// "committed, pending install" meanwhile.
+	Committed bool
 	// IDs of the statements, in the order given.
 	IDs []string
+	// Replaced lists statement ids whose stored file was corrupt: quarantined and replaced by the verified line.
+	Replaced []string
 	// NeedsRepair is set when step 5 failed: the operation is committed and its projections are untrusted.
 	NeedsRepair error
 }
@@ -114,8 +121,9 @@ type Outcome struct {
 // statements, then done, then projections. Every line is read through wire.Read first: nothing that a reader
 // would refuse is committed. A blob a statement depends on must already be held.
 //
-// The returned error is non-nil only when the operation did not reach its commit point (nothing committed).
-// After the commit point the outcome is committed, and a projection failure is Outcome.NeedsRepair.
+// An error with Outcome.Committed false means nothing was committed. An error with Committed true means the
+// record exists (the commit point was reached) and steps 3–4 did not finish; the error says so, names the
+// op id, and the next Open replays the operation. A step-5 failure is not an error: Outcome.NeedsRepair.
 func (s *Store) Commit(kind string, lines [][]byte, blobs []Digest) (Outcome, error) {
 	var out Outcome
 	canonical := make([][]byte, len(lines))
@@ -148,16 +156,20 @@ func (s *Store) Commit(kind string, lines [][]byte, blobs []Digest) (Outcome, er
 	r.Op = opID(body)
 	out.Op = r.Op
 	if err := s.writeExclusive(s.dir("journal", "pending", r.Op+".json"), append(body, '\n'), 0o444); err != nil {
-		if errors.Is(err, fs.ErrExist) {
-			// The identical operation is already committed; finish it like any recovered record.
-			return out, s.finish(r, &out)
+		if !errors.Is(err, fs.ErrExist) {
+			return out, err
 		}
-		return out, err
+		// The identical operation is already committed; finish it like any recovered record.
 	}
-	if err := s.hook(AfterRecord); err != nil {
-		return out, err
+	out.Committed = true
+	err = s.hook(AfterRecord)
+	if err == nil {
+		err = s.finish(r, &out)
 	}
-	return out, s.finish(r, &out)
+	if err != nil {
+		return out, fmt.Errorf("operation %s committed, pending install: %w; the next open of the store replays it", r.Op, err)
+	}
+	return out, nil
 }
 
 // finish runs steps 3–5 for a committed record. It is the replay path too, so every step is idempotent.
@@ -166,8 +178,12 @@ func (s *Store) finish(r Record, out *Outcome) error {
 	done := s.dir("journal", "done", r.Op+".json")
 	if _, err := os.Stat(pending); err == nil {
 		for _, l := range r.Lines {
-			if err := s.installStatement(l); err != nil {
+			id, res, err := s.installStatement(l)
+			if err != nil {
 				return err
+			}
+			if res == Replaced {
+				out.Replaced = append(out.Replaced, id)
 			}
 			if err := s.hook(AfterStatement); err != nil {
 				return err
@@ -206,32 +222,50 @@ func (s *Store) finish(r Record, out *Outcome) error {
 	return nil
 }
 
-// installStatement places one verified line under statements/<signer>/<id>, create-exclusive. Identical
-// bytes already there is success (§3.1 step 3). Different bytes under the same id cannot be a valid
-// statement (the id covers everything but sig, and sig is stored canonically), so it is reported, never
-// overwritten.
-func (s *Store) installStatement(line []byte) error {
+// installStatement places one verified line under statements/<signer>/<id>, create-exclusive (§3.1 step 3).
+// A file already under the id that reads (wire.Read, signature verified) to that same id is the same
+// statement (wire §2: the id is the statement; any valid signature over one signed string is one statement),
+// so it stays and this is success. A file that does not read to the id is a corrupt stored copy: it is moved
+// to quarantine and the verified line installed in its place, as §2 does for blobs. Either way a corrupt file
+// never makes the store unopenable (I15).
+func (s *Store) installStatement(line []byte) (string, BlobResult, error) {
 	st, err := wire.Read(line)
 	if err != nil {
-		return err
+		return "", "", err
 	}
 	dir := s.dir("statements", signerDir(st.Signer))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
+		return "", "", err
 	}
 	dst := filepath.Join(dir, st.ID)
-	err = s.writeExclusive(dst, st.Line(), 0o444)
-	if err == nil {
-		return nil
+	for attempt := 0; ; attempt++ {
+		err = s.writeExclusive(dst, st.Line(), 0o444)
+		if err == nil {
+			if attempt > 0 {
+				return st.ID, Replaced, nil
+			}
+			return st.ID, Installed, nil
+		}
+		if !errors.Is(err, fs.ErrExist) || attempt > 0 {
+			return "", "", err
+		}
+		have, rerr := os.ReadFile(dst)
+		if errors.Is(rerr, fs.ErrNotExist) {
+			continue // removed since the link failed; try once more
+		}
+		if rerr != nil {
+			return "", "", rerr
+		}
+		if bytes.Equal(have, st.Line()) {
+			return st.ID, Reused, nil
+		}
+		if hs, herr := wire.Read(have); herr == nil && hs.ID == st.ID && (hs.Verified || !st.Verified) {
+			return st.ID, Reused, nil
+		}
+		if err := s.quarantine(dst, "statement"); err != nil {
+			return "", "", err
+		}
 	}
-	if !errors.Is(err, fs.ErrExist) {
-		return err
-	}
-	have, rerr := os.ReadFile(dst)
-	if rerr == nil && bytes.Equal(have, st.Line()) {
-		return nil
-	}
-	return fmt.Errorf("statement %s: a different file is already installed under this id; left in place for fsck", st.ID)
 }
 
 // signerDir is the directory name for a signer: the signer string with ':' replaced (ed25519:<hex> is not a
@@ -357,6 +391,10 @@ func (s *Store) recover() error {
 		}
 		if out.NeedsRepair != nil {
 			ev.What, ev.Detail = "needs repair", out.NeedsRepair.Error()
+		}
+		for _, id := range out.Replaced {
+			s.Recovered = append(s.Recovered, RecoveryEvent{Op: h.rec.Op, Kind: h.rec.Kind, What: "replaced statement",
+				Detail: id + ": stored copy corrupt, quarantined; verified line installed"})
 		}
 		s.Recovered = append(s.Recovered, ev)
 	}

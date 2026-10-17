@@ -26,8 +26,10 @@ unchanged on this branch.
 - **Local store and commit protocol.** Blobs install from a temporary on the same filesystem and are
   re-hashed before reuse; a corrupt stored copy is quarantined, never read. Every write is one operation
   whose journal record is the commit point; a crash at any point recovers to the previous state or the complete
-  operation on the next open. A failed projection leaves the operation `committed, needs repair`. The store
-  prints what it guarantees (`fsync`, `link`, same filesystem).
+  operation on the next open, and a failed write says whether it got past the commit point. A corrupt stored
+  statement file is quarantined and replaced by the verified line, never left to block the store from opening.
+  A failed projection leaves the operation `committed, needs repair`. The store prints what it guarantees
+  (`fsync`, `link`, same filesystem).
 
 ### Fixed
 - **Wire-format vector V5** listed its `controllers` set unsorted, which the note's own set rule refuses. Sorted

@@ -10,8 +10,11 @@
 //	<root>/statements/<signer>/<id>     one canonical statement line, read-only
 //	<root>/journal/pending/<op>.json    committed, not yet installed (§3.1 step 2)
 //	<root>/journal/done/<op>.json       installed, projections pending (§3.1 step 4)
-//	<root>/quarantine/                  corrupt blobs and records, moved aside, never deleted
-//	<root>/tmp/                         temporaries on the same filesystem (§2 step 1)
+//	<root>/retained/<hex>               reserved: lines under an rc major this reader cannot compute ids for,
+//	                                    keyed by the sha256 of their canonical form (wire §6, §8); written by pull
+//	<root>/quarantine/                  corrupt blobs, statements and records, moved aside, never deleted
+//	<root>/tmp/                         temporaries on the same filesystem (§2 step 1); Open removes those
+//	                                    older than tmpGrace
 //
 // Every write that publishes an object is temporary file → fsync → create-exclusive link into place →
 // fsync of the directory (the durability declaration, §7).
@@ -131,21 +134,30 @@ func (s *Store) placeVerified(tmp, dst string, want Digest) (BlobResult, error) 
 }
 
 // OpenBlob opens a held blob after re-hashing it (§2 step 5, C-core-123): a corrupt copy is refused, never
-// read. The returned refusal names both hashes. A blob not held is fs.ErrNotExist.
+// read. The returned refusal names both hashes. A blob not held is fs.ErrNotExist. The path is opened once and
+// hashed through that descriptor, which is then rewound and returned, so the bytes checked are the bytes the
+// caller reads even if the path is replaced in between.
 func (s *Store) OpenBlob(d Digest) (*os.File, error) {
 	if _, ok := d.hex(); !ok {
 		return nil, refusal.Malformed("digest %q is not sha256: + 64 lowercase hex", d)
 	}
-	p := s.blobPath(d)
-	have, err := hashFile(p)
+	f, err := os.Open(s.blobPath(d))
 	if err != nil {
 		return nil, err
 	}
-	if have != d {
-		return nil, &refusal.Refusal{Class: refusal.Intrinsic, Reason: CorruptBlob,
+	have, err := hashReader(f)
+	if err == nil && have != d {
+		err = &refusal.Refusal{Class: refusal.Intrinsic, Reason: CorruptBlob,
 			Detail: fmt.Sprintf("blob %s: stored copy corrupt (hashes to %s); refetch", d, have)}
 	}
-	return os.Open(p)
+	if err == nil {
+		_, err = f.Seek(0, io.SeekStart)
+	}
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+	return f, nil
 }
 
 // HasBlob reports whether a file is present under d (not whether it is intact; OpenBlob checks that).
@@ -168,8 +180,12 @@ func hashFile(p string) (Digest, error) {
 		return "", err
 	}
 	defer f.Close()
+	return hashReader(f)
+}
+
+func hashReader(r io.Reader) (Digest, error) {
 	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
+	if _, err := io.Copy(h, r); err != nil {
 		return "", err
 	}
 	return Digest("sha256:" + hex.EncodeToString(h.Sum(nil))), nil
