@@ -4,7 +4,7 @@
 **Companion to:** the claims-model note (§15, "storage engine and transaction design")
 **Covers:** the storage bullets of claims-model note §12 (exact bytes, atomic commits, concurrent writers,
 caches, bounded scans) and §11 (external holds, package scope). Serves conformance cases C-core-123 through
-C-core-131 (with C-core-127a, C-core-127b and C-core-129a), C-core-138, C-core-145, and properties P-07 and P-10; touches P-01 (permutation) where storage order could
+C-core-131 (with C-core-127a, C-core-127b and C-core-129a), C-core-138, C-core-145, C-core-146, and properties P-07 and P-10; touches P-01 (permutation) where storage order could
 otherwise leak into answers. Carries #74 rows 1, 2, 3 and 8 as obligations.
 
 This note binds every implementation of the core, not a profile (conformance open item 11). It fixes
@@ -92,7 +92,8 @@ The install path is the same for a local file, a package member and an external 
    (create-exclusive, so a concurrent installer of the same bytes cannot overwrite; §4.3). `fsync` the
    containing directory where the platform supports it (§7).
 5. If the destination exists: **re-hash the existing file** before using it. If it matches, discard the
-   temporary file and reuse. If it does not match, the existing file is corrupt.
+   temporary file and reuse, refreshing the blob's grace window (§6.1.1). If it does not match, the existing
+   file is corrupt.
 
 | Situation | Behaviour | Display |
 |---|---|---|
@@ -152,7 +153,7 @@ anchor operation for the statements it would carry is absent or `pending`.
 
 | Crash after | Durable state | On next store open |
 |---|---|---|
-| step 1 | previous state plus unreferenced blobs | nothing to do; `gc` may remove the blobs after the grace window (§6.2) |
+| step 1 | previous state plus unreferenced blobs | nothing to do; `gc` may remove the blobs after the grace window (§6.1.1) |
 | step 2 | a `pending/` record; no statement installed | replay steps 3–5; the operation is reported as committed |
 | step 3, partially | `pending/` record; some statements installed | replay 3 (idempotent) then 4–5 |
 | step 4 | `done/` record; projections stale | replay 5; until then the record's operation shows `committed, needs repair` |
@@ -171,10 +172,13 @@ reading or writing first lists `pending/` and `done/`-without-projection records
 record-creation order. Replay is idempotent at every step. A record whose statements fail signature
 verification on replay (which can only mean the record itself is corrupt) is moved to quarantine and
 reported; no statement from it is installed (C-core-126: nothing without a verified signature is shown as
-anyone's word). `done/` records are kept until their projections have been rebuilt, then deleted; the
-operation id remains in the explain output of the statements it installed.
+anyone's word). `done/` records are kept until their projections have been rebuilt, then deleted (§12,
+decided 3). A record duplicates the statements it installed, which by then live under their own hashes, and
+every open lists the journal, so keeping records would double statement storage and slow every open. The
+operation id is therefore known while its record exists and, afterwards, only to the optional operation
+history (§3.6), which no answer reads.
 
-A full scan (`fsck`, §6.4) remains available for the case the journal itself is lost: it reconstructs
+A full scan (`fsck`, §6.3) remains available for the case the journal itself is lost: it reconstructs
 projections from installed statements. It cannot recover a `pending/` operation whose record is gone; that
 operation never reached its commit point and is reported as absent, not as failed.
 
@@ -192,6 +196,23 @@ operation committed. The implementation:
 `repair [<operation-id>|--all]` recomputes projections from blobs and statements. It invents nothing: it
 never signs, never rewrites a statement, never reinterprets a statement of one kind as another. Its exit is
 0 when every projection equals a cold rebuild, non-zero with the differing projection named otherwise.
+
+### 3.6 Operation history (optional)
+
+An implementation may keep a local **operation history**: one appended line per committed operation with the
+operation id, kind, the ids of the statements it installed, the blob hashes and the local time, written after
+step 4. It answers "what arrived together, and when" on this machine (a `history` command shows it). It is a
+convenience log, not part of the store:
+
+- **not authoritative and never read by an answer.** No read surface, `explain`, projection, gate or
+  conformance answer consults it; deleting or editing it changes nothing any other command prints (P-07,
+  C-core-146);
+- **never transported**, and never a source for `repair` or `fsck`;
+- **best-effort.** A crash after step 4 may lose the last line; the operation is committed regardless, and
+  `status` does not read the history to decide what is unfinished;
+- **bounded by local policy**, by size or age, and declared (§7 `history`);
+- the local time it records is the operator's clock and evidence of nothing beyond this machine (a received
+  statement's time is its signed `ts` and its anchors).
 
 ## 4. Concurrent writers
 
@@ -314,11 +335,34 @@ and a `gc` (§6) does not invalidate anything, because `gc` removes no input of 
 |---|---|---|
 | projection, any | yes | always; the next read rebuilds |
 | `done/` journal record whose projections are rebuilt | yes | always |
-| blob referenced by no installed statement and no `pending/` record | yes | older than the grace window (default 24 h, declared in §7) so a publish in step 1 is not raced |
+| blob referenced by no installed statement and no `pending/` record | yes | outside the grace window (§6.1.1) |
 | blob referenced by an installed statement | **no** | — |
 | blob referenced only by the operator's own `holds` | only on explicit request naming the hash | §6.2 |
 | statement, any | **never** | — |
 | `pending/` journal record | **never** by `gc`; only recovery or quarantine (§3.4) | — |
+
+#### 6.1.1 The grace window (§12, decided 2)
+
+A blob installed in step 1 is referenced by nothing until the record of step 2 names it. The grace window
+keeps `gc` from deleting it in between:
+
+- **Measured from the last install or reuse.** §2 step 5 refreshes the window of an existing blob it reuses,
+  so republishing bytes this store once released is protected exactly like new bytes.
+- **Re-checked at deletion.** `gc` decides from a listing but, immediately before removing each blob,
+  re-checks that no installed statement and no `pending/` record names it and that its window has expired;
+  a blob that gained a reference since the listing is kept.
+- **Configurable.** The window is local policy (default 24 h), printed by `gc` in its plan and in the
+  durability declaration (§7). A value below 1 h is refused unless given for one run (`gc --grace <d>`), when
+  the operator knows nothing else is writing to the store. The window has to outlast the longest interval
+  between step 1 and step 2 of any operation on this store; one that does not is the residual case.
+- **The residual case is caught, not silent.** Step 2 refuses to write a record naming a blob that is not
+  held (nothing committed, the publish retried). If `gc` removes a blob between that check and the record,
+  step 5 finds it missing, reports `committed, needs repair: blob <hash> missing` (§3.5) and `fsck` lists it
+  as an unresolved reference; re-installing the bytes repairs it. No statement is ever lost.
+
+A pre-step-1 `intent/` record (a lease, as container runtimes use) would remove the window at the cost of a
+journal write and delete on every operation, and stale intents after a crash would need an expiry of their
+own. It is not adopted; an implementation may add one as long as `gc` honours both.
 
 `gc` prints what it would delete, with hashes and sizes, and deletes only with `--apply`. Its dry run states
 its side effects exactly ("no deletion; no registry change").
@@ -363,7 +407,8 @@ conformance result (CONFORMANCE "how a result is recorded"):
 | `exclusive_create` | `link` · `O_EXCL` · `db-unique` · `none` | the create-exclusive primitive behind §2 step 4 and §3 step 3. `link` and `O_EXCL` mean the POSIX.1-2024 `link()` (fails with `EEXIST`) and `open(O_CREAT\|O_EXCL)` semantics |
 | `same_filesystem` | `required` · `checked` · `assumed` | whether the temporary directory is verified to share the destination filesystem |
 | `locks` | `advisory` · `none` | §4.3 |
-| `gc_grace` | duration | §6.1 |
+| `gc_grace` | duration | the grace window in force (§6.1.1; local policy, default 24 h) |
+| `history` | `off` · `on (<bound>)` | whether the optional operation history is kept, and its size or age bound (§3.6) |
 | `assumes` | free text | filesystem assumptions (POSIX rename semantics, no network filesystem, …) |
 
 A declaration of `none` or `best-effort` is conforming. What is not conforming is behaving as if a guarantee
@@ -438,12 +483,14 @@ semantics stated in §1 and §5.2.
    optional signed envelope field beside the single `prev` (wire-format note §7). "Cleared" then means
    every tip is an ancestor of one statement, the same rule as a merge edition (claims-model note §8), and a
    reader can tell "cleared" from "the signer never saw the other branch" (§4.2).
-2. **Grace window versus pending records.** §6.1 protects a step-1 blob by a time window. The alternative
-   is a short-lived `intent/` record written before step 1, which removes the window but adds a journal
-   write to every publish. Which is the better default for a hub that ingests thousands of packages a day?
-3. **Journal retention.** `done/` records are deleted once projections are rebuilt (§3.4). Keeping them
-   indefinitely would give `explain` the operation that installed each statement at no inference cost, at
-   the price of unbounded growth. Keep, cap, or delete?
+2. ~~**Grace window versus pending records.**~~ **Decided (2026-10-16):** the grace window, measured from the
+   last install or reuse, re-checked at deletion, configurable with a 1 h floor (§6.1.1). No per-operation
+   `intent/` record: it costs a write on every publish of a hub that ingests thousands a day and needs its
+   own expiry after a crash.
+3. ~~**Journal retention.**~~ **Decided (2026-10-16):** delete `done/` records once projections are rebuilt
+   (§3.4), plus an optional, non-authoritative operation history that no answer reads (§3.6). Keeping
+   records would duplicate every statement and slow every open; an operation id in `explain` would have been
+   an answer that a deleted cache changes (P-07).
 4. ~~**Verification cache trust.**~~ **Decided:** a conformance run re-verifies every signature it reports
    on, from a cold store; the cache stays for daily use, and C-core-129a checks that it agrees with a cold
    run (§5.3).
