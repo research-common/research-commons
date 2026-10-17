@@ -369,7 +369,7 @@ admitted, and shown `unpinned` (claims-model note §5.3.1). A kind not listed he
 | `retracts` | `of` id R (the signer's own `authored`/`observed`) · `reason` string O |
 | `anchors` | `head` id R (a statement in the signer's own log) · `head_seq` integer R · `proof` object R (`scheme` string R, `digest` digest R of the proof bytes, `quality_claimed` string O). A `head` in another key's log is malformed |
 | `genesis` | `type` `"collection"`/`"task"`/`"series"` R · `name` string R · `controllers` list of key R (set) · `rule` object R (`any_one` true, or `k_of_n` {`k` integer}) · `forked_from` id O |
-| `edition` | `resource` id R · `predecessors` list of id R (set; the genesis id for the first edition; several for a merge) · `contents` object R (`members` list of {`content` or `resource` or `statement`, `role` string} O, `schema` digest O, `rules` list of {`dialect` string, `expr` string} O, `contract` object O, `selection` `"curated"`/`"rule-based"`/`"completeness"` O, `frozen_before` object O (exactly one of `date` date, `height` integer, `run` string: the same units as `finality.state_at_capture`, so the declared boundary is compared with the boundary the members' finality rules compute in the same unit, and a declared unit different from the computed one is `not comparable`, never converted), `segments` list O, `controllers` and `rule` O for a controller change) |
+| `edition` | `resource` id R · `predecessors` list of id R (set; the genesis id for the first edition; several for a merge) · `contents` object R (`members` list of {`content` or `resource` or `statement`, `role` string} O, `schema` digest O, `rules` list of {`dialect` string, `expr` string} O, `contract` object O, `selection` `"curated"`/`"rule-based"`/`"completeness"` O, `frozen_before` object O (exactly one of `date` date, `height` integer, `run` string: the same units as `finality.state_at_capture`, so the declared boundary is compared with the boundary the members' finality rules compute in the same unit, and a declared unit different from the computed one is `not comparable`, never converted), `controllers` and `rule` O for a controller change) |
 | `intent` · `progress` · `withdraw` · `submit` · `decide` | all: `task` id R · `edition` id R. `submit`: `result` digest R, `salt` string O, `self_declared_independence` boolean O. `decide`: `submissions` list of id R, `verdict` `"accept"`/`"reject"` R, `evaluations` list of digest O, `supersedes` id O. `progress`: `note` string O |
 | `rotate_key` · `revoke_key` | `rotate_key`: `successor` key R, `effective` ts O. `revoke_key`: `reason` R, one of `key_compromise` / `superseded` / `cessation_of_operation` / `unspecified` (the RFC 5280 §5.3.1 CRL reason codes that apply to a signing key, in snake case), `note` string O, `effective` ts O. Both are statements by the old key about itself. Only `key_compromise` casts doubt on statements before `effective`; what a reader does with that doubt is its policy (claims-model note §4) |
 
@@ -410,8 +410,10 @@ line contract.
 - **Ownership rule.** Every line in a log named for key K has `signer` = K and verifies under K. A line whose
   `signer` is another key, wherever it was delivered, is refused (intrinsic: `line in another key's log`)
   and K's chain is unchanged (C-core-14). The refusal scope is that line.
-- **Append-only.** A held log is a prefix of any accepted update. A delivery whose lines at a held `seq`
-  differ by id is `rewritten history` (intrinsic) for the package, and the held lines stay valid.
+- **Append-only.** Nothing held is ever replaced or removed by a delivery. A delivered line at a held `seq`
+  with a different id is a second line by the same key at that position, which only the key can sign (its
+  `prev` is inside the signature): it is a fork, retained and shown as below, never a refusal. There is no
+  `rewritten history` refusal; the alpha needed one because its chain link was outside the signature.
 - **Forks.** Two valid lines by K with the same `prev` are both retained and the log shows `FORK` at that
   point (C-core-127). Neither is refused; neither is the tip; later statements choose a branch by `prev`.
 - **Clearing a fork: `merges`.** A line may carry `merges`, a list of ids of other statements in K's own log
@@ -835,6 +837,12 @@ as an optional field (a minor change, §6) modelled on RFC 9581 §3.5.4 and FITS
   stay bare, because their algorithm is fixed by the major version (§8).
 - **`frozen_before`** (review, 2026-10-14). Takes the finality-state units (date, height or run) (§5).
 - **Licence texts** (review, 2026-10-14). Cited by digest when held, else by location (§5).
+- **Segments are members** (2026-10-16). `edition.contents` has no `segments` field: a segment is a member
+  with role `segment`, and its boundary comes from its own statement's finality, which is what the
+  claims-model note §8 computes (V6, C-core-101 – C-core-103).
+- **No `rewritten history` refusal** (2026-10-16). With `prev` signed, a different line at a held `seq` can
+  only be the key's own, so it is a fork (§7). A relayer's package that leaves lines out is covered by
+  "packages make no completeness claims" (claims-model note §11, C-core-01).
 - **Test vectors as data** (2026-10-14). The normative vectors live in a JSON file beside this note
   (`DESIGN-notes-wire-format.vectors.json`); the blocks in §9 are rendered from it.
 
