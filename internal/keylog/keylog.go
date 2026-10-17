@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/dag"
 	"github.com/research-common/research-commons/internal/rctime"
 	"github.com/research-common/research-commons/internal/refusal"
@@ -243,6 +244,15 @@ func (l *Log) relativeRule(st *wire.Statement, nodes map[string]*wire.Statement)
 		}
 		if o, ok := l.store.owner[st.Prev]; ok && o != l.key {
 			return mal("prev names a line of another key (%s)", o)
+		}
+	}
+	// An anchor bounds only its signer's own log (wire §5 `anchors`, claims §10): a `covered` naming another
+	// key's line is malformed (C-btc-04). Whether it is reachable from this line is the resolver's question.
+	if st.Kind == "anchors" && st.Verified && st.Status == wire.Valid {
+		if v, ok := st.Body.Get("covered"); ok {
+			if o, ok := l.store.owner[string(v.(canon.String))]; ok && o != l.key {
+				return mal("anchors covered names a line of another key (%s): an anchor bounds only its signer's log", o)
+			}
 		}
 	}
 	for _, m := range st.Merges {

@@ -39,6 +39,18 @@ unchanged on this branch.
   `merges`, so on a forked log an event on one branch never reaches the other. Rotations are reported as
   successions across algorithms (Ed25519 to secp256k1 and back). What an event means for authority stays with
   the resolver and the reader's policy.
+- **Resolver: authorship, derivation groups and grades** (claims-model §5.1, §5.2, §7). Per blob: sole author,
+  `derived by k`, `default author` with later claimants, or `contested`. Priority ranks only on a bound the reader
+  verified itself through a pluggable time verifier. The default verifies nothing, so every rival construction is
+  `contested` until the Bitcoin-time profile lands. A key's later `authored` on the same blob amends its earlier
+  one and keeps its bound. Single-party fields default by agreement inside a derivation group, are `contested`
+  per field, and list every rival with its signer. Derivation groups read bytes against the workflow's own
+  declared replication and comparator: T0, `diverged`, `identical bytes (protocol workflow)`, T1 under a
+  comparator the reader runs, or `unchecked`. The chain grade is the weakest derivation step; observations and
+  constructions without provenance are summarised beside it. Key events reach authorship as they reach
+  editions (the sibling rule, hard revocations).
+- **`holds.withdrawn`** is checked (`true` only; malformed beside `locations`), and an `anchors` whose `covered`
+  names another key's line is refused in the signer's log (an anchor bounds only its signer's log).
 
 ### Fixed
 - **Wire-format vector V5** listed its `controllers` set unsorted, which the note's own set rule refuses. Sorted
