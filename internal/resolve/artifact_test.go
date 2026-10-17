@@ -149,6 +149,23 @@ func everyOrderArtifact(t *testing.T, w *world, x string, check func(*Artifact),
 	}
 }
 
+// sampledOrderArtifact is everyOrderArtifact over a seeded sample of 24 delivery orders plus file order, for
+// tests whose rule is not order itself: order-independence over every permutation is the property tests' job
+// (P-01), and a full sweep of 7+ lines costs minutes under -race.
+func sampledOrderArtifact(t *testing.T, w *world, x string, check func(*Artifact), opts ...Option) {
+	t.Helper()
+	var first string
+	for _, o := range append([][]int{nil}, sampleOrders(len(w.lines), uint64(len(w.lines))*4099, 24)...) {
+		a := w.store(o, opts...).Artifact(dig(x))
+		check(a)
+		if out := a.Render(); first == "" {
+			first = out
+		} else if out != first {
+			t.Fatalf("order %v changed the answer:\n%s\nvs\n%s", o, out, first)
+		}
+	}
+}
+
 func wantAuthorship(t *testing.T, a *Artifact, want AuthorshipState) {
 	t.Helper()
 	if a.State != want {
@@ -1087,7 +1104,7 @@ func TestReproducedOutranksOtherGroupsDivergence(t *testing.T) {
 	w.workflow("WB", "W2", "bytes", "")
 	w.authored("C1", "CC", "X", "prov", []string{"W2", "I"})
 	w.authored("D1", "DD", "Y", "prov", []string{"W2", "I"})
-	everyOrderArtifact(t, w, "X", func(a *Artifact) {
+	sampledOrderArtifact(t, w, "X", func(a *Artifact) {
 		if a.Step.Tier != "T0" || a.Group.Provenance.Workflow != dig("W") {
 			t.Fatalf("step %s\n%s", a.Step, a.Render())
 		}
@@ -1543,7 +1560,7 @@ func TestGroupVersusOutsider(t *testing.T) {
 		if c.late {
 			w.authored("D1", "DD", "X", "prov", []string{"W", "I"})
 		}
-		everyOrderArtifact(t, w, "X", func(a *Artifact) {
+		check := func(a *Artifact) {
 			wantAuthorship(t, a, Priority)
 			if got := a.Default.Provenance != nil; got != c.groupWins {
 				t.Fatalf("%s: default %s\n%s", c.name, a.Default.describe(), a.Render())
@@ -1551,7 +1568,8 @@ func TestGroupVersusOutsider(t *testing.T) {
 			if a.Step.Tier != "T0" {
 				t.Fatalf("%s: step %s", c.name, a.Step)
 			}
-		}, WithTimeVerifier(newFakeBitcoin(100, 150)))
+		}
+		sampledOrderArtifact(t, w, "X", check, WithTimeVerifier(newFakeBitcoin(100, 150)))
 	}
 }
 
@@ -1577,7 +1595,7 @@ func TestAmendmentReplacesFields(t *testing.T) {
 	w.authored("A2", "A", "X", "prov", []string{"W", "I"})
 	w.authored("C1", "CC", "X")
 	w.anchor("CA", "CC", "btc:150")
-	everyOrderArtifact(t, w, "X", func(a *Artifact) {
+	sampledOrderArtifact(t, w, "X", func(a *Artifact) {
 		wantAuthorship(t, a, Priority)
 		if a.Default.Provenance == nil || a.Default.Bound.Height != 100 {
 			t.Fatalf("default %s bound %s\n%s", a.Default.describe(), a.Default.Bound, a.Render())
