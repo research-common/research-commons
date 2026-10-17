@@ -163,6 +163,8 @@ func TestSchemaRules(t *testing.T) {
 		{"digest other alg", "refutes", setField(m("refutes"), "evidence", s("sha512:"+strings.Repeat("ef", 32))), "content digest"},
 		{"id with a prefix", "retracts", setField(m("retracts"), "of", s("sha256:"+tID)), "statement id"},
 		{"id as a 12-char alias (§3)", "retracts", setField(m("retracts"), "of", s(tID[:12])), "statement id"},
+		{"holds withdrawn false", "holds", setField(m("holds"), "withdrawn", canon.Bool(false)), "is not true"},
+		{"holds withdrawn with locations", "holds", setField(setField(m("holds"), "withdrawn", canon.Bool(true)), "locations", arr(s("https://x.example"))), "withdrawn"},
 		{"size as a string", "holds", setField(m("holds"), "content", body("digest", tDig, "size", "10")), "size is not an integer"},
 		{"type not in vocabulary", "authored", setField(m("authored"), "type", s("Dataset")), "one of"},
 		{"availability without obtainable", "authored", setField(m("authored"), "availability", body("redistribution", "permitted")), "obtainable is missing"},
