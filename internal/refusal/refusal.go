@@ -15,7 +15,8 @@ const (
 	Intrinsic Class = "intrinsic"
 	// Operational: a documented limit of this reader was reached (size, depth). Another reader may accept it.
 	Operational Class = "operational"
-	// Policy: the reader's own policy refused it (trust floor, admission rule).
+	// Policy: the reader's (or, at write time, the writer's) own policy refused it (trust floor, admission rule,
+	// the future-ts bound).
 	Policy Class = "reader policy"
 )
 
@@ -25,6 +26,8 @@ const (
 	BadSignature       = "bad signature"
 	DepthLimit         = "depth limit"
 	SizeLimit          = "size limit"
+	// WrongLog: a line whose signer is not the key the log is named for (wire-format note §7, ownership rule).
+	WrongLog = "line in another key's log"
 )
 
 // Refusal is an error that names its class, its reason and what it applies to.

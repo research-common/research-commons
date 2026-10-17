@@ -17,6 +17,15 @@ unchanged on this branch.
   writer, time values, Ed25519 with the pinned pre-checks and EIP-191 with canonical signature storage, the
   envelope, DSSE PAE signed string and statement ids. Every vector in `docs/DESIGN-notes-wire-format.vectors.json`
   runs as a test; every case in `docs/CONFORMANCE.md` is a pending subtest until a test declares it.
+- **Body schema and per-key logs.** Every kind's body fields are checked for presence and type (wire format
+  §5), with an `observed` lacking a class-required referent field admitted as `unpinned` and an unlisted kind
+  kept as `unknown kind`. Per-key logs apply the ownership rule, show `FORK` and clear it only through
+  `merges`, keep a line whose predecessor is missing as `detached` with the gap named, and flag `incoherent`
+  times. Fork clearing for logs and for resource editions is one function.
+
+### Fixed
+- **Wire-format vector V5** listed its `controllers` set unsorted, which the note's own set rule refuses. Sorted
+  and re-chained (V5–V12 and N8–N13 change; #88).
 
 ## [0.4.0-alpha.1] - 2026-10-12
 

@@ -163,11 +163,11 @@ func TestEnvelopeRules(t *testing.T) {
 		{"crit duplicate", Draft{Kind: "authored", TS: "2026-10-15T00:00:00Z", Crit: []string{"x_a", "x_a"}, Body: body("x_a", 1)}, ed, "sorted"},
 		{"crit absent from body", Draft{Kind: "authored", TS: "2026-10-15T00:00:00Z", Crit: []string{"x_a"}, Body: body()}, ed, "not in the body"},
 		{"crit names a defined field", Draft{Kind: "authored", TS: "2026-10-15T00:00:00Z", Crit: []string{"licence"}, Body: body("licence", "MIT")}, ed, "not an extension name"},
-		{"capture.at not canonical", Draft{Kind: "observed", TS: "2026-10-15T00:00:00Z", Body: body("capture", body("at", "2026-10-15T00:00:00.10Z"))}, ed, "trailing zero"},
-		{"bad timescale", Draft{Kind: "observed", TS: "2026-10-15T00:00:00Z", Body: body("referent", body("timescale", "GMT", "at", "2026-10-15T00:00:00"))}, ed, "FITS"},
-		{"window to in TAI with Z", Draft{Kind: "observed", TS: "2026-10-15T00:00:00Z", Body: body("referent", body("timescale", "TAI", "window", body("from", "2026-10-15T00:00:00", "to", "2026-10-15T01:00:00Z")))}, ed, "Z asserts UTC"},
-		{"effective not UTC", Draft{Kind: "rotate_key", TS: "2026-10-15T00:00:00Z", Body: body("effective", "2026-10-15T00:00:00")}, ed, "missing Z"},
-		{"frozen_before not a date", Draft{Kind: "edition", TS: "2026-10-15T00:00:00Z", Body: body("contents", body("frozen_before", body("date", "2026-02-30")))}, ed, "no such date"},
+		{"capture.at not canonical", Draft{Kind: "observed", TS: "2026-10-15T00:00:00Z", Body: setField(minimal("observed"), "capture", body("at", "2026-10-15T00:00:00.10Z", "evidence", "self-asserted"))}, ed, "trailing zero"},
+		{"bad timescale", Draft{Kind: "observed", TS: "2026-10-15T00:00:00Z", Body: setField(minimal("observed"), "referent", body("timescale", "GMT", "at", "2026-10-15T00:00:00"))}, ed, "FITS"},
+		{"window to in TAI with Z", Draft{Kind: "observed", TS: "2026-10-15T00:00:00Z", Body: setField(minimal("observed"), "referent", body("timescale", "TAI", "window", body("from", "2026-10-15T00:00:00", "to", "2026-10-15T01:00:00Z")))}, ed, "Z asserts UTC"},
+		{"effective not UTC", Draft{Kind: "rotate_key", TS: "2026-10-15T00:00:00Z", Body: setField(minimal("rotate_key"), "effective", s("2026-10-15T00:00:00"))}, ed, "missing Z"},
+		{"frozen_before not a date", Draft{Kind: "edition", TS: "2026-10-15T00:00:00Z", Body: setField(minimal("edition"), "contents", body("frozen_before", body("date", "2026-02-30")))}, ed, "no such date"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			line, _ := Sign(c.d, c.k)
@@ -295,6 +295,17 @@ func TestSizeLimit(t *testing.T) {
 	refused(t, err, refusal.Operational, refusal.SizeLimit, "size limit 65536")
 }
 
+// TestSizePrecheck: a line far beyond any signed string the bound admits is refused (operational: size limit)
+// before it is parsed: even one that would not parse is refused for size, not for its syntax.
+func TestSizePrecheck(t *testing.T) {
+	huge := append([]byte(`{"x":"`), bytes.Repeat([]byte("a"), MaxLine)...)
+	_, err := Read(huge) // unterminated: a parser would refuse it as malformed
+	refused(t, err, refusal.Operational, refusal.SizeLimit, "refused before parsing")
+	// A line just under MaxLine is parsed (and here refused for what it is).
+	_, err = Read(huge[:MaxLine])
+	refused(t, err, refusal.Intrinsic, refusal.MalformedStatement, "")
+}
+
 // TestFutureTimestamp: the writer refuses a ts more than 300 s ahead of its clock and accepts 299 s.
 func TestFutureTimestamp(t *testing.T) {
 	conformance.Covers(t, "C-core-105")
@@ -306,7 +317,7 @@ func TestFutureTimestamp(t *testing.T) {
 		return x
 	}
 	_, err := Write(at(time.Hour), k, now)
-	refused(t, err, refusal.Intrinsic, "future timestamp", "scope this statement")
+	refused(t, err, refusal.Policy, "future timestamp", "writer policy: max future skew 300 s")
 	if _, err := Write(at(299*time.Second), k, now); err != nil {
 		t.Fatalf("299 s ahead refused: %v", err)
 	}
@@ -314,7 +325,7 @@ func TestFutureTimestamp(t *testing.T) {
 		t.Fatalf("300 s ahead refused (the bound is more than 300 s): %v", err)
 	}
 	_, err = Write(at(301*time.Second), k, now)
-	refused(t, err, refusal.Intrinsic, "future timestamp", "")
+	refused(t, err, refusal.Policy, "future timestamp", "")
 }
 
 // TestNonCanonicalInputStoredCanonical: a received line with whitespace and reordered keys is admitted when
@@ -357,15 +368,8 @@ func TestPropertyOneIDPerBody(t *testing.T) {
 		prev := map[string]string{}
 		for _, s := range f.Statements {
 			k := keys[s.Signer]
-			fields := []any{"content", content(fmt.Sprintf("%02x", s.Blob[0]), 10)}
-			if s.Kind == "authored" {
-				fields = append(fields, "type", "dataset")
-			}
-			for fk, fv := range s.Fields {
-				fields = append(fields, fk, fv)
-			}
 			d := Draft{Kind: s.Kind, Seq: int64(s.Seq), Prev: prev[s.Signer],
-				TS: time.Unix(1_790_000_000+int64(s.Time), 0).UTC().Format("2006-01-02T15:04:05Z"), Body: body(fields...)}
+				TS: time.Unix(1_790_000_000+int64(s.Time), 0).UTC().Format("2006-01-02T15:04:05Z"), Body: fixtureBody(s)}
 			line, id := Sign(d, k)
 			prev[s.Signer] = id
 			want[id] = line
@@ -404,6 +408,29 @@ func TestPropertyOneIDPerBody(t *testing.T) {
 		}
 		return ""
 	})
+}
+
+// fixtureBody concretizes an abstract fixture statement into a body that passes §5 for its kind.
+func fixtureBody(s fixture.Statement) *canon.Object {
+	c := content(fmt.Sprintf("%02x", s.Blob[0]), 10)
+	var fields []any
+	switch s.Kind {
+	case "authored":
+		fields = []any{"content", c, "type", "dataset"}
+	case "observed":
+		fields = []any{"content", c, "class", "none-yet", "referent", body(),
+			"capture", body("at", "2026-10-15T00:00:00Z", "evidence", "self-asserted")}
+	case "holds":
+		fields = []any{"content", c}
+	case "describes":
+		fields = []any{"about", body("content", c.Members["digest"])}
+	}
+	if s.Kind == "authored" || s.Kind == "observed" {
+		for fk, fv := range s.Fields {
+			fields = append(fields, fk, fv)
+		}
+	}
+	return body(fields...)
 }
 
 func permutation(seed uint64, n int) []int {
