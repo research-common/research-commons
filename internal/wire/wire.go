@@ -72,7 +72,8 @@ type Statement struct {
 	// ID is the statement id: lowercase hex sha256 of SignedString.
 	ID string
 	// Verified is true when the signature was checked. Unsupported statements under an unknown rc major or
-	// unknown alg are retained unverified.
+	// unknown alg are retained unverified; both carry an id and links (another major's by the linkage
+	// contract, wire §6), so a log can place them once a verified line of the key names them.
 	Verified bool
 	// Unpinned names the referent fields an observed statement's class requires and the statement lacks. Such
 	// a statement is valid and admitted; its referent status reads unpinned (§5, claims-model note §5.3.1).
@@ -116,14 +117,17 @@ func ID(signedString []byte) string {
 }
 
 var (
-	reAddr    = regexp.MustCompile(`^0x[0-9a-f]{40}$`)
-	reEdKey   = regexp.MustCompile(`^ed25519:[0-9a-f]{64}$`)
-	reID      = regexp.MustCompile(`^[0-9a-f]{64}$`)
-	reRC      = regexp.MustCompile(`^rc/([1-9][0-9]*)$`)
-	reKind    = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
-	reSigEIP  = regexp.MustCompile(`^0x[0-9a-f]{130}$`)
-	reSigEd   = regexp.MustCompile(`^[0-9a-f]{128}$`)
-	envFields = []string{"rc", "kind", "signer", "alg", "seq", "prev", "ts", "body"}
+	reAddr  = regexp.MustCompile(`^0x[0-9a-f]{40}$`)
+	reEdKey = regexp.MustCompile(`^ed25519:[0-9a-f]{64}$`)
+	// reOtherKey is the shape a key may take in another major (a scheme prefix and hex), for the linkage
+	// contract only: such a signer is never verified here.
+	reOtherKey = regexp.MustCompile(`^[a-z][a-z0-9-]*:[0-9a-f]+$`)
+	reID       = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	reRC       = regexp.MustCompile(`^rc/([1-9][0-9]*)$`)
+	reKind     = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+	reSigEIP   = regexp.MustCompile(`^0x[0-9a-f]{130}$`)
+	reSigEd    = regexp.MustCompile(`^[0-9a-f]{128}$`)
+	envFields  = []string{"rc", "kind", "signer", "alg", "seq", "prev", "ts", "body"}
 )
 
 // MaxLine bounds a received line before it is parsed (I15: a hostile line is refused before the parser walks
@@ -178,9 +182,12 @@ func fromEnvelope(full *canon.Object) (*Statement, error) {
 		return nil, refusal.Malformed("rc %q is not rc/<positive integer>", rc)
 	}
 	s.RC = rc
-	if m[1] != strconv.Itoa(Major) {
-		s.Status, s.Why, s.Sig = Unsupported, rc, string(sigS)
-		return s, nil
+	major, err := strconv.Atoi(m[1])
+	if err != nil || major < 1 {
+		return nil, refusal.Malformed("rc %q is not rc/<positive integer>", rc)
+	}
+	if major != Major {
+		return otherMajor(s, env, major, string(sigS))
 	}
 
 	for _, f := range envFields {
@@ -387,4 +394,60 @@ func str(o *canon.Object, k string) (string, error) {
 		return "", refusal.Malformed("%s is not a string", k)
 	}
 	return string(s), nil
+}
+
+// otherMajor reads a statement in a major this reader does not implement, under the linkage contract (wire §6):
+// the id formula, the canonical signed body and the fields signer, seq, prev and merges are the same in every
+// major. Nothing else is read and the signature is not checked (another major's alg set may differ), so the
+// statement is Unsupported and unverified; it carries an id and links, so a log can place it once a verified
+// line of the same key names it, exactly as an unknown-alg line (wire §4). A statement whose linkage fields
+// break the contract is malformed: they are the contract's, not the other major's.
+func otherMajor(s *Statement, env *canon.Object, major int, sig string) (*Statement, error) {
+	s.Status, s.Why, s.Sig = Unsupported, s.RC, sig
+	var err error
+	if s.Kind, err = str(env, "kind"); err != nil {
+		return nil, err
+	}
+	if !reKind.MatchString(s.Kind) {
+		return nil, refusal.Malformed("kind %q", s.Kind)
+	}
+	if s.Signer, err = str(env, "signer"); err != nil {
+		return nil, err
+	}
+	if !reAddr.MatchString(s.Signer) && !reEdKey.MatchString(s.Signer) && !reOtherKey.MatchString(s.Signer) {
+		return nil, refusal.Malformed("signer %q is not a key", s.Signer)
+	}
+	seq, ok := env.Members["seq"].(canon.Int)
+	if !ok || seq < 0 {
+		return nil, refusal.Malformed("seq is not a non-negative integer")
+	}
+	s.Seq = int64(seq)
+	switch p := env.Members["prev"].(type) {
+	case canon.Null:
+		if s.Seq != 0 {
+			return nil, refusal.Malformed("prev null at seq %d", s.Seq)
+		}
+	case canon.String:
+		if !reID.MatchString(string(p)) {
+			return nil, refusal.Malformed("prev %q is not a statement id", string(p))
+		}
+		if s.Seq == 0 {
+			return nil, refusal.Malformed("prev set at seq 0")
+		}
+		s.Prev = string(p)
+	default:
+		return nil, refusal.Malformed("prev is neither null nor a string")
+	}
+	if m, present := env.Get("merges"); present {
+		if s.Merges, err = mergesList(m, s.Seq, s.Prev); err != nil {
+			return nil, err
+		}
+	}
+	s.SignedString = PAE(PayloadType(s.Kind, major), canon.Encode(env))
+	if len(s.SignedString) > MaxSignedString {
+		return nil, &refusal.Refusal{Class: refusal.Operational, Reason: refusal.SizeLimit,
+			Detail: "size limit " + strconv.Itoa(MaxSignedString)}
+	}
+	s.ID = ID(s.SignedString)
+	return s, nil
 }

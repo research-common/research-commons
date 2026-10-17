@@ -312,8 +312,7 @@ var kinds = map[string][]field{
 		opt("shares", list(text())), opt("cause", text())},
 	"refutes":  {req("of", id()), req("evidence", digest()), opt("note", text())},
 	"retracts": {req("of", id()), opt("reason", text())},
-	"anchors": {req("head", id()), req("head_seq", integer()),
-		req("proof", object(req("scheme", text()), req("digest", digest()), opt("quality_claimed", text())))},
+	"anchors":  {req("covered", id()), req("proof", digest()), req("proof_format", text()), opt("services", list(text()))},
 	"genesis": {req("type", enum("collection", "task", "series")), req("name", text()), req("controllers", set(key(), false)),
 		req("rule", ruleObj), opt("forked_from", id())},
 	"edition": {req("resource", id()), req("predecessors", set(id(), true)), req("contents", object(
@@ -323,7 +322,6 @@ var kinds = map[string][]field{
 		opt("contract", anyObject()),
 		opt("selection", enum("curated", "rule-based", "completeness")),
 		opt("frozen_before", exactlyOne([]field{opt("date", date()), opt("height", integer()), opt("run", text())})),
-		opt("segments", list(func(canon.Value, string, *schemaCtx) error { return nil })),
 		opt("controllers", set(key(), false)),
 		opt("rule", ruleObj),
 	))},

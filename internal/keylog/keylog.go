@@ -58,8 +58,8 @@ type Log struct {
 	key   string
 	store *Store
 	lines map[string]*wire.Statement // by id: every line kept, including ones View refuses
-	// retained are lines this reader cannot verify: an rc major it does not implement (nothing in the
-	// envelope is read) or an alg it lacks. An unknown-alg line is placed in the log once it is vouched: a
+	// retained are lines this reader cannot verify: an rc major it does not implement (only the linkage
+	// fields are read, wire §6) or an alg it lacks. Such a line is placed in the log once it is vouched: a
 	// verified line of this key names its id in prev or merges, directly or through other vouched lines.
 	// That naming is the key's signed word that the line is theirs, and the id pins the line's own links, so
 	// it chains as §6 promises ("a valid signed line and still chains"). An unvouched line is shown and never
@@ -79,25 +79,20 @@ func (l *Log) Add(line []byte) (*wire.Statement, error) {
 	}
 	if !st.Verified {
 		// Ownership applies to what the envelope claims, verified or not: a line naming another signer is
-		// never kept in this log. (An unknown-major line's signer is not read; it is kept where delivered.)
-		if st.Signer != "" && st.Signer != l.key {
+		// never kept in this log. signer is a linkage field, so this holds for another major's line too.
+		if st.Signer != l.key {
 			return nil, &refusal.Refusal{Class: refusal.Intrinsic, Reason: refusal.WrongLog,
 				Detail: fmt.Sprintf("signer %s in the log of %s; scope this line", st.Signer, l.key)}
 		}
 		if l.retained == nil {
 			l.retained = map[string]*wire.Statement{}
 		}
-		key := st.ID
-		if key == "" {
-			// Unknown rc major: this reader cannot compute its statement id (the id function is the major's,
-			// wire-format note §8). Key it by the hash of its canonical form, so two deliveries differing only
-			// in whitespace or key order are one retained entry (P-02).
-			key = "rc-other:" + wire.ID(st.Line())
-		} else {
-			// The id covers the signer field, so whoever holds a line with this id holds that signer's claim.
-			l.store.owner[st.ID] = st.Signer
-		}
-		l.retained[key] = st
+		// Every unverified line has an id: an unknown alg is read in full, and another major's id follows the
+		// linkage contract (wire §6). The id is over the canonical form, so two deliveries differing only in
+		// whitespace or key order are one retained entry (P-02). The id covers the signer field, so whoever
+		// holds a line with this id holds that signer's claim.
+		l.store.owner[st.ID] = st.Signer
+		l.retained[st.ID] = st
 		return st, nil
 	}
 	if st.Signer != l.key {
@@ -378,10 +373,12 @@ func Short(id string) string {
 
 // Render is the log display: one line per placed statement, then forks and refusals. It is a function of the
 // view only, so two views with the same content render identically. Tokens are FORK, cleared, detached,
-// incoherent, refused, unsupported (claims-model note §13).
+// incoherent, refused, unsupported (claims-model note §13). Key events are listed with whether each is in
+// force, and a line after an in-force event names it ("after <id>").
 func (v View) Render() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "log %s\n", v.Key)
+	ks := v.KeyState()
 	for _, ln := range v.Lines {
 		fmt.Fprintf(&b, "  seq %d %s %s", ln.St.Seq, Short(ln.St.ID), ln.St.Kind)
 		if len(ln.St.Merges) > 0 {
@@ -400,8 +397,10 @@ func (v View) Render() string {
 		if ln.Incoherent {
 			b.WriteString(" incoherent")
 		}
+		b.WriteString(ks.afterTag(ln.St.ID))
 		b.WriteString("\n")
 	}
+	ks.render(&b)
 	for _, f := range v.Forks {
 		at := "the first line"
 		if f.At != "" {

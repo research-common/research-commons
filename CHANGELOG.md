@@ -30,6 +30,15 @@ unchanged on this branch.
   statement file is quarantined and replaced by the verified line, never left to block the store from opening.
   A failed projection leaves the operation `committed, needs repair`. The store prints what it guarantees
   (`fsync`, `link`, same filesystem).
+- **Statements of another format major chain.** Under the linkage contract (wire format §6) the id formula and
+  `signer`, `seq`, `prev`, `merges` are the same in every major, so a reader computes another major's ids and
+  places its lines once a verified line of the same key names them; they stay `unsupported` and unverified.
+- **`anchors` is format-neutral:** `covered`, `proof`, `proof_format`, `services` (wire §5).
+- **Key events in per-key logs.** A `rotate_key` or `revoke_key` is in force once it chains, and not before
+  (wire format §7, "Gaps"); the log names which lines come after each in-force event through `prev` and
+  `merges`, so on a forked log an event on one branch never reaches the other. Rotations are reported as
+  successions across algorithms (Ed25519 to secp256k1 and back). What an event means for authority stays with
+  the resolver and the reader's policy.
 
 ### Fixed
 - **Wire-format vector V5** listed its `controllers` set unsorted, which the note's own set rule refuses. Sorted

@@ -42,7 +42,7 @@ func minimal(kind string) *canon.Object {
 	case "retracts":
 		return body("of", tID)
 	case "anchors":
-		return body("head", tID, "head_seq", 3, "proof", body("scheme", "ots", "digest", tDig))
+		return body("covered", tID, "proof", tDig, "proof_format", "ots-detached-v1")
 	case "genesis":
 		return body("type", "collection", "name", "n", "controllers", arr(s(tKey)), "rule", body("any_one", canon.Bool(true)))
 	case "edition":
@@ -193,6 +193,9 @@ func TestSchemaRules(t *testing.T) {
 		{"selection unknown", "edition", setField(m("edition"), "contents", body("selection", "manual")), "one of"},
 		{"cohort hand_picked false", "corroborates", setField(m("corroborates"), "cohort", body("hand_picked", canon.Bool(false))), "is not true"},
 		{"verdict unknown", "decide", setField(m("decide"), "verdict", s("maybe")), "one of"},
+		{"anchors proof as an object (first draft)", "anchors", setField(m("anchors"), "proof", body("scheme", "ots", "digest", tDig)), "content digest"},
+		{"anchors covered as a digest", "anchors", setField(m("anchors"), "covered", s(tDig)), "statement id"},
+		{"anchors without proof_format", "anchors", body("covered", tID, "proof", tDig), "proof_format is missing"},
 		{"revocation reason outside RFC 5280 subset", "revoke_key", setField(m("revoke_key"), "reason", s("affiliation_changed")), "one of"},
 		{"successor upper case", "rotate_key", setField(m("rotate_key"), "successor", s("ed25519:"+strings.Repeat("AB", 32))), "is not a key"},
 		{"capture evidence unknown", "observed", setField(m("observed"), "capture", body("at", tTS, "evidence", "notarised")), "one of"},

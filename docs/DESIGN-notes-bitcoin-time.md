@@ -8,6 +8,11 @@ C-core-20, C-core-53, C-core-70, C-core-107, C-exch-16 and P-06 that depend on w
 local receipt → ordering by chain position) is kept intact; what changes is what gets stamped, where the proof
 lives and what the result unlocks.
 
+**Scope: one proof format.** The `anchors` statement is format-neutral (wire-format note §5: `covered`,
+`proof`, `proof_format`, `services`). This note is the profile for `proof_format: ots-detached-v1`, an
+OpenTimestamps detached proof checked against Bitcoin headers, and it defines the quality `bitcoin`. Another
+timestamping service is another `proof_format` with its own note and its own quality (§16).
+
 Standards used here, per the wire-format note's standards-first rule (its §0): the OpenTimestamps detached
 format as implemented by its reference library (§5.1; there is no standards-body specification), Bitcoin
 Core's consensus header rules and BIP 34, 113, 130 and 157 (§6), and CAIP-2 for the display-only chain id
@@ -44,7 +49,8 @@ the implementation evaluating statements on the user's machine; "the author" is 
 | **statement id** | hash of a statement's canonical signed body (claims-model note §4; encoding per the wire-format note) |
 | **covered head** | the statement id an anchor stamps; the last statement of the bounded prefix |
 | **bounded prefix** | the covered head plus every statement reachable from it through signed `prev` and `merges` links in the same key's log |
-| **`anchors` statement** | a statement in the signer's own log carrying `covered`, `stamped_digest`, `proof` (blob hash), `proof_format`, and `calendars` (informational) |
+| **`anchors` statement** | a statement in the signer's own log carrying `covered`, `proof` (blob hash), `proof_format` (`ots-detached-v1` here), and `services` (the calendars submitted to; informational) |
+| **stamped digest** | the raw 32 bytes of `covered`: what is submitted to calendars and what the proof's tree is rooted at. Derived, never carried in the statement, so it cannot disagree with `covered` |
 | **bound** | the reader's conclusion "statement S existed by chain position P", at a quality the reader assigns |
 
 Rules:
@@ -78,8 +84,8 @@ unsigned prefixes, `sig2`, anchor JSON records and `.root` files. The next forma
 `publish` performs these steps in this order, and the order is observable (C-btc-03):
 
 1. Sign the statement(s) being published; compute the covered head id `H`.
-2. Compute `stamped_digest` = the raw hash bytes of `H` (no hex, no trailing newline, no framing).
-3. Submit `stamped_digest` to each configured calendar. Calendar URLs are the author's local policy. A
+2. Compute the stamped digest = the raw hash bytes of `H` (no hex, no trailing newline, no framing).
+3. Submit the stamped digest to each configured calendar. Calendar URLs are the author's local policy. A
    calendar that fails to answer within the local timeout is skipped; if every calendar fails, `publish`
    either refuses (`anchor required`) or continues with `anchor: none` recorded and a warning. It never
    proceeds silently. The default depends on what the statement's standing rests on (§17, decided 2):
@@ -90,8 +96,8 @@ unsigned prefixes, `sig2`, anchor JSON records and `.root` files. The next forma
    other statement (other `observed` captures, members of a derivation group), so a calendar outage does not
    stop a capture whose window is closing. Local policy may override either default; neither is silent.
 4. Store the returned pending proof as a blob; its id is the hash of the exact proof bytes.
-5. Append an `anchors` statement: `covered = H`, `stamped_digest`, `proof = <blob hash>`,
-   `proof_format = ots-detached-v1`, `calendars = [...]`.
+5. Append an `anchors` statement: `covered = H`, `proof = <blob hash>`, `proof_format = ots-detached-v1`,
+   `services = [<calendar URIs>]`.
 6. Only now transport anything: blobs, statements, the proof blob.
 
 A copier who observes the push (C-btc-03) can at best stamp its own `authored` statement afterwards; any
@@ -136,15 +142,15 @@ Before any chain work, the reader checks, in order; the first failure names its 
 |---|---|---|
 | 1 | The `anchors` statement verifies: signature, log membership, closed vocabulary, size limit | refuse the statement (intrinsic or operational) |
 | 2 | `covered` is a statement id in the signer's own prefix (§1 rule 3) | `invalid-anchor`, refused |
-| 3 | `stamped_digest` equals the raw hash bytes of `covered` | `invalid-anchor`, refused |
+| 3 | `proof_format` is `ots-detached-v1` (any other value is another profile's, not this note's) | `unsupported`, granting nothing |
 | 4 | The proof blob named by `proof` is held and its bytes hash to `proof` | `missing-proof` (not a refusal; bound absent) |
-| 5 | Proof bytes within size limit; `proof_format` supported | `unsupported` or operational refusal |
+| 5 | Proof bytes within size limit | operational refusal |
 | 6 | Proof deserializes per §5.1 under depth/node limits; no trailing bytes | `invalid-proof` |
-| 7 | The proof's declared file digest equals `stamped_digest`; file-hash op is SHA-256 | `invalid-proof` |
+| 7 | The proof's declared file digest equals the stamped digest (the raw bytes of `covered`); file-hash op is SHA-256 | `invalid-proof` |
 
-A refusal under 1–3 or 5–7 is scoped to the `anchors` statement (C-btc-05): the log's other statements are
-untouched, remain displayed, and simply have no bound from this anchor. Nothing in received data can widen
-that scope.
+A refusal under 1, 2 or 5–7, and the `unsupported` of 3, are scoped to the `anchors` statement (C-btc-05):
+the log's other statements are untouched, remain displayed, and simply have no bound from this anchor.
+Nothing in received data can widen that scope.
 
 A hex-encoded digest, a digest with a newline, a proof for a different statement, or a raw digest of the
 statement bytes rather than of the canonical body all fail check 7.
@@ -154,7 +160,7 @@ statement bytes rather than of the canonical body all fail check 7.
 The reader uses the OTS library's structured parser, never regular expressions over `ots info` output or a
 CLI's "success" text.
 
-Deserializing yields an operation tree rooted at `stamped_digest`. The reader enumerates
+Deserializing yields an operation tree rooted at the stamped digest. The reader enumerates
 `(calculated_digest, attestation)` pairs and, for every `BitcoinBlockHeaderAttestation`:
 
 - requires `height` to be a non-negative integer within the provider's known chain (a boolean, a negative
@@ -492,7 +498,7 @@ CONFORMANCE.md; the rest are this note's supplementary regressions.
 
 | Id | Scenario | Required outcome |
 |---|---|---|
-| C-btc-07 | `stamped_digest` ≠ hash bytes of `covered` | `invalid-anchor` |
+| C-btc-07 | a proof whose file digest is not the raw bytes of `covered`; an `anchors` with `proof_format` other than `ots-detached-v1` | `invalid-proof`; `unsupported`, no bound, nothing refused |
 | C-btc-08 | proof declares hex digest, digest + newline, or a different statement's id | `invalid-proof` |
 | C-btc-09 | `anchors` statement whose `covered` is not in the signer's prefix | refused (intrinsic), scoped to the statement |
 | C-btc-10 | proof blob not held | `missing-proof`, exit 3, no fetch attempted |

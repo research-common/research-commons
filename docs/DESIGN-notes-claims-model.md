@@ -552,8 +552,12 @@ separately, under rules the reader chooses, with denominators shown. No transfer
 
 - **Bounds are per signer.** An anchor bounds only the signer's own log prefix. Every key anchors its own
   statements.
-- **Quality.** `local` = signed and self-consistent, but self-declared. `bitcoin` = the *reader* verified the
-  proof against block evidence it trusts (#59). A label in a file grants nothing.
+- **Quality.** `local` = signed and self-consistent, but self-declared. Every other quality names a proof
+  format the *reader* verified: an `anchors` statement says which format its proof is in (`proof_format`),
+  and each format's note defines the quality it can yield and how it orders against the others. `bitcoin` =
+  the reader verified an OpenTimestamps proof against block evidence it trusts (#59), the first such
+  format. A format the reader does not implement yields nothing; bounds of two different formats are
+  incomparable for priority until a note says otherwise. A label in a file grants nothing.
 - **Publish anchors first.** Anchoring happens at `publish`, before the bytes leave the author's machine.
 
 | Use | Local quality | Bitcoin quality |
