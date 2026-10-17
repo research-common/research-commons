@@ -70,6 +70,31 @@ func (g Grade) String() string {
 	return g.Why
 }
 
+// evidence orders one blob's steps from several derivation groups, to pick the step the blob shows: a tier
+// first (T0 > T1 > T2), then `diverged`, then the tokens that compared nothing. A re-derivation under any
+// provenance is a check of these bytes that passed, and its tier names the workflow. A completed comparison
+// that disagreed outranks one that never ran, so a claim under a second provenance cannot hide a divergence
+// behind "not re-derived". Neither order gives a third party anything: a key that can join a group can already
+// add a run to it, and a run under its own provenance only adds evidence beside the others (I5, I7).
+func (g Grade) evidence() int {
+	if r := g.rank(); r > 0 {
+		return 10 + r
+	}
+	switch g.Why {
+	case DivergedToken:
+		return 5
+	case IdenticalProto:
+		return 4
+	case NotComparable:
+		return 3
+	case UncheckedToken:
+		return 2
+	case NotRederived:
+		return 1
+	}
+	return 0
+}
+
 // rank orders grades for the weakest-link rule: T0 > T1 > T2 > anything without a tier. A step with no
 // derivation (a leaf) is not a step and is never passed here.
 func (g Grade) rank() int {
@@ -190,9 +215,33 @@ func (r *Resolver) compare(g *Group) {
 		set(func(int) Grade { return Grade{Tier: "T0"} })
 		g.Token = fmt.Sprintf("derived by %d: byte-identical re-derivation (T0)", k)
 	case g.Mode == "bytes":
-		set(func(int) Grade { return Grade{Why: DivergedToken} })
+		// graded per output: a run whose bytes another run of the group also produced is a byte-identical
+		// re-derivation whatever else the group holds, so one stray output never takes T0 from the others;
+		// an output no other run produced is the one that diverged
+		runs := map[string]int{}
+		for _, run := range g.Runs {
+			runs[run.Output]++
+		}
+		reproduced := 0
+		for _, o := range g.Outputs {
+			if runs[o] > 1 {
+				reproduced++
+			}
+		}
+		set(func(i int) Grade {
+			if runs[g.Runs[i].Output] > 1 {
+				return Grade{Tier: "T0"}
+			}
+			return Grade{Why: DivergedToken}
+		})
 		g.Token = fmt.Sprintf("derived by %d: diverged (%d different outputs)", k, len(g.Outputs))
+		if reproduced > 0 {
+			g.Token += fmt.Sprintf("; %d of them byte-identical across runs (T0)", reproduced)
+		}
 		g.Explain = append(g.Explain, "an environment differs or the determinism claim is wrong; no member is marked wrong")
+		if reproduced > 0 {
+			g.Explain = append(g.Explain, "an output another run also produced is a byte-identical re-derivation (T0); an output no other run produced is diverged")
+		}
 	case g.Mode == "protocol" && len(g.Outputs) == 1:
 		set(func(int) Grade { return Grade{Why: IdenticalProto} })
 		g.Token = fmt.Sprintf("derived by %d: %s", k, IdenticalProto)
@@ -307,23 +356,16 @@ func (r *Resolver) grade(a *Artifact, visiting map[string]bool) {
 		a.Step, a.Grade = Grade{Why: ObservationLeaf}, Grade{Why: ObservationLeaf}
 		return
 	}
-	var prov *Provenance
-	if a.Default != nil {
-		prov = a.Default.Provenance
-	}
-	switch {
-	case a.State == NoClaim:
-		a.Step = Grade{Why: NotHeld}
-	case prov == nil:
-		a.Step = Grade{Why: NoDerivation}
-	default:
-		a.Group = r.Group(prov)
-		a.Step = a.Group.stepOf(a.Digest)
-	}
-	a.Grade = a.Step
-	if prov == nil {
+	if a.State == NoClaim {
+		a.Step, a.Grade = Grade{Why: NotHeld}, Grade{Why: NotHeld}
 		return
 	}
+	r.groups(a)
+	a.Grade = a.Step
+	if a.Group == nil {
+		return
+	}
+	prov := a.Group.Provenance
 	exempt := r.isRefutation(a.Digest)
 	var obs, contra, leaves, missing int
 	for _, in := range prov.Inputs {
@@ -370,6 +412,43 @@ func (r *Resolver) grade(a *Artifact, visiting map[string]bool) {
 	}
 	slices.Sort(a.RestsOn)
 	a.RestsOn = slices.Compact(a.RestsOn)
+}
+
+// groups resolves the derivation group of every claimant unit with provenance and takes the blob's step from
+// the one with the strongest evidence for these bytes (Grade.evidence), the default unit's on a tie. Whether a
+// workflow reproduces the bytes does not depend on who authored them first, so authorship (contested, or a
+// claimant without provenance ranked first) never hides a group's evidence: a statement that bears only on
+// authorship cannot change the grade (I5).
+func (r *Resolver) groups(a *Artifact) {
+	units := make([]*Unit, 0, len(a.Units))
+	if a.Default != nil && a.Default.Provenance != nil {
+		units = append(units, a.Default)
+	}
+	for _, u := range a.Units {
+		if u.Provenance != nil && u != a.Default {
+			units = append(units, u)
+		}
+	}
+	for _, u := range units {
+		g := r.Group(u.Provenance)
+		a.Groups = append(a.Groups, g)
+		if step := g.stepOf(a.Digest); a.Group == nil || step.evidence() > a.Step.evidence() {
+			a.Group, a.Step = g, step
+		}
+	}
+	if a.Group == nil {
+		a.Step = Grade{Why: NoDerivation}
+		return
+	}
+	for _, g := range a.Groups {
+		if g != a.Group && g.stepOf(a.Digest).Why == DivergedToken {
+			a.Explain = append(a.Explain, "the derivation group "+g.Provenance.String()+" shows these bytes diverged; shown beside the grade, which comes from "+a.Group.Provenance.String())
+		}
+	}
+	if a.Default == nil || a.Default.Provenance == nil || a.Default.Provenance.key() != a.Group.Provenance.key() {
+		a.Explain = append(a.Explain, "grade from the derivation group "+a.Group.Provenance.String()+"; authorship ("+
+			string(a.State)+") does not move it: whether a workflow reproduces these bytes does not depend on who authored them first")
+	}
 }
 
 func (r *Resolver) isObservation(d string) bool {

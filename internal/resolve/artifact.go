@@ -180,8 +180,11 @@ type Artifact struct {
 	// Held lists every other statement about the blob or its claims, attributed: describes, refutes, retracts,
 	// reproduced across workflows. Shown beside the artifact; inputs to no default.
 	Held []*Placed
-	// Group is the derivation group of the default unit (or the only unit), when it has provenance.
-	Group *Group
+	// Groups are the derivation groups of every claimant unit with provenance, whatever the authorship state.
+	// Group is the one this blob's step comes from: the strongest evidence any of them holds for these bytes
+	// (see grade), the default unit's on a tie. Nil when no claimant has provenance.
+	Groups []*Group
+	Group  *Group
 	// Grade is the chain grade (weakest derivation step, §7); Step is this blob's own step.
 	Grade, Step Grade
 	// RestsOn summarises the leaves under the chain (§7, scoped summary).
@@ -583,6 +586,11 @@ func (a *Artifact) Render() string {
 	}
 	if a.Group != nil {
 		b.WriteString(a.Group.render("  "))
+	}
+	for _, g := range a.Groups {
+		if g != a.Group {
+			b.WriteString(g.render("  "))
+		}
 	}
 	if len(a.Holders) > 0 {
 		hs := make([]string, len(a.Holders))

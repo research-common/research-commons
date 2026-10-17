@@ -604,7 +604,7 @@ func TestAcrossWorkflows(t *testing.T) {
 		"provenance", obj("workflow", dig("W2"), "inputs", []string{dig("I")})))
 	everyOrderArtifact(t, w, "X", func(a *Artifact) {
 		wantAuthorship(t, a, Priority)
-		if len(a.Units) != 2 || a.Default.Claims[0].Signer != w.signer("A") {
+		if len(a.Units) != 2 || a.Default.Claims[0].Signer != w.signer("A") || a.Group.Provenance.Workflow != dig("W1") {
 			t.Fatalf("%s", a.Render())
 		}
 		out := a.Render()
@@ -960,4 +960,138 @@ func TestWorkflowModeFromItsDefault(t *testing.T) {
 	}
 	has(t, a.Render(), "the workflow's authorship is contested")
 	wantExit(t, a, 3, "derivation: unchecked")
+}
+
+// TestAuthorshipDoesNotHideGroups: a claim on the bytes outside the derivation group (no provenance, or another
+// workflow) can make authorship contested; it never takes the group's evidence off the blob. X stays T0 with the
+// group shown, authorship is contested with exit 3 for that reason only, and a downstream result is unchanged.
+// Before: grade read "no derivation (no provenance)" and the group vanished from the view.
+func TestAuthorshipDoesNotHideGroups(t *testing.T) {
+	w := groupWorld(t, "bytes", "", map[string]string{"A": "X", "BB": "X"})
+	w.authored("C1", "CC", "X")
+	everyOrderArtifact(t, w, "X", func(a *Artifact) {
+		wantAuthorship(t, a, ContestedAuthorship)
+		if a.Step.Tier != "T0" || a.Grade.Tier != "T0" || a.Group == nil {
+			t.Fatalf("step %s grade %s\n%s", a.Step, a.Grade, a.Render())
+		}
+		out := a.Render()
+		has(t, out, "derived by 2: byte-identical re-derivation (T0)")
+		has(t, out, "authorship (contested) does not move it")
+		code, why := a.VerifyExit()
+		if code != 3 || len(why) != 1 || why[0] != "authorship: contested" {
+			t.Fatalf("verify %d %v", code, why)
+		}
+	})
+
+	// a rival under another workflow: both groups shown, the blob's step is the stronger evidence
+	w2 := groupWorld(t, "bytes", "", map[string]string{"A": "X", "BB": "X"})
+	w2.workflow("WB", "W2", "bytes", "")
+	w2.authored("C1", "CC", "X", "prov", []string{"W2", "I"})
+	everyOrderArtifact(t, w2, "X", func(a *Artifact) {
+		wantAuthorship(t, a, ContestedAuthorship)
+		if len(a.Groups) != 2 || a.Step.Tier != "T0" || a.Group.Provenance.Workflow != dig("W") {
+			t.Fatalf("groups %d step %s\n%s", len(a.Groups), a.Step, a.Render())
+		}
+		has(t, a.Render(), "derived by 1, not re-derived")
+	})
+
+	// same bytes, verified priority to the outsider: still T0 from the group (priority is credit, not evidence)
+	w3 := groupWorld(t, "bytes", "", map[string]string{"A": "X", "BB": "X"})
+	w3.authored("C1", "CC", "X")
+	w3.anchor("CA", "CC", "btc:100")
+	a := w3.store(nil, WithTimeVerifier(newFakeBitcoin(100))).Artifact(dig("X"))
+	wantAuthorship(t, a, Priority)
+	if a.Default.Provenance != nil || a.Step.Tier != "T0" {
+		t.Fatalf("outsider default: step %s\n%s", a.Step, a.Render())
+	}
+	wantExit(t, a, 0, "")
+}
+
+// TestNonInterferenceGroupEvidence: I5 as a property over the grade. For a T0 blob, adding any one claim that
+// bears only on authorship (a bare authored by a new key, one under another workflow with a fresh input, or an
+// amendment by an existing deriver that drops provenance) never lowers the blob's step below T0.
+func TestNonInterferenceGroupEvidence(t *testing.T) {
+	adds := map[string]func(w *world){
+		"bare": func(w *world) { w.authored("C1", "CC", "X") },
+		"other wf": func(w *world) {
+			w.workflow("WB", "W2", "protocol", "")
+			w.authored("C1", "CC", "X", "prov", []string{"W2", "J"})
+		},
+		"other input": func(w *world) { w.authored("C1", "CC", "X", "prov", []string{"W", "J"}) },
+		"licence":     func(w *world) { w.authored("C1", "CC", "X", "licence", "MIT") },
+	}
+	for _, name := range sortedKeys(adds) {
+		w := groupWorld(t, "bytes", "", map[string]string{"A": "X", "BB": "X"})
+		adds[name](w)
+		everyOrderArtifact(t, w, "X", func(a *Artifact) {
+			if a.Step.Tier != "T0" {
+				t.Fatalf("%s: step %s\n%s", name, a.Step, a.Render())
+			}
+		})
+	}
+}
+
+// TestBytesPerOutput: A13. Under `bytes`, an output another run also produced is T0 whatever else the group
+// holds; an output no other run produced is diverged. One stray run (anyone can assert a provenance) never turns
+// the reproduced bytes into "checked and wrong". The group still shows the divergence beside the grade.
+func TestBytesPerOutput(t *testing.T) {
+	w := groupWorld(t, "bytes", "", map[string]string{"A": "X", "BB": "X", "CC": "Y"})
+	everyOrderArtifact(t, w, "X", func(a *Artifact) {
+		if a.Step.Tier != "T0" {
+			t.Fatalf("X step %s\n%s", a.Step, a.Render())
+		}
+		out := a.Render()
+		has(t, out, "derived by 3: diverged (2 different outputs); 1 of them byte-identical across runs (T0)")
+		has(t, out, "an environment differs or the determinism claim is wrong")
+		wantExit(t, a, 0, "")
+	})
+	everyOrderArtifact(t, w, "Y", func(a *Artifact) {
+		if a.Step.Why != DivergedToken {
+			t.Fatalf("Y step %s\n%s", a.Step, a.Render())
+		}
+		wantExit(t, a, 1, "diverged")
+	})
+
+	// a reproduced run counts as a run: A's own re-run of X and B's Y → X T0, Y diverged
+	w2 := groupWorld(t, "bytes", "", map[string]string{"A": "X", "BB": "Y"})
+	w2.sign("AR", "A", "reproduced", obj("of", w2.ids["A1"], "result", "match", "content", contentOf("X"),
+		"provenance", obj("workflow", dig("W"), "inputs", []string{dig("I")})))
+	if a := w2.store(nil).Artifact(dig("X")); a.Step.Tier != "T0" {
+		t.Fatalf("X with a reproduced: %s\n%s", a.Step, a.Render())
+	}
+	if a := w2.store(nil).Artifact(dig("Y")); a.Step.Why != DivergedToken {
+		t.Fatalf("Y with a reproduced: %s", a.Step)
+	}
+}
+
+// TestDivergedOutranksUnrederived: a blob diverged in one group and not re-derived in another shows diverged
+// (a completed comparison that disagreed beats one that never ran); the other group is shown beside it.
+func TestDivergedOutranksUnrederived(t *testing.T) {
+	w := groupWorld(t, "bytes", "", map[string]string{"A": "X", "BB": "Y"})
+	w.workflow("WB", "W2", "bytes", "")
+	w.authored("C1", "CC", "X", "prov", []string{"W2", "I"})
+	everyOrderArtifact(t, w, "X", func(a *Artifact) {
+		if a.Step.Why != DivergedToken || len(a.Groups) != 2 {
+			t.Fatalf("step %s groups %d\n%s", a.Step, len(a.Groups), a.Render())
+		}
+		wantExit(t, a, 1, "diverged")
+	})
+}
+
+// TestReproducedOutranksOtherGroupsDivergence: X is T0 under W (A and B) and diverged under W2, where two other
+// keys claim X and Y. A passed re-derivation is a check of these bytes that passed; a group of someone else's
+// choosing that disagrees is shown beside it, never turns X's verify into 1 (I7: otherwise two strangers could
+// invent a workflow and flip any blob to "checked and wrong").
+func TestReproducedOutranksOtherGroupsDivergence(t *testing.T) {
+	w := groupWorld(t, "bytes", "", map[string]string{"A": "X", "BB": "X"})
+	w.workflow("WB", "W2", "bytes", "")
+	w.authored("C1", "CC", "X", "prov", []string{"W2", "I"})
+	w.authored("D1", "DD", "Y", "prov", []string{"W2", "I"})
+	everyOrderArtifact(t, w, "X", func(a *Artifact) {
+		if a.Step.Tier != "T0" || a.Group.Provenance.Workflow != dig("W") {
+			t.Fatalf("step %s\n%s", a.Step, a.Render())
+		}
+		has(t, a.Render(), "shows these bytes diverged; shown beside the grade")
+		wantExit(t, a, 3, "authorship: contested")
+	})
 }
