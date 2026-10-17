@@ -3,7 +3,7 @@
 **Status:** proposed · **Companion to:** the claims-model note (§15, "execution profiles: runtimes,
 confinement mechanism, limits") · **Covers:** that §15 item; claims-model note §4 (`reproduced`), §5.2
 (derivation groups, the environment record), §11 ("admission is not execution"), §12 (the sandbox bullets), §13 (exits 3
-and 5, `timeout`); conformance cases C-exec-01 through C-exec-15 (incl. C-exec-13a), plus C-core-32 (the environment record as a method
+and 5, `timeout`); conformance cases C-exec-01 through C-exec-16 (incl. C-exec-13a, C-exec-13b), plus C-core-32 (the environment record as a method
 referent) and C-core-133 (exits 3 and 5).
 
 ## 0. Summary
@@ -62,7 +62,7 @@ Rules:
    time window, environment record). A run that makes more than one request writes a request log into its
    output (endpoint, parameters, status, time and response hash per request) and the statement pins it by
    hash, format and count (wire-format note §5, source referent), so a capture of thousands of requests is
-   one statement, never `authored` with provenance. They join no derivation group and
+   one statement, never `authored` with provenance (§11, decided 2). They join no derivation group and
    carry no T0/T1. This is the mechanical form of "network access lives in `observed`, determinism in
    `corroborates`" (claims-model note, appendix; C-exec-14). A `network: none` workflow whose step opens a
    connection fails inside the sandbox (§2.1) and the run result is `failed`, never `match`.
@@ -126,6 +126,15 @@ the spec asks for more than the policy ceiling, the run is refused (reader polic
 numbers; the implementation never silently runs the step under a smaller cap than it declared, because the
 resulting failure would be indistinguishable from a workflow defect.
 
+**Running below the declared profile is the reader's explicit choice** (§11, decided 3). An invocation may ask
+for it (`run --below-profile`; never a default, never a fallback). The step then runs under the reader's
+ceiling for each cap the spec exceeds, and the environment record carries both values for each such cap
+(`caps` in force and `declared`). A cap that trips gives `failed: operational: <cap> (below declared
+profile)`, or `timeout (below declared profile)` for wall time, exit 3, and the next step names the declared
+value: run where it is available. A run that completes is compared as any other: `match` is an ordinary
+`match`, and the record shows it ran below the declaration. A failure under this flag is never read as a
+defect of the workflow, and resource use stays outside the grade (§4).
+
 After any cap trips: staging is removed, no output is read back, no statement is emitted, and the result is
 written with the resources used up to the kill (`wall_time`, `peak_rss`, `pids_peak`, `bytes_written`). The
 implementation verifies cleanup by checking that the container no longer exists and that no process remains
@@ -156,6 +165,11 @@ derivation was performed. It does not change the grade's rank or any exit code.
 A native result is re-derivable only by rebaseline (§8): a stranger's `verify` of it exits 5 (environment
 mismatch: `profile native ≠ sandbox`) unless that reader's own policy accepts native records, in which case
 the mismatch is still named and the comparison proceeds under the reader's stated choice.
+
+**Native records join derivation groups** (§11, decided 1). A native `authored` or `reproduced` is a member of
+its group for every reader, displayed with `(native)`; the exit-5 rule above keeps it from being mistaken for
+a sandbox reproduction. Keeping groups sandbox-only would hide the record from the group display without
+making it any less the author's statement.
 
 ### 2.5 Declaring support
 
@@ -217,10 +231,10 @@ note fixes the fields and their meaning.
 | `runtime` | container runtime name and version (sandbox); interpreter name and version (native) | both |
 | `interpreter` | the interpreter the step was invoked under, with its version as reported inside the environment | both |
 | `declared_deps` | the spec's dependency declarations, verbatim | both |
-| `caps` | the cap values in force: `cpus`, `memory`, `pids`, `disk`, `wall_time`; `advisory: true` under native | both |
+| `caps` | the cap values in force: `cpus`, `memory`, `pids`, `disk`, `wall_time`; `advisory: true` under native; for a run below the declared profile (§2.2), each lowered cap also carries the spec's `declared` value | both |
 | `network` | `none` · `granted: [endpoints]` | both |
 | `grants` | names (never values) of policy grants that crossed the boundary (§6) | both |
-| `peak_rss_bytes` | peak resident memory of the container cgroup (or the process tree, native); `unmeasured` if not available | both |
+| `peak_rss_bytes` | peak resident memory of the container cgroup (or the process tree, native). Under `sandbox` it is always measured: the cgroup reports it, and an implementation that cannot read it does not conform to the profile (§11, decided 5). `unmeasured` is allowed under `native` only | both |
 | `wall_time_ms` | from container start to exit or kill | both |
 | `exit_status` | the step's exit code, or `killed: <cap>` | both |
 | `result` | the run result token (§5.2) | both |
@@ -235,7 +249,8 @@ Rules:
   reports one.
 - **Measured, not copied.** `image.digest`, `platform`, `runtime`, `peak_rss_bytes` and `wall_time_ms` are
   taken from the runtime after the run, never from the spec. A value the implementation could not measure is
-  written as `unmeasured`, never as zero or as the spec's number.
+  written as `unmeasured`, never as zero or as the spec's number; for `peak_rss_bytes` that is a `native`
+  record only.
 - **Comparison.** `verify` compares the fields the workflow's `environment_match` names (§1) between the
   pinned record and the record of the re-run. A difference in any named field is an environment mismatch:
   exit 5, the field named, and the byte comparison is reported as `not compared (environment mismatch)`.
@@ -275,6 +290,7 @@ surface that shows the run; the `verify` exit codes are the claims-model note's 
 | `failed: <exit n>` | the step exited non-zero | 3 |
 | `failed: operational: <cap>` | a cap other than wall time stopped the step; resources used recorded | 3 |
 | `timeout` | wall-time cap; container and descendants killed; resources used recorded | 3 |
+| `… (below declared profile)` | either of the two rows above, in a run the reader chose to run below the spec's profile (§2.2) | 3 |
 | `environment mismatch: <field>` | a field named by `environment_match` differs between pin and re-run | 5 |
 
 Exit 1 is reserved for a comparison that ran to completion and disagreed: a script reads it as "the pinned
@@ -353,6 +369,13 @@ tag are two environments. The record stores the digest run, and `environment_mat
 includes it by default, so a re-run on another architecture is an environment mismatch (exit 5), not a
 `diverged`.
 
+**Platform-independent results are declared by narrowing `environment_match`** (§11, decided 4). An author
+who claims the bytes do not depend on the platform drops `platform` (and, if it applies, the image digest)
+from the workflow's `environment_match`. A re-run on another architecture is then compared on bytes:
+`match` or `diverged`, with both records side by side. There is no third token such as `match (platform
+differs)`: the claim is the author's, signed on the workflow, and a `diverged` on another platform is
+evidence against it like any other.
+
 **Rebaseline is a new statement, never an edit.** When an author or any runner re-runs a workflow under a new
 environment (a rebuilt image, a new architecture, sandbox where the original was native), the run emits a
 `reproduced` statement with the new record and the result token computed under the workflow's mode. The
@@ -391,7 +414,22 @@ the new image digest; derivations under the old pin stay valid under the old pin
 - Multi-step pipelines and caching of intermediate outputs across workflows.
 - Distributed or remote execution; this note's boundary is one host.
 
-## 11. Open questions
+## 11. Decisions and open questions
+
+**Decided (2026-10-16).** All five.
+
+1. **Native records across readers.** Admitted into derivation groups, displayed `(native)`; a stranger's
+   `verify` names the profile mismatch and exits 5 unless its policy accepts native records (§2.4).
+2. **Acquisition workflows.** `network: required` workflows emit `observed` only (§1 rule 3). The capture /
+   derivation line the claims-model note draws is kept.
+3. **Spec profile versus reader ceiling.** Refusal stays the default; a reader may opt in to running below the
+   declared profile, and a resulting cap failure is `… (below declared profile)`, exit 3 (§2.2, §5.2).
+4. **Cross-architecture `bytes` results.** No third token; an author who claims platform independence drops
+   `platform` from `environment_match` (§8).
+5. **Peak RSS as a requirement.** Always measured under `sandbox` (a conformance requirement); `unmeasured`
+   only under `native` (§4).
+
+The questions as first asked:
 
 1. **Native records across readers.** Should a `reproduced` or `authored` with `profile: native` be admitted
    into a derivation group at all for readers other than its author, or displayed only as the author's own
