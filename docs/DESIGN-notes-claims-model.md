@@ -167,7 +167,7 @@ body are one statement. Canonical encoding, field names and test vectors belong 
 |---|---|---|
 | `authored` | the author | "I made these bytes." Carries the author's single-party fields: licence, availability, verification spec, description, and provenance (workflow + inputs) when derived. For a construction, it is a first-to-publish claim (§5.2). The same key's later `authored` statement on the same blob amends its earlier one. |
 | `observed` | the observer | "I captured these bytes." Carries the referent, capture record, capture evidence and the observation class the observer asserts (§5.3), plus the same single-party fields. |
-| `holds` | anyone | "I have these bytes and serve them." Mirroring, with no authorship and no agreement. |
+| `holds` | anyone | "I have these bytes and serve them." Mirroring, with no authorship and no agreement. A later `holds` by the same key with `withdrawn: true` says "I no longer serve them"; the earlier one stays in the log. |
 | `describes` | anyone | Open annotations: tags, notes, non-evidential links. Shown as the signer's, ranked by the reader's trust. |
 | `reproduced` | anyone | "I re-ran this": match / diverged / not comparable, with environment record, including a successor workflow that reproduces the same outputs (#22). Emitted by `run --publish` in place of `authored` when the runner already holds a same-provenance `authored` for the bytes (§5.2). |
 | `corroborates` | anyone | Points at a corroboration result (§5.3.2): supports / contradicts / inconclusive under a named agreement model. |
