@@ -213,6 +213,14 @@
    }
   }
  ],
+ "edition_ids": [
+  {
+   "of": "V6",
+   "signed_string": "DSSEv1 53 application/vnd.research-commons.edition-body.v1+json 415 {\"contents\":{\"frozen_before\":{\"date\":\"2026-09-01\"},\"members\":[{\"content\":\"sha256:7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a\",\"role\":\"segment\"}],\"rules\":[{\"dialect\":\"rc-rules/1\",\"expr\":\"sampling.n >= 30\"}],\"selection\":\"rule-based\"},\"predecessors\":[\"9503bbd1fa92407b021011915c5da74a09594ce8186970cf92df3931f502d8b9\"],\"resource\":\"9503bbd1fa92407b021011915c5da74a09594ce8186970cf92df3931f502d8b9\"}",
+   "bytes": 483,
+   "edition_id": "81ddcc709d87564a1c8fbd3cd5d1dff61f9e754c1cdfa27c1a9e27ec5aaacc6c"
+  }
+ ],
  "ed25519": {
   "key": {
    "derivation": "seed = sha256(\"research-commons wire-format test key 2 (ed25519)\"); RFC 8032 key from that seed",
@@ -230,10 +238,10 @@
    },
    {
     "name": "E2",
-    "signed_string": "DSSEv1 51 application/vnd.research-commons.rotate_key.v1+json 348 {\"alg\":\"ed25519\",\"body\":{\"effective\":\"2026-10-14T18:01:00.5Z\",\"successor\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\"},\"kind\":\"rotate_key\",\"prev\":\"37614f5d085342c609e50383f78cf89564326616a1e0535440d67dc9af5c44d2\",\"rc\":\"rc/1\",\"seq\":1,\"signer\":\"ed25519:f9e6e12ad6036f6c19ebe6c6cf64f4e26c40b63eeab2cd19f4dd947657b25fe5\",\"ts\":\"2026-10-14T18:01:00.5Z\"}",
-    "bytes": 414,
-    "id": "a3a49f04392a3f969be4226f0a2ab45788ede846605749c633e9cfa6a81ae262",
-    "sig": "04c41721f540bc834196689ef30ac85271ea8b32bb64031d324de43eb3daff84ac12eca38c0f9da1898659fd0fe24e3473760bddeb7e39b94972e7c3e427b409"
+    "signed_string": "DSSEv1 51 application/vnd.research-commons.rotate_key.v1+json 311 {\"alg\":\"ed25519\",\"body\":{\"successor\":\"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a\"},\"kind\":\"rotate_key\",\"prev\":\"37614f5d085342c609e50383f78cf89564326616a1e0535440d67dc9af5c44d2\",\"rc\":\"rc/1\",\"seq\":1,\"signer\":\"ed25519:f9e6e12ad6036f6c19ebe6c6cf64f4e26c40b63eeab2cd19f4dd947657b25fe5\",\"ts\":\"2026-10-14T18:01:00.5Z\"}",
+    "bytes": 377,
+    "id": "0ca4a96aa436f9e0b21fa0c91620956d8fcf26ea7aa8224c28e3b3fc59d4dd9a",
+    "sig": "a51c2e20eda3858dad38de8bcd5cb96b4a71749a6bf6e1530c7a81b291c6985e976b5fa650c065869f3bbb147f78d248854ad934a4f6f3b7f526ff1e76a4770a"
    }
   ],
   "negative": [

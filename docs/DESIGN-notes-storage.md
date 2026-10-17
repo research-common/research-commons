@@ -246,7 +246,14 @@ is a **fork point**:
   deleted;
 - a statement whose `merges` names a line the reader does not hold is `detached` until that line arrives,
   like one whose `prev` is not held (wire-format note §7, "Gaps"; C-core-127b). A branch the
-  owner does not recognise is not merged: the answer to it is `revoke_key` with `key_compromise`.
+  owner does not recognise is not merged: the answer to it is a `revoke_key`, which cuts every line outside
+  its own history whatever its reason (claims-model note §4.1). The tool's `revoke` builds that history by
+  reason. For a soft reason (`superseded`, `cessation_of_operation`) the owner is retiring a key it still
+  controls, so `revoke` merges every tip it holds and nothing is cut by accident. For a hard reason it merges
+  nothing on its own: it lists every tip, marks the ones this machine did not write, and the owner picks
+  which to keep and which line is `last_good`. Folding a thief's tips into the owner's history would make
+  them count. `revoke` offers the three documented reasons with no default, and refuses to run
+  non-interactively without `--reason`.
 
 A fork is never a refusal: no gate may refuse a statement because its signer's log has forked (I7 applies to
 the signer's own relayers too). A fork is also not a claim of misbehaviour; it is what two honest processes

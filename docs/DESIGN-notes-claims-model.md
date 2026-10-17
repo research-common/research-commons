@@ -174,12 +174,49 @@ body are one statement. Canonical encoding, field names and test vectors belong 
 | `refutes` | anyone | "This premise or result is wrong", with the evidence artifact. |
 | `retracts` | the author | A recall request for the author's own artifact. |
 | `anchors` | any key, own log | Time evidence for that key's own log prefix (§10). |
-| resource editions | resource controllers | Collection and task editions (§8). |
+| resource editions | resource controllers | Collection and task editions (§8), and a controller's withdrawal of its own approval. |
 | lifecycle | task participants | Intent, progress, withdrawal, submission, decision (§9). |
-| key events | the key | Rotation and revocation. |
+| key events | the key | Rotation and revocation (§4.1). |
 
 Lineage links that carry meaning (`supersedes`, `extends`, `fulfills`, evidence links) are fields of signed
 statements, never free-standing metadata.
+
+### 4.1 Key events
+
+A key event is a statement by a key about itself: `rotate_key` names a successor, `revoke_key` ends the key.
+Neither carries a time, because a time a key signs about itself is not evidence; what a key event does is
+read from the key's own log (wire-format note §7). It is in force once it chains (a detached key event is not,
+§12).
+
+- **A revocation's history** is the revocation and every line of the same key it reaches through `prev` and
+  `merges`. A line of that key outside it counts toward nothing: a line after the revocation (C-core-143), and
+  a line on a branch the revocation does not include, whether that branch was signed later by whoever else
+  holds the key or earlier from a second machine (the **sibling rule**, C-core-143a, C-core-143b). Such lines
+  are still kept, shown and attributed to the key (I3); they grant no priority, approval, quorum or settlement.
+  A revocation forked low therefore cuts every line of the key above its fork point. That is deliberate: the holder of a
+  stolen key and its owner sign alike, so the rule lets either one shrink what counts and neither one widen it.
+- **Hard and soft.** `superseded` and `cessation_of_operation` are soft: the key retired, and its history
+  counts. Every other reason is hard, including `key_compromise`, an undocumented token and a value a later
+  revision adds (C-core-143c). Under a hard reason only the lines in the history of `last_good` (that line
+  and its ancestors) count; the rest of the revocation's history counts toward nothing, and a hard revocation
+  with no `last_good`, or with a `last_good` outside its own history, leaves nothing of the key counting
+  (C-core-143d). A revocation fails closed: a reason the reader does not know never makes it malformed.
+- **Several revocations.** A line counts only if every in-force revocation of its key lets it count (the
+  intersection of what each allows), so revocations on different branches, or a revocation and a later one,
+  can only shrink the set. A key event signed after a revocation is outside that revocation's history and
+  counts only where it makes things stricter: a hard reason after a soft one, or an earlier `last_good`.
+- **Rotation retires the old key** the way a `superseded` revocation does: the old key's lines in the
+  rotation's history count, and its lines outside it count toward nothing (C-core-127b). The successor starts
+  its own log. Controller roles name keys and do not follow a rotation (§8): a controller that rotates first
+  gets an edition naming the successor, under the resource's rule.
+- **Editions that lose their approvals.** An edition whose counted approvals fall below its rule because a key
+  event stopped counting an approver's line is shown `contested`, naming the key event, and so is every
+  edition built on it (C-core-143e). This is visible, never a silent fallback to an older tip, and building on
+  an edition does not protect it from a revocation (it does protect it from a withdrawal, §8).
+
+Restoring what a revocation cut is not possible in-band, because the two holders of a key are
+indistinguishable. A key's owner can make it possible ahead of time with a recovery key committed when the
+key is created; that mechanism is specified separately.
 
 ## 5. Authorship, priority and observation
 
@@ -455,12 +492,28 @@ immutable editions.
   three outcomes. Examples: "at least 24 h of coverage inside the window, the whole window in one routing
   era, at most one endorsed member per instrument per era"; "same scenario edition, harness commit in range,
   n ≥ 30 per arm, replication = protocol".
+- **Approvals.** Under k of n each controller signs the same edition body. Approvals of byte-identical bodies
+  are one proposal with one edition id (wire-format note §3), whoever signed them; bodies that differ in any
+  byte are different proposals and never combine (C-core-82, C-core-83). An edition names its predecessors by
+  edition id. An approval does not expire.
+- **Withdrawing an approval.** A controller may withdraw its own approval (`withdraw_approval`). A withdrawal
+  counts only while the edition has no authorized successor: once an edition is built on, it is locked in, as
+  inclusion in a block locks in a multisig transaction. A reader resolves the editions ignoring withdrawals,
+  then applies them once, to the tips: a tip whose counted approvals fall below its rule is `pending` again,
+  and its predecessor is not re-examined. A withdrawal and a re-approval of one body by one key are ordered by
+  that key's log, the later one standing. Binding a task submission to an edition does not lock it in, and a
+  withdrawal outside its signer's counted lines (§4.1) counts toward nothing (C-core-85b).
 - **Controller changes** are editions authorized under the *previous* edition's rule. Nobody elevates
-  themselves.
+  themselves. A change that leaves a rule no controller set can satisfy (k greater than the number of
+  controllers) is `invalid`.
 - **Forks are visible.** Two editions with the same predecessor are a fork, shown as one. No timestamp or file
   order picks a winner; controllers resolve it with a merge edition, which names every branch tip as a
   predecessor and is authorized under each predecessor's rule. The fork clears when every tip is an ancestor
-  of one edition.
+  of one edition. Where the predecessors disagree on controllers or rule (`any_one` and k of n with k = 1
+  count as equal), the merge declares both `controllers` and `rule`, even when only one differs; without
+  them it is `invalid`, because inheriting either side's would pick a winner by branch. Where they agree, the
+  merge inherits them (C-core-85a). The side that narrowed its controllers therefore holds a veto over the
+  merge; forking a new resource stays the last way out.
 - **Outsiders fork.** A non-controller who wants a different collection creates a new resource, which may
   declare `forked-from`.
 - **Membership is endorsement.** Only the collection's editions add members. A member's own "part of" claim
