@@ -97,6 +97,12 @@ func (v View) KeyState() KeyState {
 // Successions returns every in-force rotation across the store's logs, sorted by From then event id. Two
 // rotations of one key (on two branches of a forked log, or one after the other) are both listed: choosing
 // between them is the reader's projection.
+//
+// A listed succession is not yet authority. The resolver must not read Successions alone: an in-force hard
+// revocation of the same key (any reason but superseded or cessation_of_operation, claims-model §4.1) whose
+// last_good precedes a rotation outranks that rotation, because a successor named after a compromise is
+// compromised with it, and a rotate_key is exactly what a key thief would sign. Combine this list with each
+// key's KeyState (After, and the revocations in Events) before granting a successor anything.
 func (s *Store) Successions() []Succession {
 	var out []Succession
 	for _, k := range s.Keys() {
