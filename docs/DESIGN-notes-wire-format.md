@@ -95,8 +95,7 @@ the key named, and a reader state digest unchanged before and after.
 ### 1.1 Time values
 
 Every field this note types as `ts` is one string in one profile. That covers the envelope `ts`, `capture.at`,
-the referent `at`, the window bounds `from` and `to`, `finality.state_at_capture.captured_at`, and the key
-events' `effective`. A field typed `date` (for example `frozen_before`) is an RFC 3339 `full-date`.
+the referent `at`, the window bounds `from` and `to`, and `finality.state_at_capture.captured_at`. A field typed `date` (for example `frozen_before`) is an RFC 3339 `full-date`.
 
 | Rule | Obligation | On violation |
 |---|---|---|
@@ -194,8 +193,27 @@ Consequences, each a test:
 - One signed string with two different valid signature encodings has one id (C-core-02a second pair,
   C-core-10, P-02). The second delivery is a no-op; the stored `sig` is the canonical encoding (§4).
 - Flipping one byte anywhere in the signed string changes the id and breaks the signature (C-core-09).
-- The id of a genesis statement is the resource id (C-core-77); the id of an edition is its edition hash
-  (C-core-78); `prev`, `predecessors` and `covered` are ids, never digests.
+- The id of a genesis statement is the resource id (C-core-77); `prev`, `predecessors` and `covered` are ids,
+  never digests.
+
+**Edition ids.** An edition is the body its approvals sign, not any one approval: under k of n it is k
+statements by k keys, and those have k different ids. So an edition has an id of its own, computed from its
+body alone:
+
+```text
+edition id = sha256(PAE("application/vnd.research-commons.edition-body.v1+json", JCS(body)))
+```
+
+where `body` is the whole `body` object of an `edition` statement (extension fields included), and PAE is the
+encoding of §2. The payload type is used for nothing else, so an edition id never equals a statement id.
+Approvals of byte-identical bodies are approvals of one edition, whoever signed them (claims-model note §8,
+C-core-82, C-core-83). Every field that names an edition holds its edition id: `edition.predecessors` (or the
+genesis id, for the first edition), `fulfills.edition`, `intended_for.edition` and `edition_applied`, and the
+lifecycle kinds' `edition`. A statement id in one of those fields names no edition (a predecessor that matches
+nothing makes the edition `orphan`, C-core-79), so two bodies can never differ only in how they spell the same
+predecessor. As a lookup convenience, a surface that takes an id from a user (a pin, a command argument,
+`explain`) resolves the statement id of any approval to its edition (C-core-78). The edition-id vector is under
+V6 (§9).
 
 **Display aliases.** A surface may print the first 12 hex characters of an id or of a content digest (after
 the `sha256:` prefix) as a label. An alias is accepted as input only when exactly one held object matches;
@@ -285,8 +303,8 @@ Nothing in this subsection is checked by a reader. It is what the reference tool
 - **The mnemonic is the identity.** Whoever holds it can sign as every key derived from it, past and future.
   For an agent it belongs in the same custody as the agent's funds, never in a configuration file.
 - **Rotation after compromise uses fresh entropy.** A `rotate_key` to a successor derived from the same seed
-  is fine for routine rotation; after a `revoke_key` with reason `key_compromise`, a successor from the same
-  seed is compromised with it.
+  is fine for routine rotation; after a `revoke_key` with a hard reason (`key_compromise`, claims-model note
+  §4.1), a successor from the same seed is compromised with it.
 - **Never reuse a payment key as a Commons key.** Four reasons:
   1. *Exposure.* A Commons key signs often and from automated code; a custody key should sign rarely, ideally
      on a device after review. One key means a leak anywhere in the busier path is a leak of the funds.
@@ -355,7 +373,7 @@ admitted, and shown `unpinned` (claims-model note §5.3.1). A kind not listed he
 | `content` | `digest` digest R · `size` integer R (the exact byte length) · `media_type` string O (an RFC 6838 media type, `type/subtype` with optional parameters, as in an HTTP `Content-Type`) |
 | `provenance` | `workflow` digest R · `inputs` list of digest R (order preserved) · `environment` object O (the environment record's standard forms, execution note §4: `image_digest` an OCI digest, `sha256:` + 64 hex; `platform` `<os>/<arch>[/<variant>]` with Go `GOOS`/`GOARCH` and OCI variant values; `harness_commit` full lowercase commit hex) |
 | `window` | `from` ts R · `to` ts R. Half-open, `[from, to)`: an instant equal to `to` is outside. The start-and-end form of an ISO 8601 time interval and of RFC 9581 §5 periods, written as two fields so each is checked as a time value (§1.1). The same shape wherever a window appears |
-| disclosures (on `authored`, `observed`) | `licence` string O (an SPDX license expression, SPDX 3.0.1 Annex B; terms with no SPDX identifier are named by a `LicenseRef-` id whose text is cited in `licence_texts`, below. Stored as written, never case-normalised; an expression the reader cannot parse displays `unknown`, C-core-67) · `attribution` string O · `availability` object O (`redistribution` `"permitted"`/`"restricted"`/`"withheld"` R, `obtainable` boolean R, `withheld_until` string O, a condition in prose or a task or edition reference, claims-model note §7) · `replication` `"bytes"`/`"protocol"`/`"none"` O · `comparator` digest O · `sampling` object O (`n` integer R, the total · `unit` string R, e.g. `runs`, `slots`, `records` · `groups` list of {`name` string R, `n` integer R} O, one per arm, names unique · `window` O · `dispersion` object O) · `shelf_life_days` integer O · `pre_registration` `"exploratory"` or absent O · `fulfills` object O (`resource` id, `edition` id) · `intended_for` object O (`resource` id R, `edition` id R, `edition_applied` id R, `outcome` `"ok"`/`"unchecked"` R) · `description` string O |
+| disclosures (on `authored`, `observed`) | `licence` string O (an SPDX license expression, SPDX 3.0.1 Annex B; terms with no SPDX identifier are named by a `LicenseRef-` id whose text is cited in `licence_texts`, below. Stored as written, never case-normalised; an expression the reader cannot parse displays `unknown`, C-core-67) · `attribution` string O · `availability` object O (`redistribution` `"permitted"`/`"restricted"`/`"withheld"` R, `obtainable` boolean R, `withheld_until` string O, a condition in prose or a task or edition reference, claims-model note §7) · `replication` `"bytes"`/`"protocol"`/`"none"` O · `comparator` digest O · `sampling` object O (`n` integer R, the total · `unit` string R, e.g. `runs`, `slots`, `records` · `groups` list of {`name` string R, `n` integer R} O, one per arm, names unique · `window` O · `dispersion` object O) · `shelf_life_days` integer O · `pre_registration` `"exploratory"` or absent O · `fulfills` object O (`resource` id, `edition` edition id) · `intended_for` object O (`resource` id R, `edition` edition id R, `edition_applied` edition id R, `outcome` `"ok"`/`"unchecked"` R) · `description` string O |
 | `finality` | `rule` string R · `rule_source` string O (a digest when the document is held, else a location) · `state_at_capture` object R (`depth` integer, or `run` string, or `captured_at` ts) |
 | `licence_texts` (on `authored`, `observed`) | object O mapping each `LicenseRef-` id used in `licence` to its source, as for `rule_source`: a digest when the text is held as a blob, else a location (an RFC 3986 URI). Displayed `cited (text held)` or `cited (location only, unverified)`; an id with no entry is `cited (no source)`. Terms the author may not republish are cited by location |
 
@@ -373,9 +391,10 @@ admitted, and shown `unpinned` (claims-model note §5.3.1). A kind not listed he
 | `retracts` | `of` id R (the signer's own `authored`/`observed`) · `reason` string O |
 | `anchors` | `covered` id R (the covered head: a statement in the signer's own log, reachable from this line's `prev`) · `proof` digest R (the proof bytes, a blob) · `proof_format` string R (a registered proof format; `ots-detached-v1`, the OpenTimestamps detached proof profiled by the Bitcoin-time note, is the only one today; an unknown value leaves the anchor `unsupported`, granting nothing) · `services` list of string O (RFC 3986 URIs of the timestamping services the author submitted to, for OpenTimestamps its calendars; informational, never dereferenced by a reader). What a proof format stamps is the raw 32 bytes of `covered`. A `covered` outside the signer's log is malformed; there is no quality field (a quality is what the reader verified) |
 | `genesis` | `type` `"collection"`/`"task"`/`"series"` R · `name` string R · `controllers` list of key R (set) · `rule` object R (`any_one` true, or `k_of_n` {`k` integer}) · `forked_from` id O |
-| `edition` | `resource` id R · `predecessors` list of id R (set; the genesis id for the first edition; several for a merge) · `contents` object R (`members` list of {`content` or `resource` or `statement`, `role` string} O, `schema` digest O, `rules` list of {`dialect` string, `expr` string} O, `contract` object O, `selection` `"curated"`/`"rule-based"`/`"completeness"` O, `frozen_before` object O (exactly one of `date` date, `height` integer, `run` string: the same units as `finality.state_at_capture`, so the declared boundary is compared with the boundary the members' finality rules compute in the same unit, and a declared unit different from the computed one is `not comparable`, never converted), `controllers` and `rule` O for a controller change) |
-| `intent` · `progress` · `withdraw` · `submit` · `decide` | all: `task` id R · `edition` id R. `submit`: `result` digest R, `salt` string O, `self_declared_independence` boolean O. `decide`: `submissions` list of id R, `verdict` `"accept"`/`"reject"` R, `evaluations` list of digest O, `supersedes` id O. `progress`: `note` string O |
-| `rotate_key` · `revoke_key` | `rotate_key`: `successor` key R, `effective` ts O. `revoke_key`: `reason` R, one of `key_compromise` / `superseded` / `cessation_of_operation` / `unspecified` (the RFC 5280 §5.3.1 CRL reason codes that apply to a signing key, in snake case), `note` string O, `effective` ts O. Both are statements by the old key about itself. Only `key_compromise` casts doubt on statements before `effective`; what a reader does with that doubt is its policy (claims-model note §4) |
+| `edition` | `resource` id R · `predecessors` list of id R (set of edition ids, §3; the genesis id for the first edition; several for a merge) · `contents` object R (`members` list of {`content` or `resource` or `statement`, `role` string} O, `schema` digest O, `rules` list of {`dialect` string, `expr` string} O, `contract` object O, `selection` `"curated"`/`"rule-based"`/`"completeness"` O, `frozen_before` object O (exactly one of `date` date, `height` integer, `run` string: the same units as `finality.state_at_capture`, so the declared boundary is compared with the boundary the members' finality rules compute in the same unit, and a declared unit different from the computed one is `not comparable`, never converted), `controllers` and `rule` O for a controller change) |
+| `withdraw_approval` | `resource` id R · `edition` edition id R (§3). Signed by a key that approved that edition's body: it withdraws that key's approval. What a withdrawal changes, and until when, is claims-model note §8. A withdrawal naming a body the signer never approved, or a `resource` that is not the body's, is shown and changes nothing |
+| `intent` · `progress` · `withdraw` · `submit` · `decide` | all: `task` id R · `edition` edition id R. `submit`: `result` digest R, `salt` string O, `self_declared_independence` boolean O. `decide`: `submissions` list of id R, `verdict` `"accept"`/`"reject"` R, `evaluations` list of digest O, `supersedes` id O. `progress`: `note` string O |
+| `rotate_key` · `revoke_key` | `rotate_key`: `successor` key R. `revoke_key`: `reason` string R, a token matching `[a-z][a-z0-9_]{0,63}`; three values are documented, the RFC 5280 §5.3.1 CRL reason codes that apply to a signing key in snake case: `key_compromise`, `superseded`, `cessation_of_operation`. `superseded` and `cessation_of_operation` are **soft**; every other value, `key_compromise`, any undocumented token and a value a later revision adds, is **hard**, so an unknown reason fails closed and never makes the revocation malformed. `last_good` id O (a line in this revocation's history: the last one its signer vouches for; read only for a hard reason). `note` string O. Both kinds are statements by the old key about itself and carry no time: a time a key signs about itself is not evidence. What they do to the key's other lines (the sibling rule, hard and soft, `last_good`, stricter later events) is claims-model note §4.1 |
 
 Every `R` field of a listed kind is checked at every gate by the one validation core (C-core-109). Field
 semantics (what `match` means, how a rule is evaluated) belong to the claims-model note and the profile notes;
@@ -444,7 +463,8 @@ line contract.
   (claims-model note §8), so "cleared" means one thing for logs and resources (C-core-127a). A line that
   follows one tip and names no other leaves the fork shown: following a branch is not acknowledging the
   others. Naming a line is the signer's statement that it is theirs; a branch the signer does not recognise
-  is answered with `revoke_key` (`key_compromise`), not merged. An entry the reader does not hold makes the
+  is answered with a `revoke_key` that leaves it out (a revocation cuts every line outside its history,
+  claims-model note §4.1), not merged. An entry the reader does not hold makes the
   line `detached` exactly as an unresolved `prev` does (C-core-127b). V11–V12 in §9 are a fork and its
   clearing.
 - **Gaps.** A line whose `prev` matches nothing held is retained as `detached`: it may follow statements
@@ -488,7 +508,7 @@ declare the algorithm that could only ever disagree with the first.
 
 The normative vectors are the JSON file `DESIGN-notes-wire-format.vectors.json` beside this note: each
 positive vector's exact signed string, byte count, id and signature; the equivalent signature encodings of
-V1; the Ed25519 log (E1–E2) with its key; and each negative vector's exact input bytes with its required
+V1; the edition id of each `edition` vector (§3); the Ed25519 log (E1–E2) with its key; and each negative vector's exact input bytes with its required
 result. The Ed25519 edge cases NE1–NE12 are the `ed25519-speccheck` suite (Apache-2.0), copied with their
 source named. The blocks below are rendered from
 that file for reading. Where the two differ, the file is right and this note has a bug.
@@ -626,7 +646,22 @@ sig: 0xd61de142c5e72aef3bb6883fb6816739e8f8aecab7f31212efaa1caa8d330db16b5c\
      cc869c8dcf7ff83a960ebe28000d1291e59dfa9827bfa5cfdcd7cdc361311c
 ```
 
-Under the 2-of-2 rule this edition is one approval and is not yet the tip (C-core-82).
+Under the 2-of-2 rule this edition is one approval and is not yet the tip (C-core-82). Its edition id (§3)
+is the same for every approval of this body: the SHA-256 of the 483-byte string
+
+```text
+NOTE: '\' line wrapping per RFC 8792
+
+DSSEv1 53 application/vnd.research-commons.edition-body.v1+json 415 {"contents":{"frozen_before":{"d\
+ate":"2026-09-01"},"members":[{"content":"sha256:7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7\
+a7a7a7a7a7a7a","role":"segment"}],"rules":[{"dialect":"rc-rules/1","expr":"sampling.n >= 30"}],"sele\
+ction":"rule-based"},"predecessors":["9503bbd1fa92407b021011915c5da74a09594ce8186970cf92df3931f502d8\
+b9"],"resource":"9503bbd1fa92407b021011915c5da74a09594ce8186970cf92df3931f502d8b9"}
+edition id: 81ddcc709d87564a1c8fbd3cd5d1dff61f9e754c1cdfa27c1a9e27ec5aaacc6c
+```
+
+A second controller's approval of the same body has a different statement id and this edition id; a successor
+names `81ddcc70…` in `predecessors`, never V6's statement id.
 
 **V7 anchors**
 
@@ -766,15 +801,14 @@ sig: f64e85a9a341fd25c9918c0a2db3505e740b4b64841c4835e3e5539edfa0f7a2\
 ```text
 NOTE: '\' line wrapping per RFC 8792
 
-signed string, 414 bytes:
-DSSEv1 51 application/vnd.research-commons.rotate_key.v1+json 348 {"alg":"ed25519","body":{"effectiv\
-e":"2026-10-14T18:01:00.5Z","successor":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a"},"kind":"rotate\
-_key","prev":"37614f5d085342c609e50383f78cf89564326616a1e0535440d67dc9af5c44d2","rc":"rc/1","seq":1,\
-"signer":"ed25519:f9e6e12ad6036f6c19ebe6c6cf64f4e26c40b63eeab2cd19f4dd947657b25fe5","ts":"2026-10-14\
-T18:01:00.5Z"}
-id:  a3a49f04392a3f969be4226f0a2ab45788ede846605749c633e9cfa6a81ae262
-sig: 04c41721f540bc834196689ef30ac85271ea8b32bb64031d324de43eb3daff84\
-     ac12eca38c0f9da1898659fd0fe24e3473760bddeb7e39b94972e7c3e427b409
+signed string, 377 bytes:
+DSSEv1 51 application/vnd.research-commons.rotate_key.v1+json 311 {"alg":"ed25519","body":{"successo\
+r":"0xf71e7c9cce990243bd7fbeff34a4bad1c4750e7a"},"kind":"rotate_key","prev":"37614f5d085342c609e5038\
+3f78cf89564326616a1e0535440d67dc9af5c44d2","rc":"rc/1","seq":1,"signer":"ed25519:f9e6e12ad6036f6c19e\
+be6c6cf64f4e26c40b63eeab2cd19f4dd947657b25fe5","ts":"2026-10-14T18:01:00.5Z"}
+id:  0ca4a96aa436f9e0b21fa0c91620956d8fcf26ea7aa8224c28e3b3fc59d4dd9a
+sig: a51c2e20eda3858dad38de8bcd5cb96b4a71749a6bf6e1530c7a81b291c6985e\
+     976b5fa650c065869f3bbb147f78d248854ad934a4f6f3b7f526ff1e76a4770a
 ```
 
 **Negative vectors.** The exact input bytes of each are in the vectors file; the table names them by hash.
