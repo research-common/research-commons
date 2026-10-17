@@ -166,7 +166,8 @@ func TestEnvelopeRules(t *testing.T) {
 		{"capture.at not canonical", Draft{Kind: "observed", TS: "2026-10-15T00:00:00Z", Body: setField(minimal("observed"), "capture", body("at", "2026-10-15T00:00:00.10Z", "evidence", "self-asserted"))}, ed, "trailing zero"},
 		{"bad timescale", Draft{Kind: "observed", TS: "2026-10-15T00:00:00Z", Body: setField(minimal("observed"), "referent", body("timescale", "GMT", "at", "2026-10-15T00:00:00"))}, ed, "FITS"},
 		{"window to in TAI with Z", Draft{Kind: "observed", TS: "2026-10-15T00:00:00Z", Body: setField(minimal("observed"), "referent", body("timescale", "TAI", "window", body("from", "2026-10-15T00:00:00", "to", "2026-10-15T01:00:00Z")))}, ed, "Z asserts UTC"},
-		{"effective not UTC", Draft{Kind: "rotate_key", TS: "2026-10-15T00:00:00Z", Body: setField(minimal("rotate_key"), "effective", s("2026-10-15T00:00:00"))}, ed, "missing Z"},
+		{"reason outside the token pattern", Draft{Kind: "revoke_key", TS: "2026-10-15T00:00:00Z", Body: setField(minimal("revoke_key"), "reason", s("Key-Compromise"))}, ed, "reason token"},
+		{"last_good not an id", Draft{Kind: "revoke_key", TS: "2026-10-15T00:00:00Z", Body: setField(minimal("revoke_key"), "last_good", s("abc"))}, ed, "statement id"},
 		{"frozen_before not a date", Draft{Kind: "edition", TS: "2026-10-15T00:00:00Z", Body: setField(minimal("edition"), "contents", body("frozen_before", body("date", "2026-02-30")))}, ed, "no such date"},
 	} {
 		t.Run(c.name, func(t *testing.T) {

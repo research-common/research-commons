@@ -1,10 +1,10 @@
 // Package resolve is the one resolver (claims-model note I12, §4 "Views"): it turns the statements a reader
 // holds into the answers every surface shows. It reads per-key logs (package keylog) and never a statement on
 // its own: a statement counts toward anything only once its line has chained (wire-format note §7, "Gaps"),
-// and key events apply to the lines after them as the log orders them (keylog.KeyState).
+// and only while the key events of its signer let it count (claims-model note §4.1).
 //
-// This file holds the shared index. Each kind of answer lives in its own file: resources (collections, tasks,
-// series; claims-model note §8) in resource.go.
+// This file holds the shared index and the key-event rules. Each kind of answer lives in its own file:
+// resources (collections, tasks, series; claims-model note §8) in resource.go.
 //
 // Every answer is a pure function of the set of held lines, so delivery order cannot change it (I14, P-01).
 package resolve
@@ -22,34 +22,37 @@ type Placed struct {
 	// Chained is true when the statement's line has chained in its signer's log. A detached statement is shown,
 	// attributed, and evaluated toward nothing.
 	Chained bool
-	// Evaluable is true when the statement is chained, verified and fully understood (status valid). Only an
-	// evaluable statement counts toward an answer.
+	// Evaluable is true when the statement is chained, verified and fully understood (status valid).
 	Evaluable bool
-	// Revoked lists the in-force revoke_key events of the signer that do not have this line in their history:
-	// the line comes after the revocation in the log's order (keylog.KeyState.After), or sits on a branch the
-	// revocation does not include. Empty for a detached line, which is not evaluated.
-	//
-	// The second half is finding R3 (fail closed for authority): a revocation is the owner's signed statement
-	// of which history it stands behind, and "a branch the owner does not recognise is not merged: the answer
-	// to it is revoke_key with key_compromise" (storage note §4.2). A line on a branch the revocation does not
-	// include is therefore never counted toward authority. It is still shown, attributed and retained (I3).
-	Revoked []string
-	// RevokedAfter is the subset of Revoked that comes strictly before this line in the log's order.
-	RevokedAfter []string
+	// After names the in-force key events of the signer that come before this line in the log's order (they
+	// are among its ancestors). The key had already rotated or revoked when it signed this line, so the line
+	// counts toward nothing, and never makes anything contested (C-core-99, C-core-143).
+	After []string
+	// Doubted gives, one reason per in-force key event, why a line that is NOT after that event still counts
+	// toward nothing (claims-model note §4.1): it sits on a branch the event's history leaves out (the sibling
+	// rule), or the event is a hard revocation and the line is outside its `last_good`'s history (or it names
+	// no usable `last_good`). Such a line may have been the key's legitimate word, so an edition that needed it
+	// is contested, not silently dropped (C-core-143a, b, e).
+	Doubted []string
 }
+
+// Counts reports whether the statement counts toward any answer: chained, valid, and let through by every
+// in-force key event of its signer (the intersection rule, §4.1).
+func (p *Placed) Counts() bool { return p.Evaluable && len(p.After) == 0 && len(p.Doubted) == 0 }
 
 // Resolver is the reader's view over every log it holds. Build it with New after the logs change; it keeps
 // no state of its own beyond that snapshot.
 type Resolver struct {
-	logs   *keylog.Store
-	byID   map[string]*Placed
-	byKind map[string][]*Placed
-	keys   map[string]keylog.KeyState
+	logs    *keylog.Store
+	chained map[string]map[string]*wire.Statement // per key: its chained lines by id
+	byID    map[string]*Placed
+	byKind  map[string][]*Placed
+	keys    map[string]keylog.KeyState
 }
 
 // New indexes every placed line of every log in s.
 func New(s *keylog.Store) *Resolver {
-	r := &Resolver{logs: s, byID: map[string]*Placed{}, byKind: map[string][]*Placed{}, keys: map[string]keylog.KeyState{}}
+	r := &Resolver{logs: s, chained: map[string]map[string]*wire.Statement{}, byID: map[string]*Placed{}, byKind: map[string][]*Placed{}, keys: map[string]keylog.KeyState{}}
 	for _, k := range s.Keys() {
 		v := s.Log(k).View()
 		ks := v.KeyState()
@@ -60,27 +63,40 @@ func New(s *keylog.Store) *Resolver {
 				chained[ln.St.ID] = ln.St
 			}
 		}
-		// history[R] = R and every chained line R has among its ancestors through prev and merges.
-		history := map[string]map[string]bool{}
-		var revokes []string
+		r.chained[k] = chained
+		// Every in-force key event (rotations included: a rotation retires the old key like a `superseded`
+		// revocation, §4.1) and its history: the event and every chained line it reaches through prev and merges.
+		type event struct {
+			ev       keylog.KeyEvent
+			history  map[string]bool
+			lastGood map[string]bool // for a hard revocation: last_good's history; nil when unusable
+		}
+		var events []event
 		for _, ev := range ks.Events {
-			if ev.InForce && ev.Kind == "revoke_key" {
-				revokes = append(revokes, ev.St.ID)
-				history[ev.St.ID] = closure(ev.St.ID, chained)
+			if !ev.InForce {
+				continue
 			}
+			e := event{ev: ev, history: closure(ev.St.ID, chained)}
+			if ev.Hard() && ev.LastGood != "" && e.history[ev.LastGood] {
+				e.lastGood = closure(ev.LastGood, chained)
+			}
+			events = append(events, e)
 		}
 		for _, ln := range v.Lines {
 			p := &Placed{St: ln.St, Chained: ln.State == keylog.Chained}
 			p.Evaluable = p.Chained && ln.St.Verified && ln.St.Status == wire.Valid
 			if p.Chained {
-				for _, rv := range revokes {
-					if !history[rv][ln.St.ID] {
-						p.Revoked = append(p.Revoked, rv)
-					}
-				}
-				for _, ev := range ks.After[ln.St.ID] {
-					if slices.Contains(revokes, ev) {
-						p.RevokedAfter = append(p.RevokedAfter, ev)
+				for _, e := range events {
+					id, what := e.ev.St.ID, e.ev.Kind+" "+keylog.Short(e.ev.St.ID)
+					switch {
+					case slices.Contains(ks.After[ln.St.ID], id):
+						p.After = append(p.After, "after "+what)
+					case !e.history[ln.St.ID]:
+						p.Doubted = append(p.Doubted, "on a branch "+what+" does not include (sibling rule)")
+					case e.ev.Hard() && e.lastGood == nil:
+						p.Doubted = append(p.Doubted, "hard "+what+" names no last_good in its history")
+					case e.ev.Hard() && !e.lastGood[ln.St.ID]:
+						p.Doubted = append(p.Doubted, "after last_good of hard "+what)
 					}
 				}
 			}
@@ -97,18 +113,22 @@ func (r *Resolver) Statement(id string) (*Placed, bool) {
 	return p, ok
 }
 
-// revokedKey reports whether key has an in-force revoke_key anywhere in its log, and names it. This is a
-// display question ("does this controller still have a usable key?", C-core-99). Whether one statement counts
-// is decided per line by Placed.Revoked, which follows the log's order: a statement before the revocation
-// keeps counting, one after it does not (C-core-143), and a branch that does not include the revocation is
-// the key's own fork, shown as one.
-func (r *Resolver) revokedKey(key string) (string, bool) {
+// retiredKey reports whether key has an in-force revoke_key or rotate_key anywhere in its log, and names the
+// first by seq. This is a display question ("does this controller still have a usable key?", C-core-99):
+// controller roles name keys and do not follow a rotation (§4.1, §8). Whether one statement counts is decided
+// per line (Placed.Counts).
+func (r *Resolver) retiredKey(key string) (string, bool) {
 	for _, ev := range r.keys[key].Events {
-		if ev.InForce && ev.Kind == "revoke_key" {
+		if ev.InForce {
 			return ev.St.ID, true
 		}
 	}
 	return "", false
+}
+
+// precedes reports whether line a is an ancestor of line b in key's log (through prev and merges).
+func (r *Resolver) precedes(key, a, b string) bool {
+	return a != b && closure(b, r.chained[key])[a]
 }
 
 // closure returns id and every chained line reachable from it through prev and merges.

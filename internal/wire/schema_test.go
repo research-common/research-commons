@@ -53,6 +53,8 @@ func minimal(kind string) *canon.Object {
 		return body("task", tID, "edition", tID2, "result", tDig)
 	case "decide":
 		return body("task", tID, "edition", tID2, "submissions", arr(s(tID)), "verdict", "accept")
+	case "withdraw_approval":
+		return body("resource", tID, "edition", tID2)
 	case "rotate_key":
 		return body("successor", tKey)
 	case "revoke_key":
@@ -196,7 +198,7 @@ func TestSchemaRules(t *testing.T) {
 		{"anchors proof as an object (first draft)", "anchors", setField(m("anchors"), "proof", body("scheme", "ots", "digest", tDig)), "content digest"},
 		{"anchors covered as a digest", "anchors", setField(m("anchors"), "covered", s(tDig)), "statement id"},
 		{"anchors without proof_format", "anchors", body("covered", tID, "proof", tDig), "proof_format is missing"},
-		{"revocation reason outside RFC 5280 subset", "revoke_key", setField(m("revoke_key"), "reason", s("affiliation_changed")), "one of"},
+		{"revocation reason outside the token pattern", "revoke_key", setField(m("revoke_key"), "reason", s("Affiliation Changed")), "reason token"},
 		{"successor upper case", "rotate_key", setField(m("rotate_key"), "successor", s("ed25519:"+strings.Repeat("AB", 32))), "is not a key"},
 		{"capture evidence unknown", "observed", setField(m("observed"), "capture", body("at", tTS, "evidence", "notarised")), "one of"},
 		{"class unknown", "observed", setField(m("observed"), "class", s("exact")), "one of"},
@@ -303,4 +305,25 @@ func TestMergesEnvelope(t *testing.T) {
 	env.Members["sig"] = canon.String(k.Sign(ss))
 	_, err = Read(canon.Encode(env))
 	refused(t, err, refusal.Intrinsic, refusal.MalformedStatement, "non-empty list")
+}
+
+// TestRevokeReasonToken: wire-format note §5. `reason` is any bounded token, so undocumented values
+// (`unspecified`, a vendor value, one a later revision adds) are well-formed and never drop the revocation; a
+// value outside the pattern is malformed (C-core-143c (e)). `effective` is gone from both key events: an old
+// writer's `effective` is an unknown field, retained and ignored (§6).
+func TestRevokeReasonToken(t *testing.T) {
+	for _, r := range []string{"key_compromise", "superseded", "cessation_of_operation", "unspecified", "x_vendor_reason", "a"} {
+		if st, err := readBody(t, "revoke_key", setField(minimal("revoke_key"), "reason", s(r))); err != nil || st.Status != Valid {
+			t.Fatalf("reason %q: %v", r, err)
+		}
+	}
+	for _, r := range []string{"Key-Compromise", "", "_x", "9a", "a-b", strings.Repeat("a", 65)} {
+		_, err := readBody(t, "revoke_key", setField(minimal("revoke_key"), "reason", s(r)))
+		refused(t, err, refusal.Intrinsic, refusal.MalformedStatement, "reason token")
+	}
+	for _, k := range []string{"rotate_key", "revoke_key"} {
+		if st, err := readBody(t, k, setField(minimal(k), "effective", s("not even a time"))); err != nil || st.Status != Valid {
+			t.Fatalf("%s with a legacy effective: %v", k, err)
+		}
+	}
 }

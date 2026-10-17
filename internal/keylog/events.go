@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/research-common/research-commons/internal/canon"
-	"github.com/research-common/research-commons/internal/rctime"
 	"github.com/research-common/research-commons/internal/wire"
 )
 
@@ -20,9 +19,9 @@ import (
 //     the event among their ancestors through `prev` and `merges`. On a forked log, an event on one branch
 //     applies to that branch's descendants and to any line that merges it, never to the other branch.
 //
-// What an event means for those lines (an edition by a revoked controller, doubt before `effective` after a
-// `key_compromise`, a successor's authority) is the resolver's, under the reader's policy: claims-model §16 (1)
-// makes key succession a reader projection. Nothing here grants or removes authority.
+// What an event means for those lines (the sibling rule, hard and soft, `last_good`, claims-model note §4.1) is
+// the resolver's. Key succession stays a reader projection (claims-model §16 (1)). Nothing here grants or
+// removes authority.
 //
 // Only verified, fully understood lines are key events: an unknown-alg line (even vouched) or a line whose
 // `crit` names an extension this reader lacks has a body nobody here can rely on.
@@ -35,10 +34,20 @@ type KeyEvent struct {
 	Successor string
 	// Reason is the revoke_key reason token; "" for a rotation.
 	Reason string
-	// Effective is the optional `effective` time; nil when absent. Reported, never acted on here.
-	Effective *rctime.Time
+	// LastGood is the revoke_key `last_good` statement id; "" when absent or for a rotation.
+	LastGood string
 	// InForce is true when the event's line has chained.
 	InForce bool
+}
+
+// Hard reports whether a key event leaves only `last_good`'s history counting (claims-model note §4.1). A
+// rotation and a revocation for `superseded` or `cessation_of_operation` are soft: the key retired, and its
+// history counts. Every other reason is hard, including undocumented and future values (fail closed).
+func (ev KeyEvent) Hard() bool {
+	if ev.Kind == "rotate_key" {
+		return false
+	}
+	return ev.Reason != "superseded" && ev.Reason != "cessation_of_operation"
 }
 
 // KeyState is the key-event view of one log.
@@ -128,12 +137,7 @@ func keyEvent(st *wire.Statement) (KeyEvent, bool) {
 		}
 		return ""
 	}
-	ev.Successor, ev.Reason = str("successor"), str("reason")
-	if e := str("effective"); e != "" {
-		if t, err := rctime.ParseUTC(e); err == nil { // the schema already checked it
-			ev.Effective = &t
-		}
-	}
+	ev.Successor, ev.Reason, ev.LastGood = str("successor"), str("reason"), str("last_good")
 	return ev, true
 }
 
@@ -162,10 +166,14 @@ func (ks KeyState) render(b *strings.Builder) {
 			what += " to " + ev.Successor
 		}
 		if ev.Reason != "" {
-			what += " (" + ev.Reason + ")"
+			hs := "soft"
+			if ev.Hard() {
+				hs = "hard"
+			}
+			what += " (" + ev.Reason + ", " + hs + ")"
 		}
-		if ev.Effective != nil {
-			what += " effective " + ev.Effective.Text
+		if ev.LastGood != "" {
+			what += " last_good " + Short(ev.LastGood)
 		}
 		state := "in force"
 		if !ev.InForce {

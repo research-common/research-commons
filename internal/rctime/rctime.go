@@ -50,7 +50,7 @@ func cmp(less bool) int {
 	return 1
 }
 
-// ParseUTC parses a value that must be UTC (the envelope ts, capture.at, key events' effective).
+// ParseUTC parses a value that must be UTC (the envelope ts, capture.at).
 func ParseUTC(s string) (Time, error) {
 	t, err := parse(s)
 	if err != nil {

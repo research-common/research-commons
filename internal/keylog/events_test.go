@@ -43,7 +43,7 @@ func rotate(k wire.Key, seq int64, prev string, to wire.Key, merges ...string) l
 }
 
 func revoke(k wire.Key, seq int64, prev, reason string) line {
-	return signed(k, "revoke_key", seq, prev, obj("reason", reason, "effective", "2026-10-16T00:00:00Z"))
+	return signed(k, "revoke_key", seq, prev, obj("reason", reason, "last_good", prev))
 }
 
 func authored(k wire.Key, seq int64, prev string, tag byte) line {
@@ -196,7 +196,7 @@ func TestRotationWaitsForMergedTip(t *testing.T) {
 
 // TestRevocationWaitsForGap: C-core-143 at the key-event layer. seq 40 is revoke_key (key_compromise), seq 41
 // follows. With 40 missing: 41 is detached, no event is known, nothing is after anything. With 40 held: the
-// revocation is in force, reports its reason and effective time, and seq 41 is after it. Variant: 40 never
+// revocation is in force, reports its reason and last_good, and seq 41 is after it. Variant: 40 never
 // arrives and nothing is refused.
 func TestRevocationWaitsForGap(t *testing.T) {
 	conformance.Partial(t, "C-core-143", "revocation not in force while seq 40 is missing, in force after, seq 41 after it, no refusal while waiting: checked; the observed counting toward nothing and the edition not applied need the resolver")
@@ -215,13 +215,13 @@ func TestRevocationWaitsForGap(t *testing.T) {
 	v = s.Log(k.Signer()).View()
 	ks := v.KeyState()
 	if len(ks.Events) != 1 || !ks.Events[0].InForce || ks.Events[0].Reason != "key_compromise" ||
-		ks.Events[0].Effective == nil || ks.Events[0].Effective.Text != "2026-10-16T00:00:00Z" {
+		ks.Events[0].LastGood != ls[39].id || !ks.Events[0].Hard() {
 		t.Fatalf("%+v", ks.Events)
 	}
 	if !slices.Equal(ks.After[l41.id], []string{rv.id}) || len(ks.After) != 1 {
 		t.Fatalf("%v\n%s", ks.After, v.Render())
 	}
-	if !strings.Contains(v.Render(), "revoke_key (key_compromise) effective 2026-10-16T00:00:00Z, in force") {
+	if !strings.Contains(v.Render(), "revoke_key (key_compromise, hard) last_good "+Short(ls[39].id)+", in force") {
 		t.Fatalf("%s", v.Render())
 	}
 }
