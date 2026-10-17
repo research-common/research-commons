@@ -36,4 +36,4 @@ node_modules/
 # tool/data split: artifacts live in hubs (`commons hub init`), never in the tool repo
 registry/*
 !registry/exec-policy.example.json
-store/
+/store/
