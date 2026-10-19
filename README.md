@@ -21,6 +21,11 @@ five minutes, with no CLI.
 > Don't start a new hub on this version unless you're happy to rebuild it, and treat existing hubs
 > as disposable. Comments on #69 are the most useful contribution right now.
 
+The next-format Go reader has an opt-in, local critical-extension validation API;
+its default registry is empty and **no concrete extension is enabled**. See the
+[reader implementation design note](docs/READER-EXTENSIONS.md) for ordering,
+fail-closed behavior, and the boundary between wire validation and resolver semantics.
+
 > **Status: alpha preview.** The core is complete and drilled end to end: verification
 > tiers and chain grading, a signed per-peer ledger, git federation with an ingest gate,
 > sandboxed execution, a task/claim/settle exchange with replication quorums, collections,
