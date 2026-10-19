@@ -237,3 +237,15 @@ func (w *world) publish(n string, plan []Planned) map[string]string {
 	}
 	return ids
 }
+
+func readFile(dir, name string) (string, error) {
+	b, err := os.ReadFile(filepath.Join(dir, name))
+	return string(b), err
+}
+
+func writeOut(dir, name, content string) Resources {
+	_ = os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644)
+	return Resources{CapMemory: 100, CapWallTime: 1, CapPids: 1, CapDisk: int64(len(content))}
+}
+
+func resolveSingleParty() []string { return resolve.SingleParty }
