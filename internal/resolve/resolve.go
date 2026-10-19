@@ -6,7 +6,8 @@
 // This file holds the shared index and the key-event rules. Each kind of answer lives in its own file:
 // resources (collections, tasks, series; claims-model note §8) in resource.go; authorship, priority and
 // single-party defaults (§5.1, §5.2) in artifact.go; derivation groups and grades (§5.2, §7) in group.go; time
-// bounds (§10) in time.go.
+// bounds (§10) in time.go; edition rules (§8) in edition_rules.go; membership and the pre-pin check in
+// membership.go; growing series in series.go.
 //
 // Every answer is a pure function of the set of held lines, so delivery order cannot change it (I14, P-01).
 package resolve
@@ -58,6 +59,8 @@ type Resolver struct {
 	// pair of outputs, so every pair runs at most once per snapshot whichever blobs are viewed (group.go, pair).
 	cmpMu   sync.Mutex
 	cmpRuns map[[3]string]cmpResult
+	// rules is the reader's edition-rule configuration: dialects, content, limits, segments (edition_rules.go).
+	rules ruleConfig
 }
 
 // New indexes every placed line of every log in s. With no options the reader verifies no proof format and
