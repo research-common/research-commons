@@ -249,9 +249,9 @@ func object(kv ...any) *canon.Object {
 	return b.done()
 }
 
-// Partial reads an `authored` body's partial provenance: the unpinned inputs, or nil when the body has none.
+// UnpinnedOf reads an `authored` body's partial provenance: the unpinned inputs, or nil when the body has none.
 // `verify` of such a blob has nothing to re-run: exit 4, naming the inputs (§1 rule 1; C-exec-03).
-func Partial(body *canon.Object) []string {
+func UnpinnedOf(body *canon.Object) []string {
 	v, ok := body.Get("provenance_partial")
 	if !ok {
 		return nil

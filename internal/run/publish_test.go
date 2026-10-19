@@ -108,7 +108,7 @@ func TestUnpinnedInput(t *testing.T) {
 	if a.Group != nil || len(a.Groups) != 0 || a.Step.Tier != "" {
 		t.Fatalf("partial provenance joined a group:\n%s", a.Render())
 	}
-	un := Partial(plan[0].Body)
+	un := UnpinnedOf(plan[0].Body)
 	if len(un) != 1 || !strings.Contains(un[0], "feed:latest") {
 		t.Fatalf("unpinned %v", un)
 	}
