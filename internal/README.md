@@ -35,6 +35,17 @@ CGO_ENABLED=0 go build ./...                                      # static build
 | `conformance` | the harness: case ids from CONFORMANCE.md and the profile notes (bitcoin-time §14), vectors from the vectors file |
 | `conformance/fixture` | seeded generator of abstract statement sets for property tests, with shrinking |
 
+### Unsupported evidence in resolver views
+
+Retaining a signed statement is not permission to interpret its body. Unknown kinds and unsupported
+critical extensions grant no resource authority, authorship defaults, derivation credit or time bounds.
+Edition bodies are grouped as raw evidence: a string `resource` field may associate an uncounted approval
+with a resource display, but members and predecessor links are read only when a verified, valid approval
+has schema-checked that exact body. A well-formed detached approval still shows its proposal and counts
+toward nothing. Unknown-format-major bodies remain opaque, including when a later verified line vouches
+for their placement in a key log. Retained signed bytes and each approval's non-counting reason remain
+available; unsupported data is not silently converted into a bare-key authorization.
+
 ## How tests map to CONFORMANCE.md
 
 Every case id in `docs/CONFORMANCE.md`, and in the profile notes listed in `conformance.ProfileNotes` (today the

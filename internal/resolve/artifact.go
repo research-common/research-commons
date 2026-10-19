@@ -665,7 +665,12 @@ func heldDetail(p *Placed) string {
 
 // helpers
 
+// contentDigest also associates non-counting evidence with a blob for display. It must tolerate an
+// unvalidated or absent body (another wire major exposes linkage only); association never grants a claim.
 func contentDigest(b *canon.Object) string {
+	if b == nil {
+		return ""
+	}
 	c, ok := b.Get("content")
 	if !ok {
 		return ""
