@@ -718,6 +718,12 @@ func better(a, b Bound) Bound {
 			return a
 		}
 		return b
+	case a.Quality == NoBound && (a.Anchor == "") != (b.Anchor == ""):
+		// neither bounds anything; the one naming a refused anchor is shown, so the refusal is not hidden
+		if a.Anchor != "" {
+			return a
+		}
+		return b
 	case a.Anchor <= b.Anchor:
 		return a
 	}
