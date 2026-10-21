@@ -156,7 +156,7 @@ func (a authority) describe() string {
 // held, or the held one has not chained or is not valid (it is shown by the log, and resolves nothing yet).
 func (r *Resolver) Resource(id string) (*Resource, bool) {
 	g, ok := r.byID[id]
-	if !ok || g.St.Kind != "genesis" || !g.Evaluable {
+	if !ok || g.St.Kind != "genesis" || !g.EvidenceReady() {
 		return nil, false
 	}
 	res := &Resource{ID: id, Genesis: g, RevokedControllers: map[string]string{}}
@@ -188,7 +188,7 @@ func (r *Resolver) Resource(id string) (*Resource, bool) {
 		switch {
 		case !p.Chained:
 			a.Counted, a.Why = false, "detached"
-		case !p.Evaluable:
+		case !p.EvidenceReady():
 			a.Counted, a.Why = false, string(p.St.Status)
 		case len(p.After) > 0:
 			a.Counted, a.Why = false, p.After[0]

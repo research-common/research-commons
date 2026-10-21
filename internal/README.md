@@ -46,6 +46,20 @@ toward nothing. Unknown-format-major bodies remain opaque, including when a late
 for their placement in a key log. Retained signed bytes and each approval's non-counting reason remain
 available; unsupported data is not silently converted into a bare-key authorization.
 
+### Evidence and bare-key eligibility
+
+`Placed.EvidenceReady()` exposes the existing `Evaluable` snapshot fact: a statement is verified,
+chained and understood. It does not apply its signer's key events. `Placed.BareKeyEligible()` adds
+the existing intersection of those key-event exclusions; `Placed.Counts()` remains its compatibility
+alias, with unchanged results and reason strings. For example, a hard revocation can be ready evidence
+and in force even when its own line is outside `last_good` and is not bare-key eligible.
+
+Neither accessor establishes a controller role, threshold, identity authority or trust. Known-valid
+detached proposals retain their typed display without becoming ready evidence. Unsupported or unknown
+evidence never becomes eligible just because its signature verifies or a valid co-approval interprets
+the same body. This separation adds no identity profile, actor inference, key fallback or reader
+registration; existing views and legacy snapshots keep their current behavior.
+
 ## How tests map to CONFORMANCE.md
 
 Every case id in `docs/CONFORMANCE.md`, and in the profile notes listed in `conformance.ProfileNotes` (today the

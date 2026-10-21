@@ -468,7 +468,7 @@ func (r *Resolver) held(a *Artifact) []*Placed {
 	var out []*Placed
 	for _, kind := range []string{"describes", "refutes", "retracts", "reproduced"} {
 		for _, p := range r.byKind[kind] {
-			if !p.Evaluable {
+			if !p.EvidenceReady() {
 				continue
 			}
 			b := p.St.Body
@@ -695,7 +695,7 @@ func notCountedWhy(p *Placed) string {
 	switch {
 	case !p.Chained:
 		return "detached"
-	case !p.Evaluable:
+	case !p.EvidenceReady():
 		return string(p.St.Status)
 	case len(p.After) > 0:
 		return p.After[0]

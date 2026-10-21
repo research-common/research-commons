@@ -27,7 +27,9 @@ type Placed struct {
 	// Chained is true when the statement's line has chained in its signer's log. A detached statement is shown,
 	// attributed, and evaluated toward nothing.
 	Chained bool
-	// Evaluable is true when the statement is chained, verified and fully understood (status valid).
+	// Evaluable is true when the statement is chained, verified and fully understood (status valid),
+	// independently of its signer's key events. EvidenceReady exposes this evidence-only boundary;
+	// BareKeyEligible additionally applies the legacy key-event exclusions.
 	Evaluable bool
 	// After names the in-force key events of the signer that come before this line in the log's order (they
 	// are among its ancestors). The key had already rotated or revoked when it signed this line, so the line
@@ -41,9 +43,9 @@ type Placed struct {
 	Doubted []string
 }
 
-// Counts reports whether the statement counts toward any answer: chained, valid, and let through by every
-// in-force key event of its signer (the intersection rule, §4.1).
-func (p *Placed) Counts() bool { return p.Evaluable && len(p.After) == 0 && len(p.Doubted) == 0 }
+// Counts preserves the existing bare-key counting contract. It is a compatibility
+// alias for BareKeyEligible, not a general identity-authorization decision.
+func (p *Placed) Counts() bool { return p.BareKeyEligible() }
 
 // Resolver is the reader's view over every log it holds. Build it with New after the logs change; it keeps
 // no state of its own beyond that snapshot.
