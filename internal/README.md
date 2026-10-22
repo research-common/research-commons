@@ -73,6 +73,22 @@ evidence never becomes eligible just because its signature verifies or a valid c
 the same body. This separation adds no identity profile, actor inference, key fallback or reader
 registration; existing views and legacy snapshots keep their current behavior.
 
+### Candidate identity admission (opt-in, not wired)
+
+`wire.NewIdentityReader()` reads rc/1 exactly as `wire.Read` accepts it, plus the candidate rc/2 of
+`docs/DESIGN-notes-fixed-root-identity.md`. It verifies the signature before interpreting signer-chosen
+fields, so an authentic but malformed line is kept as `Invalid` (attributable, never authority) instead of
+being refused. `wire.Read`, the zero `wire.Reader`, `Major`, keylog and resolve are unchanged: for them rc/2
+is still an unverified other-major line.
+
+`identity.Admit` is the only production constructor of `identitymodel` facts (a test enforces it). A fact is
+authenticated only when this reader verified its signature, or when a verified line of the same key commits to
+its exact id through prev/merges (then it is authenticated but unsupported). Bad-signature copies are refused,
+never facts. Authenticated non-administrative lines that are not understood become unsupported, so a malformed
+root key event reads unknown rather than ineffective. rc/2 resource and task kinds are verified but unsupported.
+`Snapshot.Receipt()` digests the admitted canonical lines; `EvidenceDigest()` is the model's fact digest. No
+consumer (authorship, resources, tasks, policy, time) reads the result yet.
+
 ## How tests map to CONFORMANCE.md
 
 Every case id in `docs/CONFORMANCE.md`, and in the profile notes listed in `conformance.ProfileNotes` (today the
