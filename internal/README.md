@@ -46,6 +46,19 @@ toward nothing. Unknown-format-major bodies remain opaque, including when a late
 for their placement in a key log. Retained signed bytes and each approval's non-counting reason remain
 available; unsupported data is not silently converted into a bare-key authorization.
 
+Observation views apply the same boundary before class, referent, finality, capture or corroboration
+interpretation, including lite views used by derivation summaries. `Observation.BodyUnderstood` means
+the statement is verified and `Valid`; it is independent of `Counts`. Unsupported observations retain
+their statement/signer metadata, a type-checked content-digest association where available, and an
+explicit unchecked diagnostic. They do not call referent, finality, attestation, time or cohort verifiers.
+Unsupported corroborations may be associated by a string `of`, retaining their statement/signer,
+delivery origins and non-counting reason, but supplying no verdict, model, shared sources, comparison
+data or result grade. Another valid statement over the same body does not promote an unsupported one.
+Absent/malformed associations do not invent a lookup target; unknown-major bodies expose no association.
+The original signed bytes remain available through statement/log evidence. Verified, understood
+detached and key-revoked statements keep their typed displays without becoming eligible: key-event
+exclusion must not be mislabeled as an unverified signature.
+
 ### Evidence and bare-key eligibility
 
 `Placed.EvidenceReady()` exposes the existing `Evaluable` snapshot fact: a statement is verified,

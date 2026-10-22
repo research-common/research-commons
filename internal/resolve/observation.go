@@ -249,6 +249,9 @@ type Capture struct {
 type Observation struct {
 	Statement, Signer, Digest string
 	Counts                    bool
+	// BodyUnderstood requires a verified, Valid statement, not chaining or key eligibility.
+	// Otherwise only retained metadata, a type-checked digest association and diagnostics are shown.
+	BodyUnderstood bool
 	// Class is the observer's assertion (§5.3.1 rule 1), never rewritten by the reader.
 	Class string
 	// Referent is each pinned field as the observer signed it (canonical JSON), in display order.
@@ -290,6 +293,9 @@ func (r *Resolver) Observation(id string) (*Observation, bool) {
 // observedOf lists the `observed` statements for d (only the counted ones when counted), sorted.
 func (r *Resolver) observedOf(d string, counted bool) []*Placed {
 	var out []*Placed
+	if d == "" {
+		return out // an absent or malformed content association is not a blob
+	}
 	for _, p := range r.byKind["observed"] {
 		if contentDigest(p.St.Body) == d && (!counted || p.Counts()) {
 			out = append(out, p)
@@ -299,18 +305,49 @@ func (r *Resolver) observedOf(d string, counted bool) []*Placed {
 	return out
 }
 
-func (r *Resolver) observation(p *Placed) *Observation {
+// observationBase gates both full and lite views before any body semantics or reader callbacks.
+// Valid detached or revoked evidence keeps its typed display; neither is cryptographically unverified.
+func (r *Resolver) observationBase(p *Placed) *Observation {
 	st := p.St
 	o := &Observation{Statement: st.ID, Signer: st.Signer, Digest: contentDigest(st.Body), Counts: p.Counts(),
-		Class: str(st.Body, "class"), Unpinned: st.Unpinned}
+		BodyUnderstood: st.Verified && st.Status == wire.Valid}
+	if !o.Counts {
+		o.Explain = append(o.Explain, "this statement counts toward nothing: "+notCountedWhy(p))
+	}
+	if !o.BodyUnderstood {
+		why := uninterpretedBodyWhy(st)
+		o.ReferentStatus = "unchecked (body not interpreted)"
+		o.ReCheck = ReCheck{Outcome: ReUnchecked, Why: why}
+		o.Corroboration = &Corroboration{Scope: r.obs.scope, Independence: "unknown", Shared: map[string][]string{}, Unchecked: true, Why: why}
+		o.Explain = append(o.Explain, why)
+		return o
+	}
+	o.Class, o.Unpinned = str(st.Body, "class"), st.Unpinned
+	return o
+}
+
+func uninterpretedBodyWhy(st *wire.Statement) string {
+	why := "body not interpreted: " + string(st.Status)
+	if st.Why != "" {
+		why += " (" + st.Why + ")"
+	}
+	if !st.Verified {
+		why += "; signature unverified by this reader"
+	}
+	return why
+}
+
+func (r *Resolver) observation(p *Placed) *Observation {
+	o := r.observationBase(p)
+	if !o.BodyUnderstood {
+		return o
+	}
+	st := p.St
 	ref := object(st.Body, "referent")
 	for _, f := range referentOrder[o.Class] {
 		if v, ok := ref.Get(f); ok {
 			o.Referent = append(o.Referent, [2]string{f, string(canon.Encode(v))})
 		}
-	}
-	if !o.Counts {
-		o.Explain = append(o.Explain, "this statement counts toward nothing: "+notCountedWhy(p))
 	}
 	o.Finality = r.finality(st)
 	o.Capture = r.capture(st)
@@ -545,7 +582,12 @@ func (r *Resolver) others(o *Observation, st *wire.Statement) {
 		if q.St.ID == st.ID {
 			continue
 		}
-		line := fmt.Sprintf("also observed by %s in %s as %s", shortKey(q.St.Signer), keylog.Short(q.St.ID), str(q.St.Body, "class"))
+		line := fmt.Sprintf("also observed by %s in %s", shortKey(q.St.Signer), keylog.Short(q.St.ID))
+		if !q.St.Verified || q.St.Status != wire.Valid {
+			o.Others = append(o.Others, line+" (counts toward nothing: "+notCountedWhy(q)+"; "+uninterpretedBodyWhy(q.St)+")")
+			continue
+		}
+		line += " as " + str(q.St.Body, "class")
 		switch {
 		case !q.Counts():
 			line += " (counts toward nothing: " + notCountedWhy(q) + ")"
@@ -658,6 +700,16 @@ func object(o *canon.Object, k string) *canon.Object {
 func (o *Observation) Render() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "observed %s by %s: blob %s\n", keylog.Short(o.Statement), shortKey(o.Signer), shortDigest(o.Digest))
+	if !o.BodyUnderstood {
+		// No empty class/capture fields or inferred roles masquerading as a typed assertion.
+		if o.Corroboration != nil {
+			b.WriteString(o.Corroboration.render("  "))
+		}
+		for _, x := range o.Explain {
+			fmt.Fprintf(&b, "  explain: %s\n", x)
+		}
+		return b.String()
+	}
 	fmt.Fprintf(&b, "  class %s (asserted by %s in %s)\n", o.Class, shortKey(o.Signer), keylog.Short(o.Statement))
 	for _, f := range o.Referent {
 		fmt.Fprintf(&b, "  referent.%s: %s (observer's statement)\n", f[0], f[1])

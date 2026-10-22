@@ -221,7 +221,13 @@ func (r *Resolver) corroborate(o *Observation, st *wire.Statement, full bool) *C
 	}
 	// corroborates statements about this observation
 	for _, p := range r.byKind["corroborates"] {
+		// A type-checked of associates retained evidence only. It grants no body semantics.
 		if str(p.St.Body, "of") != st.ID {
+			continue
+		}
+		if !p.St.Verified || p.St.Status != wire.Valid {
+			c.Evidence = append(c.Evidence, Evidence{Key: p.St.Signer, Statement: p.St.ID, Via: "corroborates",
+				Origins: r.originsOf(p.St.ID), Cause: "counts toward nothing: " + notCountedWhy(p) + "; " + uninterpretedBodyWhy(p.St)})
 			continue
 		}
 		b := p.St.Body
@@ -595,9 +601,11 @@ func (r *Resolver) obsNotes(d string) (contradicted bool, status string) {
 
 // observationLite is the observation without the parts that resolve other artifacts.
 func (r *Resolver) observationLite(p *Placed) *Observation {
+	o := r.observationBase(p)
+	if !o.BodyUnderstood {
+		return o
+	}
 	st := p.St
-	o := &Observation{Statement: st.ID, Signer: st.Signer, Digest: contentDigest(st.Body), Counts: p.Counts(),
-		Class: str(st.Body, "class"), Unpinned: st.Unpinned}
 	o.Finality = r.finality(st)
 	r.referentStatus(o, st)
 	if o.Class == "method" {
