@@ -42,8 +42,9 @@ See [resolver evidence boundaries](internal/README.md#unsupported-evidence-in-re
 
 **Candidate protocol work:** [fixed-root identity profile](docs/DESIGN-notes-fixed-root-identity.md)
 includes proposed `rc/2` schemas, explicitly unsigned schema vectors and isolated
-validation tests. It is **not enabled** in the production reader/writer, does not
-change the current wire major, and makes no identity-conformance or hardware-support claim.
+validation tests, plus an opt-in candidate reader and admission adapter (`internal/identity`) with a
+signed end-to-end test slice. It is **not enabled** in the default reader, any writer or resolver view,
+does not change the current wire major, and makes no identity-conformance or hardware-support claim.
 
 ## This repository is the tool, not the data
 
