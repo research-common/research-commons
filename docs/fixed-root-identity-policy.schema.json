@@ -1,0 +1,189 @@
+{
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": "reader-policy-v1"
+    },
+    "selections": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/selection"
+      },
+      "maxItems": 256,
+      "uniqueItems": true
+    },
+    "trust": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/trust"
+      },
+      "maxItems": 256,
+      "uniqueItems": true
+    }
+  },
+  "required": [
+    "version",
+    "selections",
+    "trust"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Candidate local reader-policy-v1 (never installed by received evidence)",
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "key": {
+      "type": "string",
+      "pattern": "^(ed25519:[0-9a-f]{64}|0x[0-9a-f]{40})$"
+    },
+    "subject": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "$ref": "#/$defs/key"
+            }
+          },
+          "required": [
+            "key"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "identity": {
+              "$ref": "#/$defs/id"
+            }
+          },
+          "required": [
+            "identity"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "contentTargets": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "any_content": {
+              "const": true
+            }
+          },
+          "required": [
+            "any_content"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "contents": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/digest"
+              },
+              "minItems": 1,
+              "maxItems": 256,
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "contents"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "selectionSubject": {
+      "type": "object",
+      "properties": {
+        "content": {
+          "$ref": "#/$defs/digest"
+        },
+        "role": {
+          "enum": [
+            "authorship-declaration",
+            "workflow-declaration",
+            "observation-declaration"
+          ]
+        }
+      },
+      "required": [
+        "content",
+        "role"
+      ],
+      "additionalProperties": false
+    },
+    "selection": {
+      "type": "object",
+      "properties": {
+        "subject": {
+          "$ref": "#/$defs/selectionSubject"
+        },
+        "statement": {
+          "$ref": "#/$defs/id"
+        },
+        "principal": {
+          "$ref": "#/$defs/subject"
+        }
+      },
+      "required": [
+        "subject"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "statement"
+          ]
+        },
+        {
+          "required": [
+            "principal"
+          ]
+        }
+      ]
+    },
+    "trust": {
+      "type": "object",
+      "properties": {
+        "principal": {
+          "$ref": "#/$defs/subject"
+        },
+        "purposes": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "attestation",
+              "corroboration",
+              "admission"
+            ]
+          },
+          "minItems": 1,
+          "maxItems": 3,
+          "uniqueItems": true
+        },
+        "targets": {
+          "$ref": "#/$defs/contentTargets"
+        }
+      },
+      "required": [
+        "principal",
+        "purposes",
+        "targets"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$comment": "Additional semantic checks: sorted JCS entries and exactly one selection per (content,role), even if otherwise nonidentical. Canonical policy <=65536 bytes. Unknown role/purpose is an error."
+}
