@@ -1,0 +1,520 @@
+{
+  "status": "Provisional planning handles, not registered C-core cases. Schema/isolated-test links are partial evidence only; no row claims full semantic scenario coverage. Pure model and production integration are separate deliverables.",
+  "scenarios": [
+    {
+      "handle": "ID-01",
+      "scenario": "Ordinary bare-key corpus",
+      "schema_vectors": [
+        "rc1-is-not-this-profile"
+      ],
+      "isolated_tests": [
+        "internal/keylog:TestFixedRootCandidateOldReaderMixedHistory"
+      ],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Full legacy resolver differential corpus; current test proves selected wire/linkage/id behavior only."
+    },
+    {
+      "handle": "ID-02",
+      "scenario": "I / D / G / opted-in statement",
+      "schema_vectors": [
+        "shape-identity_inception",
+        "shape-identity_grant",
+        "shape-identity_cut",
+        "shape-authored",
+        "shape-observed",
+        "shape-holds",
+        "shape-describes",
+        "shape-reproduced",
+        "shape-corroborates",
+        "shape-refutes",
+        "shape-retracts",
+        "shape-anchors",
+        "shape-genesis",
+        "shape-edition",
+        "shape-withdraw_approval",
+        "shape-intent",
+        "shape-progress",
+        "shape-withdraw",
+        "shape-submit",
+        "shape-decide"
+      ],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Bind the candidate signed bytes to authenticated lineage/scope inputs and evaluate complete authority."
+    },
+    {
+      "handle": "ID-03",
+      "scenario": "Rival root/delegate inception",
+      "schema_vectors": [
+        "inception-not-sequence-zero"
+      ],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Require exact root and delegate lineage pins; schema checks inception syntax only."
+    },
+    {
+      "handle": "ID-04",
+      "scenario": "Grant alone cannot attribute raw statements",
+      "schema_vectors": [],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Model/reader attribution test, including preexisting raw history."
+    },
+    {
+      "handle": "ID-05",
+      "scenario": "Wrong signer / I / G / self-grant",
+      "schema_vectors": [
+        "actor-missing-grant",
+        "actor-extra-identity-alias",
+        "grant-to-root-itself",
+        "admin-kind-cannot-have-actor"
+      ],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Self-grant/actor shapes checked; root/delegate signature and referent bindings require authority evaluation."
+    },
+    {
+      "handle": "ID-06",
+      "scenario": "One key with grants for multiple identities",
+      "schema_vectors": [
+        "actor-list-not-single-subject"
+      ],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Single actor object checked; test explicit principal selection and no cross-principal amendment."
+    },
+    {
+      "handle": "ID-07",
+      "scenario": "Missing dependencies or unsupported root operation",
+      "schema_vectors": [],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Pure model and integration must retain and propagate exact unknown dependencies."
+    },
+    {
+      "handle": "ID-08",
+      "scenario": "Known cut with missing ancestry or prefix",
+      "schema_vectors": [],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Authenticated root relevance and blocked positive grant required."
+    },
+    {
+      "handle": "ID-09",
+      "scenario": "Stale bundle omits entire cut",
+      "schema_vectors": [],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Limitation fixture must allow evidence-relative eligibility without claiming freshness."
+    },
+    {
+      "handle": "ID-10",
+      "scenario": "Worker self-revoke / rotate",
+      "schema_vectors": [
+        "reject-rc2-rotate_key-must-use-raw-rc1",
+        "reject-rc2-revoke_key-must-use-raw-rc1"
+      ],
+      "isolated_tests": [
+        "internal/keylog:TestFixedRootCandidateOldReaderMixedHistory"
+      ],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Raw events stay rc/1 and are seen by old keylog; identity history exception requires model/consumer integration."
+    },
+    {
+      "handle": "ID-11",
+      "scenario": "Cut prefix excludes descendants/siblings",
+      "schema_vectors": [],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Set-based ancestry closure including merges; signed wire binding still required."
+    },
+    {
+      "handle": "ID-12",
+      "scenario": "Multiple cuts / wider cuts / null cut",
+      "schema_vectors": [
+        "cut-last-good-required"
+      ],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Mandatory nullable prefix syntax checked; intersection and permutation semantics belong to model."
+    },
+    {
+      "handle": "ID-13",
+      "scenario": "Malformed/unsupported relevant root cut",
+      "schema_vectors": [],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Do not drop authenticated control on syntax/lineage failures and falsely pass the grant."
+    },
+    {
+      "handle": "ID-14",
+      "scenario": "New grant cannot relabel old bytes",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/wire:TestFixedRootCandidateCrypto"
+      ],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Actor/grant signature binding checked generically; full cut/new-grant authority fixture required."
+    },
+    {
+      "handle": "ID-15",
+      "scenario": "No cross-identity or raw-history interference",
+      "schema_vectors": [],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Pure evaluator and consumer noninterference, holding all other evidence fixed."
+    },
+    {
+      "handle": "ID-16",
+      "scenario": "Independent root-fork grants coexist",
+      "schema_vectors": [],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Model accumulation and complete root-lineage fork/merge checks."
+    },
+    {
+      "handle": "ID-17",
+      "scenario": "Root events in correct versus rival lineage",
+      "schema_vectors": [
+        "reject-rc2-rotate_key-must-use-raw-rc1",
+        "reject-rc2-revoke_key-must-use-raw-rc1"
+      ],
+      "isolated_tests": [
+        "internal/keylog:TestFixedRootCandidateOldReaderMixedHistory"
+      ],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Candidate uses raw rc/1 events; terminal identity evaluation and unknown ancestry remain to integrate."
+    },
+    {
+      "handle": "ID-18",
+      "scenario": "Root lost but public evidence held",
+      "schema_vectors": [],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Authority must not depend on private-key availability; custody recovery is separate."
+    },
+    {
+      "handle": "ID-19",
+      "scenario": "Closed permissions and exact targets",
+      "schema_vectors": [
+        "permission-holds",
+        "permission-reproduced",
+        "permission-refutes",
+        "permission-edition",
+        "permission-decide",
+        "permission-anchors",
+        "grant-empty-permissions",
+        "unknown-permission-kind",
+        "missing-targets-not-unlimited",
+        "two-target-modes",
+        "resource-wildcard-not-allowed",
+        "duplicate-permission"
+      ],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Permission syntax tested; registered field dispatch and effective authorization need model/integration."
+    },
+    {
+      "handle": "ID-20",
+      "scenario": "Publish without amend permission",
+      "schema_vectors": [
+        "absent-amend-not-default-false"
+      ],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Mandatory Boolean syntax checked; grant breadth and amendment authorization require model."
+    },
+    {
+      "handle": "ID-21",
+      "scenario": "Explicit cross-key concurrent amendments",
+      "schema_vectors": [
+        "claim-explicit-amendment-shape",
+        "amendment-with-no-identity-actor"
+      ],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Amendment reference syntax checked; DAG and conflict/current-state behavior not implemented here."
+    },
+    {
+      "handle": "ID-22",
+      "scenario": "Wrong principal/content or missing amendment target",
+      "schema_vectors": [],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Operation-specific dependency resolution and noninterference."
+    },
+    {
+      "handle": "ID-23",
+      "scenario": "Cut preserves claim but loses anchor",
+      "schema_vectors": [],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Time consumer must preserve separate authority and time-quality outcomes."
+    },
+    {
+      "handle": "ID-24",
+      "scenario": "Per-signature actors, one edition body",
+      "schema_vectors": [
+        "mixed-approval-raw-context",
+        "mixed-approval-identity-context"
+      ],
+      "isolated_tests": [
+        "internal/wire:TestFixedRootCandidateSharedEdition"
+      ],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Real synthetic signatures show distinct statement ids and same v2 body id; threshold evaluation remains."
+    },
+    {
+      "handle": "ID-25",
+      "scenario": "Two delegates of one I count once",
+      "schema_vectors": [
+        "duplicate-subject-in-controller-set"
+      ],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Typed/duplicate-subject syntax checked; effective subject deduplication remains."
+    },
+    {
+      "handle": "ID-26",
+      "scenario": "Missing identity authority is never root-key fallback",
+      "schema_vectors": [
+        "genesis-untyped-carrier-controllers"
+      ],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Carrier-key mapping is rejected; typed identity slot needs authenticated I/G, never root signature fallback."
+    },
+    {
+      "handle": "ID-27",
+      "scenario": "Mixed raw/identity slots with same signer",
+      "schema_vectors": [
+        "mixed-approval-raw-context",
+        "mixed-approval-identity-context",
+        "subject-is-not-key-or-identity"
+      ],
+      "isolated_tests": [
+        "internal/wire:TestFixedRootCandidateSharedEdition"
+      ],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Distinct signature contexts and shared body tested; one subject per approval and effective slot counting remain."
+    },
+    {
+      "handle": "ID-28",
+      "scenario": "Complete typed controller changes and merges",
+      "schema_vectors": [
+        "genesis-untyped-carrier-controllers",
+        "controller-set-not-sorted",
+        "unsatisfiable-typed-threshold",
+        "typed-controller-change-incomplete"
+      ],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Reject untyped/duplicate/partial/unsatisfiable authority shapes; predecessor/merge authority evaluation remains. Supersedes obsolete carrier-mapping wording."
+    },
+    {
+      "handle": "ID-29",
+      "scenario": "Key-and-grant-local withdrawal / reapproval",
+      "schema_vectors": [],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Consumer ordering and cross-delegate exclusion tests required."
+    },
+    {
+      "handle": "ID-30",
+      "scenario": "Cut removes required resource approval",
+      "schema_vectors": [],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Propagate contested/unresolved authority to affected resource descendants."
+    },
+    {
+      "handle": "ID-31",
+      "scenario": "Exact pin versus principal-following selection",
+      "schema_vectors": [
+        "policy-exact-selection",
+        "policy-principal-selection"
+      ],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Policy syntax tested; exact statement selection, no edition alias, and current-claim evaluation remain."
+    },
+    {
+      "handle": "ID-32",
+      "scenario": "Invalid/missing exact pin and policy conflicts",
+      "schema_vectors": [
+        "policy-selector-two-modes",
+        "policy-conflicting-subject",
+        "policy-unknown-purpose",
+        "policy-unknown-role",
+        "policy-trust-no-target-default"
+      ],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Conflicting selector syntax checked; production preflight exit 2 and non-passing missing evidence remain."
+    },
+    {
+      "handle": "ID-33",
+      "scenario": "Trust purpose boundaries / received policy injection",
+      "schema_vectors": [
+        "policy-exact-selection",
+        "policy-selector-two-modes",
+        "policy-conflicting-subject",
+        "policy-unknown-purpose",
+        "policy-unknown-role",
+        "policy-trust-no-target-default"
+      ],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Closed local policy syntax checked; purpose-specific consuming logic and no remote installation remain."
+    },
+    {
+      "handle": "ID-34",
+      "scenario": "Identity-counting quorum",
+      "schema_vectors": [
+        "task-role-object-shape-only-not-readiness",
+        "task-missing-counting-unit"
+      ],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Mandatory counting unit checked; authenticated principal deduplication and unresolved vote behavior remain."
+    },
+    {
+      "handle": "ID-35",
+      "scenario": "Key counting cannot bypass actor authority",
+      "schema_vectors": [],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Task consumer integration, not a schema property."
+    },
+    {
+      "handle": "ID-36",
+      "scenario": "Old-reader compatibility",
+      "schema_vectors": [
+        "reject-rc2-rotate_key-must-use-raw-rc1",
+        "reject-rc2-revoke_key-must-use-raw-rc1",
+        "unknown-critical-marker",
+        "rc1-is-not-this-profile"
+      ],
+      "isolated_tests": [
+        "internal/keylog:TestFixedRootCandidateOldReaderMixedHistory",
+        "internal/wire:TestFixedRootCandidateCrypto",
+        "internal/wire:TestFixedRootCandidateLegacyUnmarkedActorIsNotSafe"
+      ],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Actual wire/keylog tested, including unknown-major unverified retention; full unsupported-body/resource hardening remains a blocker."
+    },
+    {
+      "handle": "ID-37",
+      "scenario": "Tamper / marker / criticality / canonicalization",
+      "schema_vectors": [
+        "actor-no-critical-declaration",
+        "actor-no-body-marker",
+        "unknown-critical-marker",
+        "critical-body-field-not-extension",
+        "duplicate-critical-name",
+        "known-crit-missing-required-base-field",
+        "known-crit-wrong-base-type",
+        "noncanonical-time-fraction",
+        "noncanonical-time-offset",
+        "wrong-algorithm-key-prefix",
+        "canonical-duplicate-name",
+        "canonical-negative-zero",
+        "canonical-float",
+        "canonical-exponent",
+        "canonical-lone-surrogate",
+        "canonical-too-large-integer"
+      ],
+      "isolated_tests": [
+        "internal/wire:TestFixedRootCandidateCrypto",
+        "internal/wire:TestFixedRootCandidateCanonicalization",
+        "internal/wire:TestFixedRootCandidateBaseSchemaIsNotBypassed"
+      ],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Concrete schema negatives and both algorithms tested; full production critical registry still disabled."
+    },
+    {
+      "handle": "ID-38",
+      "scenario": "Cache / replay / permutation invariance",
+      "schema_vectors": [],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Pin production evidence-snapshot serialization and test caches/replay; not established by this harness."
+    },
+    {
+      "handle": "ID-39",
+      "scenario": "Deterministic resource caps",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/wire:TestFixedRootCandidateCanonicalization"
+      ],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "PAE/depth syntax bounds tested; evaluation operation/dependency caps and production exit 3 not implemented."
+    },
+    {
+      "handle": "ID-40",
+      "scenario": "Root backup / compromised operational host",
+      "schema_vectors": [],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Authorized custody drill and actual signer adapters are not run or claimed."
+    },
+    {
+      "handle": "ID-41",
+      "scenario": "Marker without actor / actor without marker",
+      "schema_vectors": [
+        "mixed-approval-raw-context",
+        "actor-no-critical-declaration"
+      ],
+      "isolated_tests": [
+        "internal/wire:TestFixedRootCandidateSharedEdition",
+        "internal/wire:TestFixedRootCandidateCrypto"
+      ],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Raw context schema/crypto checked; actual mixed controller semantics and production reader integration remain."
+    },
+    {
+      "handle": "ID-42",
+      "scenario": "Decide grant is not beneficiary role",
+      "schema_vectors": [
+        "task-role-object-shape-only-not-readiness",
+        "duplicate-legacy-task-role",
+        "task-two-issuer-modes",
+        "task-contract-without-role-object"
+      ],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Typed complete task roles checked; concrete contract profile and beneficiary enforcement required."
+    },
+    {
+      "handle": "ID-43",
+      "scenario": "Cross-key exact-intent continuity",
+      "schema_vectors": [
+        "progress-must-pin-intent"
+      ],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Explicit intent syntax checked; same-actor/edition continuity and irreversible withdrawal require model/consumer integration."
+    },
+    {
+      "handle": "ID-44",
+      "scenario": "Authorized unknown amendment versus outsider DoS",
+      "schema_vectors": [
+        "claim-explicit-amendment-shape"
+      ],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Syntax permits explicit missing targets; authenticated issuer/scope uncertainty boundary needs model/integration."
+    },
+    {
+      "handle": "ID-45",
+      "scenario": "Identity-wide amendment breadth",
+      "schema_vectors": [
+        "claim-explicit-amendment-shape",
+        "absent-amend-not-default-false"
+      ],
+      "isolated_tests": [],
+      "full_scenario_coverage": "not_claimed",
+      "remaining": "Mandatory amend Boolean and explicit targets checked; breadth/competing claims and issuer UI acknowledgment remain."
+    }
+  ]
+}
