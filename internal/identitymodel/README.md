@@ -34,9 +34,12 @@ An eventual adapter must establish these facts independently:
 The package independently checks the represented key-local link facts: exact
 `seq:0` pins, same-key links, `prev` sequence adjacency, lower-sequence merges,
 missing links, and inception consistency across both `prev` and `merges`. It does
-not call production indexes or trust a test `chained: true` flag. Retained evidence
-whose linkage is vouched by another signature, rather than directly authenticated,
-is not modeled; an adapter must not silently promote it to `Authenticated`.
+not call production indexes or trust a test `chained: true` flag. An adapter may mark
+retained evidence `Authenticated` without verifying its own signature only under one
+reviewed rule: a verified line **of the same key** committed to its exact id through
+`prev`/`merges` (transitively through other such lines). The id covers every signed
+byte, so this authenticates content and signer but not meaning: such a fact must be
+`Unsupported`, never `Understood`.
 
 Never feed user-decoded JSON directly to this API. Never discard opted-in facts
 through a preliminary bare-key revocation/rotation eligibility filter. A valid raw
