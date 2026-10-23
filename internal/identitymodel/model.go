@@ -145,7 +145,7 @@ const (
 )
 
 const (
-	EvaluatorVersion = "fixed-root-model-1"
+	EvaluatorVersion = "fixed-root-model-2"
 	NotEstablished   = "not_established"
 	// MaxTraversalFacts bounds each ancestry walk and the relevant authenticated
 	// root-event scan, not the total snapshot or wire protocol. Hitting a limit
@@ -153,6 +153,10 @@ const (
 	// consume another identity's semantic budget. Transport/memory admission
 	// limits belong to the trusted caller, not this model.
 	MaxTraversalFacts = 2048
+	// MaxDelegateSelfEvents bounds how many of a delegate's own raw key events one
+	// evaluation examines for warnings. Warnings carry no authority, so the limit
+	// emits a warning and never changes a status.
+	MaxDelegateSelfEvents = 64
 )
 
 type Reason struct {

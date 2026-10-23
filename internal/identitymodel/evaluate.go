@@ -91,8 +91,12 @@ func (s *Snapshot) Evaluate(statement ID) Result {
 			if rootHeld && grant.Delegate == root.Signer {
 				e.add("root_is_delegate", Denied, g.ID, root.ID, "dedicated administrative root cannot be its worker")
 			}
-			e.reasons(checkPermissions(grant.Permissions, g.ID))
-			if st.Operation != nil {
+			// Scope is read only from an understood grant: an unsupported grant is unknown (its validity
+			// reason), never a definite scope denial built from the entries this reader happened to parse.
+			if g.Validity == Understood {
+				e.reasons(checkPermissions(grant.Permissions, g.ID))
+			}
+			if st.Operation != nil && g.Validity == Understood {
 				_, reasons := scopeAllows(grant.Permissions, *st.Operation, st.Signer)
 				for i := range reasons {
 					reasons[i].Statement, reasons[i].Related = statement, g.ID
@@ -139,7 +143,17 @@ func (s *Snapshot) rootState(e *evaluation, root Fact, actor Actor, grant *Grant
 			break
 		}
 		p := s.chain(id, root.Signer, root.ID, "root event ancestry")
-		targetCut := f.Event == CutEvent && f.Cut != nil && f.Cut.Identity == actor.Identity && f.Cut.Grant == actor.Grant
+		if rel == inside && (f.Event == RotateKey || f.Event == RevokeKey) && f.Validity == Understood && len(shapeReasons(f)) == 0 {
+			// Terminal irrespective of reason, last_good, successor or branch (profile §3), and therefore also
+			// irrespective of defects in its merges or earlier lines: its prev lineage alone places it on I.
+			// Otherwise a compromised root could plant one bad tip and void the owner's fork-clearing revoke.
+			e.basis[id] = true
+			e.add("root_retired", Denied, id, root.ID, "terminal in-lineage root event; never follow a successor")
+			continue
+		}
+		// A cut is addressed by its grant; a grant belongs to exactly one identity. A cut on I's lineage that
+		// names this grant under another identity is an invalid cut addressed to G, never "for another grant".
+		targetCut := f.Event == CutEvent && f.Cut != nil && f.Cut.Grant == actor.Grant
 		if rel == unresolved || p.status() == Unknown {
 			e.add("unresolved_root_ancestry", Unknown, id, root.ID, "authenticated root evidence; relationship or complete ancestry unresolved")
 			e.proof(p)
@@ -153,10 +167,25 @@ func (s *Snapshot) rootState(e *evaluation, root Fact, actor Actor, grant *Grant
 			e.proof(p)
 			e.reasons(validityReasons(f))
 			e.reasons(shapeReasons(f))
+			if f.Cut.Identity != actor.Identity {
+				e.add("wrong_cut_identity", Denied, id, actor.Identity, "cut names this grant under another identity")
+				continue
+			}
 			if p.status() != Eligible || f.Validity != Understood || len(shapeReasons(f)) != 0 {
 				continue // Invalid attributable cuts are non-passing, not omitted.
 			}
 			s.applyCut(e, f, grant)
+			continue
+		}
+		if f.Event == GrantEvent && f.Grant != nil && (f.Validity == Unsupported || f.Validity == Unchecked) {
+			// Grants only accumulate and never restrict each other, and fixed-root-v1 permission kinds are leaf
+			// operations only (anything administrative needs a new inception profile, which reads unknown). So an
+			// identifiable grant this reader cannot understand affects that grant alone; the actor's own grant
+			// is judged above by its validity reasons.
+			if id != actor.Grant {
+				e.basis[id] = true
+				e.result.Warnings = append(e.result.Warnings, Warning{"unsupported_sibling_grant", id, "another grant of this identity is not understood; it does not affect this grant"})
+			}
 			continue
 		}
 		if f.Validity == Unsupported || f.Validity == Unchecked || f.Validity > Invalid {
@@ -169,9 +198,19 @@ func (s *Snapshot) rootState(e *evaluation, root Fact, actor Actor, grant *Grant
 			e.add("unaddressable_root_cut", Unknown, id, root.ID, "cannot establish affected grant")
 			continue
 		}
+		switch f.Event {
+		case GrantEvent, Inert, CutEvent, RotateKey, RevokeKey:
+		default:
+			// Vocabulary before ancestry: an event outside the closed root vocabulary is uncertainty whatever its
+			// ancestry; a defect in that ancestry must never turn unknown into a silent warning.
+			e.proof(p)
+			e.add("unsupported_root_event", Unknown, id, root.ID, "not in the closed root vocabulary")
+			continue
+		}
 		if p.status() != Eligible || f.Validity == Invalid || len(shapeReasons(f)) != 0 {
-			// A conclusively invalid non-cut cannot retire a valid root. Report it
-			// without turning an invalid sibling grant into a replacement state.
+			// A conclusively invalid non-cut cannot retire a valid root (a valid terminal event was handled
+			// above, whatever its ancestry). Report it without turning an invalid sibling grant into a
+			// replacement state.
 			e.basis[id] = true
 			e.result.Warnings = append(e.result.Warnings, Warning{"invalid_root_event", id, "not an effective root operation"})
 			continue
@@ -224,10 +263,19 @@ func (s *Snapshot) applyCut(e *evaluation, f Fact, grant *Grant) {
 }
 
 func (s *Snapshot) delegateWarnings(e *evaluation, grant *Grant) {
+	checked := 0
 	for _, id := range s.order {
 		f := s.facts[id]
 		if f.Signer != grant.Delegate || f.Authentication != Authenticated || f.Validity != Understood ||
-			(f.Event != RotateKey && f.Event != RevokeKey) || s.rootRelation(id, grant.Delegate, grant.Inception) != inside {
+			(f.Event != RotateKey && f.Event != RevokeKey) {
+			continue
+		}
+		// Warnings only, never authority: bound the per-query walk cost a delegate's own log can impose.
+		if checked++; checked > MaxDelegateSelfEvents {
+			e.result.Warnings = append(e.result.Warnings, Warning{"delegate_self_event_limit", grant.Inception, "further delegate self-events not examined"})
+			break
+		}
+		if s.rootRelation(id, grant.Delegate, grant.Inception) != inside {
 			continue
 		}
 		if s.chain(id, grant.Delegate, grant.Inception, "delegate self-event").status() == Eligible {
