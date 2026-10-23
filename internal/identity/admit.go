@@ -18,9 +18,15 @@ import (
 	"github.com/research-common/research-commons/internal/wire"
 )
 
-// MaxAdmitLines bounds the distinct statements of one snapshot. Over the bound Admit fails as a whole: there is
-// no partial snapshot, so no partial pass.
+// MaxAdmitLines bounds the distinct authenticated statements (verified, or vouched by a verified same-key line) of
+// one snapshot. Over the bound Admit fails as a whole: there is no partial snapshot, so no partial pass. Selecting
+// relevant keys before admission is the transport's job: anyone can sign many lines with keys of their own.
 const MaxAdmitLines = 100000
+
+// MaxUnprovenLines bounds the retained unverified, unvouched lines. They are linkage claims that anyone could have
+// fabricated and affect nothing, so over the bound the ones with the largest ids are dropped (a dropped link reads
+// missing, which is no more permissive than unproven) instead of failing the snapshot.
+const MaxUnprovenLines = 100000
 
 // Refused is a received line no reader can attribute (parse, envelope linkage or signature failure). It is not
 // evidence: a bad-signature copy of a real line must not stand for that line, so it is never a fact.
@@ -35,6 +41,8 @@ type Snapshot struct {
 	held    map[string]*wire.Statement
 	receipt string
 	refused []Refused
+
+	droppedUnproven int
 }
 
 // Admit reads every line with the candidate identity reader and builds the model snapshot. Delivery order and
@@ -53,12 +61,35 @@ func Admit(lines [][]byte) (*Snapshot, error) {
 		if old, ok := stored[st.ID]; ok && bytes.Compare(old, canonical) <= 0 {
 			continue
 		}
-		if _, ok := s.held[st.ID]; !ok && len(s.held) >= MaxAdmitLines {
-			return nil, fmt.Errorf("identity: more than %d distinct statements; no partial snapshot", MaxAdmitLines)
+		if !bytes.Equal(line, canonical) {
+			// Translate from canonical bytes only, so no fact depends on the member order a copy arrived in.
+			if st, err = r.Read(canonical); err != nil {
+				return nil, fmt.Errorf("identity: canonical form of an attributed line does not read back: %w", err)
+			}
 		}
 		s.held[st.ID], stored[st.ID] = st, canonical
 	}
 	vouched := vouch(s.held)
+	var authenticated int
+	var unproven []string
+	for id, st := range s.held {
+		if st.Verified || vouched[id] {
+			authenticated++
+		} else {
+			unproven = append(unproven, id)
+		}
+	}
+	if authenticated > MaxAdmitLines {
+		return nil, fmt.Errorf("identity: more than %d distinct authenticated statements; no partial snapshot", MaxAdmitLines)
+	}
+	if len(unproven) > MaxUnprovenLines {
+		slices.Sort(unproven)
+		for _, id := range unproven[MaxUnprovenLines:] {
+			delete(s.held, id)
+			delete(stored, id)
+		}
+		s.droppedUnproven = len(unproven) - MaxUnprovenLines
+	}
 	ids := make([]string, 0, len(s.held))
 	for id := range s.held {
 		ids = append(ids, id)
@@ -67,9 +98,18 @@ func Admit(lines [][]byte) (*Snapshot, error) {
 	facts := make([]identitymodel.Fact, 0, len(ids))
 	h := sha256.New()
 	for _, id := range ids {
-		facts = append(facts, translate(s.held[id], vouched[id]))
-		fmt.Fprintf(h, "%s %d\n", id, len(stored[id]))
-		h.Write(stored[id])
+		st := s.held[id]
+		facts = append(facts, translate(st, vouched[id]))
+		line := stored[id]
+		if !st.Verified {
+			// An unverified line's sig is not authenticated: anyone could resend it with other sig bytes.
+			// The receipt commits to its signed content (the id) only.
+			c := *st
+			c.Sig = ""
+			line = c.Line()
+		}
+		fmt.Fprintf(h, "%s %d\n", id, len(line))
+		h.Write(line)
 		h.Write([]byte{'\n'})
 	}
 	m, err := identitymodel.NewSnapshot(facts)
@@ -81,6 +121,9 @@ func Admit(lines [][]byte) (*Snapshot, error) {
 	return s, nil
 }
 
+// DroppedUnproven counts unverified, unvouched lines dropped over MaxUnprovenLines.
+func (s *Snapshot) DroppedUnproven() int { return s.droppedUnproven }
+
 // Evaluate answers whether the statement id may act for the identity and grant its signature names. It is
 // identity eligibility only: bare statements are reported as no_identity_actor and belong to the unchanged
 // legacy evaluator; operation roles, policy and time are consumers' questions.
@@ -88,8 +131,9 @@ func (s *Snapshot) Evaluate(id string) identitymodel.Result {
 	return s.model.Evaluate(identitymodel.ID(id))
 }
 
-// Receipt digests the exact admitted canonical lines (one per id). It is the evidence receipt, distinct from
-// the model's EvidenceDigest over normalized facts. Blob availability is NOT covered.
+// Receipt digests the exact admitted canonical lines (one per id; for an unverified line, its signed content with
+// the unauthenticated sig emptied). It is the evidence receipt, distinct from the model's EvidenceDigest over
+// normalized facts. Blob availability is NOT covered.
 func (s *Snapshot) Receipt() string { return s.receipt }
 
 // EvidenceDigest is the model digest over normalized facts.
@@ -185,7 +229,7 @@ func translate(st *wire.Statement, vouched bool) identitymodel.Fact {
 		f.Event = identitymodel.RevokeKey
 	case st.Actor == nil && (st.Kind == "describes" || st.Kind == "anchors"):
 		f.Event = identitymodel.Inert
-	case wire.PermissionDomains[st.Kind] != "":
+	case wire.PermissionDomain(st.Kind) != "":
 		f.Event, f.Operation = identitymodel.Data, operation(st)
 		if st.Actor != nil {
 			f.Actor = &identitymodel.Actor{Identity: identitymodel.ID(st.Actor.Identity), Grant: identitymodel.ID(st.Actor.Grant)}
@@ -197,7 +241,7 @@ func translate(st *wire.Statement, vouched bool) identitymodel.Fact {
 
 func operation(st *wire.Statement) *identitymodel.Operation {
 	op := &identitymodel.Operation{Kind: identitymodel.Kind(st.Kind)}
-	switch wire.PermissionDomains[st.Kind] {
+	switch wire.PermissionDomain(st.Kind) {
 	case "contents":
 		op.Target = identitymodel.Target{Type: identitymodel.ContentTarget, ID: identitymodel.ID(text(object(st.Body, "content"), "digest"))}
 	case "statements":
@@ -265,7 +309,7 @@ func permission(v canon.Value) (identitymodel.Permission, bool) {
 		return identitymodel.Permission{}, false
 	}
 	kind := text(o, "kind")
-	domain := wire.PermissionDomains[kind]
+	domain := wire.PermissionDomain(kind)
 	if domain == "" {
 		return identitymodel.Permission{}, false // an unknown kind already made the grant Unsupported
 	}
@@ -281,13 +325,16 @@ func permission(v canon.Value) (identitymodel.Permission, bool) {
 	if t == nil {
 		return p, true // UnspecifiedTargets: the model denies it as invalid scope
 	}
-	for _, mode := range t.Keys {
+	if len(t.Members) != 1 {
+		return p, true // no single target mode: UnspecifiedTargets, denied as invalid scope (never member-order-picked)
+	}
+	for mode, v := range t.Members {
 		switch mode {
 		case "any_content", "any_statement":
 			p.Mode = identitymodel.AnyTarget
 		default:
 			p.Mode = identitymodel.ExactTargets
-			if a, ok := t.Members[mode].(canon.Array); ok {
+			if a, ok := v.(canon.Array); ok {
 				for _, e := range a {
 					if s, ok := e.(canon.String); ok {
 						p.Targets = append(p.Targets, identitymodel.ID(s))
