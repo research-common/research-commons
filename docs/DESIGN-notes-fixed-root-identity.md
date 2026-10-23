@@ -197,7 +197,8 @@ is a leaf operation, so no grant can carry a power over another grant, a cut, or
 root. Acts under the unsupported grant read unknown; sibling grants are evaluated
 normally, with a warning naming the grant that could not be read. **Invariant for every
 later version of this profile:** a permission kind may never confer administrative power
-(issuing, cutting or re-delegating grants, or any root control). Such powers need a new
+(issuing, cutting or re-delegating grants, or any root control), and may never narrow or
+otherwise affect any grant but its own (no negative or cross-grant permissions). Such powers need a new
 inception profile, which older readers already report as unknown for the whole identity.
 
 `amend:true` permits **identity-wide**, cross-key, cross-grant replacement within the
