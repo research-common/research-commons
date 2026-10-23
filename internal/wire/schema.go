@@ -301,7 +301,7 @@ var kinds = map[string][]field{
 	"authored": with(disclosures, req("content", contentObj),
 		req("type", enum("dataset", "workflow", "skill", "synthesis", "report", "other")),
 		opt("provenance", provObj), opt("supersedes", digest()), opt("extends", digest())),
-	"holds": {req("content", contentObj), opt("locations", list(text()))},
+	"holds": {req("content", contentObj), opt("locations", list(text())), opt("withdrawn", isTrue())},
 	"describes": {
 		req("about", exactlyOne([]field{opt("content", digest()), opt("statement", id()), opt("resource", id())})),
 		opt("tags", list(text())), opt("note", text()),
@@ -374,6 +374,12 @@ func checkBody(kind string, body *canon.Object) (known bool, unpinned []string, 
 	}
 	if kind == "genesis" {
 		return true, nil, satisfiable(body, "body")
+	}
+	if kind == "holds" {
+		_, w := body.Get("withdrawn")
+		if _, l := body.Get("locations"); w && l {
+			return true, nil, bad("body.locations", "is present with withdrawn: a withdrawal serves nothing")
+		}
 	}
 	return true, nil, nil
 }

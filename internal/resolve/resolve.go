@@ -4,13 +4,16 @@
 // and only while the key events of its signer let it count (claims-model note §4.1).
 //
 // This file holds the shared index and the key-event rules. Each kind of answer lives in its own file:
-// resources (collections, tasks, series; claims-model note §8) in resource.go.
+// resources (collections, tasks, series; claims-model note §8) in resource.go; authorship, priority and
+// single-party defaults (§5.1, §5.2) in artifact.go; derivation groups and grades (§5.2, §7) in group.go; time
+// bounds (§10) in time.go.
 //
 // Every answer is a pure function of the set of held lines, so delivery order cannot change it (I14, P-01).
 package resolve
 
 import (
 	"slices"
+	"sync"
 
 	"github.com/research-common/research-commons/internal/keylog"
 	"github.com/research-common/research-commons/internal/wire"
@@ -48,11 +51,23 @@ type Resolver struct {
 	byID    map[string]*Placed
 	byKind  map[string][]*Placed
 	keys    map[string]keylog.KeyState
+	// time and cmp are the reader's own verifiers (I9): time evidence (§10) and comparator runs (§5.2).
+	time TimeVerifier
+	cmp  Comparator
+	// cmpMu guards cmpRuns: each comparator result this resolver obtained, keyed by comparator and the unordered
+	// pair of outputs, so every pair runs at most once per snapshot whichever blobs are viewed (group.go, pair).
+	cmpMu   sync.Mutex
+	cmpRuns map[[3]string]cmpResult
 }
 
-// New indexes every placed line of every log in s.
-func New(s *keylog.Store) *Resolver {
-	r := &Resolver{logs: s, chained: map[string]map[string]*wire.Statement{}, byID: map[string]*Placed{}, byKind: map[string][]*Placed{}, keys: map[string]keylog.KeyState{}}
+// New indexes every placed line of every log in s. With no options the reader verifies no proof format and
+// runs no comparator, so no bound orders anything and no comparison is made.
+func New(s *keylog.Store, opts ...Option) *Resolver {
+	r := &Resolver{logs: s, chained: map[string]map[string]*wire.Statement{}, byID: map[string]*Placed{}, byKind: map[string][]*Placed{}, keys: map[string]keylog.KeyState{},
+		time: NoTimeVerifier{}, cmp: NoComparator{}, cmpRuns: map[[3]string]cmpResult{}}
+	for _, o := range opts {
+		o(r)
+	}
 	for _, k := range s.Keys() {
 		v := s.Log(k).View()
 		ks := v.KeyState()
