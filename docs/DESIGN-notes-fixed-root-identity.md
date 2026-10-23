@@ -191,7 +191,14 @@ No resource/task wildcard, administrative grant, root control, or key-event dele
 is admitted. `describes` and genesis remain raw-key statements. A permission for one
 kind does not authorize another. A target mentioned incidentally elsewhere in a body
 does not satisfy scope. Unknown permission kinds/target modes make the grant unsupported
-and non-passing, not broader.
+and non-passing, not broader. That uncertainty is confined to the one grant: grants only
+accumulate and never restrict each other, and every permission kind in `fixed-root-v1`
+is a leaf operation, so no grant can carry a power over another grant, a cut, or the
+root. Acts under the unsupported grant read unknown; sibling grants are evaluated
+normally, with a warning naming the grant that could not be read. **Invariant for every
+later version of this profile:** a permission kind may never confer administrative power
+(issuing, cutting or re-delegating grants, or any root control). Such powers need a new
+inception profile, which older readers already report as unknown for the whole identity.
 
 `amend:true` permits **identity-wide**, cross-key, cross-grant replacement within the
 specified content targets. It is not “amend only your own publication stream.” Issuer
@@ -205,7 +212,10 @@ Root vocabulary on the pinned I lineage is closed for authority evaluation:
 * Inception, grants and cuts are administrative. Recognized grants accumulate across
   root forks; grants do not form a mutable last-writer-wins controller state.
 * Valid raw **`rc/1`** `revoke_key` or `rotate_key` in I's lineage is terminal for the
-  entire identity, irrespective of reason, `last_good`, successor, or branch. All
+  entire identity, irrespective of reason, `last_good`, successor, or branch, and
+  irrespective of defects in its own ancestry or merges: placement on I's lineage is
+  decided by its `prev` chain alone. (Otherwise one malformed line planted by whoever
+  holds the root key could void the owner's fork-clearing revoke.) All
   passing identity authority stops, including historical uses. No successor inherits I.
   To close workers while keeping accepted history, cut grants instead of revoking R.
 * Fully understood raw `describes` and `anchors` are inert for administration. They
@@ -214,6 +224,10 @@ Root vocabulary on the pinned I lineage is closed for authority evaluation:
   not silently inert. Relevant unresolved/unsupported root state yields unknown.
   Root events on a proved rival inception do not retire I. Unknown lineage relationship
   is reported as unknown, not mistaken for a rival that can safely be ignored.
+
+A cut on I's lineage is addressed by its `grant`. A cut that names a grant of I under
+another `identity` is an invalid cut addressed to that grant: it denies the grant and is
+reported, never treated as a cut for some other identity.
 
 Malformed or mismatched purported administrative statements grant no authority. An
 issuer-authenticated potentially relevant control event that cannot be evaluated
