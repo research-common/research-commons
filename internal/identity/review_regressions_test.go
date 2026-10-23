@@ -451,3 +451,23 @@ func TestReviewCutAddressIsTheGrant(t *testing.T) {
 		})
 	}
 }
+
+// Re-review N3 (Kimi): a terminal event whose prev chain cannot be placed on I (a sequence gap) is non-passing, never
+// root_retired: only prev-lineage placement makes a terminal event retire I.
+func TestReviewUnplaceableTerminalIsUnknownNotRetired(t *testing.T) {
+	w := base(t)
+	d := wire.Draft{RC: "rc/1", Kind: "revoke_key", TS: ts, Body: obj("reason", "key_compromise"), Prev: w.ids["G2"], Seq: 5}
+	env := d.Envelope(w.keys["R"])
+	ss := wire.PAE(wire.PayloadType("revoke_key", 1), canon.Encode(env))
+	w.ids["Rgap"], w.lines["Rgap"] = wire.ID(ss), canon.Encode(withField(env, "sig", canon.String(w.keys["R"].Sign(ss))))
+	w.order = append(w.order, "Rgap")
+	s := w.admit()
+	if st, v := s.Status(w.ids["Rgap"]); st != wire.Valid || !v {
+		t.Fatalf("precondition: %s/%v", st, v)
+	}
+	// Non-passing through the unresolved placement and the gap the proof itself reports; never retirement.
+	r := w.expect(s, "A1", identitymodel.Denied, "invalid_prev_sequence")
+	if !hasReason(r, "unresolved_root_ancestry") || hasReason(r, "root_retired") {
+		t.Fatalf("want unresolved placement, no retirement: %+v", r.Reasons)
+	}
+}

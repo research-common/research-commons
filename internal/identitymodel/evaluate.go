@@ -148,6 +148,7 @@ func (s *Snapshot) rootState(e *evaluation, root Fact, actor Actor, grant *Grant
 			// irrespective of defects in its merges or earlier lines: its prev lineage alone places it on I.
 			// Otherwise a compromised root could plant one bad tip and void the owner's fork-clearing revoke.
 			e.basis[id] = true
+			e.proof(p) // moot for the status, kept so the explanation shows any ancestry defect
 			e.add("root_retired", Denied, id, root.ID, "terminal in-lineage root event; never follow a successor")
 			continue
 		}
@@ -168,7 +169,7 @@ func (s *Snapshot) rootState(e *evaluation, root Fact, actor Actor, grant *Grant
 			e.reasons(validityReasons(f))
 			e.reasons(shapeReasons(f))
 			if f.Cut.Identity != actor.Identity {
-				e.add("wrong_cut_identity", Denied, id, actor.Identity, "cut names this grant under another identity")
+				e.add("wrong_cut_identity", Denied, id, actor.Identity, "cut names this grant under another or unreadable identity")
 				continue
 			}
 			if p.status() != Eligible || f.Validity != Understood || len(shapeReasons(f)) != 0 {
@@ -270,7 +271,8 @@ func (s *Snapshot) delegateWarnings(e *evaluation, grant *Grant) {
 			(f.Event != RotateKey && f.Event != RevokeKey) {
 			continue
 		}
-		// Warnings only, never authority: bound the per-query walk cost a delegate's own log can impose.
+		// Warnings only, never authority: bound the per-query walk cost a delegate's own log can impose. Every
+		// examined event costs walks, so the count includes events that turn out to be outside the inception.
 		if checked++; checked > MaxDelegateSelfEvents {
 			e.result.Warnings = append(e.result.Warnings, Warning{"delegate_self_event_limit", grant.Inception, "further delegate self-events not examined"})
 			break
