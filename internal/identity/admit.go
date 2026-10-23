@@ -64,7 +64,7 @@ func Admit(lines [][]byte) (*Snapshot, error) {
 		if !bytes.Equal(line, canonical) {
 			// Translate from canonical bytes only, so no fact depends on the member order a copy arrived in.
 			if st, err = r.Read(canonical); err != nil {
-				return nil, fmt.Errorf("identity: canonical form of an attributed line does not read back: %w", err)
+				return nil, fmt.Errorf("identity: line %d (%s): canonical form does not read back: %w", i, st.ID, err)
 			}
 		}
 		s.held[st.ID], stored[st.ID] = st, canonical
