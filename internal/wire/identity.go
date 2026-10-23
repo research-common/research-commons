@@ -193,8 +193,19 @@ func linkageEnvelope(s *Statement, env *canon.Object) error {
 	return nil
 }
 
-// common reads ts, body and crit. ok=false means the statement is Invalid with the returned reason.
+// common reads body, crit and ts. ok=false means the statement is Invalid with the returned reason. The body is
+// kept before ts or crit can fail, so an authenticated-invalid control keeps its readable binding (a cut with a bad
+// time is still addressed to its grant).
 func common(s *Statement, env *canon.Object) (string, bool) {
+	bodyV, ok := env.Get("body")
+	if !ok {
+		return "missing envelope field \"body\"", false
+	}
+	body, ok := bodyV.(*canon.Object)
+	if !ok {
+		return "body is not an object", false
+	}
+	s.Body = body
 	tsV, ok := env.Get("ts")
 	if !ok {
 		return "missing envelope field \"ts\"", false
@@ -208,15 +219,6 @@ func common(s *Statement, env *canon.Object) (string, bool) {
 		return err.Error(), false
 	}
 	s.TS = t
-	bodyV, ok := env.Get("body")
-	if !ok {
-		return "missing envelope field \"body\"", false
-	}
-	body, ok := bodyV.(*canon.Object)
-	if !ok {
-		return "body is not an object", false
-	}
-	s.Body = body
 	if c, present := env.Get("crit"); present {
 		crit, err := critList(c, body)
 		if err != nil {
@@ -269,24 +271,45 @@ var candidateBase = map[string]bool{
 }
 
 func interpretCandidate(s *Statement, env *canon.Object) (Status, string) {
-	if why, ok := common(s, env); !ok {
+	// The actor is read first so that a later failure still reports an invalid identity context, never a bare key.
+	actorWhy := candidateActor(s, env)
+	why, ok := common(s, env)
+	switch {
+	case actorWhy != "":
+		return Invalid, actorWhy
+	case !ok:
 		return Invalid, why
+	case len(s.Merges) > maxSetEntries:
+		// Profile syntax cap, rc/2 only (rc/1 and the default readers are unchanged).
+		return Invalid, "merges has more than " + strconv.Itoa(maxSetEntries) + " entries"
 	}
-	if av, ok := env.Get(ActorField); ok {
-		s.Actor = &Actor{}
-		ao, ok := av.(*canon.Object)
-		if !ok {
-			return Invalid, ActorField + " is not an object"
-		}
-		if why := closed(ao, ActorField, "identity", "grant"); why != "" {
-			return Invalid, why
-		}
-		s.Actor.Identity, _ = idValue(ao, "identity")
-		s.Actor.Grant, _ = idValue(ao, "grant")
-		if s.Actor.Identity == "" || s.Actor.Grant == "" {
-			return Invalid, ActorField + " needs identity and grant statement ids"
-		}
+	return candidateBody(s)
+}
+
+// candidateActor reads x_actor_v1 when present. A non-empty result is the reason the statement is Invalid; s.Actor
+// is set whenever the field is present, even malformed, so the line keeps an identity context.
+func candidateActor(s *Statement, env *canon.Object) string {
+	av, ok := env.Get(ActorField)
+	if !ok {
+		return ""
 	}
+	s.Actor = &Actor{}
+	ao, ok := av.(*canon.Object)
+	if !ok {
+		return ActorField + " is not an object"
+	}
+	if why := closed(ao, ActorField, "identity", "grant"); why != "" {
+		return why
+	}
+	s.Actor.Identity, _ = idValue(ao, "identity")
+	s.Actor.Grant, _ = idValue(ao, "grant")
+	if s.Actor.Identity == "" || s.Actor.Grant == "" {
+		return ActorField + " needs identity and grant statement ids"
+	}
+	return ""
+}
+
+func candidateBody(s *Statement) (Status, string) {
 	switch {
 	case len(s.Crit) == 0:
 		return Invalid, "rc/2 requires crit [" + IdentityCrit + "]"
@@ -408,8 +431,12 @@ func grantBody(s *Statement, marker *canon.Object) (Status, string) {
 	return Valid, ""
 }
 
-// PermissionDomains is the closed permission registry of the candidate profile (§3): kind → target domain.
-var PermissionDomains = map[string]string{
+// PermissionDomain returns the target domain of a permission kind in the candidate profile's closed registry
+// (§3), or "" for a kind the registry does not hold. The registry itself is not exported, so no importer can
+// widen it at run time.
+func PermissionDomain(kind string) string { return permissionDomains[kind] }
+
+var permissionDomains = map[string]string{
 	"authored": "contents", "observed": "contents", "holds": "contents",
 	"reproduced": "statements", "corroborates": "statements", "refutes": "statements", "retracts": "statements",
 	"edition": "resources", "withdraw_approval": "resources",
@@ -436,7 +463,7 @@ func permission(v canon.Value, p string) (unknownKind, why string) {
 		return "", p + ".kind is not a kind"
 	}
 	kind := string(ks)
-	domain, known := PermissionDomains[kind]
+	domain, known := permissionDomains[kind]
 	if nonDelegable[kind] {
 		return "", p + ".kind " + kind + " is never delegable (root administration, key events, genesis, describes)"
 	}

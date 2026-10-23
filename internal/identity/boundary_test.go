@@ -39,9 +39,12 @@ func TestOnlyAdapterImportsModel(t *testing.T) {
 		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
-		dir := filepath.ToSlash(filepath.Dir(path))
-		if strings.HasSuffix(dir, "internal/identity") || strings.HasSuffix(dir, "internal/identitymodel") {
-			return nil
+		rel, err := filepath.Rel(root, filepath.Dir(path))
+		if err != nil {
+			return err
+		}
+		if dir := filepath.ToSlash(rel); dir == "internal/identity" || dir == "internal/identitymodel" {
+			return nil // exact paths: a suffix match would exempt any nested ".../internal/identity"
 		}
 		f, err := parser.ParseFile(fset, path, nil, parser.ImportsOnly)
 		if err != nil {
@@ -171,16 +174,40 @@ func TestUnchangedReaderStackOnCandidateBytes(t *testing.T) {
 // Over the admission cap the whole snapshot is refused: no partial evidence set can produce a pass. Unverified
 // future-major lines are cheap distinct statements, so the cap is reached without signing 100k lines.
 func TestAdmitCapRefusesWholeSnapshot(t *testing.T) {
+	// Unproven (unverified, unvouched) lines cost nothing to mint and affect nothing: over their own cap they are
+	// dropped deterministically, never failing the snapshot (review O-F8).
 	signer := key("cap", false).Signer()
-	lines := make([][]byte, 0, identity.MaxAdmitLines+1)
-	for i := 0; i <= identity.MaxAdmitLines; i++ {
+	lines := make([][]byte, 0, identity.MaxUnprovenLines+1)
+	for i := 0; i <= identity.MaxUnprovenLines; i++ {
 		lines = append(lines, canon.Encode(obj("rc", "rc/9", "kind", "x", "signer", signer, "seq", 0, "prev", nil,
 			"n", i, "sig", "00")))
 	}
-	if _, err := identity.Admit(lines[:identity.MaxAdmitLines]); err != nil {
-		t.Fatalf("at the cap: %v", err)
+	if s, err := identity.Admit(lines[:identity.MaxUnprovenLines]); err != nil || s.DroppedUnproven() != 0 {
+		t.Fatalf("at the unproven cap: %v", err)
 	}
-	if s, err := identity.Admit(lines); err == nil || s != nil {
-		t.Fatalf("over the cap admitted a snapshot")
+	s, err := identity.Admit(lines)
+	if err != nil || s.DroppedUnproven() != 1 {
+		t.Fatalf("over the unproven cap: err=%v dropped=%v", err, s)
+	}
+	r, err := identity.Admit(append([][]byte{lines[len(lines)-1]}, lines[:len(lines)-1]...))
+	if err != nil || r.Receipt() != s.Receipt() || r.EvidenceDigest() != s.EvidenceDigest() {
+		t.Fatalf("dropping over the cap depends on delivery order")
+	}
+	// Authenticated lines keep the whole-snapshot refusal: one key's verified chain one over MaxAdmitLines.
+	if testing.Short() {
+		t.Skip("signing MaxAdmitLines+1 lines")
+	}
+	k := key("cap-verified", false)
+	var all [][]byte
+	prev := ""
+	for i := 0; i <= identity.MaxAdmitLines; i++ {
+		d := wire.Draft{RC: "rc/1", Kind: "anchors", TS: ts, Body: obj("root", digest(byte(i)), "n", i), Seq: int64(i), Prev: prev}
+		env := d.Envelope(k)
+		ss := wire.PAE(wire.PayloadType("anchors", 1), canon.Encode(env))
+		all = append(all, canon.Encode(withField(env, "sig", canon.String(k.Sign(ss)))))
+		prev = wire.ID(ss)
+	}
+	if s, err := identity.Admit(all); err == nil || s != nil {
+		t.Fatalf("over the authenticated cap admitted a snapshot")
 	}
 }
