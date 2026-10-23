@@ -193,7 +193,7 @@ func (s *Snapshot) rootState(e *evaluation, root Fact, actor Actor, grant *Grant
 			e.add("unsupported_root_event", Unknown, id, root.ID, "authenticated in-lineage event is not understood")
 			continue
 		}
-		if f.Event == CutEvent && (f.Cut == nil || f.Cut.Identity == "" || f.Cut.Grant == "") {
+		if f.Event == CutEvent && (f.Cut == nil || f.Cut.Grant == "") {
 			e.proof(p)
 			e.add("unaddressable_root_cut", Unknown, id, root.ID, "cannot establish affected grant")
 			continue

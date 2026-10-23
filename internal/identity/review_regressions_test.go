@@ -413,3 +413,41 @@ func (w *world) all(except ...string) [][]byte {
 	}
 	return out
 }
+
+// Re-review N1 (GPT): a cut is addressed by its grant alone. A readable grant with a missing, mistyped or malformed
+// identity denies that grant and leaves sibling grants alone; an unreadable grant stays unknown for every grant.
+func TestReviewCutAddressIsTheGrant(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		field string
+		value canon.Value // nil removes the field
+	}{
+		{"identity missing", "identity", nil},
+		{"identity integer", "identity", canon.Int(5)},
+		{"identity malformed", "identity", canon.String("not-an-id")},
+		{"identity wrong id", "identity", canon.String(strings.Repeat("ab", 32))},
+		{"grant missing", "grant", nil},
+		{"grant integer", "grant", canon.Int(5)},
+		{"grant malformed", "grant", canon.String("not-an-id")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := base(t)
+			b := cutBody(w, "G1", "")
+			if tc.value == nil {
+				delete(b.Members, tc.field)
+				b.Keys = without(b.Keys, tc.field)
+			} else {
+				b.Members[tc.field] = tc.value
+			}
+			w.sign(stmt{name: "C", by: "R", parent: "G2", kind: "identity_cut", body: b})
+			s := w.admit()
+			if tc.field == "grant" {
+				w.expect(s, "A1", identitymodel.Unknown, "unsupported_root_event")
+				w.expect(s, "B1", identitymodel.Unknown, "unsupported_root_event")
+				return
+			}
+			w.expect(s, "A1", identitymodel.Denied, "wrong_cut_identity")
+			w.expect(s, "B1", identitymodel.Eligible, "")
+		})
+	}
+}

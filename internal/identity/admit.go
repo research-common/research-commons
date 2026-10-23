@@ -295,9 +295,10 @@ func administrative(f *identitymodel.Fact, st *wire.Statement) {
 			_ = v
 		}
 		f.Event, f.Cut = identitymodel.CutEvent, c
-		if f.Validity == identitymodel.Invalid && (c.Identity == "" || c.Grant == "") {
-			// Which grant it cuts is unknowable, so no grant can be definitely denied by it: unknown for all of
-			// I's grants (model: unsupported root event), never a definite denial and never ineffective.
+		if f.Validity == identitymodel.Invalid && c.Grant == "" {
+			// A cut is addressed by its grant. Without a readable grant no grant can be definitely denied by it:
+			// unknown for all of I's grants (model: unsupported root event), never a definite denial and never
+			// ineffective. An unreadable identity with a readable grant is an invalid cut addressed to that grant.
 			f.Validity = identitymodel.Unsupported
 		}
 	}
