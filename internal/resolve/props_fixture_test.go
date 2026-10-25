@@ -313,3 +313,12 @@ func firstDiff(a, b string) string {
 	}
 	return fmt.Sprintf("lengths differ: %d vs %d lines", len(x), len(y))
 }
+
+// idOf reads a line and returns the statement id it carries.
+func idOf(_ *keylog.Store, line []byte) (string, error) {
+	st, err := wire.Read(line)
+	if err != nil {
+		return "", err
+	}
+	return st.ID, nil
+}
