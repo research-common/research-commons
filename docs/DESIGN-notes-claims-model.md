@@ -587,8 +587,11 @@ immutable editions.
   segments carry finality rules (§5.3.1), a reader computes the members' finality boundary and shows both:
   "frozen_before 2025-06-01 (declared) · members final to 2025-04-01 (2 segments provisional)". A declared
   boundary later than the computed one is flagged; `unchecked` when members carry no rule; `not comparable`
-  when the declared unit differs from the computed one (never converted). A series edition
-  rule may require agreement, so a hub can refuse a premature freeze under its own policy. A controller can
+  when the declared unit differs from the computed one (never converted). The computed boundary is the
+  position of the earliest segment that is not final, every segment before it being final; when every
+  segment is final, it is the end of the last segment. It is `unchecked` when any segment carries no finality
+  rule or its state cannot be re-checked, since one segment without a rule leaves the boundary unknown. A
+  series edition rule may require agreement, so a hub can refuse a premature freeze under its own policy. A controller can
   still freeze a tail the source intends to revise; it cannot do so invisibly. An edition that replaces a
   segment dated before its predecessor's `frozen_before` is shown as `REVISED-FROZEN`; the earlier edition and
   its segment remain resolvable (I3).
