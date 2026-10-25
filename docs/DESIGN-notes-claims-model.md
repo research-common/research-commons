@@ -729,7 +729,7 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
   anyone serving the bytes. Superseded snapshots are often the evidence for their own erratum. A hub that
   must stop serving something does so under its own admission policy (I9).
 - **Exit codes.** `verify`: 0 checked and passed · 1 checked and wrong · 3 could not check (contested, unknown,
-  unchecked, unpinned, unsupported; a re-run stopped by one of the reader's own limits, `timeout` or another
+  unchecked, unpinned, unsupported; a derived artifact nobody re-derived, `not re-derived`; a re-run stopped by one of the reader's own limits, `timeout` or another
   operational cap, reported with the resources used; and a re-run whose step failed or left a declared output
   missing) · 4 nothing to re-run · 5 environment mismatch: the declared environment differs from, or is not
   available in, the one that ran. Exit 1 is reserved for a comparison that ran to completion and disagreed; a
@@ -737,6 +737,14 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
   environments call for different next steps (raise the limit or accept `unchecked`, versus run where the
   pinned environment exists). Exit 0 means the requested operation succeeded, not that everything it
   referenced is valid.
+- **`verify` of a derived artifact needs a comparison.** A derived artifact claims that its workflow on its
+  inputs produced its bytes, so exit 0 needs a T0 or T1 comparison: a second run in its group, or the
+  reader's own re-run inside `verify`. With neither, it is `not re-derived` and exits 3 under every
+  replication mode (C-core-25b). The author's own `reproduced` is a second run, and `explain` says
+  "re-derived by its author only". A construction without provenance makes no such claim, so a sole author
+  with nothing contested still exits 0 (C-core-17). So under a mode that permits no comparison (undeclared,
+  or `protocol` with no comparator), `verify` exits 3 whether the group holds one run or several: holding
+  less evidence never passes where holding more would not.
 - **Exit 2: the command did not start.** On every command, 2 means the invocation or the reader's own
   configuration could not be acted on: an unknown option, a malformed argument (an id that is not an id), a
   policy or configuration file that is present but unreadable or unparseable. Arguments and configuration are

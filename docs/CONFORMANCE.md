@@ -103,6 +103,7 @@ refer to `verify` unless another command is named (§13).
 | C-core-24b | §5.2 (tolerance is not transitive) | As C-core-24a with four runs: `K` matches `A`–`B` and `C`–`D`; every cross pair diverges. | Four T1 runs; the group shows `not all runs agree` with 2 clusters and 4 of 6 pairs diverged, never `all 4 match`. |
 | C-core-25 | §5.2 table (undeclared), I4 | `W`'s `authored` carries no `replication`. `A` and `B` derive (a) identical and (b) different bytes. | Both cells show `unchecked`; neither T0 nor T1 is awarded; `verify` of the group's derivation claim exits 3. |
 | C-core-25a | §5.2 (grades are the reader's own comparison), §7 (declared beside computed), I2, I4 | `A` derives `X` under `W`. `B` signs `reproduced` of `A`'s statement with `result: match` but `content` `Y` ≠ `X`. (a) `W` declares `bytes`; (b) `W` declares `protocol` with comparator `K`, and the reader cannot run `K`; (c) as (a) with `B` signing `result: diverged` and `content` `X`. | Every variant shows `B`'s run with the token `B` signed, `B`'s environment record and the reader's trust in `B` (`not configured` when the reader has none). (a) the reader's result is `diverged`, `verify X` exits 1, and `explain` flags `B`'s signed `match` against it; (b) `unchecked`, exit 3, `B`'s `match` shown and not graded; (c) T0, exit 0, `B`'s signed `diverged` flagged. No signed token changes a grade or exit. |
+| C-core-25b | §13 (`verify` of a derived artifact needs a comparison), §5.2, I4 | `A` alone derives `X` under `W`; nobody else holds a run. Repeat with `W` declaring (a) `bytes`, (b) `protocol` with comparator `K`, (c) no `replication`. Then (d): as (a) plus `A`'s own `reproduced: match` for `X`. Property: for (b) without a comparator and for (c), add a second deriver with different bytes. | (a)–(c) `not re-derived`, `verify X` exits 3 naming it, and the next step says a re-run checks it. (d) T0, exit 0, `explain` says "re-derived by its author only". Property: the exit is 3 before and after the second deriver joins; no variant exits 0 with one run where the same mode gives 3 with two. |
 | C-core-26 | §5.2 ("same bytes under different provenance"; `reproduced: match` across workflows, #22), §4 `reproduced` | `A` derives `X` under `W1`; `B` derives byte-identical `X` under `W2` (different workflow hash); both bitcoin-verified, `A` earlier. | No derivation group is formed; §5.2 (2) applies (`A` default, `B` later claimant); one blob; a `reproduced: match` across workflows links the two; `W1`'s `authored` unchanged. |
 | C-core-27 | §5.2 ("contested on that field only") | Within one derivation group `A` declares licence `CC-BY-4.0`, `B` declares `MIT`; both declare the same availability. | Licence shows `contested` listing both signers; availability defaults by agreement; the group display is otherwise intact; `verify` exit 3 cites only the licence field. |
 | C-core-28 | §5.2 ("independent re-runs distinguished from `holds`") | Group of derivers `A`, `B` plus key `H` that publishes only `holds` for the bytes. | `derived by 2`; `H` is listed under holders, never as a deriver. |
@@ -332,7 +333,7 @@ Properties quantify over generated inputs; each is a property test or a static c
 | I1 content is self-certifying | C-core-03, C-core-75, C-core-76, C-core-117, C-core-124 |
 | I2 attribution | C-core-09, C-core-14, C-core-15, C-core-17, C-core-29, C-core-126 |
 | I3 per-key append-only history | C-core-08, C-core-16a, C-core-78, C-core-103, C-core-127, C-core-127a, C-core-127b, C-core-143a, C-exch-20 |
-| I4 no false assurance | C-core-01, C-core-25, C-core-25a, C-core-52, C-core-57, C-core-69, C-core-90, C-core-92, C-core-95, C-core-107, C-core-130, C-core-129a, C-core-131, C-exch-08, C-btc-06, P-09 |
+| I4 no false assurance | C-core-01, C-core-25, C-core-25a, C-core-25b, C-core-52, C-core-57, C-core-69, C-core-90, C-core-92, C-core-95, C-core-107, C-core-130, C-core-129a, C-core-131, C-exch-08, C-btc-06, P-09 |
 | I5 evidence retained; irrelevant additions don't interfere | C-core-05, C-core-06, C-exec-13, C-exch-20, P-03, P-08 |
 | I6 disclosure never grades | C-core-64, C-core-65, C-core-73, C-exch-17 |
 | I7 no third-party veto | C-core-05, C-core-08, C-core-22b, C-core-81, C-core-88, C-core-98, P-03, P-04 |
@@ -353,7 +354,7 @@ Properties quantify over generated inputs; each is a property test or a static c
 | §3.1 the third state | C-core-18, C-core-36 |
 | §4 data model (one signature; statement identity; kinds; §4.1 key events) | C-core-144, C-core-143a – C-core-143e, C-core-03, C-core-05, C-core-06, C-core-08 – C-core-15, C-core-26, C-core-83, C-core-142, C-exec-01, C-exec-02, P-02, P-03 |
 | §5.1 single-party fields (incl. a forked log) | C-core-05, C-core-16, C-core-16a, C-core-17, C-core-142 |
-| §5.2 constructions and derivation groups | C-core-07, C-core-17 – C-core-28 (incl. C-core-18a, C-core-20a, C-core-22a, C-core-22b, C-core-24a, C-core-24b, C-core-25a), C-core-107, C-exec-01 – C-exec-03, C-exec-13, C-exec-15, C-btc-01 – C-btc-03 |
+| §5.2 constructions and derivation groups | C-core-07, C-core-17 – C-core-28 (incl. C-core-18a, C-core-20a, C-core-22a, C-core-22b, C-core-24a, C-core-24b, C-core-25a, C-core-25b), C-core-107, C-exec-01 – C-exec-03, C-exec-13, C-exec-15, C-btc-01 – C-btc-03 |
 | §5.3.1 observation classes, referents, finality | C-core-29 – C-core-44, C-core-73 |
 | §5.3.2 corroboration is a derivation | C-core-43, C-core-45 – C-core-51, C-exec-14, P-12 |
 | §5.3.3 capture evidence | C-core-52 – C-core-55 |
@@ -369,7 +370,7 @@ Properties quantify over generated inputs; each is a property test or a static c
 | §10 time | C-core-19, C-core-53, C-core-105 – C-core-107, C-exch-16, C-btc-01 – C-btc-06 (incl. C-btc-03a), P-06 |
 | §11 federation and gates | C-core-04, C-core-09, C-core-12, C-core-14, C-core-143, C-core-86, C-core-108 – C-core-122, C-core-134, C-exec-06, C-exec-07, C-exec-12, P-04, P-05 |
 | §12 execution and storage safety | C-core-84, C-core-145, C-core-146, C-core-86, C-core-95, C-core-123 – C-core-131 (incl. C-core-127a, C-core-127b, C-core-129a), C-core-138, C-core-143, C-exec-03, C-exec-06, C-exec-08 – C-exec-11, C-exec-14, P-07, P-10 |
-| §13 outputs | C-core-06, C-core-113, C-core-125, C-core-132 – C-core-140 (incl. C-core-133a), C-exec-11, C-exec-13, C-exec-13a, C-exec-13b, C-exec-15, C-exec-16, C-exch-08, C-btc-06, P-08, P-09, P-10 |
+| §13 outputs | C-core-06, C-core-25b, C-core-113, C-core-125, C-core-132 – C-core-140 (incl. C-core-133a), C-exec-11, C-exec-13, C-exec-13a, C-exec-13b, C-exec-15, C-exec-16, C-exch-08, C-btc-06, P-08, P-09, P-10 |
 | §14 relationship to the alpha | C-core-141 |
 | appendix: two authors, one synthesis | C-core-142, C-btc-01 |
 | appendix: a chain observation across a fork | C-core-33 |
