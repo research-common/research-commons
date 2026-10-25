@@ -293,7 +293,7 @@ Every bound is a record, not a `(timestamp, quality)` pair:
 quality            none | local | bitcoin
 state              verified | verified-historical | pending | insufficient-confirmations | missing-proof
                    | invalid-proof | invalid-anchor | unknown-height | orphaned | stale-chain
-                   | backend-unconfigured | backend-unavailable | unsupported
+                   | backend-unconfigured | backend-unavailable | unsupported | refused
 signer             key
 anchor             statement id of the `anchors` statement
 covered            statement id of the head
@@ -305,6 +305,8 @@ chain_epoch, verified_at (reader-local), policy_fingerprint, verifier_version
 ```
 
 `local` evidence carries the signer's own timestamp and no chain fields. `none` is the absence of any anchor.
+`refused` is an operational refusal under §4 (the `anchors` statement or the proof exceeds one of the reader's
+size limits, checks 1 and 5); the record names the class and the limit, and the bound is absent.
 
 ### 8.2 Quality table
 
@@ -418,7 +420,7 @@ explain <statement>                        the bound record, the relation, and e
 |---|---|
 | every requested bound is `verified` | 0 |
 | any `invalid-proof` or `invalid-anchor` | 1 |
-| none invalid, but any `pending`, `missing-proof`, `insufficient-confirmations`, `unknown-height`, `orphaned`, `stale-chain`, `backend-*`, `unsupported`, `verified-historical` | 3 |
+| none invalid, but any `pending`, `missing-proof`, `insufficient-confirmations`, `unknown-height`, `orphaned`, `stale-chain`, `backend-*`, `unsupported`, `verified-historical`, `refused` | 3 |
 
 Mixed batches report every per-anchor state; precedence invalid > could-not-check > verified. A `bitcoin`
 label in received data with no local verification yields state `backend-unconfigured` or `pending`, displays
