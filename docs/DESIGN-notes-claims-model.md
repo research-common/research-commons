@@ -289,6 +289,13 @@ every group under the workflow is read under the amendment, and `explain` cites 
 | `protocol` | consistent with a re-run and with a copy, and not evidence of either: shown as `identical bytes (protocol workflow)`; independence is §9.3's question | compared under the workflow's declared comparator: `match` or `diverged` (T1); "derived by 3: 2 match, 1 diverged". No declared comparator: `unchecked`, never a default comparison |
 | undeclared | `unchecked` | `unchecked` |
 
+**Grades are the reader's own comparison.** A grade comes from the reader comparing output bytes itself, under
+the workflow's mode and comparator; the `result` a `reproduced` statement signs is never graded. Each run in a
+group is shown with what its runner signed (its token and environment record, the comparator's record nested,
+attributed to the runner, I2), the reader's trust in that runner, and the reader's own result; where the
+runner's token and the reader's result differ, `explain` says so, declared beside computed (§7). Trust in a
+runner never moves a grade or an exit code (C-core-25a).
+
 **Each run is graded on its own output.** Under `bytes`, an output that another run of the group also
 produced is a byte-identical re-derivation (T0) whatever else the group holds, and an output no other run
 produced is `diverged`; the group shows `diverged (n different outputs)` as a disclosure, so one stray run
