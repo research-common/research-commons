@@ -451,6 +451,10 @@ such; the tool never states the rival could not have published earlier.
 - The header validator is selected by an implementation spike against §6; a bare header parser with a
   per-header PoW check does not qualify. Its supported rules and bootstrap model are documented before a
   headers backend is advertised.
+- An implementation may instead carry its own proof parser and header validator in its tree, in its own
+  language, provided they pass C-btc-11, C-btc-14 and C-btc-15 and the parser meets the §5.1 table row for
+  row. Such code is trusted code and reviewed as such (§6.1); the optional-dependency rule above still
+  applies to any external helper it calls.
 - Helpers are invoked with argument arrays (no shell), over a versioned, bounded JSON protocol; unknown
   versions, missing required fields, malformed output or mismatched echoed input hashes fail closed.
 - Resource limits (local, operator-adjustable, never sender-set): `anchors` statement 64 KiB; proof blob
