@@ -236,6 +236,17 @@ one key's `authored` or `observed` statement, chosen by the rules below. Rival v
 listed with their signers and never silently dropped. A consumer that needs certainty pins a specific
 statement rather than relying on the default.
 
+**A forked log.** On an uncleared fork of a key's log (wire-format note §7), every `authored` statement of
+that key on a blob that no later statement of the key amends is current, whichever branch it is on. Current
+statements with the same provenance are one claim, and a field on which they disagree is `contested` on that
+field; statements with different provenance are separate claims. This is read per statement, not by freezing
+the key at the fork's base: a blob that only one branch speaks about resolves normally, and lines after the
+fork count on both branches. Most forks are one key signing from two machines, and freezing would hide that
+work until a merge for no conflict in what the key said. A fork by someone else holding the key is answered by
+the key's revocation (§4.1), which cuts the branch it leaves out; until then the other branch can make the
+key's fields `contested`, never win them. Clearing the fork with `merges` does not choose between values: an
+`authored` whose history includes both branches amends both (C-core-16a).
+
 ### 5.2 Constructions: first to publish
 
 1. **Sole author.** Exactly one key has a verified `authored` statement for the blob, so its single-party

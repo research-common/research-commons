@@ -86,6 +86,7 @@ refer to `verify` unless another command is named (§13).
 | C-core-14 | I2, §11 (intrinsic: bad signature; a line in another key's log) | A statement whose signer field names key `A` but which is signed by `B`; a second whose signature verifies under no key. Deliver into `A`'s log path. | Both refused as intrinsic; nothing is displayed as `A`'s word; `A`'s log hash chain is unchanged. |
 | C-core-15 | I2, §4 (`refutes`, `describes`) | As C-core-05. | `C`'s `refutes` is displayed beside the artifact, attributed to `C` with a pointer to its statement id and its evidence artifact; never rendered as `A`'s statement or as an unsigned field. |
 | C-core-16 | §5.1 | Author's licence statement, plus a rival licence statement on the same blob from a key the reader does not trust. | The default is the author's; the rival is listed with its signer; it is never silently dropped. |
+| C-core-16a | §5.1 (a forked log), wire-format note §7 | `A`'s log forks. (a) On one branch `A` amends `authored X` to licence `CC0-1.0`, on the other to `CC-BY-4.0`. (b) Blob `Y` is amended on one branch only; blob `Z` is first claimed on one branch. (c) The fork is cleared first by a `describes` line whose `merges` names both tips, then by an `authored` for `X` (licence `CC0-1.0`) whose history includes both branches. | (a) `A` is sole author of `X`; licence `contested`, listing both of `A`'s statements; `verify X` exits 3; `explain` names the fork and says that clearing it takes an `authored` reaching both tips. (b) `Y` and `Z` resolve normally with `A`'s values. (c) After the `describes` merge the licence is still `contested`; after the `authored` merge it defaults to `CC0-1.0` and `verify X` exits 0. |
 | C-core-17 | §5.2 (1), §5.1, I2 | `A` publishes blob `X` with one verified `authored` carrying licence, availability and description; no other key claims `X`. | `A` is sole author; each default single-party field is `A`'s with a pointer to `A`'s statement; no rivals listed; not `contested`; `verify X` exits 0. |
 | C-core-18 | §5.2 (3), §3.1, I14 | `A` and `B` each publish `authored` for identical bytes `X` (no provenance); no Bitcoin-quality evidence held. Permute. | Both orders display both claimants and the token `contested`; `verify` exits 3 in both orders; the two displays are byte-identical. |
 | C-core-18a | §5.2 (`protocol` row: no declared comparator) | Two `authored` statements with the same provenance under a `protocol` workflow whose `authored` statement names no comparator; output bytes differ. | The group evaluation is `unchecked`; no default comparator is applied; `verify` exits 3; the display says the workflow declares no comparator. |
@@ -324,7 +325,7 @@ Properties quantify over generated inputs; each is a property test or a static c
 |---|---|
 | I1 content is self-certifying | C-core-03, C-core-75, C-core-76, C-core-117, C-core-124 |
 | I2 attribution | C-core-09, C-core-14, C-core-15, C-core-17, C-core-29, C-core-126 |
-| I3 per-key append-only history | C-core-08, C-core-78, C-core-103, C-core-127, C-core-127a, C-core-127b, C-core-143a, C-exch-20 |
+| I3 per-key append-only history | C-core-08, C-core-16a, C-core-78, C-core-103, C-core-127, C-core-127a, C-core-127b, C-core-143a, C-exch-20 |
 | I4 no false assurance | C-core-01, C-core-25, C-core-52, C-core-57, C-core-69, C-core-90, C-core-92, C-core-95, C-core-107, C-core-130, C-core-129a, C-core-131, C-exch-08, C-btc-06, P-09 |
 | I5 evidence retained; irrelevant additions don't interfere | C-core-05, C-core-06, C-exec-13, C-exch-20, P-03, P-08 |
 | I6 disclosure never grades | C-core-64, C-core-65, C-core-73, C-exch-17 |
@@ -345,7 +346,7 @@ Properties quantify over generated inputs; each is a property test or a static c
 | §2 actors and threats (omission; parity) | C-core-01, C-core-02, C-core-04, C-core-120, P-01, P-11, P-12 |
 | §3.1 the third state | C-core-18, C-core-36 |
 | §4 data model (one signature; statement identity; kinds; §4.1 key events) | C-core-144, C-core-143a – C-core-143e, C-core-03, C-core-05, C-core-06, C-core-08 – C-core-15, C-core-26, C-core-83, C-core-142, C-exec-01, C-exec-02, P-02, P-03 |
-| §5.1 single-party fields | C-core-05, C-core-16, C-core-17, C-core-142 |
+| §5.1 single-party fields (incl. a forked log) | C-core-05, C-core-16, C-core-16a, C-core-17, C-core-142 |
 | §5.2 constructions and derivation groups | C-core-07, C-core-17 – C-core-28, C-core-107, C-exec-01 – C-exec-03, C-exec-13, C-exec-15, C-btc-01 – C-btc-03 |
 | §5.3.1 observation classes, referents, finality | C-core-29 – C-core-44, C-core-73 |
 | §5.3.2 corroboration is a derivation | C-core-43, C-core-45 – C-core-51, C-exec-14, P-12 |
