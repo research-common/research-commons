@@ -207,6 +207,15 @@ func (s *Store) finish(r Record, out *Outcome) error {
 			return err
 		}
 	}
+	// Step 5 begins by checking the blobs the record names are still held (§6.1.1, the residual case: gc removed
+	// one between the check before step 2 and now). Nothing is rolled back; the done record stays until the
+	// bytes are installed again and Repair finishes it.
+	for _, b := range r.Blobs {
+		if !s.HasBlob(b) {
+			out.NeedsRepair = fmt.Errorf("operation %s committed, needs repair: blob %s missing; install the bytes again (fetch from a hold or publish them), then run repair", r.Op, b)
+			return nil
+		}
+	}
 	if s.opt.Project != nil {
 		if err := s.opt.Project(r); err != nil {
 			out.NeedsRepair = fmt.Errorf("operation %s committed, needs repair: projection failed: %w; run repair", r.Op, err)
