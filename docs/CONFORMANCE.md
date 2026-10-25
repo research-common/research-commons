@@ -99,6 +99,8 @@ refer to `verify` unless another command is named (§13).
 | C-core-22b | §5.2 (each run is graded on its own output), I7 | `W` declares `bytes`. `A` and `B` derive identical `X`; `C` derives `Y` under the same provenance. | The group shows `diverged (2 different outputs)` with `X` byte-identical across runs; `X` is T0 and `verify X` exits 0; `Y` is `diverged` and `verify Y` exits 1; no member is marked wrong; `explain` states "an environment differs or the determinism claim is wrong". Identical in every order. |
 | C-core-23 | §5.2 table (`protocol` × identical) | `W` declares `replication: protocol`. `A` and `B` derive identical bytes. | Display `identical bytes (protocol workflow)`; no T0 awarded; no `reproduced` implied; no copy flag raised; `explain` points to §9.3 for independence. |
 | C-core-24 | §5.2 table (`protocol` × different) | `W` declares `protocol` and names comparator `K`. `A`, `B`, `C` derive different bytes; `K` matches `A`–`B` and not `C`. | Display `derived by 3: 2 match, 1 diverged`; `A` and `B` carry T1 under `K`; `C` shows `diverged`; state not `contested`. |
+| C-core-24a | §5.2 (tolerance is not transitive), §9.3 (grouping is explicit) | `W` declares `protocol` with comparator `K`. `A`, `B`, `C` derive different bytes; `K` matches `A`–`B` and `B`–`C`, not `A`–`C`. | Every run is T1, each listed with the runs it matched (`B` with two); the group never shows `all 3 match`: it shows its counts and `not all runs agree` (1 cluster; 1 of 3 pairs diverged); `explain` names `A`–`C` as diverged; `verify` of each output exits 0. |
+| C-core-24b | §5.2 (tolerance is not transitive) | As C-core-24a with four runs: `K` matches `A`–`B` and `C`–`D`; every cross pair diverges. | Four T1 runs; the group shows `not all runs agree` with 2 clusters and 4 of 6 pairs diverged, never `all 4 match`. |
 | C-core-25 | §5.2 table (undeclared), I4 | `W`'s `authored` carries no `replication`. `A` and `B` derive (a) identical and (b) different bytes. | Both cells show `unchecked`; neither T0 nor T1 is awarded; `verify` of the group's derivation claim exits 3. |
 | C-core-26 | §5.2 ("same bytes under different provenance"; `reproduced: match` across workflows, #22), §4 `reproduced` | `A` derives `X` under `W1`; `B` derives byte-identical `X` under `W2` (different workflow hash); both bitcoin-verified, `A` earlier. | No derivation group is formed; §5.2 (2) applies (`A` default, `B` later claimant); one blob; a `reproduced: match` across workflows links the two; `W1`'s `authored` unchanged. |
 | C-core-27 | §5.2 ("contested on that field only") | Within one derivation group `A` declares licence `CC-BY-4.0`, `B` declares `MIT`; both declare the same availability. | Licence shows `contested` listing both signers; availability defaults by agreement; the group display is otherwise intact; `verify` exit 3 cites only the licence field. |
@@ -350,7 +352,7 @@ Properties quantify over generated inputs; each is a property test or a static c
 | §3.1 the third state | C-core-18, C-core-36 |
 | §4 data model (one signature; statement identity; kinds; §4.1 key events) | C-core-144, C-core-143a – C-core-143e, C-core-03, C-core-05, C-core-06, C-core-08 – C-core-15, C-core-26, C-core-83, C-core-142, C-exec-01, C-exec-02, P-02, P-03 |
 | §5.1 single-party fields (incl. a forked log) | C-core-05, C-core-16, C-core-16a, C-core-17, C-core-142 |
-| §5.2 constructions and derivation groups | C-core-07, C-core-17 – C-core-28 (incl. C-core-18a, C-core-20a, C-core-22a, C-core-22b), C-core-107, C-exec-01 – C-exec-03, C-exec-13, C-exec-15, C-btc-01 – C-btc-03 |
+| §5.2 constructions and derivation groups | C-core-07, C-core-17 – C-core-28 (incl. C-core-18a, C-core-20a, C-core-22a, C-core-22b, C-core-24a, C-core-24b), C-core-107, C-exec-01 – C-exec-03, C-exec-13, C-exec-15, C-btc-01 – C-btc-03 |
 | §5.3.1 observation classes, referents, finality | C-core-29 – C-core-44, C-core-73 |
 | §5.3.2 corroboration is a derivation | C-core-43, C-core-45 – C-core-51, C-exec-14, P-12 |
 | §5.3.3 capture evidence | C-core-52 – C-core-55 |
@@ -360,7 +362,7 @@ Properties quantify over generated inputs; each is a property test or a static c
 | §8 resources | C-core-77 – C-core-104 (incl. C-core-85a, C-core-85b, C-core-93a, C-core-93b), C-core-143e, C-exch-07, P-09 |
 | §9.1 tasks and coordination | C-exch-01 – C-exch-03 |
 | §9.2 settlement | C-core-108, C-exch-04 – C-exch-06 |
-| §9.3 independence and quorums | C-core-23, C-core-49, C-exch-09 – C-exch-14, P-02 |
+| §9.3 independence and quorums | C-core-23, C-core-24a, C-core-49, C-exch-09 – C-exch-14, P-02 |
 | §9.4 refutation and pre-registration | C-exch-15 – C-exch-18 |
 | §9.5 credit | C-exch-19, C-exch-20 |
 | §10 time | C-core-19, C-core-53, C-core-105 – C-core-107, C-exch-16, C-btc-01 – C-btc-06 (incl. C-btc-03a), P-06 |

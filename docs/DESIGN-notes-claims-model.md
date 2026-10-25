@@ -292,7 +292,20 @@ every group under the workflow is read under the amendment, and `explain` cites 
 **Each run is graded on its own output.** Under `bytes`, an output that another run of the group also
 produced is a byte-identical re-derivation (T0) whatever else the group holds, and an output no other run
 produced is `diverged`; the group shows `diverged (n different outputs)` as a disclosure, so one stray run
-under the same provenance never takes T0 from the runs that agree (I7, C-core-22b).
+under the same provenance never takes T0 from the runs that agree (I7, C-core-22b). Under `protocol`, the comparator judges each pair
+of runs, and a run that matched at least one other run is T1, listed with the runs it matched. Tolerance is
+not transitive (§9.3), so matches are never chained: the group shows `all k match under K` only when every
+pair matched, and otherwise its counts and `not all runs agree`, with the number of clusters (runs linked by
+matches) and the pairs that diverged, which `explain` lists (C-core-24a, C-core-24b). Checking one output
+needs only its own row, so `verify` may stop at that output's first match. A comparator's result for a pair
+may be cached on the comparator's hash and parameters, the unordered pair of outputs and the evaluator
+version; the cache is a projection, rebuilt at will, never evidence (§12).
+
+A comparator judges re-runs of one derivation: the same workflow on the same inputs. Agreement between
+results on different data (a replication with a fresh sample) is a corroboration (§5.3.2) or a task's test
+(§9.3), not a T1. A comparator must be deterministic and symmetric, so that a pair has one answer whichever
+output comes first and however often it is asked; that is the comparator author's duty, and no reader can
+test it.
 
 A non-deterministic process can honestly return identical bytes (a tight response contract leaves few degrees
 of freedom), so identical output under `protocol` is neither a reproduction nor a red flag. Single-party fields
