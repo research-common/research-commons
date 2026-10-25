@@ -481,18 +481,20 @@ it displays is `local` or `none`.
 
 Fixtures use synthetic keys and either a checked-in historical mainnet fixture or synthetic header chains for
 negative cases. CI contacts no public network or calendar. C-btc-01 – C-btc-06 are the conformance cases from
-CONFORMANCE.md; the rest are this note's supplementary regressions.
+CONFORMANCE.md, restated here in brief (their ids in backticks, because CONFORMANCE.md is where they are defined);
+the rest are this note's supplementary regressions, defined here. Every id has exactly one defining table, and
+the conformance harness reads both documents.
 
 ### 14.1 Conformance cases
 
 | Id | Scenario | Required outcome |
 |---|---|---|
-| C-btc-01 | rival `authored`, A verified at block n, B at n+1; or A verified, B unanchored; permute | A default author, B `later claimant`, not `contested`, exit 0; `explain` cites the reader-verified bound |
-| C-btc-02 | both verified in the same block | `contested`, both listed, exit 3, no default single-party field |
-| C-btc-03 | observe `publish` against a mock transport; copier C publishes after seeing the push | `anchors` statement precedes the first byte out; C's bound later; original default, C later claimant |
-| C-btc-04 | A's anchor lists a B line id; variant: proof stamping B's prefix under A's anchor | B's line `no anchor`; the misattached proof invalid for A; B's log untouched |
-| C-btc-05 | malformed and oversized proofs on a valid log | anchor refused with class named; statements valid and displayed; no bound |
-| C-btc-06 | well-formed proof, no backend configured | bound shown unverified (`local, self-declared` or `unknown`); no priority; exit 3 |
+| `C-btc-01` | rival `authored`, A verified at block n, B at n+1; or A verified, B unanchored; permute | A default author, B `later claimant`, not `contested`, exit 0; `explain` cites the reader-verified bound |
+| `C-btc-02` | both verified in the same block | `contested`, both listed, exit 3, no default single-party field |
+| `C-btc-03` | observe `publish` against a mock transport; copier C publishes after seeing the push | `anchors` statement precedes the first byte out; C's bound later; original default, C later claimant |
+| `C-btc-04` | A's anchor lists a B line id; variant: proof stamping B's prefix under A's anchor | B's line `no anchor`; the misattached proof invalid for A; B's log untouched |
+| `C-btc-05` | malformed and oversized proofs on a valid log | anchor refused with class named; statements valid and displayed; no bound |
+| `C-btc-06` | well-formed proof, no backend configured | bound shown unverified (`local, self-declared` or `unknown`); no priority; exit 3 |
 
 ### 14.2 Binding
 

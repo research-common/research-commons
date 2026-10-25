@@ -284,6 +284,9 @@ refer to `verify` unless another command is named (§13).
 
 ## Bitcoin-time profile
 
+The profile's supplementary cases (C-btc-07 onwards) are defined in `DESIGN-notes-bitcoin-time.md` §14; they are
+conformance cases like these, and the harness reads them from there. An id is defined in exactly one table.
+
 | id | note | scenario | required outcome |
 |---|---|---|---|
 | C-btc-01 | §5.2 (2), §10 (`bitcoin` quality), I10 | `A` and `B` each publish `authored` for identical bytes. (a) `A`'s anchor bitcoin-verified at block *n*, `B`'s at *n+1*; (b) `A`'s bitcoin-verified, `B` has no anchor. Permute. | In both: `A` is the default author and `B` is displayed as `later claimant`; not `contested`; exit 0; `explain` cites the bound the reader verified with quality `bitcoin`. |
