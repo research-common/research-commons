@@ -165,7 +165,7 @@ body are one statement. Canonical encoding, field names and test vectors belong 
 
 | Kind | Signed by | Says |
 |---|---|---|
-| `authored` | the author | "I made these bytes." Carries the author's single-party fields: licence, availability, verification spec, description, and provenance (workflow + inputs) when derived. For a construction, it is a first-to-publish claim (§5.2). The same key's later `authored` statement on the same blob amends its earlier one. |
+| `authored` | the author | "I made these bytes." Carries the author's single-party fields: licence, availability, verification spec, description, and provenance (workflow + inputs) when derived. For a construction, it is a first-to-publish claim (§5.2). The same key's later `authored` statement on the same blob amends its earlier one: the amended claim keeps the best time bound of its amendment chain, and its fields come from the latest statement alone, so a field the amendment omits is undeclared (an amendment replaces, it does not patch). |
 | `observed` | the observer | "I captured these bytes." Carries the referent, capture record, capture evidence and the observation class the observer asserts (§5.3), plus the same single-party fields. |
 | `holds` | anyone | "I have these bytes and serve them." Mirroring, with no authorship and no agreement. A later `holds` by the same key with `withdrawn: true` says "I no longer serve them"; the earlier one stays in the log. |
 | `describes` | anyone | Open annotations: tags, notes, non-evidential links. Shown as the signer's, ranked by the reader's trust. |
