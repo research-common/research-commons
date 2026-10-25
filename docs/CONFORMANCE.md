@@ -92,6 +92,7 @@ refer to `verify` unless another command is named (§13).
 | C-core-18a | §5.2 (`protocol` row: no declared comparator) | Two `authored` statements with the same provenance under a `protocol` workflow whose `authored` statement names no comparator; output bytes differ. | The group evaluation is `unchecked`; no default comparator is applied; `verify` exits 3; the display says the workflow declares no comparator. |
 | C-core-19 | §5.2 (2), §10 table (local → priority "no"), I10 | As C-core-18 but both anchors are `local` only, `A`'s timestamp an hour earlier than `B`'s; variant: `A` has a local anchor and `B` none. | `contested`, exit 3 in both variants; `A` is not the default; `explain` shows each bound as `(local, self-declared)` and states that local quality does not rank. |
 | C-core-20 | §5.2 (derivation groups), I10 | `A` and `B` each publish `authored` for outputs of workflow `W` on identical input hashes. Both have bitcoin-verified bounds, `A` strictly earlier. Permute. | Display `derived by 2 under wf-<W>`, both listed as derivers; no `default author`, no `later claimant`, no `contested` for the group; `explain` states priority is not computed within a derivation group. |
+| C-core-20a | §5.2 (derivation groups: a group against an outsider), I14 | `W` declares `bytes`. `A` and `B` derive identical `X` under `W`; `C` publishes `authored` for `X` with no provenance. (a) `A`'s anchor bitcoin-verified at block *n*, `C`'s at *n+1*; (b) `C` at *n*, `A` at *n+1*; (c) each of (a) and (b) plus `D`, who joins the group with no anchor. Permute. | (a) the group is the default claimant and `C` a later claimant; (b) `C` is the default and the group a later claimant, its grade (T0) still shown; (c) the same answers as without `D`. Identical in every order. |
 | C-core-21 | §5.2 table (`bytes` × identical) | `W`'s own `authored` declares `replication: bytes`. `A` and `B` derive identical bytes under the same provenance. | `B`'s derivation is shown as a byte-identical re-derivation, grade T0, `derived by 2`; single-party defaults by agreement; no priority computed. |
 | C-core-22 | §5.2 table (`bytes` × different) | `W` declares `replication: bytes`. `A` and `B` derive different bytes under the same provenance. | Token `diverged` on the group with both members; no member is marked wrong; no `contested`, no priority; `explain` states "an environment differs or the determinism claim is wrong". |
 | C-core-23 | §5.2 table (`protocol` × identical) | `W` declares `replication: protocol`. `A` and `B` derive identical bytes. | Display `identical bytes (protocol workflow)`; no T0 awarded; no `reproduced` implied; no copy flag raised; `explain` points to §9.3 for independence. |
@@ -336,7 +337,7 @@ Properties quantify over generated inputs; each is a property test or a static c
 | I11 honest limits | C-core-07, C-core-76a |
 | I12 one definition per concept | C-core-109, C-core-127a, C-core-134 |
 | I13 outputs are a contract | C-core-132, C-core-133, C-core-133a, C-core-135, C-exec-13a, C-exec-15 |
-| I14 explainable, order-independent answers | C-core-02, C-core-04, C-core-18, C-core-83, C-core-84, C-core-86, C-core-93b, C-core-129, C-core-136, C-exch-05, P-01, P-02, P-07, P-08 |
+| I14 explainable, order-independent answers | C-core-02, C-core-04, C-core-18, C-core-20a, C-core-83, C-core-84, C-core-86, C-core-93b, C-core-129, C-core-136, C-exch-05, P-01, P-02, P-07, P-08 |
 | I15 hostile input and partial failure stay contained | C-core-12, C-core-94, C-core-122, C-core-131, C-exec-08, C-exec-09, C-exec-10, C-exec-12, C-btc-05 |
 
 ### Note sections
@@ -347,7 +348,7 @@ Properties quantify over generated inputs; each is a property test or a static c
 | §3.1 the third state | C-core-18, C-core-36 |
 | §4 data model (one signature; statement identity; kinds; §4.1 key events) | C-core-144, C-core-143a – C-core-143e, C-core-03, C-core-05, C-core-06, C-core-08 – C-core-15, C-core-26, C-core-83, C-core-142, C-exec-01, C-exec-02, P-02, P-03 |
 | §5.1 single-party fields (incl. a forked log) | C-core-05, C-core-16, C-core-16a, C-core-17, C-core-142 |
-| §5.2 constructions and derivation groups | C-core-07, C-core-17 – C-core-28, C-core-107, C-exec-01 – C-exec-03, C-exec-13, C-exec-15, C-btc-01 – C-btc-03 |
+| §5.2 constructions and derivation groups | C-core-07, C-core-17 – C-core-28 (incl. C-core-18a, C-core-20a), C-core-107, C-exec-01 – C-exec-03, C-exec-13, C-exec-15, C-btc-01 – C-btc-03 |
 | §5.3.1 observation classes, referents, finality | C-core-29 – C-core-44, C-core-73 |
 | §5.3.2 corroboration is a derivation | C-core-43, C-core-45 – C-core-51, C-exec-14, P-12 |
 | §5.3.3 capture evidence | C-core-52 – C-core-55 |

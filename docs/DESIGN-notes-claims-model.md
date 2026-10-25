@@ -268,7 +268,13 @@ the claim. A derived artifact with pinned provenance claims something else: "thi
 produced this", which anyone can check by re-running, so time evidence is the wrong adjudicator. `authored`
 statements that carry the same provenance (workflow hash and input hashes) form one **derivation group**,
 whatever their output bytes. Priority is never computed within a group. The display is "derived by *k* under
-wf-…", each deriver listed, with independent re-runs distinguished from `holds`. Bytes are evidence *within*
+wf-…", each deriver listed, with independent re-runs distinguished from `holds`. Against a claimant outside
+it, a group is one claimant whose bound is the best any member holds: the rules above rank the group as a
+whole, and a member who joins late, with a weaker bound or none, never lowers it. This keeps the answer one
+function of the statements held, whichever member a reader happened to see first (I12, I14); it is not a
+defence against a hostile member, whom the reader keeps out by its own admission policy (C-core-20a). An
+outside claim never erases a group's evidence: when authorship is contested or goes to the outsider, each
+group's grade is still shown beside its claimants. Bytes are evidence *within*
 the group, read against the `replication` mode the workflow's own `authored` statement declares (§7), which
 derivers inherit:
 
