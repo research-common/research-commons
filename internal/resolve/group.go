@@ -1,6 +1,7 @@
 package resolve
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -154,10 +155,12 @@ type Run struct {
 	// absent; an `authored` run's environment rides on its provenance). Both are the runner's signed word,
 	// shown beside the reader's Grade and never graded (claims I2, I9; decisions A5).
 	Says, Env string
+	// Trust is the reader's attestation trust in Signer under its policy, display only ("" = trustLine).
+	Trust string
 }
 
-// trustLine is what a run shows for the reader's trust in its signer. The resolver takes no trust policy yet
-// (claims §5.3.2 "holds and trusts" needs the same input), so it says so rather than imply either answer.
+// trustLine is what a run shows for the reader's trust in its signer with no reader policy configured: it says
+// so rather than imply either answer. With a policy, Run.Trust carries the policy's answer (policy.go).
 const trustLine = "your trust in this key: not configured"
 
 // Group is the view of one derivation group.
@@ -216,6 +219,8 @@ func (r *Resolver) group(p *Provenance, only string) *Group {
 
 	wf := r.authorship(p.Workflow)
 	switch {
+	case r.modeFromPolicy(g, p.Workflow):
+		// the reader's workflow-declaration selection decides, met or not (policy.go)
 	case wf.State == NoClaim:
 		g.ModeFrom = "the workflow " + shortDigest(p.Workflow) + " has no authored statement held"
 	case wf.Default == nil:
@@ -248,6 +253,7 @@ func (r *Resolver) group(p *Provenance, only string) *Group {
 		}
 	}
 	r.compare(g)
+	r.runTrust(g)
 	for _, run := range g.Runs {
 		if says, mine := run.Says, readerResult(run.Grade); says != "" && mine != "" && says != mine {
 			g.Explain = append(g.Explain, fmt.Sprintf("%s %s signed %q; this reader's comparison: %q (shown, never graded: claims §5.2)",
@@ -594,7 +600,7 @@ func (g *Group) render(indent string) string {
 			fmt.Fprintf(&b, "%s    environment (runner's record): %s\n", indent, run.Env)
 		}
 		if run.Says != "" || run.Env != "" {
-			fmt.Fprintf(&b, "%s    %s\n", indent, trustLine)
+			fmt.Fprintf(&b, "%s    %s\n", indent, cmp.Or(run.Trust, trustLine))
 		}
 	}
 	for _, x := range g.Explain {
