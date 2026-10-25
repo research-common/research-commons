@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/research-common/research-commons/internal/canon"
+	"github.com/research-common/research-commons/internal/conformance"
 	"github.com/research-common/research-commons/internal/refusal"
 )
 
@@ -286,6 +287,8 @@ func TestTrusts(t *testing.T) {
 // TestAdmit: C-core-111's predicate. A trust floor excluding Z: refused with class reader policy, reason trust
 // floor, scope Z's objects; or admitted and labelled. No policy admits everything unlabelled.
 func TestAdmit(t *testing.T) {
+	conformance.Partial(t, "C-core-111", "the reader-policy predicate (Policy.Admit: refused, or admitted and labelled, class reader policy: trust floor, scoped to Z's objects); applying it at pull and the other gates needs the gate code")
+	conformance.Partial(t, "C-core-133a", "(c) only: an unparseable or invalid policy is a *policy.Error with ExitCode 2 before any evaluation; (a), (b), (d), (e) and the root snapshot need the CLI")
 	const z = "0x7777777777777777777777777777777777777777"
 	var none *Policy
 	if a := none.Admit(z, dA, FloorRefuse); !a.Admitted || a.Label != "" || a.Refusal != nil {
