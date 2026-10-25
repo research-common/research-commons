@@ -289,6 +289,11 @@ every group under the workflow is read under the amendment, and `explain` cites 
 | `protocol` | consistent with a re-run and with a copy, and not evidence of either: shown as `identical bytes (protocol workflow)`; independence is §9.3's question | compared under the workflow's declared comparator: `match` or `diverged` (T1); "derived by 3: 2 match, 1 diverged". No declared comparator: `unchecked`, never a default comparison |
 | undeclared | `unchecked` | `unchecked` |
 
+**Each run is graded on its own output.** Under `bytes`, an output that another run of the group also
+produced is a byte-identical re-derivation (T0) whatever else the group holds, and an output no other run
+produced is `diverged`; the group shows `diverged (n different outputs)` as a disclosure, so one stray run
+under the same provenance never takes T0 from the runs that agree (I7, C-core-22b).
+
 A non-deterministic process can honestly return identical bytes (a tight response contract leaves few degrees
 of freedom), so identical output under `protocol` is neither a reproduction nor a red flag. Single-party fields
 default by agreement within the group; a field whose values differ is `contested` on that field only. The same
