@@ -163,8 +163,9 @@ CLI's "success" text.
 Deserializing yields an operation tree rooted at the stamped digest. The reader enumerates
 `(calculated_digest, attestation)` pairs and, for every `BitcoinBlockHeaderAttestation`:
 
-- requires `height` to be a non-negative integer within the provider's known chain (a boolean, a negative
-  value or a height beyond the tip is `unknown-height`);
+- requires `height` to be within the provider's known chain: the format's varuint cannot carry a negative
+  value or a non-integer, so `unknown-height` here means a height too large for the reader's integer type,
+  below the lowest height the view holds (a checkpointed bootstrap, §6.1), or above the tip;
 - resolves the header **at that height on the reader's accepted chain**, never a header carried in the proof,
   the statement, or a remote label;
 - requires `calculated_digest == header.hashMerkleRoot` in the library's byte order, with explicit, tested
@@ -271,7 +272,7 @@ Defaults an implementation ships; every one is the reader's to change (I9), none
 | settled depth | 144 (about a day) | confirmations, counted in the last validated view, past which a bound keeps `bitcoin` quality when that view is no longer fresh (§9.4) |
 | priority margin | 0 | extra blocks the earlier bound must lead by to rank (§8.3); same block is always a tie |
 | maximum view age | 1 h | since last successful validated sync or readiness check |
-| maximum tip age | 6 h | operational stale-tip refusal, not a consensus rule |
+| maximum tip age | 6 h | operational stale-tip refusal, not a consensus rule: the tip header's `nTime` against the local clock, as Bitcoin Core's stale-tip check reads it. The only use of `nTime` beyond display and the §6.1 header rules |
 | network during reads | never | reads touch receiver-local state only |
 | explorer fallback | none | unsupported, not merely disabled |
 | header sources | operator-configured | independent sources recommended; eclipse limit disclosed |
@@ -344,6 +345,10 @@ Computed separately from any display sort, and returned by `explain`:
 | `same-block` | same accepted height and hash |
 | `unverified` | either side is `local`, `none`, or any non-`verified` state |
 | `incomparable` | different networks, or either side `orphaned`/`stale-chain` |
+
+The priority margin is the reader's policy, so both bounds in one comparison are read under the same margin; a
+reader that one day combines bounds from more than one verifier (a second proof format, §16) applies one margin
+to the pair, never a different one per side.
 
 Only `earlier-commitment` ranks. `same-block`, `within-margin` and `unverified` resolve to `contested` for
 priority; `explain` names which, and for `within-margin` the gap and the margin. A
