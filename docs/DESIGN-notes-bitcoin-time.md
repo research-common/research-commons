@@ -223,6 +223,12 @@ future-time admission against the local clock (Core's `MAX_FUTURE_BLOCK_TIME`, 2
 cumulative chainwork with greatest-work selection, never longest-by-height; reorg detection; lookup by height
 and by hash.
 
+**Equal-work tips are unresolved.** Bitcoin Core keeps the tip it saw first when two tips carry equal
+chainwork. This profile deliberately does not: first-seen depends on delivery order, which two readers do not
+share. The accepted chain ends at the tied tips' fork point, so a block above it on either branch is not on
+the accepted chain, and an attestation there has no live eligibility (`stale-chain` when the block is held on a
+tied branch, `unknown-height` when it is not) until more work breaks the tie (C-btc-15).
+
 Baseline: full header history from genesis (~80 MB per million headers), obtained headers-first (BIP 130
 `sendheaders` announcements; a BIP 157 compact-filter client is an acceptable header source). Pruned or
 checkpointed bootstraps may be offered with an explicit trust root and retained retarget/MTP context; a
