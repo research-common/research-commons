@@ -387,6 +387,7 @@ func (r *Resolver) observation(p *Placed) *Observation {
 		r.comparability(o, st)
 	}
 	o.Corroboration = r.corroboration(o, st)
+	r.observationSelection(o) // policy.go
 	return o
 }
 

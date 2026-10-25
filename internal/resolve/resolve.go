@@ -18,6 +18,7 @@ import (
 	"sync"
 
 	"github.com/research-common/research-commons/internal/keylog"
+	"github.com/research-common/research-commons/internal/policy"
 	"github.com/research-common/research-commons/internal/wire"
 )
 
@@ -68,6 +69,8 @@ type Resolver struct {
 	// delivery-metadata index, shown in explain and an input to nothing (corroboration.go).
 	obs     *obsConfig
 	origins OriginIndex
+	// policy is the reader's local policy (policy.go); nil when none is configured.
+	policy *policy.Policy
 }
 
 // New indexes every placed line of every log in s. With no options the reader verifies no proof format and
