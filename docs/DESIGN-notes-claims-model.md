@@ -276,7 +276,12 @@ defence against a hostile member, whom the reader keeps out by its own admission
 outside claim never erases a group's evidence: when authorship is contested or goes to the outsider, each
 group's grade is still shown beside its claimants. Bytes are evidence *within*
 the group, read against the `replication` mode the workflow's own `authored` statement declares (§7), which
-derivers inherit:
+derivers inherit. The mode and comparator are the workflow's resolved defaults under §5.1 and §5.2, never a
+value a deriver or its statement supplies. When the workflow's own authorship is `contested`, a group uses
+a mode and comparator only if every claimant of the workflow declares the same ones (`explain`: "all *n*
+claimants of the workflow agree"); otherwise every derivation under it is `unchecked`. The workflow's own
+display of those fields still shows no default. When the workflow's author amends its mode or comparator,
+every group under the workflow is read under the amendment, and `explain` cites it (C-core-22a):
 
 | the workflow declares | identical bytes | different bytes |
 |---|---|---|
