@@ -195,6 +195,7 @@ not conform, whichever library it uses.
 | file-hash op | `08` (sha256), then 32 digest bytes | any other hash op is `invalid-proof` (§4 check 7) |
 | operations | `f0` append, `f1` prepend (each with a varbytes argument, 1–4096 bytes); `f2` reverse; `f3` hexlify; `02` sha1, `03` ripemd160, `08` sha256, `67` keccak256 | any other tag is `invalid-proof`; an op whose result exceeds 4096 bytes is `invalid-proof` |
 | branching | `ff` before every branch except the last | depth ≤ 256 (the library's recursion limit, and §12's) |
+| duplicate siblings | two siblings at one node with the same operation and argument, or the same attestation bytes | `invalid-proof`. The library keeps a node's operations in a map keyed by operation and argument and its attestations in a set, so it merges duplicates silently; this profile refuses them, so that two parsers never disagree about what a file holds (C-btc-11) |
 | attestation | `00`, an 8-byte tag, varbytes payload ≤ 8192 bytes, parsed to its exact end | trailing bytes inside a payload are `invalid-proof` |
 | Bitcoin attestation | tag `0588960d73d71901`; payload = varuint height | the only tag that can yield `bitcoin` quality |
 | pending attestation | tag `83dfe30d2ef90c8e`; payload = URI ≤ 1000 bytes from `A–Z a–z 0–9 - . _ / :` | displayed `pending`; never dereferenced (§2) |
