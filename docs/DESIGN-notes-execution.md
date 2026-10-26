@@ -371,7 +371,11 @@ The boundary is deny-by-default in both profiles:
   environment, its parameters as named variables, no network, no grants unless policy names the comparator
   hash.
 - **Network is a grant, not an inference.** An input that happens to be a URL grants nothing; only the spec's
-  declared `network: required` plus a policy grant opens the network, and then only as declared.
+  declared `network: required` plus a policy grant opens the network, and then only as declared. "Only as
+  declared" needs per-endpoint egress control (a filtering proxy or firewall rules for the container). An
+  implementation that can only open the network as a whole says so: the record's `network` carries
+  `enforced: "all"` instead of `"per-endpoint"`, and the display shows `network granted (not limited to the
+  declared endpoints)` (proposed).
 
 C-exec-12 is the test: a canary variable, a canary file and a canary listener; the run record names the
 boundary; none of the three is reached.
