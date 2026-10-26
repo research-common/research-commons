@@ -761,6 +761,10 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
   kind of "could not check" it was. Limits and environments call for different next steps (raise the limit or
   accept `unchecked`, versus run where the pinned environment exists). Exit 0 means the requested operation
   succeeded, not that everything it referenced is valid.
+- **`verify` of an observation** (proposed) checks its signature and its pins: exit 0 when they hold, exit 3
+  when the referent is `unpinned` or its finality rule cannot be evaluated. Corroboration status and capture
+  evidence are disclosures (I6) shown beside it and never change the exit, so no exit rests on a capture
+  level the reader did not verify (C-core-52).
 - **`verify` of a derived artifact needs a comparison.** A derived artifact claims that its workflow on its
   inputs produced its bytes, so exit 0 needs a T0 or T1 comparison: a second run in its group, or the
   reader's own re-run inside `verify`. With neither, it is `not re-derived` and exits 3 under every
