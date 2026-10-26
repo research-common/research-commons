@@ -250,8 +250,17 @@ func (l *Log) relativeRule(st *wire.Statement, nodes map[string]*wire.Statement)
 	// key's line is malformed (C-btc-04). Whether it is reachable from this line is the resolver's question.
 	if st.Kind == "anchors" && st.Verified && st.Status == wire.Valid {
 		if v, ok := st.Body.Get("covered"); ok {
-			if o, ok := l.store.owner[string(v.(canon.String))]; ok && o != l.key {
+			cov := string(v.(canon.String))
+			if o, ok := l.store.owner[cov]; ok && o != l.key {
 				return mal("anchors covered names a line of another key (%s): an anchor bounds only its signer's log", o)
+			}
+			// A `covered` held as a line of this log must be in the anchor line's own prefix (bitcoin-time note
+			// §4 check 2): reachable from this line through prev and merges. Refused only when the held lines
+			// decide it; a covered not held, or a prefix with a gap the covered line may sit behind, is
+			// undecided and refuses nothing, so delivery order never changes the verdict.
+			if c, ok := nodes[cov]; ok && !inPrefix(st, c, nodes) {
+				return &refusal.Refusal{Class: refusal.Intrinsic, Reason: refusal.InvalidAnchor,
+					Detail: fmt.Sprintf("anchors covered %s is a line of this log that is not in the anchor's own prefix; scope this anchor", Short(cov))}
 			}
 		}
 	}
@@ -264,6 +273,38 @@ func (l *Log) relativeRule(st *wire.Statement, nodes map[string]*wire.Statement)
 		}
 	}
 	return nil
+}
+
+// inPrefix reports whether covered c is in the prefix of anchor line st (reachable through prev and merges), and
+// is true as well whenever the held lines cannot say: an unheld link on the way down may lead to c. It is false
+// only when c cannot be reached: seqs strictly drop along every link, so a line at seq >= st's never is, and
+// otherwise the walk over held lines is complete and misses c.
+func inPrefix(st, c *wire.Statement, nodes map[string]*wire.Statement) bool {
+	if c.Seq >= st.Seq {
+		return false
+	}
+	seen := map[string]bool{st.ID: true}
+	queue := links(st)
+	for len(queue) > 0 {
+		id := queue[len(queue)-1]
+		queue = queue[:len(queue)-1]
+		if id == c.ID {
+			return true
+		}
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		x, ok := nodes[id]
+		if !ok {
+			return true // a gap: undecided
+		}
+		if x.Seq <= c.Seq {
+			continue // at or below c's seq without being c: nothing below can be c
+		}
+		queue = append(queue, links(x)...)
+	}
+	return false
 }
 
 // nodes is every line the view places: the verified lines, plus every unknown-alg line of this key vouched
