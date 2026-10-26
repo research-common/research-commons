@@ -299,13 +299,13 @@ runner never moves a grade or an exit code (C-core-25a).
 **Each run is graded on its own output.** Under `bytes`, an output that another run of the group also
 produced is a byte-identical re-derivation (T0) whatever else the group holds, and an output no other run
 produced is `diverged`; the group shows `diverged (n different outputs)` as a disclosure, so one stray run
-under the same provenance never takes T0 from the runs that agree (I7, C-core-22b). Under `protocol`, the comparator judges each pair
-of runs, and a run that matched at least one other run is T1, listed with the runs it matched. Tolerance is
-not transitive (§9.3), so matches are never chained: the group shows `all k match under K` only when every
-pair matched, and otherwise its counts and `not all runs agree`, with the number of clusters (runs linked by
-matches) and the pairs that diverged, which `explain` lists (C-core-24a, C-core-24b). Checking one output
-needs only its own row, so `verify` may stop at that output's first match. A comparator's result for a pair
-may be cached on the comparator's hash and parameters, the unordered pair of outputs and the evaluator
+under the same provenance never takes T0 from the runs that agree (I7, C-core-22b). Under `protocol`, the
+comparator judges each pair of runs, and a run that matched at least one other run is T1, listed with the runs
+it matched. Tolerance is not transitive (§9.3), so matches are never chained: the group shows `all k match under
+K` only when every pair matched, and otherwise its counts and `not all runs agree`, with the number of clusters
+(runs linked by matches) and the pairs that diverged, which `explain` lists (C-core-24a, C-core-24b). Checking
+one output needs only its own row, so `verify` may stop at that output's first match. A comparator's result for
+a pair may be cached on the comparator's hash and parameters, the unordered pair of outputs and the evaluator
 version; the cache is a projection, rebuilt at will, never evidence (§12).
 
 A comparator judges re-runs of one derivation: the same workflow on the same inputs. Agreement between
@@ -390,9 +390,9 @@ Rules:
   - *Class migration by rule.* While the rule is unmet, agreement is source-class (near-equality around the
     same time). Near-equality needs a declared tolerance, from the agreement model or the source profile;
     without one no default tolerance is applied and the source-class result is `inconclusive`, never counted,
-    as for a `protocol` workflow with no comparator (§5.2). Once it holds, a re-capture of the same referent with identical bytes is an exact-bytes
-    corroboration. The observer still asserts the class; the rule is what lets a reader apply the stronger
-    agreement model.
+    as for a `protocol` workflow with no comparator (§5.2). Once it holds, a re-capture of the same referent
+    with identical bytes is an exact-bytes corroboration. The observer still asserts the class; the rule is what
+    lets a reader apply the stronger agreement model.
   - *Derived results inherit the horizon*, shown beside the grade: "rests on 3 captures: 2 final, 1
     provisional until RF" (§7).
 - **Identical bytes mean different things per class.** For most classes, a second key publishing the same bytes
@@ -599,12 +599,12 @@ immutable editions.
   segment is final, it is the end of the last segment. It is `unchecked` when any segment carries no finality
   rule or its state cannot be re-checked, since one segment without a rule leaves the boundary unknown. A
   series edition rule may require agreement, so a hub can refuse a premature freeze under its own policy. A
-  controller can still freeze a tail the source intends to revise; it cannot do so invisibly. A segment's position is read
-  from its referent: the start of its window, else its time, else its finality state, in the unit of
-  `frozen_before`; a position in another unit is `not comparable` with the boundary and is explained, not
-  flagged. An edition replaces a segment when a segment of its predecessor is missing from it, or it adds a
-  segment, positioned before the predecessor's `frozen_before`. Such an edition is shown as
-  `REVISED-FROZEN`; the earlier edition and its segment remain resolvable (I3).
+  controller can still freeze a tail the source intends to revise; it cannot do so invisibly. A segment's
+  position is read from its referent: the start of its window, else its time, else its finality state, in the
+  unit of `frozen_before`; a position in another unit is `not comparable` with the boundary and is explained,
+  not flagged. An edition replaces a segment when a segment of its predecessor is missing from it, or it adds a
+  segment, positioned before the predecessor's `frozen_before`. Such an edition is shown as `REVISED-FROZEN`;
+  the earlier edition and its segment remain resolvable (I3).
 
 ## 9. Research exchange
 
@@ -736,20 +736,20 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
 
 - **Closed vocabulary.** One documented table of state tokens (`contested`, `unknown`, `unchecked`,
   `corroborated n`, `contradicted m`, `SUPERSEDED`, `FORK`, `retracted`, …), each with one meaning on every
-  surface, including `unpinned`, `REVISED-FROZEN`, `timeout` and the referent statuses of §7. Every rule evaluation (edition rules,
-  departure checks, pre-pin checks) is one of `ok`, `fail`, `unchecked`.
+  surface, including `unpinned`, `REVISED-FROZEN`, `timeout` and the referent statuses of §7. Every rule
+  evaluation (edition rules, departure checks, pre-pin checks) is one of `ok`, `fail`, `unchecked`.
 - **Retraction is display.** A `retracts` statement is shown wherever the artifact is; it does not stop
   anyone serving the bytes. Superseded snapshots are often the evidence for their own erratum. A hub that
   must stop serving something does so under its own admission policy (I9).
 - **Exit codes.** `verify`: 0 checked and passed · 1 checked and wrong · 3 could not check (contested, unknown,
-  unchecked, unpinned, unsupported; a derived artifact nobody re-derived, `not re-derived`; a re-run stopped by one of the reader's own limits, `timeout` or another
-  operational cap, reported with the resources used; and a re-run whose step failed or left a declared output
-  missing) · 4 nothing to re-run · 5 environment mismatch: the declared environment differs from, or is not
-  available in, the one that ran. Exit 1 is reserved for a comparison that ran to completion and disagreed; a
-  step that failed compared nothing, and the token says which kind of "could not check" it was. Limits and
-  environments call for different next steps (raise the limit or accept `unchecked`, versus run where the
-  pinned environment exists). Exit 0 means the requested operation succeeded, not that everything it
-  referenced is valid.
+  unchecked, unpinned, unsupported; a derived artifact nobody re-derived, `not re-derived`; a re-run stopped by
+  one of the reader's own limits, `timeout` or another operational cap, reported with the resources used; and a
+  re-run whose step failed or left a declared output missing) · 4 nothing to re-run · 5 environment mismatch:
+  the declared environment differs from, or is not available in, the one that ran. Exit 1 is reserved for a
+  comparison that ran to completion and disagreed; a step that failed compared nothing, and the token says which
+  kind of "could not check" it was. Limits and environments call for different next steps (raise the limit or
+  accept `unchecked`, versus run where the pinned environment exists). Exit 0 means the requested operation
+  succeeded, not that everything it referenced is valid.
 - **`verify` of a derived artifact needs a comparison.** A derived artifact claims that its workflow on its
   inputs produced its bytes, so exit 0 needs a T0 or T1 comparison: a second run in its group, or the
   reader's own re-run inside `verify`. With neither, it is `not re-derived` and exits 3 under every
