@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/research-common/research-commons/internal/conformance"
+	"github.com/research-common/research-commons/internal/keylog"
+	"github.com/research-common/research-commons/internal/refusal"
 	"github.com/research-common/research-commons/internal/resolve"
 )
 
@@ -224,11 +226,12 @@ func TestVerifierAbsent(t *testing.T) {
 	}
 }
 
-// TestAnchorWithoutCoveredInPrefix: C-btc-09 (resolver half). An anchors statement whose covered head is a line of
-// the signer's own log that the anchor does not reach (a sibling branch) bounds nothing, and the rest of the log is
-// untouched. The note asks for an intrinsic refusal scoped to the statement; today the resolver ignores the anchor.
+// TestAnchorWithoutCoveredInPrefix: C-btc-09. An anchors statement whose covered head is a line of the signer's own
+// log that the anchor does not reach (a sibling branch) is refused (intrinsic, invalid-anchor), scoped to the
+// statement: it bounds nothing even though its proof itself verifies, and the rest of the log is untouched.
+// (The keylog test pins the boundary of "in the prefix"; this is the same refusal seen through the resolver.)
 func TestAnchorWithoutCoveredInPrefix(t *testing.T) {
-	conformance.Partial(t, "C-btc-09", "covered off the anchor's prefix bounds nothing and the log is untouched; the anchor is ignored, not refused with an intrinsic class (keylog/resolver change)")
+	conformance.Covers(t, "C-btc-09")
 	w := newWorld(t)
 	w.authored("A0", "A", "Y")
 	fork, seq := w.head["A"], w.seq["A"]
@@ -242,11 +245,23 @@ func TestAnchorWithoutCoveredInPrefix(t *testing.T) {
 	if e := v.Evaluate(w.sts["AA"]); !e.Live() {
 		t.Fatalf("control: the proof itself verifies: %s", e)
 	}
-	r := w.resolver(nil, v)
-	if a := r.Artifact(dig("X")); a.Claims[0].Bound.Quality != resolve.NoBound {
-		t.Fatalf("an anchor bounded a line off its prefix: %s", a.Claims[0].Bound)
+	for _, order := range orders(len(w.lines), 9) {
+		r := w.resolver(order, v)
+		if a := r.Artifact(dig("X")); a.Claims[0].Bound.Quality != resolve.NoBound {
+			t.Fatalf("an anchor bounded a line off its prefix: %s", a.Claims[0].Bound)
+		}
+		if p, _ := r.Statement(w.ids["A0"]); !p.Counts() {
+			t.Fatal("the log's other statement no longer counts")
+		}
+		if p, ok := r.Statement(w.ids["AA"]); ok && p.Counts() {
+			t.Fatal("the anchor itself still counts")
+		}
 	}
-	if p, _ := r.Statement(w.ids["A0"]); !p.Counts() {
-		t.Fatal("the log's other statement no longer counts")
+	var refused []keylog.Refused
+	for _, rf := range w.logs(nil).Log(w.signer("A")).View().Refused {
+		refused = append(refused, rf)
+	}
+	if len(refused) != 1 || refused[0].St.ID != w.ids["AA"] || refused[0].Reason.Class != refusal.Intrinsic || refused[0].Reason.Reason != refusal.InvalidAnchor {
+		t.Fatalf("anchor not refused as intrinsic invalid-anchor: %v", refused)
 	}
 }
