@@ -195,12 +195,11 @@ func TestCalendarFailureDefaults(t *testing.T) {
 	}
 }
 
-// TestBoundsInDisplay: C-btc-27 and C-btc-28 (bound half). The same evidence record serves capture evidence and
+// TestBoundsInDisplay: C-btc-27 (bound half; C-btc-28 is TestPreRegistrationBound). The same evidence record serves capture evidence and
 // pre-registration (I12): local evidence displays as (local, self-declared), verified evidence as a time labelled
 // miner-reported with its height. The resolver views that print these lines are not built.
 func TestBoundsInDisplay(t *testing.T) {
 	conformance.Partial(t, "C-btc-27", "the evidence record renders local vs verified (time, miner-reported, height); the observation view's 'anchored at capture' line is not built")
-	conformance.Partial(t, "C-btc-28", "the evidence record renders local vs verified; the exchange view's 'pre-registered <edition>' line is not built")
 	w := newWorld(t)
 	w.sign("O1", "A", "observed", obj("content", canon.Value(obj("digest", dig("OBS"), "size", 3)), "class", "none-yet", "referent", obj(),
 		"capture", canon.Value(obj("at", "2026-10-16T00:00:00Z", "evidence", "anchored-at-capture"))))
