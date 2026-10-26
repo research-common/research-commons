@@ -380,7 +380,10 @@ Rules:
   What the rule buys:
   - *Referent status by rule.* `provisional (SF; final at RF)` while unmet, `final` once met, `revised` when
     the bytes changed before finality, `not canonical` when they changed after it (a deep reorg, a dispute
-    run). The earlier observation stays true of what it pinned in every case.
+    run). The earlier observation stays true of what it pinned in every case. "Changed" compares captures by
+    their state in the rule's order, never by `capture.at`, which is the observer's word: a capture at a
+    later state with different bytes is a revision, and two captures at the same state with different bytes
+    contradict each other (C-core-40). States that the rule cannot order are not comparable.
   - *Expected revision is not contradiction.* A finality-aware agreement model (§5.3.2) returns
     `inconclusive (referent revised)` for two captures at different states before finality, and `contradicts`
     only when both are at the same state or past it.
