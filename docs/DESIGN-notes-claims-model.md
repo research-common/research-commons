@@ -497,7 +497,7 @@ the source.
 | capture evidence | §5.3.3 level, verified or not |
 | corroboration | §5.3.2 status, scoped |
 | selection | curated · rule-based · completeness claim · undeclared (§6). Missing means undeclared. |
-| referent status | still canonical · `provisional` · `final` · `revised` · `not canonical` · source still available / unknown (§5.3.1) |
+| referent status | still canonical · `provisional` · `final` · `revised` · `not canonical` · source still available / unknown · `unpinned` (a field its class requires is missing) · `finality unchecked` (a declared rule the reader has no source profile to evaluate) · `pinned` (phenomenon and method classes, whose referent has no re-check) (§5.3.1) |
 
 | pre-registration | `pre-registered <task edition> (<bound quality>)` · `exploratory` · undeclared (#3). Missing means undeclared, not exploratory. |
 | finality | §5.3.1 rule and rule provenance; state at capture |
@@ -734,7 +734,7 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
 
 - **Closed vocabulary.** One documented table of state tokens (`contested`, `unknown`, `unchecked`,
   `corroborated n`, `contradicted m`, `SUPERSEDED`, `FORK`, `retracted`, …), each with one meaning on every
-  surface, including `unpinned`, `REVISED-FROZEN` and `timeout`. Every rule evaluation (edition rules,
+  surface, including `unpinned`, `REVISED-FROZEN`, `timeout` and the referent statuses of §7. Every rule evaluation (edition rules,
   departure checks, pre-pin checks) is one of `ok`, `fail`, `unchecked`.
 - **Retraction is display.** A `retracts` statement is shown wherever the artifact is; it does not stop
   anyone serving the bytes. Superseded snapshots are often the evidence for their own erratum. A hub that
