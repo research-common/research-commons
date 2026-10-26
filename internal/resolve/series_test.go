@@ -180,11 +180,11 @@ func everyOrderSeries(t *testing.T, w *world, g string, f fakeSegments, check fu
 	}
 }
 
-// TestPrematureFreeze: C-core-104. A reader (hub) whose policy requires declared ≤ computed refuses the series
+// TestPrematureFreeze: C-core-104, the resolver half (hub CI applying the policy at push is hubcheck's
+// TestPrematureFreeze, which declares the case). A reader (hub) whose policy requires declared ≤ computed refuses the series
 // of C-core-101 under reader policy, scope this series edition. The edition stays authorized and current in
 // every reader's resource view, and a reader without the policy endorses nothing less.
 func TestPrematureFreeze(t *testing.T) {
-	conformance.Partial(t, "C-core-104", "the reader-side computation and the policy hook; hub CI applying the policy from its base revision at push is not built")
 	w, g, ids, f := seriesWorld(t)
 	e1 := w.editionWith("E1", "A", g, []string{g}, "members", segs(ids...), "frozen_before", obj("date", "2025-06-01"))
 	r := w.store(nil, WithSegments(f))

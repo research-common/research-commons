@@ -612,7 +612,6 @@ func TestSetLevelRule(t *testing.T) {
 // delivery order, a fail names every member in conflict and nobody is admitted by order: two candidates with
 // one tuple are never one ok and one fail.
 func TestSetLevelProperty(t *testing.T) {
-	conformance.Partial(t, "P-01", "edition-rule admissions over seeded candidate sets (TestSetLevelProperty); other views as they land")
 	opts := fixture.Default
 	opts.MaxStatements = 7
 	fixture.Check(t, 500, 60, opts, func(f fixture.Fixture) string {
@@ -828,11 +827,11 @@ func TestIntendedForOK(t *testing.T) {
 	}
 }
 
-// TestForgedIntendedFor: C-core-98. A statement records intended_for {R, E2} outcome ok over content E2's rule
+// TestForgedIntendedFor: C-core-98, the resolver half (the hub gate half is hubcheck's TestForgedIntendedForAtHub, which
+// declares the case). A statement records intended_for {R, E2} outcome ok over content E2's rule
 // fails. R's current edition E3 lists it. The reader shows E2: fail and E3: fail side by side as its own
 // computation, the publisher's ok only as its word, and does not endorse the membership.
 func TestForgedIntendedFor(t *testing.T) {
-	conformance.Partial(t, "C-core-98", "the reader's side-by-side computation; push and hub CI reading its base revision are not built")
 	w := newWorld(t)
 	g := w.genesis("G", "A", 0, "A")
 	e1 := w.editionWith("E1", "A", g, []string{g})
