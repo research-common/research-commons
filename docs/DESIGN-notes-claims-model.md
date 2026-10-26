@@ -591,10 +591,13 @@ immutable editions.
   position of the earliest segment that is not final, every segment before it being final; when every
   segment is final, it is the end of the last segment. It is `unchecked` when any segment carries no finality
   rule or its state cannot be re-checked, since one segment without a rule leaves the boundary unknown. A
-  series edition rule may require agreement, so a hub can refuse a premature freeze under its own policy. A controller can
-  still freeze a tail the source intends to revise; it cannot do so invisibly. An edition that replaces a
-  segment dated before its predecessor's `frozen_before` is shown as `REVISED-FROZEN`; the earlier edition and
-  its segment remain resolvable (I3).
+  series edition rule may require agreement, so a hub can refuse a premature freeze under its own policy. A
+  controller can still freeze a tail the source intends to revise; it cannot do so invisibly. A segment's position is read
+  from its referent: the start of its window, else its time, else its finality state, in the unit of
+  `frozen_before`; a position in another unit is `not comparable` with the boundary and is explained, not
+  flagged. An edition replaces a segment when a segment of its predecessor is missing from it, or it adds a
+  segment, positioned before the predecessor's `frozen_before`. Such an edition is shown as
+  `REVISED-FROZEN`; the earlier edition and its segment remain resolvable (I3).
 
 ## 9. Research exchange
 
