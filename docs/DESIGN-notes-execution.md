@@ -340,6 +340,16 @@ exploration, produces a `describes` statement ("compared under K′: …"), neve
 runs under the same profile and boundary as the workflow (§6), with the two outputs as its only inputs and no
 network, and its own environment record is nested inside the `reproduced` statement.
 
+**The comparator interface** (proposed). A comparator is a workflow spec (§1) with exactly two inputs, named
+`a` and `b`, which the reader fills with the two outputs in ascending digest order; no network; and exactly
+one output, named `verdict`, whose bytes are `match`, `diverged` or `not comparable`, optionally followed by
+one line feed. Anything else (other bytes, a failed step, a cap stopping it, a spec that does not have this
+shape) makes the comparison `unchecked`, with the reason. A comparator's own `authored` declares
+`replication: bytes`: a comparison has one answer per pair (claims-model note §5.2), and a reader that caches
+comparator results relies on it; a comparator that declares anything else is not run, and every comparison
+under it is `unchecked`. The alpha's interface (`<comparator> <expected> <actual>`, exit 0 or 1) has no
+`not comparable` and is not carried forward.
+
 **Nondeterminism is a result.** A `bytes` workflow that produces different bytes across two runs in the same
 environment is reported exactly as the table says: `diverged`, both records visible, the earlier statement
 untouched (C-exec-13). The implementation never re-runs until it matches, never picks the majority of several
