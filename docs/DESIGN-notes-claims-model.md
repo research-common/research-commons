@@ -543,7 +543,13 @@ immutable editions.
   rule's domain. Every evaluation is `ok`, `fail` or `unchecked`, and `unchecked`
   never passes (I4). A failing rule rejects the membership, never the artifact: the artifact's own statements
   are untouched. The rule language is a profile (§15); the core fixes only what a rule may read and the
-  three outcomes. Examples: "at least 24 h of coverage inside the window, the whole window in one routing
+  three outcomes. *Which record and which rules* (proposed): a rule reads the statement a `statement` member
+  names; for a `content` member it reads the blob's single-party defaults (§5.1), where a contested or
+  undeclared field answers nothing (`unchecked`), and observation fields (referent, class, finality) need a
+  `statement` member naming the `observed`; a `resource` member offers only its role. A membership is endorsed
+  when the edition that lists it, re-applied over its own members, yields `ok` for it; a candidate for the next
+  edition is evaluated under the base edition's rules over the base members and every candidate proposed with
+  it (C-core-93b). Examples: "at least 24 h of coverage inside the window, the whole window in one routing
   era, at most one endorsed member per instrument per era"; "same scenario edition, harness commit in range,
   n ≥ 30 per arm, replication = protocol".
 - **Approvals.** Under k of n each controller signs the same edition body. Approvals of byte-identical bodies
