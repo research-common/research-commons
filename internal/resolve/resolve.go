@@ -8,7 +8,8 @@
 // single-party defaults (§5.1, §5.2) in artifact.go; derivation groups and grades (§5.2, §7) in group.go; time
 // bounds (§10) in time.go; edition rules (§8) in edition_rules.go; membership and the pre-pin check in
 // membership.go; growing series in series.go; observations, referent status and capture evidence (§5.3.1,
-// §5.3.3) in observation.go; corroboration status and reputation projections (§5.3.2, §5.4) in corroboration.go.
+// §5.3.3) in observation.go; corroboration status and reputation projections (§5.3.2, §5.4) in corroboration.go; the research exchange
+// (§9: tasks, contracts, readiness, decisions, pre-registration, credit) in task.go, contract.go, prereg.go and credit.go.
 //
 // Every answer is a pure function of the set of held lines, so delivery order cannot change it (I14, P-01).
 package resolve
@@ -71,13 +72,15 @@ type Resolver struct {
 	origins OriginIndex
 	// policy is the reader's local policy (policy.go); nil when none is configured.
 	policy *policy.Policy
+	// exch is the reader's configuration for the research exchange (task.go, contract.go).
+	exch *exchConfig
 }
 
 // New indexes every placed line of every log in s. With no options the reader verifies no proof format and
 // runs no comparator, so no bound orders anything and no comparison is made.
 func New(s *keylog.Store, opts ...Option) *Resolver {
 	r := &Resolver{logs: s, chained: map[string]map[string]*wire.Statement{}, byID: map[string]*Placed{}, byKind: map[string][]*Placed{}, keys: map[string]keylog.KeyState{},
-		time: NoTimeVerifier{}, cmp: NoComparator{}, cmpRuns: map[[3]string]cmpResult{}, obs: defaultObsConfig()}
+		time: NoTimeVerifier{}, cmp: NoComparator{}, cmpRuns: map[[3]string]cmpResult{}, obs: defaultObsConfig(), exch: defaultExchConfig()}
 	for _, o := range opts {
 		o(r)
 	}
