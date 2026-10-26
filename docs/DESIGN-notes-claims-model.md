@@ -470,7 +470,9 @@ decide who is right.
    curator's judgment), `rule-based` (a published inclusion rule others can re-apply), or a
    `completeness claim` ("every reading from source X in this window", which can be checked and refuted).
    A hub that declares nothing displays `undeclared`, never a value it did not sign; agreement models treat
-   an undeclared selection as curated, the weakest claim.
+   an undeclared selection as curated, the weakest claim. No statement kind carries a hub's own selection
+   today, so a hub declares it through a collection it controls whose editions carry `selection`
+   (proposed), and the hub's display cites that collection's edition.
 4. **The reader brings the references.** A reader can re-run any corroboration against reference data *it*
    trusts. The project ships **no default reference collections**: they are ordinary collections that anyone
    may curate and readers choose among, consistent with categories being convention rather than protocol (#16).
