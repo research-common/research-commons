@@ -112,6 +112,12 @@ Each cap is applied by the kernel to the container's cgroup or filesystem before
 while the step runs, not after it has finished. A host-side check after the fact (the output-size walk the
 alpha did) may remain as a second check; it is never the only one.
 
+The kernel enforces the disk cap (a write fails inside the container), but a size-capped filesystem raises no
+event that says so: the step just sees a failed write. Which token the run gets (`failed: operational: disk`,
+`failed: <exit n>` or `timeout`) is therefore the implementation's own classification, from the filesystem's
+fill level while the step runs and when it exits or is killed. That classification is a heuristic; an
+implementation documents it as one (I11), and it never changes what the cap enforced.
+
 | cap | mechanism | when tripped | result token | exit (`verify`) |
 |---|---|---|---|---|
 | `cpus` | cgroup cpu quota | throttled, not killed | (none; wall time absorbs it) | |
