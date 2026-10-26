@@ -547,21 +547,41 @@ func TestBytesDifferent(t *testing.T) {
 	}
 }
 
-// TestProtocolIdentical: C-core-23. protocol, identical bytes: no T0, no reproduced implied, no copy flag.
+// TestProtocolIdentical: C-core-23. protocol, identical bytes: no T0, no reproduced implied, no copy flag, and
+// explain points to §9.3 for independence. The exit under a declared comparator is 0 today (the execution note's
+// `match (identical bytes)` is a match; claims §13 says exit 0 needs a T0 or T1 comparison): pinned here, and an
+// open spec question. Under protocol with no comparator nothing can be compared, so
+// identical bytes are `unchecked` and exit 3, the same as different bytes (claims §13, execution §5.3).
 func TestProtocolIdentical(t *testing.T) {
 	conformance.Covers(t, "C-core-23")
 	w := groupWorld(t, "protocol", "K", map[string]string{"A": "X", "BB": "X"})
 	everyOrderArtifact(t, w, "X", func(a *Artifact) {
 		out := a.Render()
-		has(t, out, IdenticalProto)
+		has(t, out, "derived by 2: "+IdenticalProto)
 		has(t, out, "claims §9.3")
 		hasNot(t, out, "T0")
 		hasNot(t, out, "reproduced ")
 		hasNot(t, out, "copied")
 		hasNot(t, out, "later claimant")
-		if a.Grade.Tier != "" {
-			t.Fatalf("grade %s", a.Grade)
+		if a.Grade.Tier != "" || a.Step.Tier != "" || a.Step.Why != IdenticalProto {
+			t.Fatalf("grade %s step %s", a.Grade, a.Step)
 		}
+		for _, run := range a.Group.Runs {
+			if run.Kind != "authored" || run.Grade.Tier != "" {
+				t.Fatalf("run %+v", run)
+			}
+		}
+		wantExit(t, a, 0, "")
+	})
+
+	w = groupWorld(t, "protocol", "", map[string]string{"A": "X", "BB": "X"})
+	everyOrderArtifact(t, w, "X", func(a *Artifact) {
+		if a.Step.Why != UncheckedToken || a.Grade.Tier != "" {
+			t.Fatalf("no comparator: step %s\n%s", a.Step, a.Render())
+		}
+		has(t, a.Render(), "no comparator")
+		hasNot(t, a.Render(), IdenticalProto)
+		wantExit(t, a, 3, "derivation: unchecked")
 	})
 }
 
@@ -836,7 +856,6 @@ func genAuthorship(t *testing.T, seed uint64) (*world, []string) {
 
 // TestArtifactPermutationProperty: P-01 over the artifact view.
 func TestArtifactPermutationProperty(t *testing.T) {
-	conformance.Partial(t, "P-01", "artifacts: authorship, defaults, groups and grades; other views as they land")
 	opts := []Option{WithTimeVerifier(newFakeBitcoin(100, 101)), WithComparator(newFakeComparator("X", "Y", "r~1", "r~2"))}
 	for seed := uint64(1); seed <= 40; seed++ {
 		w, blobs := genAuthorship(t, seed)
@@ -853,7 +872,6 @@ func TestArtifactPermutationProperty(t *testing.T) {
 
 // TestDuplicatesProperty: P-02 over the artifact view. Delivering every line twice changes nothing.
 func TestDuplicatesProperty(t *testing.T) {
-	conformance.Partial(t, "P-02", "duplicate delivery over the artifact view; equivalent signature encodings are covered for resources (TestKOfNDuplicates)")
 	for seed := uint64(1); seed <= 20; seed++ {
 		w, blobs := genAuthorship(t, seed)
 		order := make([]int, 0, 2*len(w.lines))
@@ -1053,6 +1071,7 @@ func TestNonInterferenceGroupEvidence(t *testing.T) {
 // holds; an output no other run produced is diverged. One stray run (anyone can assert a provenance) never turns
 // the reproduced bytes into "checked and wrong". The group still shows the divergence beside the grade.
 func TestBytesPerOutput(t *testing.T) {
+	conformance.Covers(t, "C-core-22b")
 	w := groupWorld(t, "bytes", "", map[string]string{"A": "X", "BB": "X", "CC": "Y"})
 	everyOrderArtifact(t, w, "X", func(a *Artifact) {
 		if a.Step.Tier != "T0" {
@@ -1060,14 +1079,31 @@ func TestBytesPerOutput(t *testing.T) {
 		}
 		out := a.Render()
 		has(t, out, "derived by 3: diverged (2 different outputs); 1 of them byte-identical across runs (T0)")
-		has(t, out, "an environment differs or the determinism claim is wrong")
+		has(t, out, "an environment differs or the determinism claim is wrong; no member is marked wrong")
+		hasNot(t, out, "contested")
+		hasNot(t, out, "later claimant")
+		for _, run := range a.Group.Runs {
+			if run.Output == dig("X") && run.Grade.Tier != "T0" {
+				t.Fatalf("a byte-identical run of X is %s\n%s", run.Grade, out)
+			}
+			if run.Output == dig("Y") && run.Grade.Why != DivergedToken {
+				t.Fatalf("Y's run is %s\n%s", run.Grade, out)
+			}
+		}
 		wantExit(t, a, 0, "")
+		if code, why := w.store(nil).Verify(dig("X")); code != 0 {
+			t.Fatalf("Verify X: %d %v", code, why)
+		}
 	})
 	everyOrderArtifact(t, w, "Y", func(a *Artifact) {
 		if a.Step.Why != DivergedToken {
 			t.Fatalf("Y step %s\n%s", a.Step, a.Render())
 		}
+		has(t, a.Render(), "derived by 3: diverged (2 different outputs)")
 		wantExit(t, a, 1, "diverged")
+		if code, why := w.store(nil).Verify(dig("Y")); code != 1 {
+			t.Fatalf("Verify Y: %d %v", code, why)
+		}
 	})
 
 	// a reproduced run counts as a run: A's own re-run of X and B's Y → X T0, Y diverged
@@ -1158,33 +1194,87 @@ func TestProtocolAllAgree(t *testing.T) {
 	}, cmp)
 }
 
-// TestProtocolNotTransitive: A~B, B~C, A≁C. Each run is T1 with its own partners; the summary never says the
-// three agree; explain names the pair that diverged.
-func TestProtocolNotTransitive(t *testing.T) {
-	w := groupWorld(t, "protocol", "K", map[string]string{"A": "a", "BB": "b", "CC": "c"})
-	cmp := WithComparator(newTableComparator(map[string]string{"a|b": "match", "b|c": "match"}, "a", "b", "c"))
-	everyOrderArtifact(t, w, "a", func(a *Artifact) {
-		out := a.Render()
-		has(t, out, "derived by 3: 3 match, 0 diverged; matching runs do not all agree (1 cluster; 1 of 3 pairs among them diverged)")
-		has(t, out, "tolerance is not transitive; matches are never chained")
-		hasNot(t, out, "all 3 runs match")
-		for _, run := range a.Group.Runs {
-			want := map[string]int{dig("a"): 1, dig("b"): 2, dig("c"): 1}[run.Output]
-			if run.Grade.Tier != "T1" || len(run.Partners) != want {
-				t.Fatalf("run %s: %s partners %d", shortDigest(run.Output), run.Grade, len(run.Partners))
-			}
+// protocolRows checks a protocol group's per-run rows against the matches the comparator found: every run is T1
+// under K, listed with exactly the runs it matched, and `verify` of its output exits 0 both from the full view
+// and from the lazy per-output path.
+func protocolRows(t *testing.T, w *world, a *Artifact, cmp Option, matched map[string][]string) {
+	t.Helper()
+	for _, run := range a.Group.Runs {
+		want := matched[run.Output]
+		var got []string
+		for _, p := range run.Partners {
+			got = append(got, p)
 		}
-		wantExit(t, a, 0, "")
-	}, cmp)
+		slices.Sort(got)
+		slices.Sort(want)
+		if run.Grade.Tier != "T1" || run.Grade.Under != dig("K") || !slices.Equal(got, want) {
+			t.Fatalf("run %s: %s partners %v, want %v\n%s", shortDigest(run.Output), run.Grade, got, want, a.Render())
+		}
+		list := make([]string, len(run.Partners))
+		for i, p := range run.Partners {
+			list[i] = shortDigest(p)
+		}
+		has(t, a.Render(), "-> "+shortDigest(run.Output)+": T1 under "+shortDigest(dig("K"))+" (matched "+strings.Join(list, ",")+")")
+	}
+	for out := range matched {
+		if code, why := w.store(nil, cmp).Verify(out); code != 0 {
+			t.Fatalf("verify %s: %d %v", shortDigest(out), code, why)
+		}
+	}
 }
 
-// TestProtocolCamps: A~B and C~D, every cross pair diverged. Four T1 runs; the summary names two clusters and
-// four diverged pairs, never "all match".
+// pairDiverged is the `explain` line for a diverged pair of outputs, in the digest order the group prints them.
+func pairDiverged(x, y string) string {
+	if y < x {
+		x, y = y, x
+	}
+	return shortDigest(x) + " vs " + shortDigest(y) + ": diverged, though each matched another run"
+}
+
+// TestProtocolNotTransitive: C-core-24a. A~B, B~C, A≁C. Each run is T1 with its own partners (B with two); the
+// summary never says the three agree and shows its counts and `not all runs agree` (1 cluster; 1 of 3 pairs
+// diverged); explain names the A–C pair; verify of each output exits 0.
+func TestProtocolNotTransitive(t *testing.T) {
+	conformance.Covers(t, "C-core-24a")
+	w := groupWorld(t, "protocol", "K", map[string]string{"A": "a", "BB": "b", "CC": "c"})
+	cmp := WithComparator(newTableComparator(map[string]string{"a|b": "match", "b|c": "match"}, "a", "b", "c"))
+	matched := map[string][]string{dig("a"): {dig("b")}, dig("b"): {dig("a"), dig("c")}, dig("c"): {dig("b")}}
+	for _, x := range []string{"a", "b", "c"} {
+		everyOrderArtifact(t, w, x, func(a *Artifact) {
+			out := a.Render()
+			has(t, out, "derived by 3: 3 match, 0 diverged; not all runs agree (1 cluster; 1 of 3 pairs among them diverged)")
+			has(t, out, "tolerance is not transitive; matches are never chained")
+			has(t, out, pairDiverged(dig("a"), dig("c")))
+			hasNot(t, out, "all 3 runs match")
+			hasNot(t, out, "all 3 match")
+			protocolRows(t, w, a, cmp, matched)
+			wantExit(t, a, 0, "")
+		}, cmp)
+	}
+}
+
+// TestProtocolCamps: C-core-24b. A~B and C~D, every cross pair diverged. Four T1 runs; the summary says
+// `not all runs agree` with two clusters and four of six pairs diverged, never "all match"; explain names each
+// diverged cross pair.
 func TestProtocolCamps(t *testing.T) {
+	conformance.Covers(t, "C-core-24b")
 	w := groupWorld(t, "protocol", "K", map[string]string{"A": "a", "BB": "b", "CC": "c", "DD": "d"})
 	cmp := WithComparator(newTableComparator(map[string]string{"a|b": "match", "c|d": "match"}, "a", "b", "c", "d"))
-	a := w.store(nil, cmp).Artifact(dig("a"))
-	has(t, a.Render(), "derived by 4: 4 match, 0 diverged; matching runs do not all agree (2 clusters; 4 of 6 pairs among them diverged)")
+	matched := map[string][]string{dig("a"): {dig("b")}, dig("b"): {dig("a")}, dig("c"): {dig("d")}, dig("d"): {dig("c")}}
+	for _, x := range []string{"a", "d"} {
+		everyOrderArtifact(t, w, x, func(a *Artifact) {
+			out := a.Render()
+			has(t, out, "derived by 4: 4 match, 0 diverged; not all runs agree (2 clusters; 4 of 6 pairs among them diverged)")
+			hasNot(t, out, "all 4 runs match")
+			hasNot(t, out, "all 4 match")
+			for _, p := range [][2]string{{"a", "c"}, {"a", "d"}, {"b", "c"}, {"b", "d"}} {
+				has(t, out, pairDiverged(dig(p[0]), dig(p[1])))
+			}
+			hasNot(t, out, pairDiverged(dig("a"), dig("b")))
+			protocolRows(t, w, a, cmp, matched)
+			wantExit(t, a, 0, "")
+		}, cmp)
+	}
 }
 
 // TestComparatorCostAndCache: k = 10 outputs. One full view runs each of the 45 pairs once; viewing every blob
@@ -1294,48 +1384,68 @@ func TestRowNotComparable(t *testing.T) {
 	}
 }
 
-// TestNotRederivedExits3: A4. A derivation nobody re-derived is unchecked: verify exits 3 citing it, under every
-// replication mode, and the full view and Verify agree. A construction without provenance (C-core-17) still
-// exits 0. A second run decides it: identical bytes under `bytes` → 0, different → the stray output 1.
+// TestNotRederivedExits3: C-core-25b (A4). A derivation nobody re-derived is unchecked: verify exits 3 citing it,
+// under every replication mode, the full view and Verify agree, and the next step says a re-run checks it. A
+// construction without provenance (C-core-17) still exits 0. (d) the author's own `reproduced: match` is a
+// second run: T0, exit 0, "re-derived by its author only" (TestSelfReproduction). A second run decides it:
+// identical bytes under `bytes` → 0, different → the stray output 1. The property is TestMoreEvidenceNeverPasses.
 func TestNotRederivedExits3(t *testing.T) {
-	for _, mode := range []string{"bytes", "protocol", ""} {
-		w := groupWorld(t, mode, "K", map[string]string{"A": "X"})
+	conformance.Covers(t, "C-core-25b")
+	for _, c := range []struct{ mode, comparator string }{{"bytes", ""}, {"protocol", "K"}, {"", ""}, {"protocol", ""}} {
+		w := groupWorld(t, c.mode, c.comparator, map[string]string{"A": "X"})
 		everyOrderArtifact(t, w, "X", func(a *Artifact) {
 			if a.Step.Why != NotRederived {
-				t.Fatalf("mode %q: step %s", mode, a.Step)
+				t.Fatalf("mode %q: step %s", c.mode, a.Step)
 			}
 			wantExit(t, a, 3, "derivation: not re-derived")
 			has(t, a.Render(), "a re-run by the reader, or a `reproduced` by anyone, is what checks it")
 		})
-		if code, _ := w.store(nil).Verify(dig("X")); code != 3 {
-			t.Fatalf("mode %q: Verify %d", mode, code)
+		if code, why := w.store(nil).Verify(dig("X")); code != 3 || !strings.Contains(strings.Join(why, ";"), "not re-derived") {
+			t.Fatalf("mode %q: Verify %d %v", c.mode, code, why)
 		}
 	}
 	w := newWorld(t)
 	w.authored("A1", "A", "X")
 	wantExit(t, w.store(nil).Artifact(dig("X")), 0, "")
+	// (d) the author's own `reproduced: match` is a second run
+	w = groupWorld(t, "bytes", "", map[string]string{"A": "X"})
+	w.sign("AR", "A", "reproduced", obj("of", w.ids["A1"], "result", "match", "content", contentOf("X"),
+		"provenance", obj("workflow", dig("W"), "inputs", []string{dig("I")})))
+	everyOrderArtifact(t, w, "X", func(a *Artifact) {
+		if a.Step.Tier != "T0" {
+			t.Fatalf("(d) step %s", a.Step)
+		}
+		has(t, a.Render(), "re-derived by its author only")
+		wantExit(t, a, 0, "")
+	})
 }
 
 // TestMoreEvidenceNeverPasses: monotonicity (P-A4-mono). From a sole derivation (exit 3), adding a run can move
 // the exit to 0 only when the run brings a comparison that passed for these bytes; a run that compares nothing
-// or disagrees never turns 3 into 0.
+// or disagrees never turns 3 into 0. A mode that permits no comparison (undeclared, or protocol with no
+// comparator) stays 3 whatever the second run holds, identical bytes included (claims §13).
 func TestMoreEvidenceNeverPasses(t *testing.T) {
+	conformance.Covers(t, "C-core-25b")
 	cases := []struct {
-		mode, other string
-		want        int
+		mode, comparator, other string
+		want                    int
 	}{
-		{"bytes", "X", 0}, {"bytes", "Y", 1}, // a byte-identical re-run passes; a different one: X has no partner
-		{"", "X", 3}, {"", "Y", 3}, // undeclared: nothing compares
-		{"protocol", "X", 0}, // identical bytes under protocol: `match (identical bytes)`, no tier (execution §5.3)
-		{"protocol", "Y", 3},
+		{"bytes", "", "X", 0}, {"bytes", "", "Y", 1}, // a byte-identical re-run passes; a different one: X has no partner
+		{"", "", "X", 3}, {"", "", "Y", 3}, // undeclared: nothing compares
+		{"protocol", "", "X", 3}, {"protocol", "", "Y", 3}, // no comparator: nothing compares, identical bytes or not
+		{"protocol", "K", "X", 0}, // identical bytes under a declared comparator: `match (identical bytes)`, no tier (execution §5.3)
+		{"protocol", "K", "Y", 3}, // no comparator runner configured: unchecked
 	}
 	for _, c := range cases {
-		w := groupWorld(t, c.mode, "", map[string]string{"A": "X"})
+		w := groupWorld(t, c.mode, c.comparator, map[string]string{"A": "X"})
 		before, _ := w.store(nil).Artifact(dig("X")).VerifyExit()
 		w.authored("B1", "BB", c.other, "prov", []string{"W", "I"})
 		after, why := w.store(nil).Artifact(dig("X")).VerifyExit()
 		if before != 3 || after != c.want {
-			t.Fatalf("mode %q other %s: %d → %d %v, want 3 → %d", c.mode, c.other, before, after, why, c.want)
+			t.Fatalf("mode %q comparator %q other %s: %d → %d %v, want 3 → %d", c.mode, c.comparator, c.other, before, after, why, c.want)
+		}
+		if v, _ := w.store(nil).Verify(dig("X")); v != after {
+			t.Fatalf("mode %q comparator %q other %s: Verify %d, full view %d", c.mode, c.comparator, c.other, v, after)
 		}
 	}
 }
@@ -1357,21 +1467,39 @@ func TestSelfReproduction(t *testing.T) {
 	hasNot(t, w.store(nil).Artifact(dig("X")).Render(), "re-derived by its author only")
 }
 
-// TestRunnerSaysIsShownNeverGraded: A5. A runner's `reproduced` result and environment are shown on its run,
-// attributed, with the reader's trust stated as not configured; the grade is the reader's own. (a) `bytes`:
-// the runner signs `match` for different bytes → its run is diverged, explain names the disagreement, X keeps
-// X's own verdict is diverged too (its only partner disagreed). (b) `protocol` with no comparator runner: the runner's `match` is shown; the reader made no
-// comparison, so unchecked and exit 3, and no disagreement is claimed.
+// TestRunnerSaysIsShownNeverGraded: C-core-25a (A5). A runner's `reproduced` result and environment are shown on
+// its run, attributed, with the reader's trust in the runner stated as not configured; the grade is the reader's
+// own. (a) `bytes`: the runner signs `match` for different bytes → its run is diverged, explain flags the signed
+// `match` against the reader's result, X's verdict is diverged too (its only partner disagreed), exit 1. (b)
+// `protocol` with a comparator the reader cannot run: the runner's `match` is shown; the reader made no
+// comparison, so unchecked and exit 3, and no disagreement is claimed. (c) `bytes`, the runner signs `diverged`
+// for identical bytes: flagged, X stays T0, exit 0. Every variant shows the token, the environment record and
+// the trust line; and whatever token the runner signs, the grade and exit are the same.
 func TestRunnerSaysIsShownNeverGraded(t *testing.T) {
+	conformance.Covers(t, "C-core-25a")
 	env := obj("image_digest", dig("img"), "platform", "linux/amd64")
-	w := groupWorld(t, "bytes", "", map[string]string{"A": "X"})
-	w.sign("BR", "BB", "reproduced", obj("of", w.ids["A1"], "result", "match", "content", contentOf("Y"),
-		"provenance", obj("workflow", dig("W"), "inputs", []string{dig("I")}, "environment", env)))
+	envLine := `environment (runner's record): {"image_digest":"` + dig("img") + `","platform":"linux/amd64"}`
+	run := func(mode, comparator, says, content string) *world {
+		w := groupWorld(t, mode, comparator, map[string]string{"A": "X"})
+		w.sign("BR", "BB", "reproduced", obj("of", w.ids["A1"], "result", says, "content", contentOf(content),
+			"provenance", obj("workflow", dig("W"), "inputs", []string{dig("I")}, "environment", env)))
+		return w
+	}
+	shown := func(a *Artifact, says string) {
+		t.Helper()
+		out := a.Render()
+		has(t, out, "reproduced ")
+		has(t, out, "by "+shortKey(a.Group.Runs[len(a.Group.Runs)-1].Signer))
+		has(t, out, "runner says: "+says)
+		has(t, out, envLine)
+		has(t, out, "your trust in this key: not configured")
+	}
+
+	// (a)
+	w := run("bytes", "", "match", "Y")
 	everyOrderArtifact(t, w, "X", func(a *Artifact) {
 		out := a.Render()
-		has(t, out, "runner says: match")
-		has(t, out, `environment (runner's record): {"image_digest":"`+dig("img")+`","platform":"linux/amd64"}`)
-		has(t, out, "your trust in this key: not configured")
+		shown(a, "match")
 		has(t, out, `signed "match"; this reader's comparison: "diverged" (shown, never graded`)
 		if a.Step.Why != DivergedToken {
 			t.Fatalf("step %s", a.Step)
@@ -1379,36 +1507,61 @@ func TestRunnerSaysIsShownNeverGraded(t *testing.T) {
 		wantExit(t, a, 1, "diverged")
 	})
 
-	w2 := groupWorld(t, "protocol", "K", map[string]string{"A": "X"})
-	w2.sign("BR", "BB", "reproduced", obj("of", w2.ids["A1"], "result", "match", "content", contentOf("Y"),
-		"provenance", obj("workflow", dig("W"), "inputs", []string{dig("I")})))
-	a := w2.store(nil).Artifact(dig("X"))
-	out := a.Render()
-	has(t, out, "runner says: match")
-	hasNot(t, out, "this reader's comparison")
-	if a.Step.Why != UncheckedToken {
-		t.Fatalf("step %s", a.Step)
-	}
-	wantExit(t, a, 3, "derivation: unchecked")
+	// (b)
+	w2 := run("protocol", "K", "match", "Y")
+	everyOrderArtifact(t, w2, "X", func(a *Artifact) {
+		out := a.Render()
+		shown(a, "match")
+		hasNot(t, out, "this reader's comparison")
+		if a.Step.Why != UncheckedToken {
+			t.Fatalf("step %s", a.Step)
+		}
+		for _, r := range a.Group.Runs {
+			if r.Grade.Tier != "" {
+				t.Fatalf("a run was graded: %+v", r)
+			}
+		}
+		wantExit(t, a, 3, "derivation: unchecked")
+	})
+
+	// (c)
+	w4 := run("bytes", "", "diverged", "X")
+	everyOrderArtifact(t, w4, "X", func(a *Artifact) {
+		shown(a, "diverged")
+		has(t, a.Render(), `signed "diverged"; this reader's comparison: "match" (shown, never graded`)
+		if a.Step.Tier != "T0" {
+			t.Fatalf("step %s", a.Step)
+		}
+		wantExit(t, a, 0, "")
+	})
 
 	// an agreeing runner: shown, no disagreement line
-	w3 := groupWorld(t, "bytes", "", map[string]string{"A": "X"})
-	w3.sign("BR", "BB", "reproduced", obj("of", w3.ids["A1"], "result", "match", "content", contentOf("X"),
-		"provenance", obj("workflow", dig("W"), "inputs", []string{dig("I")})))
-	out = w3.store(nil).Artifact(dig("X")).Render()
-	has(t, out, "runner says: match")
-	hasNot(t, out, "this reader's comparison")
+	w3 := run("bytes", "", "match", "X")
+	a := w3.store(nil).Artifact(dig("X"))
+	shown(a, "match")
+	hasNot(t, a.Render(), "this reader's comparison")
 
-	// a runner who signs `diverged` for bytes the reader finds identical: flagged, and X stays T0
-	w4 := groupWorld(t, "bytes", "", map[string]string{"A": "X"})
-	w4.sign("BR", "BB", "reproduced", obj("of", w4.ids["A1"], "result", "diverged", "content", contentOf("X"),
-		"provenance", obj("workflow", dig("W"), "inputs", []string{dig("I")})))
-	a = w4.store(nil).Artifact(dig("X"))
-	has(t, a.Render(), `signed "diverged"; this reader's comparison: "match"`)
-	if a.Step.Tier != "T0" {
-		t.Fatalf("step %s", a.Step)
+	// no signed token moves a grade or an exit: the same content under every token the runner can sign
+	for _, c := range []struct {
+		mode, cmp, content string
+		step               string
+		exit               int
+	}{{"bytes", "", "Y", DivergedToken, 1}, {"bytes", "", "X", "T0", 0}, {"protocol", "K", "Y", UncheckedToken, 3}} {
+		var first string
+		for _, says := range []string{"match", "diverged", "not-comparable"} {
+			a := run(c.mode, c.cmp, says, c.content).store(nil).Artifact(dig("X"))
+			code, _ := a.VerifyExit()
+			got := fmt.Sprintf("%s|%s|%d", a.Step, a.Grade, code)
+			if first == "" {
+				first = got
+				if a.Step.String() != c.step || code != c.exit {
+					t.Fatalf("%s %s: step %s exit %d, want %s %d", c.mode, c.content, a.Step, code, c.step, c.exit)
+				}
+			} else if got != first {
+				t.Fatalf("%s %s: signing %q moved the result: %s vs %s", c.mode, c.content, says, got, first)
+			}
+		}
 	}
-	wantExit(t, a, 0, "")
 }
 
 // TestWorkflowModeByAgreement: A7. Two keys hold `authored` on the workflow (an agent published it and a
@@ -1455,6 +1608,74 @@ func TestWorkflowModeAmendment(t *testing.T) {
 	has(t, a.Render(), "the workflow's author amended its replication or comparator")
 }
 
+// TestWorkflowModeIsTheResolvedDefault: C-core-22a. The replication a group reads is the workflow's resolved
+// default, never a deriver's statement. (a) two claimants of W declaring bytes, neither ranking: W's own field
+// shows no default, the group reads bytes (X is T0) and explain says all 2 claimants agree. (b) the second
+// claimant declares protocol with no comparator: unchecked, exit 3. (c) one author declares protocol with no
+// comparator, then amends to bytes: unchecked before, T0 after, explain citing the amendment. In every variant
+// a deriver's own `replication` on its statement for X changes nothing, and every delivery order agrees.
+func TestWorkflowModeIsTheResolvedDefault(t *testing.T) {
+	conformance.Covers(t, "C-core-22a")
+	// derivers sometimes carry a replication of their own on X: it is X's field, never the workflow's mode
+	for _, derivers := range [][]any{{}, {"replication", "protocol"}, {"replication", "bytes"}} {
+		build := func(p, q [2]string) *world {
+			w := newWorld(t)
+			w.workflow("P", "W", p[0], p[1])
+			if q[0] != "-" {
+				w.workflow("Q", "W", q[0], q[1])
+			}
+			w.authored("A1", "A", "X", append([]any{"prov", []string{"W", "I"}}, derivers...)...)
+			w.authored("B1", "BB", "X", append([]any{"prov", []string{"W", "I"}}, derivers...)...)
+			return w
+		}
+		agree := "all 2 claimants of wf-" + shortDigest(dig("W")) + " declare the same replication and comparator"
+
+		// (a)
+		w := build([2]string{"bytes", ""}, [2]string{"bytes", ""})
+		everyOrderArtifact(t, w, "X", func(a *Artifact) {
+			if a.Step.Tier != "T0" || a.Group == nil || a.Group.Mode != "bytes" {
+				t.Fatalf("(a) %v: step %s\n%s", derivers, a.Step, a.Render())
+			}
+			has(t, a.Render(), agree)
+			wantExit(t, a, 0, "")
+		})
+		wf := w.store(nil).Artifact(dig("W"))
+		wantAuthorship(t, wf, ContestedAuthorship)
+		wantField(t, wf, "replication", FieldNoDefault, "")
+		has(t, wf.Render(), "replication: "+string(FieldNoDefault))
+
+		// (b)
+		w = build([2]string{"bytes", ""}, [2]string{"protocol", ""})
+		everyOrderArtifact(t, w, "X", func(a *Artifact) {
+			if a.Step.Why != UncheckedToken || a.Group.Token != "derived by 2: unchecked" {
+				t.Fatalf("(b) %v: step %s token %q\n%s", derivers, a.Step, a.Group.Token, a.Render())
+			}
+			has(t, a.Render(), "do not all declare the same replication and comparator")
+			hasNot(t, a.Render(), agree)
+			wantExit(t, a, 3, "derivation: unchecked")
+		})
+
+		// (c) protocol with no comparator permits no comparison, identical bytes or not (claims §13, execution §5.3)
+		w = build([2]string{"protocol", ""}, [2]string{"-", ""})
+		everyOrderArtifact(t, w, "X", func(a *Artifact) {
+			if a.Step.Why != UncheckedToken || a.Group.Mode != "protocol" {
+				t.Fatalf("(c) before %v: step %s\n%s", derivers, a.Step, a.Render())
+			}
+			has(t, a.Render(), "no comparator")
+			hasNot(t, a.Render(), "amended its replication")
+			wantExit(t, a, 3, "derivation: unchecked")
+		})
+		w.workflow("P", "W", "bytes", "") // the author amends its own authored
+		everyOrderArtifact(t, w, "X", func(a *Artifact) {
+			if a.Step.Tier != "T0" || a.Group.Mode != "bytes" {
+				t.Fatalf("(c) after %v: step %s\n%s", derivers, a.Step, a.Render())
+			}
+			has(t, a.Render(), "the workflow's author amended its replication or comparator")
+			wantExit(t, a, 0, "")
+		})
+	}
+}
+
 // forkAt rewinds key n's head to the line it had at the fork point, so the next line is a sibling branch.
 func (w *world) forkAt(n, head string, seq int64) { w.head[n], w.seq[n] = head, seq }
 
@@ -1475,6 +1696,7 @@ func (w *world) signMerge(name, n, kind string, body *canon.Object, merge ...str
 // so nothing is frozen at the fork. A merge by a `describes` leaves X's licence contested; a merge by an
 // `authored` on X amends both branches and settles it.
 func TestForkedAuthor(t *testing.T) {
+	conformance.Covers(t, "C-core-16a")
 	build := func() (*world, string) {
 		w := newWorld(t)
 		w.authored("X0", "A", "X", "licence", "MIT")
@@ -1488,30 +1710,59 @@ func TestForkedAuthor(t *testing.T) {
 		w.authored("Y2", "A", "Y", "licence", "CC0-1.0")
 		return w, tip
 	}
+	// (a) both branches amend X: sole author, licence contested listing both of A's statements, exit 3, and
+	// explain names the fork and what clears it
 	w, _ := build()
 	everyOrderArtifact(t, w, "X", func(a *Artifact) {
 		wantAuthorship(t, a, SoleAuthor)
 		wantField(t, a, "licence", FieldContested, "")
-		has(t, a.Render(), "holds 2 current authored on this blob on separate branches of its log")
-		has(t, a.Render(), "a merge that is not an authored amends nothing")
+		f := a.Field("licence")
+		var vals []string
+		for _, s := range f.From {
+			if s.Signer != w.signer("A") {
+				t.Fatalf("a listed statement is not A's: %+v", s)
+			}
+			vals = append(vals, s.Value)
+		}
+		if !slices.Equal(vals, []string{`"CC-BY-4.0"`, `"CC0-1.0"`}) && !slices.Equal(vals, []string{`"CC0-1.0"`, `"CC-BY-4.0"`}) {
+			t.Fatalf("contested licence lists %v, want both of A's statements", vals)
+		}
+		out := a.Render()
+		has(t, out, `"CC0-1.0" by `+shortKey(w.signer("A"))+" in "+keylog.Short(w.ids["X1"]))
+		has(t, out, `"CC-BY-4.0" by `+shortKey(w.signer("A"))+" in "+keylog.Short(w.ids["X2"]))
+		has(t, out, "holds 2 current authored on this blob on separate branches of its log")
+		has(t, out, "until one authored whose history holds both branches amends them")
+		has(t, out, "a merge that is not an authored amends nothing")
 		wantExit(t, a, 3, "field licence: contested")
 	})
-	r := w.store(nil)
-	wantField(t, r.Artifact(dig("Y")), "licence", FieldDefault, `"CC0-1.0"`)
-	wantField(t, r.Artifact(dig("Z")), "licence", FieldDefault, `"MIT"`)
-	hasNot(t, r.Artifact(dig("Y")).Render(), "separate branches")
+	// (b) Y (amended on one branch only) and Z (first claimed on one branch) resolve normally with A's values,
+	// in every order, and say nothing of a fork
+	for blob, licence := range map[string]string{"Y": `"CC0-1.0"`, "Z": `"MIT"`} {
+		sampledOrderArtifact(t, w, blob, func(a *Artifact) {
+			wantAuthorship(t, a, SoleAuthor)
+			wantField(t, a, "licence", FieldDefault, licence)
+			hasNot(t, a.Render(), "separate branches")
+			wantExit(t, a, 0, "")
+		})
+	}
 
+	// (c) a merge by a `describes` clears nothing: licence still contested, exit 3, the fork still explained
 	w, tip := build()
 	w.signMerge("M", "A", "describes", obj("about", obj("content", dig("X")), "note", "merge"), tip)
-	a := w.store(nil).Artifact(dig("X"))
-	wantField(t, a, "licence", FieldContested, "")
+	sampledOrderArtifact(t, w, "X", func(a *Artifact) {
+		wantField(t, a, "licence", FieldContested, "")
+		has(t, a.Render(), "holds 2 current authored on this blob on separate branches of its log")
+		wantExit(t, a, 3, "field licence: contested")
+	})
 
+	// a merge by an `authored` on X whose history holds both branches amends both: it defaults to CC0, exit 0
 	w, tip = build()
 	w.signMerge("M", "A", "authored", obj("content", contentOf("X"), "type", "dataset", "licence", "CC0-1.0"), tip)
-	a = w.store(nil).Artifact(dig("X"))
-	wantField(t, a, "licence", FieldDefault, `"CC0-1.0"`)
-	hasNot(t, a.Render(), "separate branches")
-	wantExit(t, a, 0, "")
+	sampledOrderArtifact(t, w, "X", func(a *Artifact) {
+		wantField(t, a, "licence", FieldDefault, `"CC0-1.0"`)
+		hasNot(t, a.Render(), "separate branches")
+		wantExit(t, a, 0, "")
+	})
 }
 
 // TestForkedAuthorTwoProvenances: A forks with a bare authored on X on one branch and one under W on the other,
@@ -1540,37 +1791,79 @@ func TestForkedAuthorTwoProvenances(t *testing.T) {
 // first: C is default author and the group a later claimant, its evidence still shown (A10). (c) a member who
 // joins the group late with no anchor changes neither answer (joining can't lower a group's bound).
 func TestGroupVersusOutsider(t *testing.T) {
+	conformance.Covers(t, "C-core-20a")
+	// answer is what a variant must say whether or not D joined: who is default, who is later, the grade
+	type answer struct {
+		state, step, grade string
+		defaultIsGroup     bool
+		laterIsGroup       bool
+		laterCount         int
+	}
 	for _, c := range []struct {
 		name      string
 		a, c      string
-		late      bool
 		groupWins bool
 	}{
-		{"group first", "btc:100", "btc:150", false, true},
-		{"outsider first", "btc:150", "btc:100", false, false},
-		{"group first, late joiner", "btc:100", "btc:150", true, true},
-		{"outsider first, late joiner", "btc:150", "btc:100", true, false},
+		{"group first", "btc:100", "btc:150", true},
+		{"outsider first", "btc:150", "btc:100", false},
 	} {
-		w := newWorld(t)
-		w.workflow("WA", "W", "bytes", "")
-		w.authored("A1", "A", "X", "prov", []string{"W", "I"})
-		w.anchor("AA", "A", c.a)
-		w.authored("B1", "BB", "X", "prov", []string{"W", "I"})
-		w.authored("C1", "CC", "X")
-		w.anchor("CA", "CC", c.c)
-		if c.late {
-			w.authored("D1", "DD", "X", "prov", []string{"W", "I"})
-		}
-		check := func(a *Artifact) {
-			wantAuthorship(t, a, Priority)
-			if got := a.Default.Provenance != nil; got != c.groupWins {
-				t.Fatalf("%s: default %s\n%s", c.name, a.Default.describe(), a.Render())
+		var plain answer
+		for _, late := range []bool{false, true} {
+			w := newWorld(t)
+			w.workflow("WA", "W", "bytes", "")
+			w.authored("A1", "A", "X", "prov", []string{"W", "I"})
+			w.anchor("AA", "A", c.a)
+			w.authored("B1", "BB", "X", "prov", []string{"W", "I"})
+			w.authored("C1", "CC", "X")
+			w.anchor("CA", "CC", c.c)
+			if late {
+				w.authored("D1", "DD", "X", "prov", []string{"W", "I"}) // joins the group with no anchor
 			}
-			if a.Step.Tier != "T0" {
-				t.Fatalf("%s: step %s", c.name, a.Step)
+			var got answer
+			sampledOrderArtifact(t, w, "X", func(a *Artifact) {
+				wantAuthorship(t, a, Priority)
+				got = answer{state: string(a.State), step: a.Step.String(), grade: a.Grade.String(), laterCount: len(a.Later),
+					defaultIsGroup: a.Default.Provenance != nil}
+				if len(a.Later) == 1 {
+					got.laterIsGroup = a.Later[0].Provenance != nil
+				}
+				if got.defaultIsGroup != c.groupWins || got.laterCount != 1 || got.laterIsGroup == c.groupWins {
+					t.Fatalf("%s late=%v: default is group %v, later %d (group %v)\n%s", c.name, late, got.defaultIsGroup, got.laterCount, got.laterIsGroup, a.Render())
+				}
+				out := a.Render()
+				grp, out2 := a.Default, a.Later[0]
+				if !c.groupWins {
+					grp, out2 = a.Later[0], a.Default
+				}
+				want := []string{w.signer("A"), w.signer("BB")}
+				if late {
+					want = append(want, w.signer("DD"))
+				}
+				var members []string
+				for _, cl := range grp.Claims {
+					members = append(members, cl.Signer)
+				}
+				slices.Sort(want)
+				slices.Sort(members)
+				if !slices.Equal(want, members) || len(out2.Claims) != 1 || out2.Claims[0].Signer != w.signer("CC") {
+					t.Fatalf("%s late=%v: group %v, outsider unit %d claims\n%s", c.name, late, members, len(out2.Claims), out)
+				}
+				has(t, out, "default author "+a.Default.describe()+", bound")
+				has(t, out, "later claimant "+a.Later[0].describe()+", bound")
+				// the group's grade is shown whoever has priority (priority is credit, not evidence)
+				if a.Step.Tier != "T0" || a.Grade.Tier != "T0" || a.Group == nil {
+					t.Fatalf("%s late=%v: step %s grade %s\n%s", c.name, late, a.Step, a.Grade, out)
+				}
+				has(t, out, "derived by "+strconv.Itoa(len(a.Group.Derivers))+": byte-identical re-derivation (T0)")
+				has(t, out, "priority is credit for publishing first, not evidence of copying")
+				wantExit(t, a, 0, "")
+			}, WithTimeVerifier(newFakeBitcoin(100, 150)))
+			if !late {
+				plain = got
+			} else if got != plain {
+				t.Fatalf("%s: a late joiner without an anchor changed the answer:\n%+v\nvs\n%+v", c.name, got, plain)
 			}
 		}
-		sampledOrderArtifact(t, w, "X", check, WithTimeVerifier(newFakeBitcoin(100, 150)))
 	}
 }
 
