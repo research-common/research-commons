@@ -279,7 +279,10 @@ Rules:
 | another key's `authored` for the same provenance | `authored` for its own bytes; the group display handles the rest (claims-model note §5.2) |
 
 A `reproduced` statement always carries: the statement it reproduces (by hash), the workflow and input
-hashes, the output hashes it produced, the result token, and the environment record.
+hashes, the output hashes it produced, the result token, and the environment record. Its `result` is one of
+`match`, `diverged` and `not comparable`, so a re-run whose comparison is `unchecked` (different bytes under
+`protocol` with no comparator, or under an undeclared mode, §5.3) emits no `reproduced`: `run` reports the
+token and says why nothing was published, and the reader's own record of the run is unaffected.
 
 ### 5.2 Result tokens
 
