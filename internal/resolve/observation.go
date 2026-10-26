@@ -270,7 +270,9 @@ type Observation struct {
 	// method edition and whether the two pin the same clause members (C-core-32). Readers decide from the
 	// structured fields; the display is rendered from them.
 	Comparability []Comparability
-	Explain       []string
+	// PreRegistration is the `fulfills` / `pre_registration` disclosure (prereg.go, claims §9.4).
+	PreRegistration PreRegistration
+	Explain         []string
 }
 
 // Comparability is one method-class comparison (C-core-32): the other statement, whether the two pin the same
@@ -388,6 +390,7 @@ func (r *Resolver) observation(p *Placed) *Observation {
 	}
 	o.Corroboration = r.corroboration(o, st)
 	r.observationSelection(o) // policy.go
+	o.PreRegistration = r.preRegistration(st)
 	return o
 }
 
@@ -756,6 +759,7 @@ func (o *Observation) Render() string {
 	}
 	c := o.Capture
 	fmt.Fprintf(&b, "  capture at %s; evidence %s\n", c.At, c.Display)
+	fmt.Fprintf(&b, "  pre-registration: %s\n", o.PreRegistration.Display)
 	fmt.Fprintf(&b, "  roles: signer %s (statement %s) · operator %s · instrument %s\n", shortKey(o.Signer), keylog.Short(o.Statement),
 		declaredLabel(c.Operator), declaredLabel(c.Instrument))
 	for _, w := range c.Witnesses {
