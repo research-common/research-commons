@@ -54,7 +54,12 @@ hash. Two publishers of the same bytes share one blob (C-core-128).
 **Statements** live one per file (or one per row in a store with equivalent create-exclusive semantics),
 addressed by their statement hash, grouped by signing key. The per-key *log* is the set of that key's
 statements ordered by the predecessor each names in its signed body (§4). There is no log file to append
-to and therefore no line to lose: a statement either exists under its hash or it does not.
+to and therefore no line to lose: a statement either exists under its hash or it does not. A statement the
+reader cannot evaluate (an unknown `rc` major, an unknown `alg`, a `crit` member it does not implement) is
+stored the same way, under its id, in its signer's place (proposed): the id formula and link fields are the
+same in every major (wire-format note §6), so every received line has an id, and a separate area for lines
+without one would never be used. Such a line is `unsupported` in every projection until the reader
+implements it.
 
 **Projections** are everything else an implementation keeps: full-text and field indexes, the resolution of
 single-party defaults, grades, corroboration status, derivation groups, per-key head pointers, signature
