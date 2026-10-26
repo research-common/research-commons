@@ -418,7 +418,9 @@ grade reflects how it was computed. No new trust mechanism is needed.
 An observation's **corroboration status** is computed per reader from the corroborations it holds and trusts:
 `corroborated n · contradicted m · unchecked`, always scoped ("within statements you hold"). Disagreement is
 symmetric. If Denver says 120 and two neighbours say 85, the status is "contradicted by 2 under model M", and
-the tool does not decide which side is wrong.
+the tool does not decide which side is wrong. A counted `contradicts` counts against the original and against
+each observation in its comparison data (the result's inputs other than the original); a `supports` counts for
+the original only, because a check against data says nothing about the data (C-core-51).
 
 #### 5.3.3 Capture evidence
 
