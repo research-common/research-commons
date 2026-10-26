@@ -812,7 +812,11 @@ What the clean break removes, and the alpha issues it closes by construction:
 
 Each of these needs its own note: wire format (canonical encoding, field names, signature scheme, test vectors);
 storage engine and transaction design; execution profiles (runtimes, confinement mechanism, limits); statistical
-comparison dialects; rule and schema dialects (what edition rules and member schemas may express, §8);
+comparison dialects; rule and schema dialects (what edition rules and member schemas may express, §8; until
+that note exists, proposed: a member schema under no dialect the reader implements is loaded, named and always
+`unchecked`, and every dialect states its cost model: evaluation runs under the reader's step budget, each
+primitive is charged against it, and regular expressions are linear-time (RE2-class) or charged per
+backtracking step, so C-core-94's limit binds whatever the dialect computes);
 attestation verifiers (receipts, TEEs); receiver-local Bitcoin verification (#59); size policy (#9); hub
 conventions (discovery #66; the hub-template and `COMMONS.md` rubric, which still use alpha vocabulary).
 
