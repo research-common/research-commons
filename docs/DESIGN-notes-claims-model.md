@@ -773,6 +773,12 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
   with nothing contested still exits 0 (C-core-17). So under a mode that permits no comparison (undeclared,
   or `protocol` with no comparator), `verify` exits 3 whether the group holds one run or several: holding
   less evidence never passes where holding more would not.
+- **Gate exit codes** (proposed). A gate (`pull`, `push`, hub CI, the pre-pin check) exits 0 when every object
+  would be admitted, labels included; 1 when at least one object is refused, under any class, the refusal
+  being a decided verdict on that object (an object over a size limit is refused, not interrupted); 3 when the
+  admission of some object could not be decided, including an evaluation stopped by one of the reader's own
+  limits partway through (a traversal depth, C-core-131) and a check the gate's policy requires that comes out
+  `unchecked`; and 2 as for every command.
 - **Exit 2: the command did not start.** On every command, 2 means the invocation or the reader's own
   configuration could not be acted on: an unknown option, a malformed argument (an id that is not an id), a
   policy or configuration file that is present but unreadable or unparseable. Arguments and configuration are
