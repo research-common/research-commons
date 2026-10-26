@@ -396,6 +396,22 @@ admitted, and shown `unpinned` (claims-model note §5.3.1). A kind not listed he
 | `intent` · `progress` · `withdraw` · `submit` · `decide` | all: `task` id R · `edition` edition id R. `submit`: `result` digest R, `salt` string O, `self_declared_independence` boolean O. `decide`: `submissions` list of id R, `verdict` `"accept"`/`"reject"` R, `evaluations` list of digest O, `supersedes` id O. `progress`: `note` string O |
 | `rotate_key` · `revoke_key` | `rotate_key`: `successor` key R. `revoke_key`: `reason` string R, a token matching `[a-z][a-z0-9_]{0,63}`; three values are documented, the RFC 5280 §5.3.1 CRL reason codes that apply to a signing key in snake case: `key_compromise`, `superseded`, `cessation_of_operation`. `superseded` and `cessation_of_operation` are **soft**; every other value, `key_compromise`, any undocumented token and a value a later revision adds, is **hard**, so an unknown reason fails closed and never makes the revocation malformed. `last_good` id O (a line in this revocation's history: the last one its signer vouches for; read only for a hard reason). `note` string O. Both kinds are statements by the old key about itself and carry no time: a time a key signs about itself is not evidence. What they do to the key's other lines (the sibling rule, hard and soft, `last_good`, stricter later events) is claims-model note §4.1 |
 
+**Execution objects** (proposed). The workflow spec blob and the environment record are canonical JSON
+(§1) with these members; the execution note fixes their meaning.
+
+| Object | Fields |
+|---|---|
+| workflow spec (a blob; its digest is `provenance.workflow`) | `code` digest R · `inputs` object R (name → digest; any other string is an unpinned input, execution note §1) · `interpreter` string R · `image` object O (`reference` string R, `digest` digest R) · `parameters` object O · `env` object O (name → string) · `network` `"none"` or object (`required` list of string, RFC 3986 URIs) O, absent = `"none"` · `resources` object O (`cpus` integer, milli-CPUs · `memory` integer, bytes · `disk` integer, bytes · `pids` integer · `wall_time` integer, milliseconds) · `outputs` object R (name → relative file name) · `declared_deps` any O, carried verbatim |
+| environment record (`provenance.environment`; `capture.environment`) | the three standard forms above (`image_digest`, `platform`, `harness_commit`) plus, under the execution note §4 names flattened to snake case: `profile` `"sandbox"`/`"native"` R · `image_reference` string O · `runtime` string O · `interpreter` string O · `declared_deps` any O · `caps` object R (the `resources` members in force, `advisory` boolean O, and per lowered cap a `declared` value) · `network` `"none"` or object (`granted` list of string) R · `grants` list of string R · `peak_rss_bytes` integer or `"unmeasured"` R · `wall_time_ms` integer R · `exit_status` integer or string R · `result` string R · `staging_check` string R · `boundary` string O (the sandbox boundary the run was confined by, C-exec-12) · `cleanup` string O (the post-kill check, execution note §2.2) |
+
+On the workflow's `authored`, `environment_match` list of string O is a disclosure (a set of environment-record
+field names; absent = the execution note §1 default for the mode). A run with an unpinned input emits
+`provenance_partial` object (`workflow` digest R · `inputs` list of digest R, the pinned ones · `unpinned`
+list of string R, the input names · `environment` O) **in place of** `provenance`, so the output joins no
+derivation group. `provenance` gains `output` string O, the spec's output name the content is, so a re-run of
+a multi-output workflow names which output it re-ran. An acquisition's `capture` gains `endpoints` list of
+string O, `window` O (the shared object) and `environment` O (the record above).
+
 Every `R` field of a listed kind is checked at every gate by the one validation core (C-core-109). Field
 semantics (what `match` means, how a rule is evaluated) belong to the claims-model note and the profile notes;
 this table fixes only names, types and presence.

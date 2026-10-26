@@ -225,8 +225,10 @@ extracted.
 
 Every run writes one environment record. It is carried, unchanged, on the `authored` statement of each output
 when the run is a first derivation, on the `reproduced` statement when it is a re-run (§5), and on `observed`
-statements when the workflow is an acquisition (§1 rule 3). The wire-format note fixes the encoding; this
-note fixes the fields and their meaning.
+statements when the workflow is an acquisition (§1 rule 3). The wire-format note fixes the encoding (its §5,
+"Execution objects"); this note fixes the fields and their meaning. Two fields complete the table: `boundary`
+(the sandbox boundary that confined the run, which C-exec-12 requires the record to name) and `cleanup` (the
+result of the post-kill check, §2.2).
 
 | field | meaning | required under |
 |---|---|---|
