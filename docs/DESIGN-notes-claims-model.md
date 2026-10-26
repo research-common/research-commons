@@ -709,6 +709,10 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
   labelled.
 - **Data never carries control.** Incoming trees cannot carry code, hooks, configuration, trust lists or policy.
   Hub CI reads the hub's policy from the base revision, so a pull request cannot grant itself anything.
+  What the policy holds is each hub tool's choice (proposed): the format fixes only that it is control plane,
+  read from the base revision, strict, refused as data, and limited to decisions this note gives a hub (its
+  refusal classes above: blob storage, limits, blobs it does not serve, series rules). It names no keys and
+  grants no key anything until the reader-trust design settles (C-core-114, C-core-115).
 - **Admission is not execution.** Holding executable bytes never implies permission to run them. Foreign code
   runs sandboxed.
 - **Byte-exact transport.** Fetch is binary-safe and verifies the full hash before installing anything (#64).
