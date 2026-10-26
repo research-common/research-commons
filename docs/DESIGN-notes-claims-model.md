@@ -356,7 +356,10 @@ Rules:
   identity, location and time. For methods: the method edition followed, the execution environment record
   (image digest, platform, harness commit), the measured system's identity and state (model and provider pin,
   and whatever changes the apparatus under the observer, such as a routing era), the protocol's pinned inputs
-  by hash (scenario edition, seed set, configuration), and the window (#65). A fork
+  by hash (scenario edition, seed set, configuration), and the window (#65). A method edition declares the
+  members of the measured system an observation under it must pin (proposed); a missing declared member is
+  `unpinned`, and without a declaration two method-class observations are comparable only when they pin the
+  same members (C-core-32). A fork
   or a vanished API does not make an observation false. It is still true of what it pinned. What changes is
   whether the referent is still canonical or still available, and that is shown separately. It never counts
   against the observer. A statement whose referent lacks a field its class requires is still a valid signed
