@@ -410,7 +410,9 @@ grade reflects how it was computed. No new trust mechanism is needed.
   climate-record or physical-bounds check before any neighbouring station is consulted.
 - **Cohorts are chosen by rule.** A corroboration states "every station in collection R within 50 km and 200 m
   elevation", not "these three stations". Anyone can re-apply the rule to R and see what was left out.
-  Hand-picked cohorts are allowed and labelled `cohort: hand-picked`.
+  Hand-picked cohorts are allowed and labelled `cohort: hand-picked`. A corroboration that declares neither
+  is malformed (proposed; wire-format note §5 makes `cohort` required), so `cohort: undeclared` is never
+  displayed.
 - **Agreement isn't independence.** Each corroboration declares what it shares with the original: upstream feed,
   operator, instrument model. Two "stations" scraping one upstream feed are one source. Distinct keys prove
   nothing about independence.
