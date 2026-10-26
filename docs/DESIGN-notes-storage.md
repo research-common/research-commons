@@ -284,6 +284,11 @@ Two concurrent `pull`s of overlapping packages each commit their admitted set. O
 step. A hub's gate (CI on a base revision) sees a package as one unit (claims-model note §11) and never
 observes a partial install because step 3 of a `pull` completes before any projection the gate reads.
 
+For a hub kept in a version-control repository (proposed), a package is the set of files a change adds under
+the data surface: the blobs and statement files between the base revision and the change's head. Statement
+files are the one-statement-per-file form of §1, so a package and a store share one layout and the gate reads
+the change with the same code that reads a store.
+
 ## 5. Caches and indexes
 
 ### 5.1 Keys
