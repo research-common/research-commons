@@ -447,7 +447,6 @@ func editionBody(resource string, preds []string, kv ...any) *canon.Object {
 // edition the members support is admitted, and without the knob the premature one is admitted.
 func TestPrematureFreeze(t *testing.T) {
 	conformance.Covers(t, "C-core-104")
-	conformance.Partial(t, "C-core-98", "hub check re-applies the named edition as held at the base revision and the current edition, side by side as the hub's computation, the publisher's ok as its word, membership not endorsed; the JSON form of the side-by-side belongs to the command layer")
 	knob := `{"policy":"rc-hub-policy/1","series":{"refuse_premature_freeze":true}}`
 	h := newHub(t, knob)
 	s := newSigner()
@@ -553,6 +552,7 @@ func (k forbid) Eval(d *resolve.Domain) (resolve.Outcome, string, []string) {
 // base revision and E3, both from the base tree's content, shows fail beside fail as its own computation and
 // the publisher's ok as its word; the statement is admitted (the field confers nothing) and not endorsed.
 func TestForgedIntendedForAtHub(t *testing.T) {
+	conformance.Covers(t, "C-core-98")
 	h := newHub(t, defaultPolicy)
 	s := newSigner()
 	rule := func(exprs ...string) canon.Array {
