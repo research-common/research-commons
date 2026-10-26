@@ -308,6 +308,11 @@ compared nothing, so it exits 3 and the token says which kind of "could not chec
 environment mismatch: the environment the pin declares differs from, or is not available in, the one that
 ran. The table is the claims-model note's §13 vocabulary applied to runs.
 
+**An environment mismatch is checked first.** When a re-run in an environment that differs from the pin also
+fails, times out or produces different bytes, the token is `environment mismatch: <field>` and the exit is 5:
+a run outside the environment the pin declares says nothing about the pin, so its failure or its bytes are
+shown and never read as a 3 or a 1 (§4, "not compared (environment mismatch)").
+
 **A failure in the pinned environment is evidence about the claim, not the bytes.** When a `bytes` workflow's
 re-run fails or leaves outputs missing in an environment that matches the pin, `explain` says in words that the
 determinism claim may be weaker than declared (a hidden dependency, nondeterminism in the step); the pinned
