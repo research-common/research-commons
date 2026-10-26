@@ -388,7 +388,9 @@ Rules:
     `inconclusive (referent revised)` for two captures at different states before finality, and `contradicts`
     only when both are at the same state or past it.
   - *Class migration by rule.* While the rule is unmet, agreement is source-class (near-equality around the
-    same time). Once it holds, a re-capture of the same referent with identical bytes is an exact-bytes
+    same time). Near-equality needs a declared tolerance, from the agreement model or the source profile;
+    without one no default tolerance is applied and the source-class result is `inconclusive`, never counted,
+    as for a `protocol` workflow with no comparator (§5.2). Once it holds, a re-capture of the same referent with identical bytes is an exact-bytes
     corroboration. The observer still asserts the class; the rule is what lets a reader apply the stronger
     agreement model.
   - *Derived results inherit the horizon*, shown beside the grade: "rests on 3 captures: 2 final, 1
