@@ -393,7 +393,10 @@ remains valid, and every other holder's copy is unaffected. The tool therefore:
   withdrawn) needs no release;
 - never deletes a statement for any reason, including retraction (claims-model note §13: retraction is
   display) or a takedown; a hub that must stop serving bytes deletes the blob under its own admission policy
-  and keeps the statements;
+  and keeps the statements. In a repository hub (proposed) that is two changes: the policy first lists the
+  digest as not served, then a change removes the blob, the one removal the gate admits; every other
+  removal or rewrite of held data is refused, since a delivery never removes what a hub holds (wire-format
+  note §7);
 - reports a referenced-but-absent blob as `unavailable (not held locally)`, never as invalid, corrupt or
   retracted.
 
