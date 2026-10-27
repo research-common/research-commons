@@ -130,7 +130,7 @@ func readExecPolicy(path string) (*ExecPolicy, *Problem) {
 		if !ok {
 			return nil, false
 		}
-		var out []string
+		out := []string{} // present and empty is an empty list, never "absent": an empty allowlist admits nothing
 		for _, e := range a {
 			s, ok := e.(canon.String)
 			if !ok || (check != nil && !check(string(s))) {

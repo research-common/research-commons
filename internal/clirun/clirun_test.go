@@ -223,3 +223,24 @@ func TestWordsInVocabulary(t *testing.T) {
 		}
 	}
 }
+
+// TestEmptyImageAllowlistAdmitsNothing: a present but empty images list is an allowlist that admits no image (the
+// allowlist fails closed, execution note §2.1); only an absent member means no allowlist.
+func TestEmptyImageAllowlistAdmitsNothing(t *testing.T) {
+	p := newPinned(t)
+	body, err := os.ReadFile(p.policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	empty := p.writePolicy(t, strings.Replace(string(body), `"format":`, `"images":[],"format":`, 1))
+	f := fake(catStep)
+	r := p.verify(&Bridge{Runner: f}, p.output, "--rerun", "--exec-policy", empty)
+	if r.code == 0 || f.Spawned != 0 || !strings.Contains(r.stdout, "allowlist") {
+		t.Fatalf("empty allowlist: exit %d, spawned %d\n%s", r.code, f.Spawned, r.stdout)
+	}
+	// control: the same policy without the member runs
+	f = fake(catStep)
+	if r := p.verify(&Bridge{Runner: f}, p.output, "--rerun", "--exec-policy", p.policy); r.code != 0 || f.Spawned != 1 {
+		t.Fatalf("absent allowlist: exit %d, spawned %d\n%s", r.code, f.Spawned, r.stdout)
+	}
+}
