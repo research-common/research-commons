@@ -58,6 +58,7 @@ func statusCmd(c *Ctx) (*Obj, int, error) {
 		set("same_filesystem", textV(d.SameFilesystem)).set("locks", textV(d.Locks)).set("gc_grace", textV(d.GCGrace)).
 		set("history", textV("off")).set("assumes", textV(d.Assumes)))
 	o.set("policy", newObj().set("source", textV(c.Policy.Source)).set("digest", refV(c.Policy.Digest)).set("reader_policy", c.Policy.readerObj()))
+	o.set("key", keyStatus(c))
 	if _, ok := c.Flag("limits"); ok {
 		o.set("limits", limitsTable(c.Policy))
 	}
@@ -113,4 +114,22 @@ func limitsTable(p *Policy) listV {
 		row("reader_policy.entries", policy.MaxEntries, "count", "tool default", "selections, and trust entries, in a reader policy"),
 	)
 	return l
+}
+
+// keyStatus says whether a signing key is configured: $COMMONS_KEY set and loadable shows the signer and the
+// algorithm; set but unusable says so (never why in key terms beyond the file's shape: loadKey's problem text
+// names the file, not its content); unset says none is configured. Never key material, and never a failure of
+// status: a reader that does not sign has no use for a key.
+func keyStatus(c *Ctx) *Obj {
+	path := c.Env.Getenv(KeyEnv)
+	if path == "" {
+		return newObj().set("configured", boolV(false)).set("detail", textV("no key configured; to sign, run commons key new --out <file> and give --key <file> or "+KeyEnv))
+	}
+	lk, prob := loadKey(path, "environment "+KeyEnv)
+	if prob != nil {
+		return newObj().set("configured", boolV(false)).set("source", textV("environment "+KeyEnv)).set("file", peerV(path)).
+			set("detail", textV("the file named by "+KeyEnv+" cannot be used as a key ("+prob.Title+"); run commons key show <file> for the reason"))
+	}
+	return newObj().set("configured", boolV(true)).set("source", textV("environment "+KeyEnv)).set("signer", refV(lk.Key.Signer())).
+		set("alg", textV(lk.Key.Alg()))
 }
