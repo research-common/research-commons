@@ -21,7 +21,7 @@ var exitTable = []struct {
 	Meaning string
 }{
 	{ExitOK, "ok", "the requested operation succeeded; for verify, checked and passed. Not a claim that everything referenced is valid"},
-	{ExitWrong, "checked and wrong", "a comparison ran to completion and disagreed (verify only)"},
+	{ExitWrong, "checked and wrong", "a check ran to completion and found something wrong: verify's comparison disagreed, a gate (hub check, pull) refused at least one object, or fsck made a fatal finding. What a gate admitted beside a refusal is still committed (pull) and said so"},
 	{ExitDidNotStart, "did not start", "the invocation or the reader's own configuration could not be acted on: unknown option, malformed argument, unreadable or unparseable policy, no store. Nothing ran and nothing was committed"},
 	{ExitCouldNot, "could not check", "contested, unknown, unchecked, unpinned, unsupported, an optional capability not configured, a reader limit, or a failure after work started"},
 	{ExitNothing, "nothing to re-run", "the derivation names an input it did not pin"},

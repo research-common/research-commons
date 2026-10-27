@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"io/fs"
@@ -133,3 +135,8 @@ func (p *Policy) readerObj() *Obj {
 // readerPolicyFlag is the flag every ReaderPolicy command declares.
 var readerPolicyFlag = Flag{Name: "policy", Value: "file",
 	Help: "the reader policy (reader-policy-v1) to answer under (default: $" + PolicyEnv + "; none when neither is set; nothing is read implicitly)"}
+
+func digestOf(b []byte) string {
+	h := sha256.Sum256(b)
+	return "sha256:" + hex.EncodeToString(h[:])
+}

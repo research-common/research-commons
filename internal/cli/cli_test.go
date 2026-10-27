@@ -5,6 +5,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -22,21 +23,29 @@ import (
 func sweepArgs(w *world) [][]string {
 	var out [][]string
 	for _, c := range Commands() {
+		name := strings.Fields(c.Name)
 		if !c.Store {
+			// a command that reads no store runs in a fixture of its own (hub check: the store as a git hub)
+			if a := w.sweepNonStore(c); a != nil {
+				out = append(out, a)
+			}
 			continue
 		}
-		if len(c.Args) == 0 {
-			out = append(out, []string{c.Name})
+		if len(c.Args) == 0 || c.Args[0].Optional {
+			out = append(out, name)
+			continue
+		}
+		if c.Args[0].Shape == ShapeText {
+			out = append(out, append(name, w.pkgDir()))
 			continue
 		}
 		for _, r := range w.refsOf() {
-			out = append(out, []string{c.Name, r})
+			out = append(out, append(slices.Clone(name), r))
 		}
 	}
 	return out
 }
 
-// TestVerifyExits: C-core-133, statement fixtures through the CLI. Re-run fixtures need verify --rerun.
 func TestVerifyExits(t *testing.T) {
 	conformance.Partial(t, "C-core-133", "checked and passed, checked and wrong, contested, unknown (no authorship claim), unchecked and nothing to re-run exit through the CLI; timeout, failed step and environment mismatch need a re-run path in verify (run.VerifyWithRerun is tested in internal/run)")
 	w := fixture(t)
@@ -102,16 +111,20 @@ func TestExitTwo(t *testing.T) {
 	}
 	for _, c := range Commands() {
 		before := snapshot(t, w.root)
-		check(c.Name+" unknown option", w.run(c.Name, "--no-such-option", "--json"), before)
+		name := strings.Fields(c.Name)
+		check(c.Name+" unknown option", w.run(append(slices.Clone(name), "--no-such-option", "--json")...), before)
 		if len(c.Args) > 0 {
 			for _, bad := range []string{"not-an-id", strings.Repeat("AB", 32), "sha256:" + strings.Repeat("0", 63)} {
-				check(c.Name+" malformed "+bad, w.run(c.Name, bad, "--json"), before)
+				check(c.Name+" malformed "+bad, w.run(append(slices.Clone(name), bad, "--json")...), before)
 			}
 		}
-		if r := w.run(c.Name, "--help"); r.code != 0 {
+		for _, bad := range w.badInvocations(c) {
+			check(c.Name+" "+strings.Join(bad, " "), w.run(append(append(slices.Clone(name), bad...), "--json")...), before)
+		}
+		if r := w.run(append(slices.Clone(name), "--help")...); r.code != 0 {
 			t.Fatalf("%s --help: exit %d", c.Name, r.code)
 		}
-		if r := w.run("help", c.Name); r.code != 0 {
+		if r := w.run(append([]string{"help"}, name...)...); r.code != 0 {
 			t.Fatalf("help %s: exit %d", c.Name, r.code)
 		}
 	}
@@ -124,7 +137,7 @@ func TestExitTwo(t *testing.T) {
 		}
 		for _, c := range Commands() {
 			if c.Store {
-				args := []string{c.Name}
+				args := strings.Fields(c.Name)
 				if len(c.Args) > 0 {
 					args = append(args, dig("sole"))
 				}
@@ -156,7 +169,7 @@ func TestExitTwo(t *testing.T) {
 	}
 	// no fixture exits 1 except the completed comparison that disagreed
 	for _, a := range sweepArgs(w) {
-		if r := w.run(a...); r.code == 1 && !(a[0] == "verify" && a[1] == dig("div1")) {
+		if r := w.run(a...); r.code == 1 && !(a[0] == "verify" && a[1] == dig("div1")) && !w.mayRefuse(a) {
 			t.Fatalf("%v exits 1", a)
 		}
 	}
@@ -165,7 +178,7 @@ func TestExitTwo(t *testing.T) {
 // TestClosedVocabulary: C-core-132. Every surface over the fixture set prints only tokens of the table, and
 // every exit is in the exit table; every token constant of the layers below is documented in the table.
 func TestClosedVocabulary(t *testing.T) {
-	conformance.Partial(t, "C-core-132", "every CLI surface over the fixture set prints only table tokens and table exits, and the table is the docs' source; no shipped command prints a rule evaluation yet (membership, pre-pin and hub check land with publish and the gate)")
+	conformance.Partial(t, "C-core-132", "every CLI surface (show, verify, explain, list, status, hub check, pull, gc, fsck) over the fixture set prints only table tokens and table exits, and the table is the docs' source; a rule evaluation's ok/fail/unchecked reaches the CLI only inside the gate's intended_for label detail, not yet as its own typed member")
 	w := fixture(t)
 	for _, a := range sweepArgs(w) {
 		r := w.run(append(a, "--json")...)
