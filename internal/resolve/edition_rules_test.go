@@ -673,7 +673,7 @@ func TestSetLevelProperty(t *testing.T) {
 // evaluation terminates, is `unchecked`, and carries an operational refusal naming the limit and its scope
 // (this rule, this member). The artifacts' views are untouched.
 func TestRuleLimits(t *testing.T) {
-	conformance.Partial(t, "C-core-94", "the step budget binds a dialect that charges Domain.Step (and every domain read); no member-schema dialect exists, and a dialect that computes without charging steps is bounded by nothing here (spec finding: the rule and schema note must fix a cost model)")
+	conformance.Partial(t, "C-core-94", "the step budget binds a dialect that charges Domain.Step (and every domain read), as the cost model of claims §15 requires of every dialect; this package ships no dialect (the test dialect charges per step) and no member-schema dialect, so a shipped dialect's own charging is pending the rule and schema note")
 	w := newWorld(t)
 	slow := w.authored("S", "M", "slow")
 	deep := w.authored("D", "M", "deep")
