@@ -10,7 +10,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/research-common/research-commons/internal/refusal"
 	"github.com/research-common/research-commons/internal/store"
 )
 
@@ -217,21 +216,13 @@ func (r *Report) Render() string {
 // Exit maps a report to the gate exit code of claims §13 (0 every object admitted, possibly labelled, or only
 // control-plane paths reported; 1 at least one refused, under any class: a refusal, an operational one over a
 // size limit included, is a decided verdict on that object; 3 nothing refused and the admission of at least one
-// object could not be decided, which includes a limit hit partway through an evaluation). Callers pass false.
-//
-// Deprecated parameter: operationalUndecided=true maps an operational refusal to 3, a reading the format does
-// not take (an operational refusal exits 1). It remains only until its last caller drops the argument, and
-// then goes with it.
-func (r *Report) Exit(operationalUndecided bool) int {
+// object could not be decided, which includes a limit hit partway through an evaluation).
+func (r *Report) Exit() int {
 	refused, undecided := false, false
 	for _, x := range r.Results {
 		switch x.Verdict {
 		case Refused:
-			if operationalUndecided && x.Refusal.Class == refusal.Operational {
-				undecided = true
-			} else {
-				refused = true
-			}
+			refused = true
 		case Undecided:
 			undecided = true
 		}
