@@ -19,8 +19,10 @@ func init() {
 		Help: "A digest shows the blob: authorship and every claimant, labels, whether the bytes are held here, the grade with the full disclosure set beside it, derivation groups, and every other statement about it. An id shows the statement.",
 		Run:  showCmd})
 	Register(&Command{Name: "verify", Summary: "check a blob or a statement from the statements held; exit per the exit table", Args: ref, Store: true, ReaderPolicy: true,
-		Help: "Statement-only: verify reads the statements this store holds and runs nothing. A re-run needs the reader's execution policy and is not part of verify yet. Exit 0 checked and passed, 1 a completed comparison disagreed, 3 could not check, 4 nothing to re-run.",
-		Run:  verifyCmd})
+		Flags:   rerunFlags,
+		Prepare: prepareRerun,
+		Help:    "Statement-only by default: verify reads the statements this store holds and runs nothing. With --rerun (a blob only) and --exec-policy <file>, the reader re-runs the derivation under its own execution policy and the re-run's token replaces the derivation cause; without a policy the re-run is unchecked and nothing runs. Exit 0 checked and passed, 1 a completed comparison disagreed, 3 could not check, 4 nothing to re-run, 5 environment mismatch.",
+		Run:     verifyCmd})
 	Register(&Command{Name: "explain", Summary: "the statements, policy, evaluator and time context behind every token shown", Args: ref, Store: true, ReaderPolicy: true,
 		Run: explainCmd})
 	Register(&Command{Name: "list", Summary: "every blob a statement in this store names, one line of tokens each", Store: true, ReaderPolicy: true,
@@ -169,6 +171,9 @@ func verifyCmd(c *Ctx) (*Obj, int, error) {
 		return nil, 0, err
 	}
 	ref := c.Args["digest|id"]
+	if _, rerun := c.Flag("rerun"); rerun {
+		return v.verifyRerun(c, ref)
+	}
 	if isDigest(ref) {
 		a := v.r.Artifact(ref)
 		code, causes := v.verifyArtifact(ref)

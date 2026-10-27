@@ -104,6 +104,15 @@ var vocabulary = []Token{
 	{"admitted by override", "label", "a reader-policy refusal lifted by a typed override that names this object"},
 	{"series boundary", "label", "a series boundary the freeze policy could not decide"},
 	{"below trust floor", "label", "the signer is not trusted for admission by this reader's policy; admitted and labelled (--below-floor label)"},
+	// the reader's own re-run (verify --rerun; execution note §5.2). The token's parameter (the exit status, the
+	// cap, the environment fields) is in the cause's detail member, so the token itself stays closed.
+	{"match", "rerun", "the re-run's output equals the pinned output (bytes), or the comparator said match (protocol)"},
+	{"match (identical bytes)", "rerun", "a protocol workflow re-ran to identical bytes: consistent with a re-run and with a copy; no T0"},
+	{"incomplete output", "rerun", "the step exited 0 and a declared output is missing"},
+	{"failed", "rerun", "the step exited non-zero in an environment matching the pin (detail: the exit status)"},
+	{"failed: operational", "rerun", "a cap of this reader stopped the step (detail: the cap); could not check"},
+	{"timeout", "rerun", "the wall-time cap stopped the step; could not check"},
+	{"environment mismatch", "rerun", "the re-run's environment differs from the pin on a field environment_match names, or the pinned environment is not available here (detail: the fields); nothing compared"},
 	// task readiness (claims-model note §9.2, §9.3)
 	{"settled by review, not by counting", "readiness", "the task edition has no quorum predicate: its beneficiary's decisions settle it; nothing is counted"},
 	{"ready", "readiness", "the quorum is met by distinct signing keys under the edition's terms"},
