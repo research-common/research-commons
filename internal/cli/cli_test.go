@@ -119,7 +119,8 @@ func TestExitTwo(t *testing.T) {
 	for _, c := range Commands() {
 		before := snapshot(t, w.root)
 		check(c.Name+" unknown option", w.run(words(c, "--no-such-option", "--json")...), before)
-		if len(c.Args) > 0 {
+		// init's argument is a path to create: any text is a valid shape, so the malformed-ref sweep does not apply
+		if len(c.Args) > 0 && c.Name != "init" {
 			for _, bad := range []string{"not-an-id", strings.Repeat("AB", 32), "sha256:" + strings.Repeat("0", 63)} {
 				check(c.Name+" malformed "+bad, w.run(words(c, bad, "--json")...), before)
 			}
