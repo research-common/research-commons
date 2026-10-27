@@ -6,6 +6,7 @@ import (
 
 	"github.com/research-common/research-commons/internal/btctime"
 	"github.com/research-common/research-commons/internal/keylog"
+	"github.com/research-common/research-commons/internal/policy"
 	"github.com/research-common/research-commons/internal/resolve"
 	"github.com/research-common/research-commons/internal/store"
 	"github.com/research-common/research-commons/internal/wire"
@@ -43,7 +44,9 @@ func newTimeVerifier(s *store.Store) *btctime.Verifier {
 	return &btctime.Verifier{Policy: btctime.DefaultPolicy(), Blobs: storeBlobs{s}}
 }
 
-func loadView(s *store.Store) (*view, error) {
+// loadView builds the view under the reader policy rp (nil = no reader policy: every answer is the no-policy
+// answer).
+func loadView(s *store.Store, rp *policy.Policy) (*view, error) {
 	lines, err := s.Statements()
 	if err != nil {
 		return nil, err
@@ -62,7 +65,7 @@ func loadView(s *store.Store) (*view, error) {
 		logs.Log(st.Signer).Add(lines[id]) // a log-relative refusal keeps the line; it is part of the view
 	}
 	tv := newTimeVerifier(s)
-	r := resolve.New(logs, resolve.WithTimeVerifier(btctime.TimeVerifier{V: tv}))
+	r := resolve.New(logs, resolve.WithTimeVerifier(btctime.TimeVerifier{V: tv}), resolve.WithPolicy(rp))
 	return &view{r: r, logs: logs, st: s, timeV: tv, evidence: map[string]btctime.Evidence{}}, nil
 }
 

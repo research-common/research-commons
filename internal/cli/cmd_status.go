@@ -10,7 +10,7 @@ import (
 // (C-core-125).
 
 func init() {
-	Register(&Command{Name: "status", Summary: "store recovery state, unfinished operations and the durability declaration", Store: true,
+	Register(&Command{Name: "status", Summary: "store recovery state, unfinished operations and the durability declaration", Store: true, ReaderPolicy: true,
 		Run: statusCmd})
 }
 
@@ -51,7 +51,7 @@ func statusCmd(c *Ctx) (*Obj, int, error) {
 		set("rename", textV(d.Rename)).set("exclusive_create", textV(d.ExclusiveCreate)).
 		set("same_filesystem", textV(d.SameFilesystem)).set("locks", textV(d.Locks)).set("gc_grace", textV(d.GCGrace)).
 		set("history", textV("off")).set("assumes", textV(d.Assumes)))
-	o.set("policy", newObj().set("source", textV(c.Policy.Source)).set("digest", refV(c.Policy.Digest)))
+	o.set("policy", newObj().set("source", textV(c.Policy.Source)).set("digest", refV(c.Policy.Digest)).set("reader_policy", c.Policy.readerObj()))
 	// status succeeded; an unfinished operation is a state it reports, not a failure of status (claims §13:
 	// exit 0 means the requested operation succeeded)
 	return o, ExitOK, nil

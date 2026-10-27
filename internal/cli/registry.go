@@ -58,9 +58,17 @@ type Command struct {
 	// Store: the command reads a store. The registry discovers it, checks its marker and its policy file, and
 	// opens it (journal replay, storage note §3.4) before Run.
 	Store bool
+	// ReaderPolicy: the command answers under the reader policy (--policy <file>, else $COMMONS_POLICY). The
+	// registry adds the --policy option and parses the file before Run; a command without it rejects
+	// --policy and ignores the environment variable.
+	ReaderPolicy bool
 	// Help is extra text after the synopsis.
 	Help string
-	Run  func(*Ctx) (*Obj, int, error)
+	// Before validates the invocation beyond argument shapes (a directory exists, options do not conflict)
+	// after the store and policies are checked and before the store is opened: a problem it returns is exit 2
+	// with nothing done. It must not write.
+	Before func(*Ctx) *Problem
+	Run    func(*Ctx) (*Obj, int, error)
 }
 
 var registry []*Command
@@ -77,6 +85,9 @@ func Register(c *Command) {
 		if slices.ContainsFunc(globalFlags, func(g Flag) bool { return g.Name == f.Name }) {
 			panic("cli: command " + c.Name + " flag --" + f.Name + " shadows a global flag")
 		}
+	}
+	if c.ReaderPolicy {
+		c.Flags = append(c.Flags, readerPolicyFlag)
 	}
 	registry = append(registry, c)
 	slices.SortFunc(registry, func(a, b *Command) int { return strings.Compare(a.Name, b.Name) })
