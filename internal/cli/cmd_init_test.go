@@ -108,3 +108,28 @@ func TestFirstRunNoKey(t *testing.T) {
 		t.Fatalf("init output: %s", r.stdout)
 	}
 }
+
+// TestStatusKey: status says whether COMMONS_KEY names a loadable key (the signer only, never key material).
+func TestStatusKey(t *testing.T) {
+	w := newWorld(t)
+	kd := t.TempDir()
+	key, signer := newKeyFile(t, kd, "ed25519")
+	secret := ""
+	if b, err := os.ReadFile(key); err == nil {
+		secret = string(b[strings.Index(string(b), `"seed":"`)+8:][:64])
+	}
+	r := runIn(w.root, map[string]string{KeyEnv: key}, "status", "--json")
+	if r.code != 0 || !strings.Contains(r.stdout, `"configured":true`) || !strings.Contains(r.stdout, signer) || strings.Contains(r.stdout, secret) {
+		t.Fatalf("configured: %d %s", r.code, r.stdout)
+	}
+	r = runIn(w.root, nil, "status", "--json")
+	if r.code != 0 || !strings.Contains(r.stdout, `"configured":false`) {
+		t.Fatalf("unset: %d %s", r.code, r.stdout)
+	}
+	bad := filepath.Join(kd, "bad")
+	os.WriteFile(bad, []byte("not a key"), 0o600)
+	r = runIn(w.root, map[string]string{KeyEnv: bad}, "status", "--json")
+	if r.code != 0 || !strings.Contains(r.stdout, `"configured":false`) || strings.Contains(r.stdout, "not a key\"") {
+		t.Fatalf("unusable: %d %s", r.code, r.stdout)
+	}
+}
