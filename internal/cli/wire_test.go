@@ -480,3 +480,32 @@ func TestFsckAndLimits(t *testing.T) {
 		t.Fatal("status prints limits without --limits")
 	}
 }
+
+// TestVerifyObservation: verify of an observed statement goes through the observation's own exit (claims §13): 0
+// when the signature and the pins hold, 3 when the referent is unpinned; corroboration never moves it (I6).
+func TestVerifyObservation(t *testing.T) {
+	w := fixture(t)
+	ref := obj("chain_id", "bip122:000000000019d6689c085ae165831e93", "block_hash", strings.Repeat("a1", 32), "depth", 3)
+	pinned := w.sign("O:pinned", "K5", "observed", obj("content", canon.Value(content("sole")), "class", "exact-bytes",
+		"referent", canon.Value(ref), "capture", canon.Value(obj("at", "2026-10-16T00:00:00Z", "evidence", "self-asserted"))))
+	unpinned := w.sign("O:unpinned", "K5", "observed", obj("content", canon.Value(content("sole")), "class", "exact-bytes",
+		"referent", canon.Value(obj("chain_id", "bip122:000000000019d6689c085ae165831e93")),
+		"capture", canon.Value(obj("at", "2026-10-16T00:00:00Z", "evidence", "self-asserted"))))
+	r := w.run("verify", pinned, "--json")
+	if r.code != 0 {
+		t.Fatalf("pinned observation: exit %d\n%s", r.code, r.stdout)
+	}
+	r = w.run("verify", unpinned, "--json")
+	if r.code != 3 || !strings.Contains(r.stdout, `"state":"unpinned"`) || !strings.Contains(r.stdout, "block_hash") {
+		t.Fatalf("unpinned observation: exit %d\n%s", r.code, r.stdout)
+	}
+	// a corroboration from another key changes nothing about either exit
+	w.sign("C:pinned", "K6", "corroborates", obj("of", pinned, "result", unpinned, "verdict", "contradicts", "model", "M",
+		"cohort", canon.Value(obj("rule", "every station in R"))))
+	if r := w.run("verify", pinned); r.code != 0 {
+		t.Fatalf("corroboration moved the exit: %d\n%s", r.code, r.stdout)
+	}
+	if r := w.run("verify", unpinned); r.code != 3 {
+		t.Fatalf("corroboration moved the exit: %d\n%s", r.code, r.stdout)
+	}
+}

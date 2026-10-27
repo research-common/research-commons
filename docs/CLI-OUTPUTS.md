@@ -79,6 +79,9 @@ JSON members carrying tokens: `authorship`, `role`, `state`, `grade`, `step`, `q
 | `held here` | bytes | this store holds the blob's bytes and they hash correctly when read |
 | `not held here` | bytes | this store does not hold the blob's bytes |
 | `unpinned` | verify | a derivation names an input it did not pin; nothing to re-run |
+| `finality unchecked` | verify | the observation's declared finality rule cannot be evaluated by this reader |
+| `body not interpreted` | verify | the observation's body was kept opaque (an unsupported or critical member); nothing read from it |
+| `counts toward nothing` | verify | the statement is not placed in its signer's log (a fork branch left out, a revoked key); it is shown, never counted |
 | `admitted` | gate | the object passed every check of the gate and the receiver's policy |
 | `admitted and labelled` | gate | admitted, with a label the reader should see (already held, detached, below trust floor, …) |
 | `could not check` | gate | the gate could not decide about the object (a check that could not run); never a pass |

@@ -195,6 +195,13 @@ func verifyCmd(c *Ctx) (*Obj, int, error) {
 		e, _ := v.anchorEvidence(ref)
 		o.set("time", evidenceObj(e))
 		code = btctime.Exit([]btctime.Evidence{e})
+	case st.Kind == "observed":
+		// claims §13: signature and pins; corroboration and capture evidence never move the exit (I6)
+		if ob, ok := v.r.Observation(ref); ok {
+			var why []string
+			code, why = ob.VerifyExit()
+			o.set("causes", observationCauses(why))
+		}
 	}
 	o.set("exit", intV(int64(code))).set("exit_name", textV(ExitName(code)))
 	return o, code, nil

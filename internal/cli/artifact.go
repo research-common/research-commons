@@ -302,3 +302,19 @@ func unpinnedOf(body *canon.Object) []string {
 	}
 	return out
 }
+
+// observationCauses renders resolve.Observation.VerifyExit's reasons ("<about>: <token>[ (<detail>)]"): the token
+// from the closed vocabulary, the detail (field names, a rule name) as text beside it.
+func observationCauses(why []string) listV {
+	causes := listV{}
+	for _, w := range why {
+		about, rest, _ := strings.Cut(w, ": ")
+		state, detail, hasDetail := strings.Cut(rest, " (")
+		c := newObj().set("about", textV(about)).set("state", tokV(tok(state)))
+		if hasDetail {
+			c.set("detail", textV(strings.TrimSuffix(detail, ")")))
+		}
+		causes = append(causes, c)
+	}
+	return causes
+}
