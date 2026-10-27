@@ -164,6 +164,13 @@ func Execute(ctx context.Context, p *Policy, rn Runner, inv Invocation) (*Result
 	if rec.Grants == nil {
 		rec.Grants = []string{}
 	}
+	if adm.Network != nil {
+		// a runner that does not say how it confined a granted network is not claimed to limit it (§6)
+		rec.NetworkEnforced = o.NetworkEnforced
+		if rec.NetworkEnforced == "" {
+			rec.NetworkEnforced = EnforcedAll
+		}
+	}
 	switch {
 	case o.Killed != "":
 		res.Token = Token{Kind: FailedCap, Cap: o.Killed}
