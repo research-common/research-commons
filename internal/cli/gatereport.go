@@ -71,10 +71,6 @@ func gateReport(rep *gate.Report) *Obj {
 	return o
 }
 
-// gateExit is a report's exit (0 all admitted, 1 at least one refused, 3 nothing refused and something
-// undecided). Whether an operational refusal is 1 or 3 is undecided by the project; the default is 1, kept
-// behind gate.Report.Exit's parameter.
-func gateExit(rep *gate.Report) int { return rep.Exit(operationalUndecided) }
-
-// operationalUndecided is the seam for that open question (see gateExit). Do not change it without the decision.
-const operationalUndecided = false
+// gateExit is a report's exit (claims §13: 0 all admitted, 1 at least one refused under any class, an
+// operational refusal included, 3 nothing refused and something undecided).
+func gateExit(rep *gate.Report) int { return rep.Exit() }

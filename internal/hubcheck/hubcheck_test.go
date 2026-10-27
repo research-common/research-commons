@@ -242,7 +242,7 @@ func TestDidNotStart(t *testing.T) {
 	h.write(PolicyFile, []byte(`{"policy":"rc-hub-policy/1",`))
 	h.commit("broken policy on the branch")
 	res := h.check("main")
-	if r := verdict(t, res, PolicyFile); r.Verdict != gate.NotApplied || res.Exit(false) != 0 {
+	if r := verdict(t, res, PolicyFile); r.Verdict != gate.NotApplied || res.Exit() != 0 {
 		t.Fatalf("%s %v", r.Verdict, r.Refusal)
 	}
 	// on the base, the same bytes stop the check
@@ -273,8 +273,8 @@ func TestBasePolicy(t *testing.T) {
 	res := h.check("main")
 	refusedAs(t, res, gate.BlobPath(dig(banned)), refusal.Policy, gate.HubRules+": not_served")
 	refusedAs(t, res, PolicyFile, refusal.Intrinsic, gate.OutsideSurface)
-	if !strings.Contains(res.PolicyName, "at "+res.Base) || res.PolicyRev != res.Base || res.Exit(false) != 1 {
-		t.Fatalf("policy from %s (%s), exit %d", res.PolicyRev, res.PolicyName, res.Exit(false))
+	if !strings.Contains(res.PolicyName, "at "+res.Base) || res.PolicyRev != res.Base || res.Exit() != 1 {
+		t.Fatalf("policy from %s (%s), exit %d", res.PolicyRev, res.PolicyName, res.Exit())
 	}
 	if !strings.Contains(res.Render(), "policy hub-policy.json at "+res.Base) {
 		t.Fatal(res.Render())
@@ -291,7 +291,7 @@ func TestBasePolicy(t *testing.T) {
 			t.Fatalf("%s: %s", p, r.Verdict)
 		}
 	}
-	if res.Exit(false) != 0 {
+	if res.Exit() != 0 {
 		t.Fatal(res.Render())
 	}
 }
@@ -464,7 +464,7 @@ func TestNotServed(t *testing.T) {
 	h.write(PolicyFile, []byte(`{"not_served":[{"digest":"`+dig(bad)+`","reason":"retracted by its author"}],"policy":"rc-hub-policy/1"}`))
 	h.commit("not_served entry")
 	full := h.check("")
-	if r := verdict(t, full, gate.BlobPath(dig(bad))); r.Verdict != gate.Admitted || !r.HasLabel(gate.LabelStillServed) || full.Exit(false) != 0 {
+	if r := verdict(t, full, gate.BlobPath(dig(bad))); r.Verdict != gate.Admitted || !r.HasLabel(gate.LabelStillServed) || full.Exit() != 0 {
 		t.Fatalf("still present: %s %v", r.Verdict, r.Labels)
 	}
 	// merge 2: the deletion
@@ -472,7 +472,7 @@ func TestNotServed(t *testing.T) {
 	h.rm(gate.BlobPath(dig(bad)))
 	h.commit("remove bytes")
 	res := h.check("main")
-	if r := verdict(t, res, gate.BlobPath(dig(bad))); r.Verdict != gate.Admitted || !r.HasLabel(gate.LabelTakedown) || res.Exit(false) != 0 {
+	if r := verdict(t, res, gate.BlobPath(dig(bad))); r.Verdict != gate.Admitted || !r.HasLabel(gate.LabelTakedown) || res.Exit() != 0 {
 		t.Fatalf("%s %v", r.Verdict, r.Refusal)
 	}
 	h.git("checkout", "-q", "main")
@@ -724,7 +724,7 @@ func TestPrematureFreeze(t *testing.T) {
 	res := h.check("main", resolve.WithSegments(f))
 	refusedAs(t, res, ep, refusal.Policy, gate.HubRules+": series.refuse_premature_freeze")
 	r := verdict(t, res, ep)
-	if r.Series == nil || r.Series.Comparison != "flagged" || !strings.Contains(r.Refusal.Detail, "scope series edition") || res.Exit(false) != 1 {
+	if r.Series == nil || r.Series.Comparison != "flagged" || !strings.Contains(r.Refusal.Detail, "scope series edition") || res.Exit() != 1 {
 		t.Fatalf("%v", r.Refusal)
 	}
 	if !strings.Contains(r.Refusal.Detail, gate.ReaderRecheck) {
@@ -732,7 +732,7 @@ func TestPrematureFreeze(t *testing.T) {
 	}
 	// without the reader's re-check, the boundary is unchecked: could not check, exit 3
 	res = h.check("main")
-	if r := verdict(t, res, ep); r.Verdict != gate.Undecided || res.Exit(false) != 3 {
+	if r := verdict(t, res, ep); r.Verdict != gate.Undecided || res.Exit() != 3 {
 		t.Fatalf("%s %v\n%s", r.Verdict, r.Refusal, res.Render())
 	}
 	// control: a supported declaration is admitted

@@ -555,7 +555,7 @@ func TestLabelsNeverRefuse(t *testing.T) {
 	if r := wantAdmitted(t, rep, w.path(second)); !r.HasLabel(LabelDetached) || !strings.Contains(r.Labels[0].Detail, "seq 0..0") {
 		t.Fatalf("%v", r.Labels)
 	}
-	if rep.Exit(false) != 0 {
+	if rep.Exit() != 0 {
 		t.Fatal("labels changed the exit")
 	}
 }
@@ -593,20 +593,20 @@ func TestExitMapping(t *testing.T) {
 	op := DefaultPolicy()
 	op.Limits[LimitBlobBytes] = 1
 	rep := mustAdmit(t, "pull", Package{Objects: []Object{blobObject([]byte("xx"))}}, MemHeld{}, op, Options{})
-	if rep.Results[0].Verdict != Refused || rep.Results[0].Refusal.Class != refusal.Operational || rep.Exit(false) != 1 {
-		t.Fatalf("an operational refusal: exit %d\n%s", rep.Exit(false), rep.Render())
+	if rep.Results[0].Verdict != Refused || rep.Results[0].Refusal.Class != refusal.Operational || rep.Exit() != 1 {
+		t.Fatalf("an operational refusal: exit %d\n%s", rep.Exit(), rep.Render())
 	}
 	// a refusal outweighs an undecided object: still 1
 	rep.Results = append(rep.Results, Result{Verdict: Undecided})
-	if rep.Exit(false) != 1 {
-		t.Fatal(rep.Exit(false))
+	if rep.Exit() != 1 {
+		t.Fatal(rep.Exit())
 	}
 	rep = mustAdmit(t, "pull", Package{Objects: []Object{blobObject([]byte("x"))}}, MemHeld{}, nil, Options{})
-	if rep.Exit(false) != 0 {
+	if rep.Exit() != 0 {
 		t.Fatal(rep.Render())
 	}
 	rep.Results = append(rep.Results, Result{Verdict: Undecided})
-	if rep.Exit(false) != 3 {
+	if rep.Exit() != 3 {
 		t.Fatal()
 	}
 }
