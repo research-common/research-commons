@@ -23,7 +23,7 @@ func (w *world) gitHub() {
 	if _, err := exec.LookPath("git"); err != nil {
 		return // hub check then exits 2 in the sweep (no commit at HEAD); the dedicated test skips
 	}
-	os.WriteFile(filepath.Join(w.root, ".gitignore"), []byte("/journal/\n/quarantine/\n/retained/\n/tmp/\n"), 0o644)
+	os.WriteFile(filepath.Join(w.root, ".gitignore"), []byte("/journal/\n/quarantine/\n/tmp/\n"), 0o644)
 	gitIn(t, w.root, "init", "-q", "-b", "main")
 	gitIn(t, w.root, "add", "-A")
 	gitIn(t, w.root, "commit", "-q", "-m", "fixture")
