@@ -696,7 +696,9 @@ func captureState(st *wire.Statement) State {
 // comparability checks a method-class observation against every other counted method-class observation of the
 // same method edition: two that do not pin the same measured-system members are not comparable, and the
 // display names what is missing (C-core-32). Comparability is a precondition of any statistical agreement
-// model; it never reads as `supports`.
+// model; it never reads as `supports`. This is the claims §5.3.1 rule for a method edition that declares no
+// system members; reading a declaration (a missing declared member is `unpinned`) waits for a wire field that
+// carries it.
 func (r *Resolver) comparability(o *Observation, st *wire.Statement) {
 	ref := object(st.Body, "referent")
 	ed := str(ref, "method_edition")

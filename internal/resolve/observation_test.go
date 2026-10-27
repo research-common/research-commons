@@ -246,7 +246,7 @@ func TestSourceAndPhenomenonReferents(t *testing.T) {
 // the other method-class observation is unchecked and names the missing field, and a corroboration whose
 // comparison data is that observation is never counted as supports.
 func TestMethodComparability(t *testing.T) {
-	conformance.Partial(t, "C-core-32", "omission detected against another observation of the same method edition; the note does not say which system members a method edition requires, so an omission with no comparison partner is not detectable (spec finding)")
+	conformance.Partial(t, "C-core-32", "omission detected against another observation of the same method edition (the claims §5.3.1 fallback with no declaration); a method edition's declared system members (a missing one `unpinned`, with no comparison partner) are pending editions reader: no wire field carries the declaration yet")
 	ed := strings.Repeat("e1", 32)
 	ref := func(system *canon.Object) *canon.Object {
 		return obj("method_edition", ed, "environment", obj("image_digest", dig("img"), "platform", "linux/amd64", "harness_commit", strings.Repeat("c", 40)),
