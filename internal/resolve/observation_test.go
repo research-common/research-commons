@@ -628,22 +628,32 @@ func TestCohortRuleReapplied(t *testing.T) {
 }
 
 // TestHandPickedCohort: C-core-48. A hand-picked cohort is labelled; a corroboration declaring neither a rule nor
-// hand-picked cannot be admitted: the wire schema makes `cohort` required with exactly one of the two.
+// hand-picked is malformed (claims §5.3.2, wire §5: `cohort` is required with exactly one of the two), refused
+// intrinsically at the gate naming `cohort`. The mutation reaches the cohort rule: the same body with a cohort
+// reads, and the only difference is the cohort member (absent, or an object with neither).
 func TestHandPickedCohort(t *testing.T) {
-	conformance.Partial(t, "C-core-48", "hand-picked labelled; `cohort: undeclared` is unreachable because wire §5 requires cohort with exactly one of rule/hand_picked (spec finding)")
+	conformance.Covers(t, "C-core-48")
 	w := newWorld(t)
 	o1 := w.observed("O1", "O1", "X", "phenomenon", obj("instrument", "urn:s", "location", "geo:1,2", "at", "2026-07-01T12:00:00Z"))
 	w.workflow("WA", "W", "bytes", "")
 	res := w.result("R", "C", "v", "W", "X", "a", "b", "c")
 	w.corroborates("CC", "C", o1, res, "supports", "cohort", canon.Value(obj("hand_picked", true)))
 	has(t, obsView(t, w, o1).Render(), "cohort: hand-picked")
-	// neither: refused at the schema, so it reaches nothing (the mutation reaches the cohort rule: the only
-	// difference from a valid body is the cohort member)
-	line, _ := wire.Sign(wire.Draft{Kind: "corroborates", TS: "2026-10-16T00:00:00Z",
-		Body: obj("of", o1, "result", res, "verdict", "supports", "model", "M", "cohort", obj())}, testKey("C"))
-	_, err := wire.Read(line)
-	if r, ok := err.(*refusal.Refusal); !ok || !strings.Contains(r.Error(), "cohort") {
-		t.Fatalf("got %v, want a malformed refusal naming cohort", err)
+	read := func(kv ...any) error {
+		line, _ := wire.Sign(wire.Draft{Kind: "corroborates", TS: "2026-10-16T00:00:00Z",
+			Body: obj(append([]any{"of", o1, "result", res, "verdict", "supports", "model", "M"}, kv...)...)}, testKey("C"))
+		_, err := wire.Read(line)
+		return err
+	}
+	if err := read("cohort", obj("rule", "every station in R within 50 km")); err != nil {
+		t.Fatalf("control: the body with a cohort is refused: %v", err)
+	}
+	for name, kv := range map[string][]any{"no cohort member": nil, "cohort declares neither": {"cohort", obj()}} {
+		err := read(kv...)
+		r, ok := err.(*refusal.Refusal)
+		if !ok || r.Class != refusal.Intrinsic || r.Reason != refusal.MalformedStatement || !strings.Contains(r.Error(), "cohort") {
+			t.Fatalf("%s: got %v, want an intrinsic malformed refusal naming cohort", name, err)
+		}
 	}
 }
 
