@@ -245,15 +245,24 @@ func TestDigest(t *testing.T) {
 }
 
 // TestTrusts: purpose-scoped, target-scoped, additive; identity entries answer unknown; no policy answers
-// unconfigured, and a configured policy with no matching entry answers not trusted (never universal trust).
+// unconfigured, as does a policy naming no principal for the purpose; once a purpose is named, no matching entry
+// answers not trusted (never universal trust).
 func TestTrusts(t *testing.T) {
 	var none *Policy
 	if a := none.Trusts(kEd, PurposeCorroboration, dA); a.State != Unconfigured || a.Trusted() {
 		t.Fatalf("nil policy: %+v", a)
 	}
+	// trust is configured per purpose: a policy naming nobody for a purpose leaves it unconfigured
 	empty, _ := Parse([]byte(doc("", "")))
-	if a := empty.Trusts(kEd, PurposeCorroboration, dA); a.State != NotTrusted || a.Policy != empty.Digest {
+	if a := empty.Trusts(kEd, PurposeCorroboration, dA); a.State != Unconfigured || a.Policy != "" || empty.Configures(PurposeCorroboration) {
 		t.Fatalf("empty policy: %+v", a)
+	}
+	admOnly, _ := Parse([]byte(doc("", trustOf(`{"key":"`+kEth+`"}`, `"admission"`, `{"any_content":true}`))))
+	if a := admOnly.Trusts(kEd, PurposeCorroboration, dA); a.State != Unconfigured || !admOnly.Configures(PurposeAdmission) {
+		t.Fatalf("admission-only policy, corroboration: %+v", a)
+	}
+	if a := admOnly.Trusts(kEd, PurposeAdmission, dA); a.State != NotTrusted || a.Policy != admOnly.Digest {
+		t.Fatalf("admission-only policy, admission: %+v", a)
 	}
 	p, err := Parse([]byte(sortedDoc(nil, []string{
 		trustOf(`{"identity":"`+idI+`"}`, `"attestation"`, `{"any_content":true}`),
@@ -285,7 +294,8 @@ func TestTrusts(t *testing.T) {
 }
 
 // TestAdmit: C-core-111's predicate. A trust floor excluding Z: refused with class reader policy, reason trust
-// floor, scope Z's objects; or admitted and labelled. No policy admits everything unlabelled.
+// floor, scope Z's objects; or admitted and labelled. No policy, or one naming nobody for admission, admits
+// everything unlabelled.
 func TestAdmit(t *testing.T) {
 	conformance.Partial(t, "C-core-111", "the reader-policy predicate (Policy.Admit: refused, or admitted and labelled, class reader policy: trust floor, scoped to Z's objects); applying it at pull and the other gates needs the gate code")
 	conformance.Partial(t, "C-core-133a", "(c) only: an unparseable or invalid policy is a *policy.Error with ExitCode 2 before any evaluation; (a), (b), (d), (e) and the root snapshot need the CLI")
@@ -310,10 +320,17 @@ func TestAdmit(t *testing.T) {
 	if !l.Admitted || l.Refusal != nil || !strings.Contains(l.Label, "below the reader's trust floor") {
 		t.Fatalf("label: %+v", l)
 	}
-	// corroboration trust is not admission trust
-	q, _ := Parse([]byte(doc("", trustOf(`{"key":"`+z+`"}`, `"corroboration"`, `{"any_content":true}`))))
+	// corroboration trust is not admission trust: under a policy naming another key for admission it does not
+	// admit; under a policy naming nobody for admission the floor is not configured and admits unlabelled
+	q, _ := Parse([]byte(sortedDoc(nil, []string{
+		trustOf(`{"key":"`+kEd+`"}`, `"admission"`, `{"any_content":true}`),
+		trustOf(`{"key":"`+z+`"}`, `"corroboration"`, `{"any_content":true}`)})))
 	if q.Admit(z, dA, FloorRefuse).Admitted {
 		t.Fatal("corroboration trust admitted")
+	}
+	c, _ := Parse([]byte(doc("", trustOf(`{"key":"`+z+`"}`, `"corroboration"`, `{"any_content":true}`))))
+	if a := c.Admit(z, dA, FloorRefuse); !a.Admitted || a.Label != "" || a.Answer.State != Unconfigured {
+		t.Fatalf("no admission entry: %+v", a)
 	}
 }
 

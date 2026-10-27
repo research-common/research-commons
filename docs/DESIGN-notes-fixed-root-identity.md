@@ -411,8 +411,12 @@ content target union as grants). A purpose matches only itself. Targets apply to
 content being judged, not an incidental digest; unresolved target references remain
 unknown. Trust admits otherwise eligible evidence for the named purpose, not signature
 validity, authorship, independent-person status, successful reproduction or time quality.
-No configured trust means unconfigured/not trusted where trust is required, not universal
-trust. No local arbitrary speaks-for grammar or automatic old-to-new-I trust transfer.
+Trust is configured per purpose. A purpose that no trust entry names is unconfigured:
+the reader keeps its documented default for it (for corroboration, every counted
+statement is counted) and labels the answer "not configured", never as trust. Once any
+entry names a principal for a purpose, only the listed principals are trusted for it;
+no configured trust is then not trusted, never universal trust. The admission floor
+follows the same rule. No local arbitrary speaks-for grammar or automatic old-to-new-I trust transfer.
 
 Selections/trust entries sort by JCS text as above; `purposes` and explicit contents
 sort as string sets. Duplicate/conflicting selections for the **same content/role**

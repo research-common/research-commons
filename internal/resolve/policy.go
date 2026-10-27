@@ -330,9 +330,10 @@ func (r *Resolver) observationSelection(o *Observation) {
 const TrustLineUnconfigured = trustLine
 
 // runTrust sets each run's trust line: the reader's attestation trust in the runner over the run's output.
-// Display only; a grade never reads it.
+// Display only; a grade never reads it. A policy that names no principal for attestation leaves the line
+// `not configured` (trust is configured per purpose).
 func (r *Resolver) runTrust(g *Group) {
-	if r.policy == nil {
+	if !r.policy.Configures(policy.PurposeAttestation) {
 		return
 	}
 	for i := range g.Runs {
@@ -341,11 +342,12 @@ func (r *Resolver) runTrust(g *Group) {
 }
 
 // trustFilter leaves out of the counts every counted piece of evidence signed by a key the reader's policy does
-// not trust for corroboration over the observation's content, with the policy's answer as its cause. No policy
-// filters nothing and the status says so (the current text of claims §5.3.2; see the trust note in
-// corroboration.go). The reader's own computations are never filtered.
+// not trust for corroboration over the observation's content, with the policy's answer as its cause. Trust is
+// configured per purpose: with no policy, or a policy that names no principal for corroboration, nothing is
+// filtered and the status says so (the current text of claims §5.3.2; see the trust note in corroboration.go).
+// The reader's own computations are never filtered.
 func (r *Resolver) trustFilter(c *Corroboration, o *Observation) {
-	if r.policy == nil {
+	if !r.policy.Configures(policy.PurposeCorroboration) {
 		c.Trust = "your trust in these keys: not configured (every counted statement is counted)"
 		return
 	}
