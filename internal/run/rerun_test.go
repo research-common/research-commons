@@ -298,7 +298,9 @@ func TestRerunFeedsResolver(t *testing.T) {
 
 // TestComparatorRunnerFeedsResolver: a protocol workflow's comparator runs as a sandboxed workflow through the
 // same Execute path, and that runner is the resolver's Comparator (resolve.WithComparator): T1 under the
-// comparator; with no grant for the comparator, `unchecked` with the reason.
+// comparator; with no grant for the comparator, `unchecked` with the reason. A comparator whose `authored` does
+// not declare `replication: bytes` (another mode, or no declaration held) is not run: `unchecked`, with the reason
+// (execution §5.3, the comparator interface).
 func TestComparatorRunnerFeedsResolver(t *testing.T) {
 	cmpSpecBytes := specB("cmp", map[string]string{"a": Digest([]byte("pa")), "b": Digest([]byte("pb"))},
 		"outputs", object("verdict", canon.String("verdict")))
@@ -331,6 +333,15 @@ func TestComparatorRunnerFeedsResolver(t *testing.T) {
 	}
 	cr := &ComparatorRunner{Policy: grantAll(), Runner: f, Specs: map[string][]byte{k: cmpSpecBytes}, Signers: map[string]string{k: ownerKey},
 		Blobs: map[string][]byte{cmpSpec.Code: []byte("code:cmp"), Digest(x): x, Digest(y): y}}
+	for _, mode := range []string{"", "protocol", "none"} {
+		cr.Replication = map[string]string{k: mode}
+		a := w.resolver(resolve.WithComparator(cr)).Artifact(Digest(x))
+		if a.Step.Why != resolve.UncheckedToken || f.Spawned != 0 {
+			t.Fatalf("comparator declaring %q: spawned %d\n%s", mode, f.Spawned, a.Render())
+		}
+		has(t, a.Render(), "a comparator must declare replication: bytes")
+	}
+	cr.Replication = map[string]string{k: "bytes"}
 	a := w.resolver(resolve.WithComparator(cr)).Artifact(Digest(x))
 	if a.Step.Tier != "T1" || a.Step.Under != k {
 		t.Fatalf("%s", a.Render())
