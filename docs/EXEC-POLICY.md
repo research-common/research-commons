@@ -35,8 +35,8 @@ workflow runs only if its author is in `exec_signers` or its spec digest is in `
 Details worth knowing:
 
 - `images` entries are not checked when the file is read, but an entry that is not a digest makes every run that
-  consults the list refuse (the list fails closed). An empty `images` array is read as no `images` member, that
-  is, no allowlist; to restrict runs, list the digests you accept.
+  consults the list refuse (the list fails closed). An absent `images` member means no allowlist; a present
+  but empty `images` array is an allowlist that admits no image, so every sandbox run is refused.
 - Only the sandbox profile is run. A workflow with no pinned image is refused before it starts.
 
 ## Not expressible yet
