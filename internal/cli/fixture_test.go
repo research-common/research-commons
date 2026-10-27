@@ -221,6 +221,7 @@ func fixture(t testing.TB) *world {
 	w.sign("D:hostile", "K4", "describes", obj("about", canon.Value(obj("content", dig("sole"))), "note", Hostile,
 		"tags", []string{Hostile, "<b>"}))
 	w.sign("U:hostile", "K4", "x_"+"hostile", obj("text", Hostile))
+	w.gitHub() // the store is also a hub clone: hub check sweeps it (sweep_test.go)
 	return w
 }
 

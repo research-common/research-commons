@@ -38,7 +38,7 @@ func (p *Problem) obj() *Obj {
 		set("type", textV(ProblemTypeBase+p.Slug)).
 		set("title", textV(p.Title)).
 		set("detail", textV(p.Detail)).
-		set("class", textV(string(p.Class))).
+		set("class", tokV(tok(string(p.Class)))).
 		set("scope", textV(p.Scope)).
 		set("committed", boolV(p.Committed)).
 		set("next", textV(p.Next)).

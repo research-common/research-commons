@@ -67,7 +67,7 @@ var vocabulary = []Token{
 	{"backend-unconfigured", "time", "no chain backend is configured, so no bound is verified; a state, not a failed invocation (exit 3)"},
 	{"backend-unavailable", "time", "the configured chain backend could not be read"},
 	{"unsupported", "time", "a proof format, attestation, rc major, alg or critical extension this reader does not implement"},
-	{"refused", "time", "an anchor refused under a limit of this reader"},
+	{"refused", "time", "an anchor refused under a limit of this reader; as a gate verdict, an object not admitted, with its class, reason and narrowest next step named"},
 	// statements and log lines (wire §2, §7)
 	{"valid", "statement", "signature verified and every rule this reader implements passed"},
 	{"unknown kind", "statement", "a validly signed statement of a kind the format does not list; granted nothing"},
@@ -81,6 +81,29 @@ var vocabulary = []Token{
 	{"held here", "bytes", "this store holds the blob's bytes and they hash correctly when read"},
 	{"not held here", "bytes", "this store does not hold the blob's bytes"},
 	{"unpinned", "verify", "a derivation names an input it did not pin; nothing to re-run"},
+	// gate verdicts (claims §11; hub template H-50): one per object of a package, a change or a tree
+	{"admitted", "gate", "the object passed every check of the gate and the receiver's policy"},
+	{"admitted and labelled", "gate", "admitted, with a label the reader should see (already held, detached, below trust floor, …)"},
+	{"could not check", "gate", "the gate could not decide about the object (a check that could not run); never a pass"},
+	{"not applied", "gate", "a control-plane path: reviewed by the maintainers, never admitted as data"},
+	// refusal classes (claims §11)
+	{"intrinsic", "class", "no reader could admit it (bad signature, hash mismatch, unsafe path); no override applies"},
+	{"reader policy", "class", "this reader's own policy refused it (trust floor, hub rules); a typed override naming the object may admit it"},
+	{"operational", "class", "a limit or resource of this reader stopped it; raising the named limit is the next step"},
+	// gate labels beside an admitted object (claims §11; gate)
+	{"already held", "label", "the receiver already holds this statement; nothing new is installed"},
+	{"incoherent", "label", "the key's log is inconsistent at this line; shown, counted toward nothing"},
+	{"unreferenced", "label", "a blob no statement of the evaluated set names"},
+	{"unavailable", "label", "a statement names a blob neither the package nor the receiver holds"},
+	{"not held here (policy)", "label", "the receiver's policy does not serve the blob a statement names (not_served)"},
+	{"layout marker", "label", "the rc-store layout marker"},
+	{"control-plane change: needs maintainer review", "label", "a change to a hub's own files; not data, reviewed by the maintainers"},
+	{"removed (not_served)", "label", "a blob the hub policy no longer serves was removed"},
+	{"not served: still present", "label", "a blob the hub policy lists in not_served is still in the tree"},
+	{"intended_for", "label", "the receiver's re-application of the statement's intended_for, beside the signer's record"},
+	{"admitted by override", "label", "a reader-policy refusal lifted by a typed override that names this object"},
+	{"series boundary", "label", "a series boundary the freeze policy could not decide"},
+	{"below trust floor", "label", "the signer is not trusted for admission by this reader's policy; admitted and labelled (--below-floor label)"},
 	// store and journal (storage note §3, §7)
 	{"nothing pending", "store", "no journal record is waiting: every committed operation is installed and projected"},
 	{"committed, pending install", "store", "the operation reached its commit point and its statements are not all installed yet"},
@@ -113,7 +136,7 @@ func tok(s string) string {
 // tokenKeys are the JSON member names whose values are state tokens (a string, or an array of strings). Every
 // surface puts tokens in these members only, so a consumer (and the C-core-132 sweep) finds them by name.
 var tokenKeys = []string{"authorship", "role", "state", "grade", "step", "quality", "time_state", "status", "line",
-	"counted", "labels", "bytes", "causes", "store_state", "what"}
+	"counted", "labels", "bytes", "causes", "store_state", "what", "verdict", "class"}
 
 // IsTokenKey reports whether a JSON member of that name carries tokens.
 func IsTokenKey(k string) bool { return slices.Contains(tokenKeys, k) }

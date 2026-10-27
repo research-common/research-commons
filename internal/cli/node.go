@@ -37,6 +37,9 @@ type (
 type Obj struct {
 	keys []string
 	vals map[string]value
+	// inline renders the object on one line of the human surface ("k: v · k: v"), for reports that print one
+	// line per object (hub template H-50). Only scalar and all-scalar-list members are inlined.
+	inline bool
 }
 
 func (tokV) isValue()  {}
@@ -50,6 +53,33 @@ func (listV) isValue() {}
 func (*Obj) isValue()  {}
 
 func newObj() *Obj { return &Obj{vals: map[string]value{}} }
+
+// rowObj is an object rendered on one human line.
+func rowObj() *Obj { return &Obj{vals: map[string]value{}, inline: true} }
+
+func inlineText(o *Obj) string {
+	var parts []string
+	for _, k := range o.keys {
+		label := strings.ReplaceAll(k, "_", " ")
+		v := o.vals[k]
+		if s, ok := scalar(v); ok {
+			parts = append(parts, label+": "+s)
+			continue
+		}
+		if l, ok := v.(listV); ok {
+			var ss []string
+			for _, e := range l {
+				if s, ok := scalar(e); ok {
+					ss = append(ss, s)
+				}
+			}
+			if len(ss) > 0 {
+				parts = append(parts, label+": "+strings.Join(ss, ", "))
+			}
+		}
+	}
+	return strings.Join(parts, " · ")
+}
 
 // set adds or replaces a member; a nil value is skipped.
 func (o *Obj) set(k string, v value) *Obj {
@@ -258,6 +288,10 @@ func writeMember(b *strings.Builder, k string, v value, ind string) {
 		for _, e := range x {
 			if s, ok := scalar(e); ok {
 				b.WriteString(ind + "  - " + s + "\n")
+				continue
+			}
+			if eo, ok := e.(*Obj); ok && eo.inline {
+				b.WriteString(ind + "  - " + inlineText(eo) + "\n")
 				continue
 			}
 			if eo, ok := e.(*Obj); ok {

@@ -74,6 +74,11 @@ func Commit(s *store.Store, r *Report) (store.Outcome, error) {
 	lines, blobs := r.Admitted()
 	var digests []store.Digest
 	for _, b := range blobs {
+		if s.HasBlob(store.Digest(b.ID)) {
+			if f, err := s.CheckBlob(store.Digest(b.ID)); err == nil && f == nil {
+				continue // already held intact: nothing to install, and an empty operation is no operation
+			}
+		}
 		d, _, err := s.InstallBlob(bytes.NewReader(b.data), store.Digest(b.ID))
 		if err != nil {
 			return store.Outcome{}, err
@@ -115,7 +120,8 @@ func (h StoreHeld) Statements() map[string][]byte {
 func (h StoreHeld) HasBlob(d string) bool { return h.S.HasBlob(store.Digest(d)) }
 
 // ReadTree reads a directory as a whole-tree package, confined to root: every entry is listed with its path
-// relative to root, symlinks and other non-regular files are listed as such (never followed), and regular
+// relative to root, symlinks and other non-regular files are listed as such (never followed; a `.git`
+// directory is one such entry, so the gate refuses it), and regular
 // files are read through an os.Root, so nothing outside root is read. maxBytes bounds one file's read; a
 // larger file is listed with no data and refused by the gate's size limit (its size is reported as the read
 // bound plus one).
@@ -135,7 +141,11 @@ func ReadTree(root string, maxBytes int64) (Package, error) {
 		}
 		if d.IsDir() {
 			if p == ".git" {
-				return fs.SkipDir // the transport's own metadata, never part of a package
+				// A transport's metadata directory is not part of a store, and a tree that carries one (a
+				// checkout, or a tarball with .git/hooks as data) has it refused by the gate like any other path
+				// outside the data surface. It is listed as one non-regular entry, never read or descended into.
+				pkg.Objects = append(pkg.Objects, Object{Path: p, Mode: Other})
+				return fs.SkipDir
 			}
 			return nil
 		}
