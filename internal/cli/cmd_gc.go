@@ -36,7 +36,7 @@ func init() {
 					}
 					return nil
 				}},
-			{Name: "key", Value: "file", Help: "the signing key file for --release (default: $" + KeyEnv + "); provisional format, never printed"},
+			{Name: "key", Value: "file", Help: "the signing key file for --release (default: $" + KeyEnv + "); a key file written by commons key new; never printed"},
 		},
 		Store: true, Before: gcBefore,
 		Help: "Exit 0 the plan was made (dry run) or carried out; 2 did not start (a malformed duration or digest, --release with --apply or --grace, --key without --release, no usable key for --release); 3 the operation failed after work started (the output says whether anything was committed).",
@@ -58,20 +58,15 @@ func gcBefore(c *Ctx) *Problem {
 	case !rel:
 		return nil
 	}
-	scope := "option --key"
-	if !keyGiven {
-		keyPath, scope = c.Env.Getenv(KeyEnv), "environment "+KeyEnv
-	}
-	if keyPath == "" {
+	if keyPath == "" && c.Env.Getenv(KeyEnv) == "" {
 		return policyProblem("no-key", "--release needs a signing key", "option --key",
 			"give --key <file> or set "+KeyEnv+"; a release that cannot sign deletes nothing", "")
 	}
-	k, err := loadKeyFile(keyPath)
-	if err != nil {
-		p := policyProblem("key-unusable", "the signing key file could not be used", scope, "fix the key file, then run the release again", err.Error())
-		return p
+	k, prob := signingKey(c)
+	if prob != nil {
+		return prob
 	}
-	c.state = k
+	c.state = k.Key
 	return nil
 }
 

@@ -45,8 +45,8 @@ func newTimeVerifier(s *store.Store) *btctime.Verifier {
 }
 
 // loadView builds the view under the reader policy rp (nil = no reader policy: every answer is the no-policy
-// answer).
-func loadView(s *store.Store, rp *policy.Policy) (*view, error) {
+// answer); opts are extra resolver options (publish's pre-pin check passes its rule dialects and content reader).
+func loadView(s *store.Store, rp *policy.Policy, opts ...resolve.Option) (*view, error) {
 	lines, err := s.Statements()
 	if err != nil {
 		return nil, err
@@ -65,7 +65,7 @@ func loadView(s *store.Store, rp *policy.Policy) (*view, error) {
 		logs.Log(st.Signer).Add(lines[id]) // a log-relative refusal keeps the line; it is part of the view
 	}
 	tv := newTimeVerifier(s)
-	r := resolve.New(logs, resolve.WithTimeVerifier(btctime.TimeVerifier{V: tv}), resolve.WithPolicy(rp))
+	r := resolve.New(logs, append([]resolve.Option{resolve.WithTimeVerifier(btctime.TimeVerifier{V: tv}), resolve.WithPolicy(rp)}, opts...)...)
 	return &view{r: r, logs: logs, st: s, timeV: tv, evidence: map[string]btctime.Evidence{}}, nil
 }
 

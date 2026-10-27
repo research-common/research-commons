@@ -21,7 +21,7 @@ import (
 // statement naming a real task edition among them) is refused at push, intrinsic, scope that object, and
 // reported as a draft; the hub's held set is unchanged. Control: the same body signed is admitted.
 func TestUnsignedDraftsRefused(t *testing.T) {
-	conformance.Partial(t, "C-core-108", "push refuses every unsigned draft (intrinsic, scope the object, reported as a draft) and the hub is unchanged; first-run key generation belongs to the command layer")
+	conformance.Partial(t, "C-core-108", "push refuses every unsigned draft (intrinsic, scope the object, reported as a draft) and the hub is unchanged; commons key new generates a key and publish never stores a draft unsigned (internal/cli), but first-run setup does not generate a key implicitly: a signing command without a key exits 2 pointing at key new (decision pending)")
 	w := newWorld(t)
 	g := w.sign("A", "genesis", obj("type", "task", "name", "t", "controllers", []string{w.signer("A")}, "rule", obj("any_one", true)))
 	held := w.held(g)

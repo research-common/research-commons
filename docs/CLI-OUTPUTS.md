@@ -99,6 +99,9 @@ JSON members carrying tokens: `authorship`, `role`, `state`, `grade`, `step`, `q
 | `admitted by override` | label | a reader-policy refusal lifted by a typed override that names this object |
 | `series boundary` | label | a series boundary the freeze policy could not decide |
 | `below trust floor` | label | the signer is not trusted for admission by this reader's policy; admitted and labelled (--below-floor label) |
+| `settled by review, not by counting` | readiness | the task edition has no quorum predicate: its beneficiary's decisions settle it; nothing is counted |
+| `ready` | readiness | the quorum is met by distinct signing keys under the edition's terms |
+| `not ready` | readiness | the quorum is not met yet |
 | `nothing pending` | store | no journal record is waiting: every committed operation is installed and projected |
 | `committed, pending install` | store | the operation reached its commit point and its statements are not all installed yet |
 | `committed, needs repair` | store | the operation is installed and its projections are untrusted; run repair |

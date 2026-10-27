@@ -5,7 +5,6 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -19,11 +18,14 @@ import (
 	"github.com/research-common/research-commons/internal/wire"
 )
 
+// words is a command's argv: its name split into words (a multi-word command is several argv tokens), then
+// the rest.
+func words(c *Command, rest ...string) []string { return append(strings.Fields(c.Name), rest...) }
+
 // storeCommands are the registered commands that read a store, with the arguments the sweep gives them.
 func sweepArgs(w *world) [][]string {
 	var out [][]string
 	for _, c := range Commands() {
-		name := strings.Fields(c.Name)
 		if !c.Store {
 			// a command that reads no store runs in a fixture of its own (hub check: the store as a git hub)
 			if a := w.sweepNonStore(c); a != nil {
@@ -31,16 +33,19 @@ func sweepArgs(w *world) [][]string {
 			}
 			continue
 		}
+		if c.Writes {
+			continue // a writer needs a key and its own arguments: its own tests cover it
+		}
 		if len(c.Args) == 0 || c.Args[0].Optional {
-			out = append(out, name)
+			out = append(out, words(c))
 			continue
 		}
 		if c.Args[0].Shape == ShapeText {
-			out = append(out, append(name, w.pkgDir()))
+			out = append(out, words(c, w.pkgDir()))
 			continue
 		}
 		for _, r := range w.refsOf() {
-			out = append(out, append(slices.Clone(name), r))
+			out = append(out, words(c, r))
 		}
 	}
 	return out
@@ -111,20 +116,19 @@ func TestExitTwo(t *testing.T) {
 	}
 	for _, c := range Commands() {
 		before := snapshot(t, w.root)
-		name := strings.Fields(c.Name)
-		check(c.Name+" unknown option", w.run(append(slices.Clone(name), "--no-such-option", "--json")...), before)
+		check(c.Name+" unknown option", w.run(words(c, "--no-such-option", "--json")...), before)
 		if len(c.Args) > 0 {
 			for _, bad := range []string{"not-an-id", strings.Repeat("AB", 32), "sha256:" + strings.Repeat("0", 63)} {
-				check(c.Name+" malformed "+bad, w.run(append(slices.Clone(name), bad, "--json")...), before)
+				check(c.Name+" malformed "+bad, w.run(words(c, bad, "--json")...), before)
 			}
 		}
 		for _, bad := range w.badInvocations(c) {
-			check(c.Name+" "+strings.Join(bad, " "), w.run(append(append(slices.Clone(name), bad...), "--json")...), before)
+			check(c.Name+" "+strings.Join(bad, " "), w.run(append(words(c), append(bad, "--json")...)...), before)
 		}
-		if r := w.run(append(slices.Clone(name), "--help")...); r.code != 0 {
+		if r := w.run(words(c, "--help")...); r.code != 0 {
 			t.Fatalf("%s --help: exit %d", c.Name, r.code)
 		}
-		if r := w.run(append([]string{"help"}, name...)...); r.code != 0 {
+		if r := w.run(append([]string{"help"}, words(c)...)...); r.code != 0 {
 			t.Fatalf("help %s: exit %d", c.Name, r.code)
 		}
 	}
@@ -137,7 +141,7 @@ func TestExitTwo(t *testing.T) {
 		}
 		for _, c := range Commands() {
 			if c.Store {
-				args := strings.Fields(c.Name)
+				args := words(c)
 				if len(c.Args) > 0 {
 					args = append(args, dig("sole"))
 				}
