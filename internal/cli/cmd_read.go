@@ -15,20 +15,20 @@ import (
 
 func init() {
 	ref := []Arg{{Name: "digest|id", Shape: ShapeRef}}
-	Register(&Command{Name: "show", Summary: "show a blob (authorship, grade, every disclosure) or a statement", Args: ref, Store: true,
+	Register(&Command{Name: "show", Summary: "show a blob (authorship, grade, every disclosure) or a statement", Args: ref, Store: true, ReaderPolicy: true,
 		Help: "A digest shows the blob: authorship and every claimant, labels, whether the bytes are held here, the grade with the full disclosure set beside it, derivation groups, and every other statement about it. An id shows the statement.",
 		Run:  showCmd})
-	Register(&Command{Name: "verify", Summary: "check a blob or a statement from the statements held; exit per the exit table", Args: ref, Store: true,
+	Register(&Command{Name: "verify", Summary: "check a blob or a statement from the statements held; exit per the exit table", Args: ref, Store: true, ReaderPolicy: true,
 		Help: "Statement-only: verify reads the statements this store holds and runs nothing. A re-run needs the reader's execution policy and is not part of verify yet. Exit 0 checked and passed, 1 a completed comparison disagreed, 3 could not check, 4 nothing to re-run.",
 		Run:  verifyCmd})
-	Register(&Command{Name: "explain", Summary: "the statements, policy, evaluator and time context behind every token shown", Args: ref, Store: true,
+	Register(&Command{Name: "explain", Summary: "the statements, policy, evaluator and time context behind every token shown", Args: ref, Store: true, ReaderPolicy: true,
 		Run: explainCmd})
-	Register(&Command{Name: "list", Summary: "every blob a statement in this store names, one line of tokens each", Store: true,
+	Register(&Command{Name: "list", Summary: "every blob a statement in this store names, one line of tokens each", Store: true, ReaderPolicy: true,
 		Run: listCmd})
 }
 
 func viewOf(c *Ctx) (*view, error) {
-	v, err := loadView(c.Store)
+	v, err := loadView(c.Store, c.Policy.Reader)
 	if err != nil {
 		return nil, failed(err, "store", false, "run status, then fsck")
 	}
@@ -244,7 +244,7 @@ func explainCmd(c *Ctx) (*Obj, int, error) {
 	}
 	o.set("statements", in)
 	o.set("policy", newObj().set("source", textV(c.Policy.Source)).set("digest", refV(c.Policy.Digest)).
-		set("time_policy_fingerprint", refV(v.timeV.Policy.Fingerprint())))
+		set("time_policy_fingerprint", refV(v.timeV.Policy.Fingerprint())).set("reader_policy", c.Policy.readerObj()))
 	o.set("evaluator", evaluatorObj(c.Env.Build))
 	o.set("time_context", textV("none: this answer does not depend on the reader's clock (no shelf life, finality or freshness is evaluated, and no chain backend is configured)"))
 	return o, ExitOK, nil

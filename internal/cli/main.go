@@ -238,20 +238,37 @@ func dispatch(argv []string, env *Env) (*Obj, int, error) {
 		if prob != nil {
 			return nil, 0, prob
 		}
-		pol, prob := loadPolicy(root)
+		pol, prob := loadHubPolicy(root)
 		if prob != nil {
 			return nil, 0, prob
 		}
+		if cmd.ReaderPolicy {
+			if pol.Reader, pol.ReaderSource, prob = loadReaderPolicy(p.flags, env); prob != nil {
+				return nil, 0, prob
+			}
+		}
 		ctx.Root, ctx.Policy = root, pol
+		if cmd.Before != nil {
+			if prob := cmd.Before(ctx); prob != nil {
+				return nil, 0, prob
+			}
+		}
 		// every argument and configuration check has passed: from here on, work starts (journal replay)
 		s, err := store.Open(root, store.Options{})
 		if err != nil {
 			return nil, 0, failed(err, "store", false, "run status; if the store is damaged, fsck")
 		}
 		ctx.Store = s
-	} else if _, ok := p.flags["store"]; ok {
-		return nil, 0, usage("unknown-option", "this command reads no store", "--store does not apply; nothing was done",
-			"option --store", "drop --store", "")
+	} else {
+		if _, ok := p.flags["store"]; ok {
+			return nil, 0, usage("unknown-option", "this command reads no store", "--store does not apply; nothing was done",
+				"option --store", "drop --store", "")
+		}
+		if cmd.Before != nil {
+			if prob := cmd.Before(ctx); prob != nil {
+				return nil, 0, prob
+			}
+		}
 	}
 	return cmd.Run(ctx)
 }
