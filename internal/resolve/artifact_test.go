@@ -548,9 +548,9 @@ func TestBytesDifferent(t *testing.T) {
 }
 
 // TestProtocolIdentical: C-core-23. protocol, identical bytes: no T0, no reproduced implied, no copy flag, and
-// explain points to §9.3 for independence. The exit under a declared comparator is 0 today (the execution note's
-// `match (identical bytes)` is a match; claims §13 says exit 0 needs a T0 or T1 comparison): pinned here, and an
-// open spec question. Under protocol with no comparator nothing can be compared, so
+// explain points to §9.3 for independence. The exit under a declared comparator is 0, as decided: claims §13
+// admits byte-identical outputs under `protocol` with a declared comparator (`match (identical bytes)`, no tier)
+// beside a T0 or T1 comparison. Under protocol with no comparator nothing can be compared, so
 // identical bytes are `unchecked` and exit 3, the same as different bytes (claims §13, execution §5.3).
 func TestProtocolIdentical(t *testing.T) {
 	conformance.Covers(t, "C-core-23")
@@ -571,7 +571,7 @@ func TestProtocolIdentical(t *testing.T) {
 				t.Fatalf("run %+v", run)
 			}
 		}
-		wantExit(t, a, 0, "")
+		wantExit(t, a, 0, "") // claims §13: byte-identical outputs under protocol with a declared comparator
 	})
 
 	w = groupWorld(t, "protocol", "", map[string]string{"A": "X", "BB": "X"})
