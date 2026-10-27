@@ -214,10 +214,14 @@ func (r *Report) Render() string {
 	return b.String()
 }
 
-// Exit maps a report to the gate exit code the hub template proposes (0 every object admitted, possibly
-// labelled, or only control-plane paths reported; 1 at least one refused; 3 nothing refused and at least one
-// undecided). Refusals of every class map to 1 by default; with operationalUndecided an operational refusal
-// maps to 3 instead (the open question of whether "stopped by the reader's own limit" is a completed check).
+// Exit maps a report to the gate exit code of claims §13 (0 every object admitted, possibly labelled, or only
+// control-plane paths reported; 1 at least one refused, under any class: a refusal, an operational one over a
+// size limit included, is a decided verdict on that object; 3 nothing refused and the admission of at least one
+// object could not be decided, which includes a limit hit partway through an evaluation). Callers pass false.
+//
+// Deprecated parameter: operationalUndecided=true maps an operational refusal to 3, a reading the format does
+// not take (an operational refusal exits 1). It remains only until its last caller drops the argument, and
+// then goes with it.
 func (r *Report) Exit(operationalUndecided bool) int {
 	refused, undecided := false, false
 	for _, x := range r.Results {

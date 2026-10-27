@@ -587,14 +587,19 @@ func TestPeerTextInert(t *testing.T) {
 	}
 }
 
-// TestExitMapping: 0 admitted (labels allowed), 1 refused, 3 undecided; an operational refusal maps to 1 or,
-// on request, 3.
+// TestExitMapping: claims §13 gate exits. 0 admitted (labels allowed), 1 refused under any class (an operational
+// refusal over a size limit is a decided verdict on the object: 1), 3 nothing refused and something undecided.
 func TestExitMapping(t *testing.T) {
 	op := DefaultPolicy()
 	op.Limits[LimitBlobBytes] = 1
 	rep := mustAdmit(t, "pull", Package{Objects: []Object{blobObject([]byte("xx"))}}, MemHeld{}, op, Options{})
-	if rep.Exit(false) != 1 || rep.Exit(true) != 3 {
-		t.Fatal(rep.Exit(false), rep.Exit(true))
+	if rep.Results[0].Verdict != Refused || rep.Results[0].Refusal.Class != refusal.Operational || rep.Exit(false) != 1 {
+		t.Fatalf("an operational refusal: exit %d\n%s", rep.Exit(false), rep.Render())
+	}
+	// a refusal outweighs an undecided object: still 1
+	rep.Results = append(rep.Results, Result{Verdict: Undecided})
+	if rep.Exit(false) != 1 {
+		t.Fatal(rep.Exit(false))
 	}
 	rep = mustAdmit(t, "pull", Package{Objects: []Object{blobObject([]byte("x"))}}, MemHeld{}, nil, Options{})
 	if rep.Exit(false) != 0 {
