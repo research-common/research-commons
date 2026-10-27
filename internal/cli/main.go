@@ -43,6 +43,8 @@ type Ctx struct {
 	Policy *Policy
 	Store  *store.Store
 	Env    *Env
+	// state carries what a command's Before checked and Run uses (a loaded key), so Run does not re-read it.
+	state any
 }
 
 // Flag reports a flag's value and whether it was given.

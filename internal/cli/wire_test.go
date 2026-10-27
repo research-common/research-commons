@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"slices"
@@ -343,5 +345,137 @@ func TestHubCheckCommand(t *testing.T) {
 	// the environment configures nothing (H-13): a reader policy in the environment is not read
 	if r := runIn(w.root, map[string]string{PolicyEnv: "/nonexistent"}, "hub", "check", "--base", "main", "--json"); r.code == 2 && strings.Contains(r.stdout, "reader policy") {
 		t.Fatal("hub check read COMMONS_POLICY")
+	}
+}
+
+// releaseWorld: a store whose operator key (OPR) serves blob B under its own holds, and a key file for OPR.
+func releaseWorld(t *testing.T) (w *world, b, keyFile string) {
+	w = newWorld(t)
+	b = w.blob("B", []byte("B"))
+	w.authored("A:B", "K1", "B")
+	w.sign("H:B", "OPR", "holds", obj("content", canon.Value(content("B")), "locations", []string{"https://mirror.example/b"}))
+	seed := sha256.Sum256([]byte("research-commons go test cli key OPR"))
+	keyFile = filepath.Join(t.TempDir(), "opr.key")
+	os.WriteFile(keyFile, []byte(`{"alg":"ed25519","seed":"`+hex.EncodeToString(seed[:])+`"}`), 0o600)
+	return w, b, keyFile
+}
+
+// TestGCRelease: C-core-145 (a), (b), (d) and C-core-146 (c) through the command. gc is a dry run by default
+// and states its side effects; a blob the operator's serving holds pins is kept with the reason named; gc
+// --release signs the withdrawal and deletes the blob in one operation, after which show says the bytes are not
+// held here and the holds statements (serving and withdrawn) are both in the log; with no usable key nothing
+// is committed or deleted. --grace for one run is printed in the plan.
+func TestGCRelease(t *testing.T) {
+	conformance.Partial(t, "C-core-145", "through the command: (a) gc keeps B and names the serving holds, (b) gc --release commits the withdrawal and deletes B, show then says not held here and both holds are listed, (d) no usable key: nothing committed or deleted; (c) crash and (e) are the store's and the wire schema's (internal/store)")
+	conformance.Partial(t, "C-core-146", "through the command: (c) gc --grace for one run is used and printed in the plan; the policy-window floor, (a), (b) and (d) are the store's (internal/store) or need history and publish")
+	w, b, keyFile := releaseWorld(t)
+	blobPath := filepath.Join(w.root, "blobs", "sha256", strings.TrimPrefix(b, "sha256:"))
+
+	before := snapshot(t, w.root)
+	r := w.run("gc", "--json")
+	if r.code != 0 || snapshot(t, w.root) != before {
+		t.Fatalf("dry run: %d %s", r.code, r.stdout)
+	}
+	if !strings.Contains(w.run("show", b, "--json").stdout, `"holders":["`+w.signer("OPR")+`"]`) {
+		t.Fatal("the operator is not a holder before the release")
+	}
+	p := jsonOf(t, r)
+	if p.Members["side_effects"] != canon.String("no deletion; no registry change") || !strings.Contains(string(canon.Encode(p.Members["kept"])), "served under holds "+w.ids["H:B"]) {
+		t.Fatalf("plan: %s", r.stdout)
+	}
+	if r := w.run("gc", "--apply", "--grace", "0s", "--json"); r.code != 0 || !strings.Contains(r.stdout, `"grace_source":"this run (--grace)"`) {
+		t.Fatalf("apply: %d %s", r.code, r.stdout)
+	} else if _, err := os.Stat(blobPath); err != nil {
+		t.Fatal("gc --apply deleted a blob the operator serves")
+	}
+
+	// (d) no usable key: exit 2, nothing changed; a group-readable key file is refused, and never printed
+	os.Chmod(keyFile, 0o644)
+	before = snapshot(t, w.root)
+	for _, args := range [][]string{{"--key", keyFile}, {}} {
+		r := w.run(append([]string{"gc", "--release", b, "--json"}, args...)...)
+		if r.code != 2 || snapshot(t, w.root) != before || strings.Contains(r.stdout, "seed") && strings.Contains(r.stdout, `"seed":"`) {
+			t.Fatalf("unusable key %v: %d %s", args, r.code, r.stdout)
+		}
+	}
+	os.Chmod(keyFile, 0o600)
+
+	// (b) one operation
+	r = runIn(w.root, map[string]string{KeyEnv: keyFile}, "gc", "--release", b, "--json")
+	if r.code != 0 {
+		t.Fatalf("release: %d %s%s", r.code, r.stdout, r.stderr)
+	}
+	rel := jsonOf(t, r)
+	if rel.Members["blob_removed"] != canon.Bool(true) || rel.Members["withdrawal"] == nil {
+		t.Fatalf("release: %s", r.stdout)
+	}
+	if _, err := os.Stat(blobPath); err == nil {
+		t.Fatal("the blob is still there")
+	}
+	// B is not held here and has no current holder; both holds (serving, then withdrawn) stay in the log
+	show := w.run("show", b, "--json")
+	if !strings.Contains(show.stdout, `"bytes":"not held here"`) || !strings.Contains(show.stdout, `"holders":[]`) {
+		t.Fatalf("show after release: %s", show.stdout)
+	}
+	for _, id := range []string{w.ids["H:B"], string(rel.Members["withdrawal"].(canon.String))} {
+		if r := w.run("show", id, "--json"); r.code != 0 || !strings.Contains(r.stdout, `"line":"chained"`) {
+			t.Fatalf("holds %s after release: %d %s", id, r.code, r.stdout)
+		}
+	}
+	if !strings.Contains(w.run("show", string(rel.Members["withdrawal"].(canon.String)), "--json").stdout, `"withdrawn":true`) {
+		t.Fatal("the withdrawal does not show withdrawn")
+	}
+	if strings.Contains(r.stdout+show.stdout, hex.EncodeToString([]byte{})+`"seed"`) {
+		t.Fatal("key material printed")
+	}
+}
+
+// TestFsckAndLimits: fsck is read-only, reports what it scanned and exits 1 on a fatal finding (a corrupt blob)
+// and 0 otherwise; status --limits prints one table, every row with a name, value, source and what it bounds,
+// and a hub policy limit shows as the policy's.
+func TestFsckAndLimits(t *testing.T) {
+	w := fixture(t)
+	before := snapshot(t, w.root)
+	r := w.run("fsck", "--json")
+	if r.code != 0 || snapshot(t, w.root) != before {
+		t.Fatalf("fsck: %d %s", r.code, r.stdout)
+	}
+	if s := jsonOf(t, r).Members["scanned"].(*canon.Object); s.Members["statements"] == canon.Int(0) {
+		t.Fatal("fsck scanned nothing")
+	}
+	bp := filepath.Join(w.root, "blobs", "sha256", strings.TrimPrefix(dig("sole"), "sha256:"))
+	os.Chmod(bp, 0o644)
+	if err := os.WriteFile(bp, []byte("not sole"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if r := w.run("fsck", "--json"); r.code != 1 || !strings.Contains(r.stdout, `"finding":"corrupt blob"`) {
+		t.Fatalf("corrupt blob: %d %s", r.code, r.stdout)
+	}
+	os.WriteFile(filepath.Join(w.root, PolicyFile), []byte(`{"policy":"rc-hub-policy/1","limits":{"blob_bytes":5}}`), 0o644)
+	l := jsonOf(t, w.run("status", "--limits", "--json")).Members["limits"].(canon.Array)
+	seen := map[string]bool{}
+	for _, x := range l {
+		o := x.(*canon.Object)
+		for _, k := range []string{"name", "value", "unit", "source", "bounds"} {
+			if _, ok := o.Members[k]; !ok {
+				t.Fatalf("limit row lacks %s: %s", k, canon.Encode(o))
+			}
+		}
+		n := string(o.Members["name"].(canon.String))
+		if seen[n] {
+			t.Fatalf("limit %s twice", n)
+		}
+		seen[n] = true
+		if n == "blob_bytes" && (o.Members["value"] != canon.Int(5) || o.Members["source"] != canon.String(PolicyFile)) {
+			t.Fatalf("hub policy limit: %s", canon.Encode(o))
+		}
+	}
+	for _, n := range []string{"blob_bytes", "statement_bytes", "scan.member_bytes", "fetch_bytes", "gc_grace", "wire.line_bytes"} {
+		if !seen[n] {
+			t.Fatalf("limits table lacks %s", n)
+		}
+	}
+	if _, ok := jsonOf(t, w.run("status", "--json")).Members["limits"]; ok {
+		t.Fatal("status prints limits without --limits")
 	}
 }
