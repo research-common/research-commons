@@ -726,9 +726,10 @@ func TestDisagreementIsSymmetric(t *testing.T) {
 // --- §5.3.3 capture evidence -------------------------------------------------------------------------------
 
 // TestDeviceAttestedUnverified: C-core-52. An attestation bound to other bytes and one with no verifier both
-// display device-attested (unverified) and contribute no verified level.
+// display device-attested (unverified) and contribute no verified level; no exit rests on it: the observation's
+// verify exit is the same whether the attestation verifies or not (claims §13, capture evidence never moves it).
 func TestDeviceAttestedUnverified(t *testing.T) {
-	conformance.Partial(t, "C-core-52", "display and verified level; \"no exit 0 rests on it\" needs an observation verify exit, which the note does not define yet")
+	conformance.Covers(t, "C-core-52")
 	w := newWorld(t)
 	o1 := w.observed("O1", "O1", "X", "none-yet", obj(), "capture", canon.Value(obj("at", "2026-10-16T00:00:00Z", "evidence", "device-attested", "attestation", obj("format", "x"))))
 	for _, opt := range []Option{WithAttestationVerifier(fakeAttest{false}), WithAttestationVerifier(NoAttestationVerifier{})} {
@@ -738,9 +739,43 @@ func TestDeviceAttestedUnverified(t *testing.T) {
 			t.Fatalf("verified level %s", o.Capture.Verified)
 		}
 	}
-	if o := obsView(t, w, o1, WithAttestationVerifier(fakeAttest{true})); o.Capture.Display != "device-attested" {
-		t.Fatalf("control: %s", o.Capture.Display)
+	ok := obsView(t, w, o1, WithAttestationVerifier(fakeAttest{true}))
+	if ok.Capture.Display != "device-attested" {
+		t.Fatalf("control: %s", ok.Capture.Display)
 	}
+	want, _ := ok.VerifyExit()
+	for _, opt := range []Option{WithAttestationVerifier(fakeAttest{false}), WithAttestationVerifier(NoAttestationVerifier{})} {
+		if got, why := obsView(t, w, o1, opt).VerifyExit(); got != want {
+			t.Fatalf("an unverified attestation moved the verify exit: %d %v, verified %d", got, why, want)
+		}
+	}
+}
+
+// TestObservationVerifyExit: claims §13, `verify` of an observation. 0 when its signature and pins hold; 3 when
+// the referent is unpinned or its finality rule cannot be evaluated by this reader; the corroboration status
+// (corroborated, contradicted, unchecked) and the reader's re-check never move it.
+func TestObservationVerifyExit(t *testing.T) {
+	exit := func(o *Observation, want int, cause string) {
+		t.Helper()
+		got, why := o.VerifyExit()
+		if got != want || (cause != "" && !strings.Contains(strings.Join(why, "; "), cause)) || (want == 0 && why != nil) {
+			t.Fatalf("exit %d %v, want %d %q\n%s", got, why, want, cause, o.Render())
+		}
+	}
+	// pinned, rule evaluable: 0 whatever corroboration says
+	w := newWorld(t)
+	o1 := w.observed("O1", "O1", "X", "exact-bytes", chainRef(3), "finality", canon.Value(depthFinality("confirmations >= 6", 3)))
+	exit(obsView(t, w, o1), 0, "")
+	exit(obsView(t, w, o1, WithReferentChecker(fakeReferents{o1: {Outcome: ReDifferent, Digest: dig("Y"), State: State{HasDepth: true, Depth: 12}}})), 0, "")
+	hw, x := hotReading(t) // corroborated 2, contradicted 1
+	exit(obsView(t, hw, x), 0, "")
+	// unpinned: 3, naming the missing pin (the control above pins all three fields)
+	m := w.observed("O2", "O2", "Y", "exact-bytes", obj("chain_id", "bip122:000000000019d6689c085ae165831e93", "height", 860000, "depth", 3))
+	exit(obsView(t, w, m), 3, "referent: unpinned")
+	// a finality rule this reader cannot evaluate: 3; the same observation under a reader that can: 0
+	src := w.observed("S1", "O3", "Z", "source", apiRef("https://api.example/settlements"), "finality", runFinality("RF"))
+	exit(obsView(t, w, src), 3, "referent: finality unchecked")
+	exit(obsView(t, w, src, WithFinalityRules(settlementRules{})), 0, "")
 }
 
 // TestAnchoredAtCapture: C-core-53. A local anchor displays (local, self-declared); a bitcoin-verified one
