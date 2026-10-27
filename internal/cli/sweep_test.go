@@ -79,8 +79,11 @@ func mustRead(t testing.TB, p string) []byte {
 
 // sweepNonStore is the sweep invocation of a command that reads no store.
 func (w *world) sweepNonStore(c *Command) []string {
-	if c.Name == "hub check" {
+	switch c.Name {
+	case "hub check":
 		return []string{"hub", "check"}
+	case "init":
+		return []string{"init", w.root} // an existing store: idempotent, exit 0, nothing changes
 	}
 	return nil
 }
@@ -101,6 +104,11 @@ func (w *world) badInvocations(c *Command) [][]string {
 		return [][]string{{"--rebuild", "no-such-projection"}, {"--rebuild", ""}}
 	case "status":
 		return [][]string{{"--limits", "x"}}
+	case "init":
+		// a non-empty directory that is not a store, a file, and a second argument
+		d := w.t.TempDir()
+		os.WriteFile(filepath.Join(d, "x"), []byte("x"), 0o644)
+		return [][]string{{d}, {filepath.Join(d, "x")}, {w.root, "extra"}, {"--store", w.root}}
 	}
 	return nil
 }
