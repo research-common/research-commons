@@ -30,6 +30,9 @@ type Env struct {
 	Getenv         func(string) string
 	Getwd          func() (string, error)
 	Build          Build
+	// Rerun is the re-run bridge `verify --rerun` calls; nil in a build without execution (the command then
+	// answers "re-run not available in this build", exit 3). This package never executes anything itself.
+	Rerun Rerunner
 }
 
 // Ctx is one invocation as a command's Run sees it: arguments and flags already validated, the store (when

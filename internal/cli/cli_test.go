@@ -51,8 +51,10 @@ func sweepArgs(w *world) [][]string {
 	return out
 }
 
+// TestVerifyExits: C-core-133, statement fixtures through the CLI. The re-run fixtures (match, diverged, timeout,
+// failed step, environment mismatch) run verify --rerun on a fake runner in internal/clirun.TestRerunExits.
 func TestVerifyExits(t *testing.T) {
-	conformance.Partial(t, "C-core-133", "checked and passed, checked and wrong, contested, unknown (no authorship claim), unchecked and nothing to re-run exit through the CLI; timeout, failed step and environment mismatch need a re-run path in verify (run.VerifyWithRerun is tested in internal/run)")
+	conformance.Covers(t, "C-core-133") // the statement fixtures; the re-run fixtures are internal/clirun.TestRerunExits
 	w := fixture(t)
 	cases := []struct {
 		blob  string
@@ -433,8 +435,11 @@ func TestInert(t *testing.T) {
 	if _, err := os.Stat("/tmp/rc-pwned"); err == nil {
 		t.Fatal("something executed peer text")
 	}
-	// static: the CLI and the binary import nothing that executes or touches the network
+	// static: the CLI imports nothing that executes or touches the network. The binary imports exactly one
+	// execution path, the re-run bridge (internal/clirun), which only verify --rerun with an execution policy
+	// reaches (TestRerunNeverByDefault checks that dynamically).
 	root, _ := conformance.RepoRoot()
+	sawBridge := false
 	for _, dir := range []string{"internal/cli", "cmd/commons"} {
 		ents, _ := os.ReadDir(filepath.Join(root, dir))
 		for _, e := range ents {
@@ -447,11 +452,18 @@ func TestInert(t *testing.T) {
 			}
 			for _, imp := range f.Imports {
 				p, _ := strconv.Unquote(imp.Path.Value)
-				if p == "os/exec" || p == "net" || strings.HasPrefix(p, "net/") || p == "html/template" || p == "text/template" || strings.HasSuffix(p, "/internal/run") {
+				if dir == "cmd/commons" && strings.HasSuffix(p, "/internal/clirun") {
+					sawBridge = true
+					continue
+				}
+				if strings.HasSuffix(p, "/internal/clirun") || p == "os/exec" || p == "net" || strings.HasPrefix(p, "net/") || p == "html/template" || p == "text/template" || strings.HasSuffix(p, "/internal/run") {
 					t.Errorf("%s/%s imports %s", dir, e.Name(), p)
 				}
 			}
 		}
+	}
+	if !sawBridge {
+		t.Error("cmd/commons does not wire the re-run bridge; verify --rerun would always be unavailable")
 	}
 	// the CLI's reader of partial provenance agrees with the execution layer's
 	b := obj("provenance_partial", canon.Value(obj("unpinned", []string{"a", "b"})))
