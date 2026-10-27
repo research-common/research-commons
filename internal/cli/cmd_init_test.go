@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/research-common/research-commons/internal/canon"
+	"github.com/research-common/research-commons/internal/conformance"
 	"github.com/research-common/research-commons/internal/store"
 )
 
@@ -70,5 +72,39 @@ func TestInitRefuses(t *testing.T) {
 	}
 	if r := runIn(d, nil, "init", filepath.Join(d, "x")); r.code != 2 {
 		t.Fatalf("file: %d", r.code)
+	}
+}
+
+// TestFirstRunNoKey: every signing command with no key exits 2, changes nothing, and tells the user to run
+// commons key new --out <file> and give --key or COMMONS_KEY; so does init's own output.
+func TestFirstRunNoKey(t *testing.T) {
+	conformance.Partial(t, "C-core-108", "the CLI half: no signing command generates a key implicitly (publish, publish task, gc --release exit 2 and point at commons key new); push does not exist as a command, so the refusal of an unsigned draft at push stays with the gate test")
+	p := newPubWorld(t)
+	c := p.file("c", "bytes")
+	ct := p.file("ct.json", `{}`)
+	before := snapshot(t, p.root)
+	for _, args := range [][]string{
+		{"publish", "--kind", "authored", "--content", c},
+		{"publish", "task", "--name", "t", "--contract", ct},
+		{"gc", "--release", dig("sole")},
+	} {
+		r := runIn(p.root, nil, append(args, "--json")...)
+		if r.code != 2 || snapshot(t, p.root) != before {
+			t.Fatalf("%v: exit %d %s", args, r.code, r.stdout)
+		}
+		o := jsonOf(t, r)
+		var text string
+		for _, k := range []string{"detail", "next"} {
+			if s, ok := o.Members[k].(canon.String); ok {
+				text += string(s) + " "
+			}
+		}
+		if !strings.Contains(text, "commons key new --out <file>") || !strings.Contains(text, "--key") || !strings.Contains(text, KeyEnv) {
+			t.Fatalf("%v: no first-run guidance: %s", args, text)
+		}
+	}
+	r := runIn(t.TempDir(), nil, "init", filepath.Join(t.TempDir(), "s"))
+	if !strings.Contains(r.stdout, "commons key new --out <file>") || !strings.Contains(r.stdout, "--key <file>") || !strings.Contains(r.stdout, KeyEnv) {
+		t.Fatalf("init output: %s", r.stdout)
 	}
 }

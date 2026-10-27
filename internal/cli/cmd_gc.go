@@ -60,7 +60,7 @@ func gcBefore(c *Ctx) *Problem {
 	}
 	if keyPath == "" && c.Env.Getenv(KeyEnv) == "" {
 		return policyProblem("no-key", "--release needs a signing key", "option --key",
-			"give --key <file> or set "+KeyEnv+"; a release that cannot sign deletes nothing", "")
+			"create a key with commons key new --out <file> (first-run setup), then give --key <file> or set "+KeyEnv+"; a release that cannot sign deletes nothing", "")
 	}
 	k, prob := signingKey(c)
 	if prob != nil {
