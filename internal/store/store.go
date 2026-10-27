@@ -52,7 +52,7 @@ type Store struct {
 // Open opens (creating if needed) the store at root and replays the journal (§3.4).
 func Open(root string, opt Options) (*Store, error) {
 	s := &Store{root: root, opt: opt}
-	for _, d := range []string{"blobs/sha256", "statements", "journal/pending", "journal/done", "quarantine", "retained", "tmp"} {
+	for _, d := range []string{"blobs/sha256", "statements", "journal/pending", "journal/done", "quarantine", "tmp"} {
 		if err := os.MkdirAll(filepath.Join(root, d), 0o755); err != nil {
 			return nil, err
 		}

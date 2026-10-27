@@ -6,7 +6,8 @@ package store
 //
 //   - an installed statement, of any kind or format major, other than a `holds`, whose stored line mentions
 //     its digest (found by scanning for `sha256:<64 hex>` with wire.ScanDigests, the rule the gate applies to
-//     a statement it cannot interpret, so a statement this reader cannot interpret pins too), and any file under statements/ or retained/ that does not read: kept, never interpreted;
+//     a statement it cannot interpret, so a statement this reader cannot interpret pins too), and any file
+//     under statements/ that does not read: kept, never interpreted;
 //   - any journal record, pending or done, that names it (a record is in transit; gc never touches one);
 //   - a serving `holds`: the current `holds` of an operator key for that digest that is not withdrawn
 //     (GCConfig.Operators; with none configured every key's serving holds pins, which can only keep more).
@@ -220,33 +221,27 @@ func (ri *refIndex) refresh() error {
 			}
 		}
 	}
-	for _, top := range []string{"statements", "retained"} {
-		err := filepath.WalkDir(ri.s.dir(top), func(p string, d fs.DirEntry, err error) error {
-			if err != nil {
-				if errors.Is(err, fs.ErrNotExist) {
-					return nil
-				}
-				return err
-			}
-			if d.IsDir() || ri.seen[p] {
-				return nil
-			}
-			b, err := os.ReadFile(p)
+	return filepath.WalkDir(ri.s.dir("statements"), func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
 				return nil
 			}
-			if err != nil {
-				return err
-			}
-			ri.seen[p] = true
-			ri.readFile(top, d.Name(), b)
+			return err
+		}
+		if d.IsDir() || ri.seen[p] {
 			return nil
-		})
+		}
+		b, err := os.ReadFile(p)
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
 		if err != nil {
 			return err
 		}
-	}
-	return nil
+		ri.seen[p] = true
+		ri.readFile(d.Name(), b)
+		return nil
+	})
 }
 
 // contentDigest is body.content.digest of a statement, when present and typed.
@@ -268,35 +263,34 @@ func contentDigest(st *wire.Statement) (Digest, bool) {
 	return Digest(d), true
 }
 
-func (ri *refIndex) readFile(top, name string, b []byte) {
-	why := "retained line " + name
-	if top == "statements" {
-		st, err := wire.Read(b)
-		switch {
-		case err != nil || st.ID != name:
-			why = "statement file " + name + " (does not read; kept, never interpreted)"
-		case st.Verified && st.Kind == "holds":
-			if d, ok := contentDigest(st); ok {
-				_, w := st.Body.Members["withdrawn"]
-				h := holdsEntry{signer: st.Signer, digest: d, seq: st.Seq, id: st.ID, withdrawn: w, size: -1}
-				if c, ok := st.Body.Members["content"].(*canon.Object); ok {
-					if n, ok := c.Members["size"].(canon.Int); ok {
-						h.size = int64(n)
-					}
+// readFile indexes one file under statements/: every digest it mentions pins, whether or not it reads.
+func (ri *refIndex) readFile(name string, b []byte) {
+	var why string
+	st, err := wire.Read(b)
+	switch {
+	case err != nil || st.ID != name:
+		why = "statement file " + name + " (does not read; kept, never interpreted)"
+	case st.Verified && st.Kind == "holds":
+		if d, ok := contentDigest(st); ok {
+			_, w := st.Body.Members["withdrawn"]
+			h := holdsEntry{signer: st.Signer, digest: d, seq: st.Seq, id: st.ID, withdrawn: w, size: -1}
+			if c, ok := st.Body.Members["content"].(*canon.Object); ok {
+				if n, ok := c.Members["size"].(canon.Int); ok {
+					h.size = int64(n)
 				}
-				if ls, ok := st.Body.Members["locations"].(canon.Array); ok {
-					for _, l := range ls {
-						if t, ok := l.(canon.String); ok {
-							h.locations = append(h.locations, string(t))
-						}
-					}
-				}
-				ri.holds = append(ri.holds, h)
 			}
-			return
-		default:
-			why = "statement " + name
+			if ls, ok := st.Body.Members["locations"].(canon.Array); ok {
+				for _, l := range ls {
+					if t, ok := l.(canon.String); ok {
+						h.locations = append(h.locations, string(t))
+					}
+				}
+			}
+			ri.holds = append(ri.holds, h)
 		}
+		return
+	default:
+		why = "statement " + name
 	}
 	for _, m := range wire.ScanDigests(b) {
 		ri.pins[Digest(m)] = append(ri.pins[Digest(m)], why)

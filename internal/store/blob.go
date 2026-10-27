@@ -11,11 +11,13 @@
 //	<root>/journal/pending/<op>.json    committed, not yet installed (§3.1 step 2)
 //	<root>/journal/done/<op>.json       installed, projections pending (§3.1 step 4)
 //	<root>/cache/<projection>/<digest>   projections (disposable; created on first use)
-//	<root>/retained/<hex>               reserved: lines under an rc major this reader cannot compute ids for,
-//	                                    keyed by the sha256 of their canonical form (wire §6, §8); written by pull
 //	<root>/quarantine/                  corrupt blobs, statements and records, moved aside, never deleted
 //	<root>/tmp/                         temporaries on the same filesystem (§2 step 1); Open removes those
 //	                                    older than tmpGrace
+//
+// There is no separate area for statements this reader cannot evaluate (an unknown rc major, alg or critical
+// extension): their id is computable in every major (wire §6), so they are stored under statements/ like any
+// other and are unsupported in every projection (§1).
 //
 // Every write that publishes an object is temporary file → fsync → create-exclusive link into place →
 // fsync of the directory (the durability declaration, §7).
