@@ -44,10 +44,11 @@ func init() {
 				}},
 			{Name: "override", Value: "name=path[,path…]", Help: "a typed override: admits exactly the named objects (paths in the package) where the refusal is this reader's own policy; never an intrinsic or operational refusal",
 				Check: func(v string) error { _, err := parseOverride(v); return err }},
+			{Name: "from-checkout", Help: "the package is a git checkout: a top-level .git entry is transport metadata, not listed to the gate and reported as skipped (never the default; a .git anywhere deeper is still refused)"},
 			{Name: "dry-run", Help: "judge the package and print the report; install nothing (no registry change; no fetch; no cache)"},
 		},
 		Store: true, ReaderPolicy: true, Before: pullBefore,
-		Help: "Exit 0 every object admitted (possibly labelled; nothing new is not an error), 1 at least one object refused (the admitted rest is still committed, and the output says so), 2 did not start (no such directory, a malformed option, an unusable policy), 3 nothing refused and something undecided, or the commit failed after work started.",
+		Help: "With --from-checkout (a hub checkout), the top-level .git is skipped as transport metadata and reported once; without it .git is refused. Exit 0 every object admitted (possibly labelled; nothing new is not an error), 1 at least one object refused (the admitted rest is still committed, and the output says so), 2 did not start (no such directory, a malformed option, an unusable policy), 3 nothing refused and something undecided, or the commit failed after work started.",
 		Run:  pullCmd})
 }
 
@@ -132,6 +133,20 @@ func pullCmd(c *Ctx) (*Obj, int, error) {
 		}
 		return nil, 0, failed(err, "package "+dir, false, "pull again; nothing was committed")
 	}
+	var skipped listV
+	if _, ok := c.Flag("from-checkout"); ok {
+		// only the top-level entry named .git (a directory, or the file a linked worktree has); a .git deeper in
+		// the tree keeps its path and the gate refuses it as before
+		kept := pkg.Objects[:0:0]
+		for _, ob := range pkg.Objects {
+			if ob.Path == ".git" {
+				skipped = append(skipped, textV(".git (transport metadata, --from-checkout)"))
+				continue
+			}
+			kept = append(kept, ob)
+		}
+		pkg.Objects = kept
+	}
 	rep, err := gate.Pull(pkg, gate.StoreHeld{S: c.Store}, &pol, opt)
 	if err != nil {
 		var d *gate.DidNotStart
@@ -142,6 +157,9 @@ func pullCmd(c *Ctx) (*Obj, int, error) {
 	}
 	o := gateReport(rep)
 	o.set("package", peerV(dir))
+	if len(skipped) > 0 {
+		o.set("skipped", skipped)
+	}
 	if c.Policy.Reader != nil {
 		o.get("policy").(*Obj).set("reader_policy", c.Policy.readerObj())
 	}
