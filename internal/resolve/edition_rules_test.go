@@ -723,7 +723,7 @@ func archive() []ContentUnit {
 // pre-pin check: the draft passes with outcome `unchecked` recorded; re-applied by a reader (hub) it admits
 // nothing.
 func TestUnscannedArchive(t *testing.T) {
-	conformance.Partial(t, "C-core-95", "the rule and pre-pin check at the resolver; the archive scanner is a stand-in ContentReader, and publish (pinning the bytes) is not built")
+	conformance.Partial(t, "C-core-95", "the rule and pre-pin check at the resolver; the archive scanner is a stand-in ContentReader (no archive scanner ships); publish records unchecked for an unscanned unit in internal/cli.TestPublishPrePin")
 	w := newWorld(t)
 	x := w.authored("X", "M", "arch")
 	g := w.genesis("G", "A", 0, "A")
@@ -757,7 +757,7 @@ func TestUnscannedArchive(t *testing.T) {
 // names the edition to fetch; no body is returned, so nothing records `ok`. Control: after fetching it, the
 // check runs and the body records its outcome.
 func TestIntendedForNotHeld(t *testing.T) {
-	conformance.Partial(t, "C-core-95a", "the pre-pin check at the resolver; publish (nothing pinned) is not built")
+	conformance.Covers(t, "C-core-95a") // the resolver half; publish is internal/cli.TestPublishPrePin
 	w := newWorld(t)
 	g := w.genesis("G", "A", 0, "A")
 	e1 := w.editionWith("E1", "A", g, []string{g}, "rules", rules("FORBID secret"))
@@ -783,7 +783,7 @@ func TestIntendedForNotHeld(t *testing.T) {
 // TestIntendedForFail: C-core-96. E2's rule forbids `secret`; the content has it. The check refuses with class
 // reader policy, scope this statement, naming the edition, and returns no body to sign.
 func TestIntendedForFail(t *testing.T) {
-	conformance.Partial(t, "C-core-96", "the refusal at the resolver; publish (nothing pinned or appended) is not built")
+	conformance.Covers(t, "C-core-96") // the resolver half; publish is internal/cli.TestPublishPrePin
 	w := newWorld(t)
 	g := w.genesis("G", "A", 0, "A")
 	e1 := w.editionWith("E1", "A", g, []string{g})

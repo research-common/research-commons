@@ -144,7 +144,7 @@ func TestFsckInvalidStatementAndJournal(t *testing.T) {
 // and step 5: the commit reports `committed, needs repair: blob <hash> missing`, nothing is rolled back,
 // fsck lists the unresolved reference, and re-installing the bytes plus repair finishes it.
 func TestFsckMissingBlobInRecord(t *testing.T) {
-	conformance.Partial(t, "C-core-138", "the failure message names what failed (blob <hash> missing), what is committed, and the next step; the publish command's wording and exit codes are a later layer")
+	conformance.Covers(t, "C-core-138") // the store half; the publish command is internal/cli.TestPublishCommittedPendingInstall
 	root := t.TempDir()
 	k := testKey("A")
 	data := []byte("removed mid-publish")

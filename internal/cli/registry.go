@@ -62,6 +62,13 @@ type Command struct {
 	// registry adds the --policy option and parses the file before Run; a command without it rejects
 	// --policy and ignores the environment variable.
 	ReaderPolicy bool
+	// Writes: the command appends to the store (publish). The read-command sweeps (every Store command run bare
+	// or over every fixture ref) skip it: a writer needs a key and its own arguments.
+	Writes bool
+	// Prepare, when set, runs after argument binding and before store discovery: every check of the
+	// invocation's own inputs (key file, draft, content file, policy files it names) belongs here, so a bad
+	// input exits 2 before any work (claims-model note §13). It may stash what it read in Ctx.Prep for Run.
+	Prepare func(*Ctx) *Problem
 	// Help is extra text after the synopsis.
 	Help string
 	// Before validates the invocation beyond argument shapes (a directory exists, options do not conflict)

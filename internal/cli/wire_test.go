@@ -11,6 +11,7 @@ import (
 
 	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/conformance"
+	"github.com/research-common/research-commons/internal/wire"
 )
 
 // readerPolicyDoc is a reader-policy-v1 document trusting keys for admission over any content.
@@ -356,7 +357,7 @@ func releaseWorld(t *testing.T) (w *world, b, keyFile string) {
 	w.sign("H:B", "OPR", "holds", obj("content", canon.Value(content("B")), "locations", []string{"https://mirror.example/b"}))
 	seed := sha256.Sum256([]byte("research-commons go test cli key OPR"))
 	keyFile = filepath.Join(t.TempDir(), "opr.key")
-	os.WriteFile(keyFile, []byte(`{"alg":"ed25519","seed":"`+hex.EncodeToString(seed[:])+`"}`), 0o600)
+	os.WriteFile(keyFile, keyFileBytes(wire.AlgEd25519, seed[:]), 0o600)
 	return w, b, keyFile
 }
 

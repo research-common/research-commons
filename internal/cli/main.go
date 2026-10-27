@@ -45,6 +45,8 @@ type Ctx struct {
 	Env    *Env
 	// state carries what a command's Before checked and Run uses (a loaded key), so Run does not re-read it.
 	state any
+	// Prep is what the command's Prepare hook read, for Run.
+	Prep any
 }
 
 // Flag reports a flag's value and whether it was given.
@@ -234,6 +236,11 @@ func dispatch(argv []string, env *Env) (*Obj, int, error) {
 	pos := p.words[n:]
 	if prob := bindArgs(cmd, pos, ctx.Args); prob != nil {
 		return nil, 0, prob
+	}
+	if cmd.Prepare != nil {
+		if prob := cmd.Prepare(ctx); prob != nil {
+			return nil, 0, prob
+		}
 	}
 	if cmd.Store {
 		root, prob := discover(p.flags, env)

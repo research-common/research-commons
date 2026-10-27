@@ -403,7 +403,7 @@ func reverse(n int) []int {
 
 // TestSettledByReview: C-exch-06, the view half. No quorum predicate: the task display says so.
 func TestSettledByReview(t *testing.T) {
-	conformance.Partial(t, "C-exch-06", "the view half only: `publish task` (CLI) is not built; contract grammar pending (quorum)")
+	conformance.Covers(t, "C-exch-06") // the view half; the publish half is internal/cli.TestPublishTask
 	w := newWorld(t)
 	g := w.task("G", "R")
 	e := w.taskEdition("E", "R", g, []string{g}, w.contract("R"))

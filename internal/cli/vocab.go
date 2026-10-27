@@ -104,6 +104,10 @@ var vocabulary = []Token{
 	{"admitted by override", "label", "a reader-policy refusal lifted by a typed override that names this object"},
 	{"series boundary", "label", "a series boundary the freeze policy could not decide"},
 	{"below trust floor", "label", "the signer is not trusted for admission by this reader's policy; admitted and labelled (--below-floor label)"},
+	// task readiness (claims-model note §9.2, §9.3)
+	{"settled by review, not by counting", "readiness", "the task edition has no quorum predicate: its beneficiary's decisions settle it; nothing is counted"},
+	{"ready", "readiness", "the quorum is met by distinct signing keys under the edition's terms"},
+	{"not ready", "readiness", "the quorum is not met yet"},
 	// store and journal (storage note §3, §7)
 	{"nothing pending", "store", "no journal record is waiting: every committed operation is installed and projected"},
 	{"committed, pending install", "store", "the operation reached its commit point and its statements are not all installed yet"},
