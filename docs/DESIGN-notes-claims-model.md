@@ -165,7 +165,7 @@ body are one statement. Canonical encoding, field names and test vectors belong 
 
 | Kind | Signed by | Says |
 |---|---|---|
-| `authored` | the author | "I made these bytes." Carries the author's single-party fields: licence, availability, verification spec, description, and provenance (workflow + inputs) when derived. For a construction, it is a first-to-publish claim (§5.2). The same key's later `authored` statement on the same blob amends its earlier one. |
+| `authored` | the author | "I made these bytes." Carries the author's single-party fields: licence, availability, verification spec, description, and provenance (workflow + inputs) when derived. For a construction, it is a first-to-publish claim (§5.2). The same key's later `authored` statement on the same blob amends its earlier one: the amended claim keeps the best time bound of its amendment chain, and its fields come from the latest statement alone, so a field the amendment omits is undeclared (an amendment replaces, it does not patch). |
 | `observed` | the observer | "I captured these bytes." Carries the referent, capture record, capture evidence and the observation class the observer asserts (§5.3), plus the same single-party fields. |
 | `holds` | anyone | "I have these bytes and serve them." Mirroring, with no authorship and no agreement. A later `holds` by the same key with `withdrawn: true` says "I no longer serve them"; the earlier one stays in the log. |
 | `describes` | anyone | Open annotations: tags, notes, non-evidential links. Shown as the signer's, ranked by the reader's trust. |
@@ -236,6 +236,17 @@ one key's `authored` or `observed` statement, chosen by the rules below. Rival v
 listed with their signers and never silently dropped. A consumer that needs certainty pins a specific
 statement rather than relying on the default.
 
+**A forked log.** On an uncleared fork of a key's log (wire-format note §7), every `authored` statement of
+that key on a blob that no later statement of the key amends is current, whichever branch it is on. Current
+statements with the same provenance are one claim, and a field on which they disagree is `contested` on that
+field; statements with different provenance are separate claims. This is read per statement, not by freezing
+the key at the fork's base: a blob that only one branch speaks about resolves normally, and lines after the
+fork count on both branches. Most forks are one key signing from two machines, and freezing would hide that
+work until a merge for no conflict in what the key said. A fork by someone else holding the key is answered by
+the key's revocation (§4.1), which cuts the branch it leaves out; until then the other branch can make the
+key's fields `contested`, never win them. Clearing the fork with `merges` does not choose between values: an
+`authored` whose history includes both branches amends both (C-core-16a).
+
 ### 5.2 Constructions: first to publish
 
 1. **Sole author.** Exactly one key has a verified `authored` statement for the blob, so its single-party
@@ -257,15 +268,51 @@ the claim. A derived artifact with pinned provenance claims something else: "thi
 produced this", which anyone can check by re-running, so time evidence is the wrong adjudicator. `authored`
 statements that carry the same provenance (workflow hash and input hashes) form one **derivation group**,
 whatever their output bytes. Priority is never computed within a group. The display is "derived by *k* under
-wf-…", each deriver listed, with independent re-runs distinguished from `holds`. Bytes are evidence *within*
+wf-…", each deriver listed, with independent re-runs distinguished from `holds`. Against a claimant outside
+it, a group is one claimant whose bound is the best any member holds: the rules above rank the group as a
+whole, and a member who joins late, with a weaker bound or none, never lowers it. This keeps the answer one
+function of the statements held, whichever member a reader happened to see first (I12, I14); it is not a
+defence against a hostile member, whom the reader keeps out by its own admission policy (C-core-20a). An
+outside claim never erases a group's evidence: when authorship is contested or goes to the outsider, each
+group's grade is still shown beside its claimants. Bytes are evidence *within*
 the group, read against the `replication` mode the workflow's own `authored` statement declares (§7), which
-derivers inherit:
+derivers inherit. The mode and comparator are the workflow's resolved defaults under §5.1 and §5.2, never a
+value a deriver or its statement supplies. When the workflow's own authorship is `contested`, a group uses
+a mode and comparator only if every claimant of the workflow declares the same ones (`explain`: "all *n*
+claimants of the workflow agree"); otherwise every derivation under it is `unchecked`. The workflow's own
+display of those fields still shows no default. When the workflow's author amends its mode or comparator,
+every group under the workflow is read under the amendment, and `explain` cites it (C-core-22a):
 
 | the workflow declares | identical bytes | different bytes |
 |---|---|---|
 | `bytes` (deterministic) | a byte-identical re-derivation (T0); "derived by *k*" | `diverged`: an environment differs or the determinism claim is wrong; shown, not adjudicated |
-| `protocol` | consistent with a re-run and with a copy, and not evidence of either: shown as `identical bytes (protocol workflow)`; independence is §9.3's question | compared under the workflow's declared comparator: `match` or `diverged` (T1); "derived by 3: 2 match, 1 diverged". No declared comparator: `unchecked`, never a default comparison |
+| `protocol` | consistent with a re-run and with a copy, and not evidence of either: shown as `identical bytes (protocol workflow)`; independence is §9.3's question; with no declared comparator, `unchecked` and `verify` exits 3, as for different bytes | compared under the workflow's declared comparator: `match` or `diverged` (T1); "derived by 3: 2 match, 1 diverged". No declared comparator: `unchecked`, never a default comparison |
 | undeclared | `unchecked` | `unchecked` |
+
+**Grades are the reader's own comparison.** A grade comes from the reader comparing output bytes itself, under
+the workflow's mode and comparator; the `result` a `reproduced` statement signs is never graded. Each run in a
+group is shown with what its runner signed (its token and environment record, the comparator's record nested,
+attributed to the runner, I2), the reader's trust in that runner, and the reader's own result; where the
+runner's token and the reader's result differ, `explain` says so, declared beside computed (§7). Trust in a
+runner never moves a grade or an exit code (C-core-25a).
+
+**Each run is graded on its own output.** Under `bytes`, an output that another run of the group also
+produced is a byte-identical re-derivation (T0) whatever else the group holds, and an output no other run
+produced is `diverged`; the group shows `diverged (n different outputs)` as a disclosure, so one stray run
+under the same provenance never takes T0 from the runs that agree (I7, C-core-22b). Under `protocol`, the
+comparator judges each pair of runs, and a run that matched at least one other run is T1, listed with the runs
+it matched. Tolerance is not transitive (§9.3), so matches are never chained: the group shows `all k match under
+K` only when every pair matched, and otherwise its counts and `not all runs agree`, with the number of clusters
+(runs linked by matches) and the pairs that diverged, which `explain` lists (C-core-24a, C-core-24b). Checking
+one output needs only its own row, so `verify` may stop at that output's first match. A comparator's result for
+a pair may be cached on the comparator's hash and parameters, the unordered pair of outputs and the evaluator
+version; the cache is a projection, rebuilt at will, never evidence (§12).
+
+A comparator judges re-runs of one derivation: the same workflow on the same inputs. Agreement between
+results on different data (a replication with a fresh sample) is a corroboration (§5.3.2) or a task's test
+(§9.3), not a T1. A comparator must be deterministic and symmetric, so that a pair has one answer whichever
+output comes first and however often it is asked; that is the comparator author's duty, and no reader can
+test it.
 
 A non-deterministic process can honestly return identical bytes (a tight response contract leaves few degrees
 of freedom), so identical output under `protocol` is neither a reproduction nor a red flag. Single-party fields
@@ -309,7 +356,10 @@ Rules:
   identity, location and time. For methods: the method edition followed, the execution environment record
   (image digest, platform, harness commit), the measured system's identity and state (model and provider pin,
   and whatever changes the apparatus under the observer, such as a routing era), the protocol's pinned inputs
-  by hash (scenario edition, seed set, configuration), and the window (#65). A fork
+  by hash (scenario edition, seed set, configuration), and the window (#65). A method edition declares the
+  members of the measured system an observation under it must pin; a missing declared member is
+  `unpinned`, and without a declaration two method-class observations are comparable only when they pin the
+  same members (C-core-32). A fork
   or a vanished API does not make an observation false. It is still true of what it pinned. What changes is
   whether the referent is still canonical or still available, and that is shown separately. It never counts
   against the observer. A statement whose referent lacks a field its class requires is still a valid signed
@@ -333,14 +383,19 @@ Rules:
   What the rule buys:
   - *Referent status by rule.* `provisional (SF; final at RF)` while unmet, `final` once met, `revised` when
     the bytes changed before finality, `not canonical` when they changed after it (a deep reorg, a dispute
-    run). The earlier observation stays true of what it pinned in every case.
+    run). The earlier observation stays true of what it pinned in every case. "Changed" compares captures by
+    their state in the rule's order, never by `capture.at`, which is the observer's word: a capture at a
+    later state with different bytes is a revision, and two captures at the same state with different bytes
+    contradict each other (C-core-40). States that the rule cannot order are not comparable.
   - *Expected revision is not contradiction.* A finality-aware agreement model (§5.3.2) returns
     `inconclusive (referent revised)` for two captures at different states before finality, and `contradicts`
     only when both are at the same state or past it.
   - *Class migration by rule.* While the rule is unmet, agreement is source-class (near-equality around the
-    same time). Once it holds, a re-capture of the same referent with identical bytes is an exact-bytes
-    corroboration. The observer still asserts the class; the rule is what lets a reader apply the stronger
-    agreement model.
+    same time). Near-equality needs a declared tolerance, from the agreement model or the source profile;
+    without one no default tolerance is applied and the source-class result is `inconclusive`, never counted,
+    as for a `protocol` workflow with no comparator (§5.2). Once it holds, a re-capture of the same referent
+    with identical bytes is an exact-bytes corroboration. The observer still asserts the class; the rule is what
+    lets a reader apply the stronger agreement model.
   - *Derived results inherit the horizon*, shown beside the grade: "rests on 3 captures: 2 final, 1
     provisional until RF" (§7).
 - **Identical bytes mean different things per class.** For most classes, a second key publishing the same bytes
@@ -358,7 +413,9 @@ grade reflects how it was computed. No new trust mechanism is needed.
   climate-record or physical-bounds check before any neighbouring station is consulted.
 - **Cohorts are chosen by rule.** A corroboration states "every station in collection R within 50 km and 200 m
   elevation", not "these three stations". Anyone can re-apply the rule to R and see what was left out.
-  Hand-picked cohorts are allowed and labelled `cohort: hand-picked`.
+  Hand-picked cohorts are allowed and labelled `cohort: hand-picked`. A corroboration that declares neither
+  is malformed (wire-format note §5 makes `cohort` required), so `cohort: undeclared` is never
+  displayed.
 - **Agreement isn't independence.** Each corroboration declares what it shares with the original: upstream feed,
   operator, instrument model. Two "stations" scraping one upstream feed are one source. Distinct keys prove
   nothing about independence.
@@ -368,7 +425,9 @@ grade reflects how it was computed. No new trust mechanism is needed.
 An observation's **corroboration status** is computed per reader from the corroborations it holds and trusts:
 `corroborated n · contradicted m · unchecked`, always scoped ("within statements you hold"). Disagreement is
 symmetric. If Denver says 120 and two neighbours say 85, the status is "contradicted by 2 under model M", and
-the tool does not decide which side is wrong.
+the tool does not decide which side is wrong. A counted `contradicts` counts against the original and against
+each observation in its comparison data (the result's inputs other than the original); a `supports` counts for
+the original only, because a check against data says nothing about the data (C-core-51).
 
 #### 5.3.3 Capture evidence
 
@@ -411,7 +470,9 @@ decide who is right.
    curator's judgment), `rule-based` (a published inclusion rule others can re-apply), or a
    `completeness claim` ("every reading from source X in this window", which can be checked and refuted).
    A hub that declares nothing displays `undeclared`, never a value it did not sign; agreement models treat
-   an undeclared selection as curated, the weakest claim.
+   an undeclared selection as curated, the weakest claim. No statement kind carries a hub's own selection
+   today, so a hub declares it through a collection it controls whose editions carry `selection`,
+   and the hub's display cites that collection's edition.
 4. **The reader brings the references.** A reader can re-run any corroboration against reference data *it*
    trusts. The project ships **no default reference collections**: they are ordinary collections that anyone
    may curate and readers choose among, consistent with categories being convention rather than protocol (#16).
@@ -445,7 +506,7 @@ the source.
 | capture evidence | §5.3.3 level, verified or not |
 | corroboration | §5.3.2 status, scoped |
 | selection | curated · rule-based · completeness claim · undeclared (§6). Missing means undeclared. |
-| referent status | still canonical · `provisional` · `final` · `revised` · `not canonical` · source still available / unknown (§5.3.1) |
+| referent status | still canonical · `provisional` · `final` · `revised` · `not canonical` · source still available / unknown · `unpinned` (a field its class requires is missing) · `finality unchecked` (a declared rule the reader has no source profile to evaluate) · `pinned` (phenomenon and method classes, whose referent has no re-check) (§5.3.1) |
 
 | pre-registration | `pre-registered <task edition> (<bound quality>)` · `exploratory` · undeclared (#3). Missing means undeclared, not exploratory. |
 | finality | §5.3.1 rule and rule provenance; state at capture |
@@ -489,7 +550,13 @@ immutable editions.
   rule's domain. Every evaluation is `ok`, `fail` or `unchecked`, and `unchecked`
   never passes (I4). A failing rule rejects the membership, never the artifact: the artifact's own statements
   are untouched. The rule language is a profile (§15); the core fixes only what a rule may read and the
-  three outcomes. Examples: "at least 24 h of coverage inside the window, the whole window in one routing
+  three outcomes. *Which record and which rules*: a rule reads the statement a `statement` member
+  names; for a `content` member it reads the blob's single-party defaults (§5.1), where a contested or
+  undeclared field answers nothing (`unchecked`), and observation fields (referent, class, finality) need a
+  `statement` member naming the `observed`; a `resource` member offers only its role. A membership is endorsed
+  when the edition that lists it, re-applied over its own members, yields `ok` for it; a candidate for the next
+  edition is evaluated under the base edition's rules over the base members and every candidate proposed with
+  it (C-core-93b). Examples: "at least 24 h of coverage inside the window, the whole window in one routing
   era, at most one endorsed member per instrument per era"; "same scenario edition, harness commit in range,
   n ≥ 30 per arm, replication = protocol".
 - **Approvals.** Under k of n each controller signs the same edition body. Approvals of byte-identical bodies
@@ -540,11 +607,17 @@ immutable editions.
   segments carry finality rules (§5.3.1), a reader computes the members' finality boundary and shows both:
   "frozen_before 2025-06-01 (declared) · members final to 2025-04-01 (2 segments provisional)". A declared
   boundary later than the computed one is flagged; `unchecked` when members carry no rule; `not comparable`
-  when the declared unit differs from the computed one (never converted). A series edition
-  rule may require agreement, so a hub can refuse a premature freeze under its own policy. A controller can
-  still freeze a tail the source intends to revise; it cannot do so invisibly. An edition that replaces a
-  segment dated before its predecessor's `frozen_before` is shown as `REVISED-FROZEN`; the earlier edition and
-  its segment remain resolvable (I3).
+  when the declared unit differs from the computed one (never converted). The computed boundary is the
+  position of the earliest segment that is not final, every segment before it being final; when every
+  segment is final, it is the end of the last segment. It is `unchecked` when any segment carries no finality
+  rule or its state cannot be re-checked, since one segment without a rule leaves the boundary unknown. A
+  series edition rule may require agreement, so a hub can refuse a premature freeze under its own policy. A
+  controller can still freeze a tail the source intends to revise; it cannot do so invisibly. A segment's
+  position is read from its referent: the start of its window, else its time, else its finality state, in the
+  unit of `frozen_before`; a position in another unit is `not comparable` with the boundary and is explained,
+  not flagged. An edition replaces a segment when a segment of its predecessor is missing from it, or it adds a
+  segment, positioned before the predecessor's `frozen_before`. Such an edition is shown as `REVISED-FROZEN`;
+  the earlier edition and its segment remain resolvable (I3).
 
 ## 9. Research exchange
 
@@ -636,6 +709,10 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
   labelled.
 - **Data never carries control.** Incoming trees cannot carry code, hooks, configuration, trust lists or policy.
   Hub CI reads the hub's policy from the base revision, so a pull request cannot grant itself anything.
+  What the policy holds is each hub tool's choice: the format fixes only that it is control plane,
+  read from the base revision, strict, refused as data, and limited to decisions this note gives a hub (its
+  refusal classes above: blob storage, limits, blobs it does not serve, series rules). It names no keys and
+  grants no key anything until the reader-trust design settles (C-core-114, C-core-115).
 - **Admission is not execution.** Holding executable bytes never implies permission to run them. Foreign code
   runs sandboxed.
 - **Byte-exact transport.** Fetch is binary-safe and verifies the full hash before installing anything (#64).
@@ -676,20 +753,42 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
 
 - **Closed vocabulary.** One documented table of state tokens (`contested`, `unknown`, `unchecked`,
   `corroborated n`, `contradicted m`, `SUPERSEDED`, `FORK`, `retracted`, …), each with one meaning on every
-  surface, including `unpinned`, `REVISED-FROZEN` and `timeout`. Every rule evaluation (edition rules,
-  departure checks, pre-pin checks) is one of `ok`, `fail`, `unchecked`.
+  surface, including `unpinned`, `REVISED-FROZEN`, `timeout` and the referent statuses of §7. Every rule
+  evaluation (edition rules, departure checks, pre-pin checks) is one of `ok`, `fail`, `unchecked`.
 - **Retraction is display.** A `retracts` statement is shown wherever the artifact is; it does not stop
   anyone serving the bytes. Superseded snapshots are often the evidence for their own erratum. A hub that
   must stop serving something does so under its own admission policy (I9).
-- **Exit codes.** `verify`: 0 checked and passed · 1 checked and wrong · 3 could not check (contested, unknown,
-  unchecked, unpinned, unsupported; a re-run stopped by one of the reader's own limits, `timeout` or another
+- **Exit codes.** 0 checked and passed · 1 a completed check disagreed (a `verify` comparison, or a rule the
+  publisher named failing its own bytes at the pre-pin check, or a gate refusing an object, or a fatal `fsck`
+  finding) · 3 could not check (contested, unknown, unchecked, unpinned, unsupported; a derived artifact nobody
+  re-derived, `not re-derived`; a re-run stopped by one of the reader's own limits, `timeout` or another
   operational cap, reported with the resources used; and a re-run whose step failed or left a declared output
   missing) · 4 nothing to re-run · 5 environment mismatch: the declared environment differs from, or is not
-  available in, the one that ran. Exit 1 is reserved for a comparison that ran to completion and disagreed; a
-  step that failed compared nothing, and the token says which kind of "could not check" it was. Limits and
-  environments call for different next steps (raise the limit or accept `unchecked`, versus run where the
-  pinned environment exists). Exit 0 means the requested operation succeeded, not that everything it
-  referenced is valid.
+  available in, the one that ran. Exit 1 is reserved for a check that ran to completion and disagreed; a step
+  that failed compared nothing, a rule that came out `unchecked` decided nothing, and the token says which kind
+  of "could not check" it was. Limits and environments call for different next steps (raise the limit or accept
+  `unchecked`, versus run where the pinned environment exists). Exit 0 means the requested operation succeeded,
+  not that everything it referenced is valid.
+- **`verify` of an observation** checks its signature and its pins: exit 0 when they hold, exit 3
+  when the referent is `unpinned` or its finality rule cannot be evaluated. Corroboration status and capture
+  evidence are disclosures (I6) shown beside it and never change the exit, so no exit rests on a capture
+  level the reader did not verify (C-core-52).
+- **`verify` of a derived artifact needs a comparison.** A derived artifact claims that its workflow on its
+  inputs produced its bytes, so exit 0 needs a T0 or T1 comparison (a second run in its group, or the
+  reader's own re-run inside `verify`), or, under `protocol` with a declared comparator, byte-identical
+  outputs (`match (identical bytes)`, no tier; execution §5.3): identical bytes are a match under any
+  comparator, and the grade stays untiered, with no T0 and no copy flag (C-core-23). With none of these, it is `not re-derived` and exits 3 under every
+  replication mode (C-core-25b). The author's own `reproduced` is a second run, and `explain` says
+  "re-derived by its author only". A construction without provenance makes no such claim, so a sole author
+  with nothing contested still exits 0 (C-core-17). So under a mode that permits no comparison (undeclared,
+  or `protocol` with no comparator), `verify` exits 3 whether the group holds one run or several: holding
+  less evidence never passes where holding more would not.
+- **Gate exit codes.** A gate (`pull`, `push`, hub CI, the pre-pin check) exits 0 when every object
+  would be admitted, labels included; 1 when at least one object is refused, under any class, the refusal
+  being a decided verdict on that object (an object over a size limit is refused, not interrupted); 3 when the
+  admission of some object could not be decided, including an evaluation stopped by one of the reader's own
+  limits partway through (a traversal depth, C-core-131) and a check the gate's policy requires that comes out
+  `unchecked`; and 2 as for every command.
 - **Exit 2: the command did not start.** On every command, 2 means the invocation or the reader's own
   configuration could not be acted on: an unknown option, a malformed argument (an id that is not an id), a
   policy or configuration file that is present but unreadable or unparseable. Arguments and configuration are
@@ -697,7 +796,7 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
   error is still the problem-details object below, with `committed` false. Conditions about a particular
   artifact or check are never 2, even when they stem from configuration: an optional capability that is
   simply not configured (no Bitcoin backend, say) is a state token and exits 3. No other condition exits 2,
-  so exit 1 stays reserved for a completed comparison that disagreed. An explicit request for help exits 0.
+  so exit 1 stays reserved for a completed check that disagreed. An explicit request for help exits 0.
 - **Explain.** Every status can be expanded to the statements, policy and checks behind it (I14).
 - **Dry runs** state their side effects: "no registry change" differs from "no fetch, no cache, no quarantine".
 - **Errors** say what failed, what is still known, whether anything was committed, and the narrowest next
@@ -738,7 +837,11 @@ What the clean break removes, and the alpha issues it closes by construction:
 
 Each of these needs its own note: wire format (canonical encoding, field names, signature scheme, test vectors);
 storage engine and transaction design; execution profiles (runtimes, confinement mechanism, limits); statistical
-comparison dialects; rule and schema dialects (what edition rules and member schemas may express, §8);
+comparison dialects; rule and schema dialects (what edition rules and member schemas may express, §8; until
+that note exists: a member schema under no dialect the reader implements is loaded, named and always
+`unchecked`, and every dialect states its cost model: evaluation runs under the reader's step budget, each
+primitive is charged against it, and regular expressions are linear-time (RE2-class) or charged per
+backtracking step, so C-core-94's limit binds whatever the dialect computes);
 attestation verifiers (receipts, TEEs); receiver-local Bitcoin verification (#59); size policy (#9); hub
 conventions (discovery #66; the hub-template and `COMMONS.md` rubric, which still use alpha vocabulary).
 
