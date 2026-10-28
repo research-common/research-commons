@@ -163,8 +163,9 @@ CLI's "success" text.
 Deserializing yields an operation tree rooted at the stamped digest. The reader enumerates
 `(calculated_digest, attestation)` pairs and, for every `BitcoinBlockHeaderAttestation`:
 
-- requires `height` to be a non-negative integer within the provider's known chain (a boolean, a negative
-  value or a height beyond the tip is `unknown-height`);
+- requires `height` to be within the provider's known chain: the format's varuint cannot carry a negative
+  value or a non-integer, so `unknown-height` here means a height too large for the reader's integer type,
+  below the lowest height the view holds (a checkpointed bootstrap, §6.1), or above the tip;
 - resolves the header **at that height on the reader's accepted chain**, never a header carried in the proof,
   the statement, or a remote label;
 - requires `calculated_digest == header.hashMerkleRoot` in the library's byte order, with explicit, tested
@@ -195,6 +196,7 @@ not conform, whichever library it uses.
 | file-hash op | `08` (sha256), then 32 digest bytes | any other hash op is `invalid-proof` (§4 check 7) |
 | operations | `f0` append, `f1` prepend (each with a varbytes argument, 1–4096 bytes); `f2` reverse; `f3` hexlify; `02` sha1, `03` ripemd160, `08` sha256, `67` keccak256 | any other tag is `invalid-proof`; an op whose result exceeds 4096 bytes is `invalid-proof` |
 | branching | `ff` before every branch except the last | depth ≤ 256 (the library's recursion limit, and §12's) |
+| duplicate siblings | two siblings at one node with the same operation and argument, or the same attestation bytes | `invalid-proof`. The library keeps a node's operations in a map keyed by operation and argument and its attestations in a set, so it merges duplicates silently; this profile refuses them, so that two parsers never disagree about what a file holds (C-btc-11) |
 | attestation | `00`, an 8-byte tag, varbytes payload ≤ 8192 bytes, parsed to its exact end | trailing bytes inside a payload are `invalid-proof` |
 | Bitcoin attestation | tag `0588960d73d71901`; payload = varuint height | the only tag that can yield `bitcoin` quality |
 | pending attestation | tag `83dfe30d2ef90c8e`; payload = URI ≤ 1000 bytes from `A–Z a–z 0–9 - . _ / :` | displayed `pending`; never dereferenced (§2) |
@@ -221,6 +223,12 @@ median-time-past BIP 113 uses; version/activation rules of the chosen validator,
 future-time admission against the local clock (Core's `MAX_FUTURE_BLOCK_TIME`, 2 hours, `time-too-new`);
 cumulative chainwork with greatest-work selection, never longest-by-height; reorg detection; lookup by height
 and by hash.
+
+**Equal-work tips are unresolved.** Bitcoin Core keeps the tip it saw first when two tips carry equal
+chainwork. This profile deliberately does not: first-seen depends on delivery order, which two readers do not
+share. The accepted chain ends at the tied tips' fork point, so a block above it on either branch is not on
+the accepted chain, and an attestation there has no live eligibility (`stale-chain` when the block is held on a
+tied branch, `unknown-height` when it is not) until more work breaks the tie (C-btc-15).
 
 Baseline: full header history from genesis (~80 MB per million headers), obtained headers-first (BIP 130
 `sendheaders` announcements; a BIP 157 compact-filter client is an acceptable header source). Pruned or
@@ -264,7 +272,7 @@ Defaults an implementation ships; every one is the reader's to change (I9), none
 | settled depth | 144 (about a day) | confirmations, counted in the last validated view, past which a bound keeps `bitcoin` quality when that view is no longer fresh (§9.4) |
 | priority margin | 0 | extra blocks the earlier bound must lead by to rank (§8.3); same block is always a tie |
 | maximum view age | 1 h | since last successful validated sync or readiness check |
-| maximum tip age | 6 h | operational stale-tip refusal, not a consensus rule |
+| maximum tip age | 6 h | operational stale-tip refusal, not a consensus rule: the tip header's `nTime` against the local clock, as Bitcoin Core's stale-tip check reads it. The only use of `nTime` beyond display and the §6.1 header rules |
 | network during reads | never | reads touch receiver-local state only |
 | explorer fallback | none | unsupported, not merely disabled |
 | header sources | operator-configured | independent sources recommended; eclipse limit disclosed |
@@ -292,7 +300,7 @@ Every bound is a record, not a `(timestamp, quality)` pair:
 quality            none | local | bitcoin
 state              verified | verified-historical | pending | insufficient-confirmations | missing-proof
                    | invalid-proof | invalid-anchor | unknown-height | orphaned | stale-chain
-                   | backend-unconfigured | backend-unavailable | unsupported
+                   | backend-unconfigured | backend-unavailable | unsupported | refused
 signer             key
 anchor             statement id of the `anchors` statement
 covered            statement id of the head
@@ -304,6 +312,8 @@ chain_epoch, verified_at (reader-local), policy_fingerprint, verifier_version
 ```
 
 `local` evidence carries the signer's own timestamp and no chain fields. `none` is the absence of any anchor.
+`refused` is an operational refusal under §4 (the `anchors` statement or the proof exceeds one of the reader's
+size limits, checks 1 and 5); the record names the class and the limit, and the bound is absent.
 
 ### 8.2 Quality table
 
@@ -335,6 +345,10 @@ Computed separately from any display sort, and returned by `explain`:
 | `same-block` | same accepted height and hash |
 | `unverified` | either side is `local`, `none`, or any non-`verified` state |
 | `incomparable` | different networks, or either side `orphaned`/`stale-chain` |
+
+The priority margin is the reader's policy, so both bounds in one comparison are read under the same margin; a
+reader that one day combines bounds from more than one verifier (a second proof format, §16) applies one margin
+to the pair, never a different one per side.
 
 Only `earlier-commitment` ranks. `same-block`, `within-margin` and `unverified` resolve to `contested` for
 priority; `explain` names which, and for `within-margin` the gap and the margin. A
@@ -417,7 +431,7 @@ explain <statement>                        the bound record, the relation, and e
 |---|---|
 | every requested bound is `verified` | 0 |
 | any `invalid-proof` or `invalid-anchor` | 1 |
-| none invalid, but any `pending`, `missing-proof`, `insufficient-confirmations`, `unknown-height`, `orphaned`, `stale-chain`, `backend-*`, `unsupported`, `verified-historical` | 3 |
+| none invalid, but any `pending`, `missing-proof`, `insufficient-confirmations`, `unknown-height`, `orphaned`, `stale-chain`, `backend-*`, `unsupported`, `verified-historical`, `refused` | 3 |
 
 Mixed batches report every per-anchor state; precedence invalid > could-not-check > verified. A `bitcoin`
 label in received data with no local verification yields state `backend-unconfigured` or `pending`, displays
@@ -450,6 +464,10 @@ such; the tool never states the rival could not have published earlier.
 - The header validator is selected by an implementation spike against §6; a bare header parser with a
   per-header PoW check does not qualify. Its supported rules and bootstrap model are documented before a
   headers backend is advertised.
+- An implementation may instead carry its own proof parser and header validator in its tree, in its own
+  language, provided they pass C-btc-11, C-btc-14 and C-btc-15 and the parser meets the §5.1 table row for
+  row. Such code is trusted code and reviewed as such (§6.1); the optional-dependency rule above still
+  applies to any external helper it calls.
 - Helpers are invoked with argument arrays (no shell), over a versioned, bounded JSON protocol; unknown
   versions, missing required fields, malformed output or mismatched echoed input hashes fail closed.
 - Resource limits (local, operator-adjustable, never sender-set): `anchors` statement 64 KiB; proof blob
@@ -481,18 +499,20 @@ it displays is `local` or `none`.
 
 Fixtures use synthetic keys and either a checked-in historical mainnet fixture or synthetic header chains for
 negative cases. CI contacts no public network or calendar. C-btc-01 – C-btc-06 are the conformance cases from
-CONFORMANCE.md; the rest are this note's supplementary regressions.
+CONFORMANCE.md, restated here in brief (their ids in backticks, because CONFORMANCE.md is where they are defined);
+the rest are this note's supplementary regressions, defined here. Every id has exactly one defining table, and
+the conformance harness reads both documents.
 
 ### 14.1 Conformance cases
 
 | Id | Scenario | Required outcome |
 |---|---|---|
-| C-btc-01 | rival `authored`, A verified at block n, B at n+1; or A verified, B unanchored; permute | A default author, B `later claimant`, not `contested`, exit 0; `explain` cites the reader-verified bound |
-| C-btc-02 | both verified in the same block | `contested`, both listed, exit 3, no default single-party field |
-| C-btc-03 | observe `publish` against a mock transport; copier C publishes after seeing the push | `anchors` statement precedes the first byte out; C's bound later; original default, C later claimant |
-| C-btc-04 | A's anchor lists a B line id; variant: proof stamping B's prefix under A's anchor | B's line `no anchor`; the misattached proof invalid for A; B's log untouched |
-| C-btc-05 | malformed and oversized proofs on a valid log | anchor refused with class named; statements valid and displayed; no bound |
-| C-btc-06 | well-formed proof, no backend configured | bound shown unverified (`local, self-declared` or `unknown`); no priority; exit 3 |
+| `C-btc-01` | rival `authored`, A verified at block n, B at n+1; or A verified, B unanchored; permute | A default author, B `later claimant`, not `contested`, exit 0; `explain` cites the reader-verified bound |
+| `C-btc-02` | both verified in the same block | `contested`, both listed, exit 3, no default single-party field |
+| `C-btc-03` | observe `publish` against a mock transport; copier C publishes after seeing the push | `anchors` statement precedes the first byte out; C's bound later; original default, C later claimant |
+| `C-btc-04` | A's anchor lists a B line id; variant: proof stamping B's prefix under A's anchor | B's line `no anchor`; the misattached proof invalid for A; B's log untouched |
+| `C-btc-05` | malformed and oversized proofs on a valid log | anchor refused with class named; statements valid and displayed; no bound |
+| `C-btc-06` | well-formed proof, no backend configured | bound shown unverified (`local, self-declared` or `unknown`); no priority; exit 3 |
 
 ### 14.2 Binding
 

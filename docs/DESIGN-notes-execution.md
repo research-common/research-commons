@@ -112,6 +112,12 @@ Each cap is applied by the kernel to the container's cgroup or filesystem before
 while the step runs, not after it has finished. A host-side check after the fact (the output-size walk the
 alpha did) may remain as a second check; it is never the only one.
 
+The kernel enforces the disk cap (a write fails inside the container), but a size-capped filesystem raises no
+event that says so: the step just sees a failed write. Which token the run gets (`failed: operational: disk`,
+`failed: <exit n>` or `timeout`) is therefore the implementation's own classification, from the filesystem's
+fill level while the step runs and when it exits or is killed. That classification is a heuristic; an
+implementation documents it as one (I11), and it never changes what the cap enforced.
+
 | cap | mechanism | when tripped | result token | exit (`verify`) |
 |---|---|---|---|---|
 | `cpus` | cgroup cpu quota | throttled, not killed | (none; wall time absorbs it) | |
@@ -219,8 +225,10 @@ extracted.
 
 Every run writes one environment record. It is carried, unchanged, on the `authored` statement of each output
 when the run is a first derivation, on the `reproduced` statement when it is a re-run (§5), and on `observed`
-statements when the workflow is an acquisition (§1 rule 3). The wire-format note fixes the encoding; this
-note fixes the fields and their meaning.
+statements when the workflow is an acquisition (§1 rule 3). The wire-format note fixes the encoding (its §5,
+"Execution objects"); this note fixes the fields and their meaning. Two fields complete the table: `boundary`
+(the sandbox boundary that confined the run, which C-exec-12 requires the record to name) and `cleanup` (the
+result of the post-kill check, §2.2).
 
 | field | meaning | required under |
 |---|---|---|
@@ -273,7 +281,10 @@ Rules:
 | another key's `authored` for the same provenance | `authored` for its own bytes; the group display handles the rest (claims-model note §5.2) |
 
 A `reproduced` statement always carries: the statement it reproduces (by hash), the workflow and input
-hashes, the output hashes it produced, the result token, and the environment record.
+hashes, the output hashes it produced, the result token, and the environment record. Its `result` is one of
+`match`, `diverged` and `not comparable`, so a re-run whose comparison is `unchecked` (different bytes under
+`protocol` with no comparator, or under an undeclared mode, §5.3) emits no `reproduced`: `run` reports the
+token and says why nothing was published, and the reader's own record of the run is unaffected.
 
 ### 5.2 Result tokens
 
@@ -298,6 +309,11 @@ result is refuted". A step that exits non-zero, leaves a declared output missing
 compared nothing, so it exits 3 and the token says which kind of "could not check" it was. Exit 5 is only an
 environment mismatch: the environment the pin declares differs from, or is not available in, the one that
 ran. The table is the claims-model note's §13 vocabulary applied to runs.
+
+**An environment mismatch is checked first.** When a re-run in an environment that differs from the pin also
+fails, times out or produces different bytes, the token is `environment mismatch: <field>` and the exit is 5:
+a run outside the environment the pin declares says nothing about the pin, so its failure or its bytes are
+shown and never read as a 3 or a 1 (§4, "not compared (environment mismatch)").
 
 **A failure in the pinned environment is evidence about the claim, not the bytes.** When a `bytes` workflow's
 re-run fails or leaves outputs missing in an environment that matches the pin, `explain` says in words that the
@@ -324,6 +340,16 @@ exploration, produces a `describes` statement ("compared under K′: …"), neve
 runs under the same profile and boundary as the workflow (§6), with the two outputs as its only inputs and no
 network, and its own environment record is nested inside the `reproduced` statement.
 
+**The comparator interface**. A comparator is a workflow spec (§1) with exactly two inputs, named
+`a` and `b`, which the reader fills with the two outputs in ascending digest order; no network; and exactly
+one output, named `verdict`, whose bytes are `match`, `diverged` or `not comparable`, optionally followed by
+one line feed. Anything else (other bytes, a failed step, a cap stopping it, a spec that does not have this
+shape) makes the comparison `unchecked`, with the reason. A comparator's own `authored` declares
+`replication: bytes`: a comparison has one answer per pair (claims-model note §5.2), and a reader that caches
+comparator results relies on it; a comparator that declares anything else is not run, and every comparison
+under it is `unchecked`. The alpha's interface (`<comparator> <expected> <actual>`, exit 0 or 1) has no
+`not comparable` and is not carried forward.
+
 **Nondeterminism is a result.** A `bytes` workflow that produces different bytes across two runs in the same
 environment is reported exactly as the table says: `diverged`, both records visible, the earlier statement
 untouched (C-exec-13). The implementation never re-runs until it matches, never picks the majority of several
@@ -345,7 +371,11 @@ The boundary is deny-by-default in both profiles:
   environment, its parameters as named variables, no network, no grants unless policy names the comparator
   hash.
 - **Network is a grant, not an inference.** An input that happens to be a URL grants nothing; only the spec's
-  declared `network: required` plus a policy grant opens the network, and then only as declared.
+  declared `network: required` plus a policy grant opens the network, and then only as declared. "Only as
+  declared" needs per-endpoint egress control (a filtering proxy or firewall rules for the container). An
+  implementation that can only open the network as a whole says so: the record's `network` carries
+  `enforced: "all"` instead of `"per-endpoint"`, and the display shows `network granted (not limited to the
+  declared endpoints)`.
 
 C-exec-12 is the test: a canary variable, a canary file and a canary listener; the run record names the
 boundary; none of the three is reached.
