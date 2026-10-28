@@ -56,7 +56,7 @@ addressed by their statement hash, grouped by signing key. The per-key *log* is 
 statements ordered by the predecessor each names in its signed body (§4). There is no log file to append
 to and therefore no line to lose: a statement either exists under its hash or it does not. A statement the
 reader cannot evaluate (an unknown `rc` major, an unknown `alg`, a `crit` member it does not implement) is
-stored the same way, under its id, in its signer's place (proposed): the id formula and link fields are the
+stored the same way, under its id, in its signer's place: the id formula and link fields are the
 same in every major (wire-format note §6), so every received line has an id, and a separate area for lines
 without one would never be used. Such a line is `unsupported` in every projection until the reader
 implements it.
@@ -289,7 +289,7 @@ Two concurrent `pull`s of overlapping packages each commit their admitted set. O
 step. A hub's gate (CI on a base revision) sees a package as one unit (claims-model note §11) and never
 observes a partial install because step 3 of a `pull` completes before any projection the gate reads.
 
-For a hub kept in a version-control repository (proposed), a package is the set of files a change adds under
+For a hub kept in a version-control repository, a package is the set of files a change adds under
 the data surface: the blobs and statement files between the base revision and the change's head. Statement
 files are the one-statement-per-file form of §1, so a package and a store share one layout and the gate reads
 the change with the same code that reads a store.
@@ -398,7 +398,7 @@ remains valid, and every other holder's copy is unaffected. The tool therefore:
   withdrawn) needs no release;
 - never deletes a statement for any reason, including retraction (claims-model note §13: retraction is
   display) or a takedown; a hub that must stop serving bytes deletes the blob under its own admission policy
-  and keeps the statements. In a repository hub (proposed) that is two changes: the policy first lists the
+  and keeps the statements. In a repository hub that is two changes: the policy first lists the
   digest as not served, then a change removes the blob, the one removal the gate admits; every other
   removal or rewrite of held data is refused, since a delivery never removes what a hub holds (wire-format
   note §7);

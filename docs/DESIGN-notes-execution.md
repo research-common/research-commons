@@ -340,7 +340,7 @@ exploration, produces a `describes` statement ("compared under K′: …"), neve
 runs under the same profile and boundary as the workflow (§6), with the two outputs as its only inputs and no
 network, and its own environment record is nested inside the `reproduced` statement.
 
-**The comparator interface** (proposed). A comparator is a workflow spec (§1) with exactly two inputs, named
+**The comparator interface**. A comparator is a workflow spec (§1) with exactly two inputs, named
 `a` and `b`, which the reader fills with the two outputs in ascending digest order; no network; and exactly
 one output, named `verdict`, whose bytes are `match`, `diverged` or `not comparable`, optionally followed by
 one line feed. Anything else (other bytes, a failed step, a cap stopping it, a spec that does not have this
@@ -375,7 +375,7 @@ The boundary is deny-by-default in both profiles:
   declared" needs per-endpoint egress control (a filtering proxy or firewall rules for the container). An
   implementation that can only open the network as a whole says so: the record's `network` carries
   `enforced: "all"` instead of `"per-endpoint"`, and the display shows `network granted (not limited to the
-  declared endpoints)` (proposed).
+  declared endpoints)`.
 
 C-exec-12 is the test: a canary variable, a canary file and a canary listener; the run record names the
 boundary; none of the three is reached.
