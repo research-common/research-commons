@@ -128,8 +128,19 @@ func TestJoinRules(t *testing.T) {
 			t.Fatalf("hard link: %q %v", b, err)
 		}
 	}
-	if p, err := Join(root, "sub/new/file", "s"); err != nil || !strings.HasPrefix(p, root) {
-		t.Fatalf("a missing tail inside root: %q %v", p, err)
+	// Join returns the resolved form (built on the realpath of root), so compare against that, by components: on
+	// macOS t.TempDir() is under /var, a symlink to /private/var, and a textual prefix would also admit a sibling
+	// such as root+"X".
+	realRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := Join(root, "sub/new/file", "s")
+	if err != nil {
+		t.Fatalf("a missing tail inside root: %v", err)
+	}
+	if r, err := filepath.Rel(realRoot, p); err != nil || r != filepath.Join("sub", "new", "file") {
+		t.Fatalf("a missing tail inside root: %q (relative to %q: %q, %v)", p, realRoot, r, err)
 	}
 	c.check(t)
 }
