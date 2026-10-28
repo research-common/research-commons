@@ -66,8 +66,8 @@ merged design notes until `next` replaces it.
 
 ### What CI runs (Go implementation, `next`)
 
-`.github/workflows/go.yml` runs on every pull request and on pushes to `next` and `main`. The Go
-module lives on `next`; the alpha under `bin/` and `lib/` is still tested with `tests/run-all.sh`
+`.github/workflows/go.yml` runs on pull requests into `next` (and into the stacked `stage3/*` branches) and on
+pushes to `next`. The Go module lives on `next` only; the alpha under `bin/` and `lib/` is still tested with `tests/run-all.sh`
 as above. The workflow has read-only permissions, uses no secrets, and pins every action by commit SHA.
 
 - `go vet ./...` and `go test ./...` on Linux and macOS, with the Go version taken from `go.mod`.
