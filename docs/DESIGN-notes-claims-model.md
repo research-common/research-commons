@@ -624,7 +624,9 @@ immutable editions.
 ### 9.1 Tasks and coordination
 
 A task contract pins the question, required inputs and methods, acceptance rubric or comparator, eligible
-evidence, decision authority, quorum requirements and deadlines. **Claims are advisory intents, not locks.**
+evidence, decision authority, quorum requirements and deadlines. Its grammar is a named contract profile; the
+first, `task-contract-v1`, is proposed in `DESIGN-notes-task-contracts.md`.
+**Claims are advisory intents, not locks.**
 They make work visible without excluding independent attempts. A partition-tolerant global lock is impossible,
 and the design doesn't pretend otherwise. Liveness reports (heartbeats) are evidence of activity, not lease
 renewals. A task that truly needs exclusion names a coordinator, whose signed grants are the only thing that
@@ -843,7 +845,8 @@ that note exists: a member schema under no dialect the reader implements is load
 primitive is charged against it, and regular expressions are linear-time (RE2-class) or charged per
 backtracking step, so C-core-94's limit binds whatever the dialect computes);
 attestation verifiers (receipts, TEEs); receiver-local Bitcoin verification (#59); size policy (#9); hub
-conventions (discovery #66; the hub-template and `COMMONS.md` rubric, which still use alpha vocabulary).
+conventions (discovery #66; the hub-template and `COMMONS.md` rubric, which still use alpha vocabulary);
+task-contract profiles (§9.1).
 
 ## 16. Decisions on the questions this note first left open
 
