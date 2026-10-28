@@ -440,6 +440,57 @@ func TestRubricUnchecked(t *testing.T) {
 	}
 }
 
+// stmtRubric answers per criterion and statement id (so two submitters of one result can be judged apart).
+type stmtRubric map[string]Outcome
+
+func (f stmtRubric) Evaluate(c Criterion, st *wire.Statement) (Outcome, string) {
+	if o, ok := f[c.ID+"/"+st.ID]; ok {
+		return o, "fake evaluation"
+	}
+	return RuleUnchecked, "missing evidence for " + c.ID
+}
+
+// TestUndecidedSubmissionIsNoVeto: an unchecked rubric criterion on one submission never takes readiness from k
+// others that passed every criterion and agree (I7, no third-party veto; I4, unknown never passes). (a) A and B
+// pass, C is unchecked: ready, exit 0, C listed. (b) only A passes and C is unchecked, identical results: C is
+// needed, so unchecked, exit 3. (c) as (b) with C failing: not ready, exit 0. (d) a lone unchecked submission
+// that could not reach k even if it passed: not ready.
+func TestUndecidedSubmissionIsNoVeto(t *testing.T) {
+	conformance.Partial(t, "C-exch-08", "contract grammar pending (rubric); the undecided-submission rule follows the task-contracts RFC's bracket, itself proposed")
+	type sub struct {
+		name, by, result string
+		o                Outcome
+	}
+	for _, c := range []struct {
+		name  string
+		k     int
+		subs  []sub
+		token string
+		exit  int
+		says  string
+	}{
+		{"a: k passed, one undecided", 2, []sub{{"S1", "A", "X", RuleOK}, {"S2", "B", "X", RuleOK}, {"S3", "C", "Y", RuleUnchecked}}, Ready, 0, "undecided"},
+		{"b: the undecided one is needed", 2, []sub{{"S1", "A", "X", RuleOK}, {"S3", "C", "X", RuleUnchecked}}, ReadyUnchecked, 3, "unchecked"},
+		{"c: the needed one fails", 2, []sub{{"S1", "A", "X", RuleOK}, {"S3", "C", "X", RuleFail}}, NotReady, 0, "fail"},
+		{"d: could not reach k anyway", 3, []sub{{"S1", "A", "X", RuleOK}, {"S3", "C", "Y", RuleUnchecked}}, NotReady, 0, "would not reach"},
+	} {
+		w := newWorld(t)
+		g := w.task("G", "R")
+		e := w.taskEdition("E", "R", g, []string{g}, w.contract("R", "rubric", canon.Value(canon.Array{obj("id", "R1")}), "quorum", quorum(c.k, IndependenceNotRequired)))
+		ev := stmtRubric{}
+		for _, s := range c.subs {
+			ev["R1/"+w.submit(s.name, s.by, g, e, s.result)] = s.o
+		}
+		tk := taskView(t, w, g, WithRubricEvaluator(ev)) // 13 delivery orders, one rendering
+		rd := readinessOf(t, tk, w.ed(e))
+		out := tk.Render()
+		if rd.Token != c.token || tk.VerifyExit() != c.exit {
+			t.Fatalf("%s: token %q exit %d, want %q %d\n%s", c.name, rd.Token, tk.VerifyExit(), c.token, c.exit, out)
+		}
+		has(t, out, c.says)
+	}
+}
+
 // TestIndependenceNotInferred: C-exch-09 and C-btc-19. Quorum 2 requiring independence. Every generator reads
 // `unknown`, never `1 of 2` or 2.
 func TestIndependenceNotInferred(t *testing.T) {
