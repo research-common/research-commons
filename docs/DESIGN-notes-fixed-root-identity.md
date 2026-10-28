@@ -528,6 +528,9 @@ Files in this candidate:
   registry, reader, writer or global major is changed.
 * `internal/keylog/fixed_root_identity_profile_test.go`: actual old-reader mixed-log
   behavior, without claiming whole-resolver mixed-resource safety.
+* `internal/identity` (with `internal/identitymodel`): the candidate admission adapter
+  from signed bytes to model facts, its contract in the package README, and the signed
+  slice and review-regression tests that the coverage file links as partial evidence.
 
 Run from the repository:
 

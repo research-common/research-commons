@@ -1,5 +1,5 @@
 {
-  "status": "Provisional planning handles, not registered C-core cases. Schema/isolated-test links are partial evidence only; no row claims full semantic scenario coverage. Pure model and production integration are separate deliverables.",
+  "status": "Provisional planning handles, not registered C-core cases. Schema/isolated-test links are partial evidence only; no row claims full semantic scenario coverage. Pure model and production integration are separate deliverables. internal/identity tests exercise the candidate admission adapter over the isolated model (signed bytes, no resolver consumer), so they are also partial evidence.",
   "scenarios": [
     {
       "handle": "ID-01",
@@ -38,7 +38,9 @@
         "shape-submit",
         "shape-decide"
       ],
-      "isolated_tests": [],
+      "isolated_tests": [
+        "internal/identity:TestSliceGrantsAuthorizeExplicitActs"
+      ],
       "full_scenario_coverage": "not_claimed",
       "remaining": "Bind the candidate signed bytes to authenticated lineage/scope inputs and evaluate complete authority."
     },
@@ -48,7 +50,10 @@
       "schema_vectors": [
         "inception-not-sequence-zero"
       ],
-      "isolated_tests": [],
+      "isolated_tests": [
+        "internal/identity:TestSliceNegatives",
+        "internal/identity:TestReviewTerminalRootEventIgnoresAncestryDefects"
+      ],
       "full_scenario_coverage": "not_claimed",
       "remaining": "Require exact root and delegate lineage pins; schema checks inception syntax only."
     },
@@ -69,7 +74,9 @@
         "grant-to-root-itself",
         "admin-kind-cannot-have-actor"
       ],
-      "isolated_tests": [],
+      "isolated_tests": [
+        "internal/identity:TestSliceNegatives"
+      ],
       "full_scenario_coverage": "not_claimed",
       "remaining": "Self-grant/actor shapes checked; root/delegate signature and referent bindings require authority evaluation."
     },
@@ -87,7 +94,11 @@
       "handle": "ID-07",
       "scenario": "Missing dependencies or unsupported root operation",
       "schema_vectors": [],
-      "isolated_tests": [],
+      "isolated_tests": [
+        "internal/identity:TestSliceNegatives",
+        "internal/identity:TestSliceRootTerminalAndDelivery",
+        "internal/identity:TestReviewUnsupportedRootEventSurvivesBadMerge"
+      ],
       "full_scenario_coverage": "not_claimed",
       "remaining": "Pure model and integration must retain and propagate exact unknown dependencies."
     },
@@ -95,7 +106,9 @@
       "handle": "ID-08",
       "scenario": "Known cut with missing ancestry or prefix",
       "schema_vectors": [],
-      "isolated_tests": [],
+      "isolated_tests": [
+        "internal/identity:TestSliceCutUncertainty"
+      ],
       "full_scenario_coverage": "not_claimed",
       "remaining": "Authenticated root relevance and blocked positive grant required."
     },
@@ -103,7 +116,9 @@
       "handle": "ID-09",
       "scenario": "Stale bundle omits entire cut",
       "schema_vectors": [],
-      "isolated_tests": [],
+      "isolated_tests": [
+        "internal/identity:TestSliceCutUncertainty"
+      ],
       "full_scenario_coverage": "not_claimed",
       "remaining": "Limitation fixture must allow evidence-relative eligibility without claiming freshness."
     },
@@ -115,7 +130,8 @@
         "reject-rc2-revoke_key-must-use-raw-rc1"
       ],
       "isolated_tests": [
-        "internal/keylog:TestFixedRootCandidateOldReaderMixedHistory"
+        "internal/keylog:TestFixedRootCandidateOldReaderMixedHistory",
+        "internal/identity:TestSliceWorkerSelfRevocation"
       ],
       "full_scenario_coverage": "not_claimed",
       "remaining": "Raw events stay rc/1 and are seen by old keylog; identity history exception requires model/consumer integration."
@@ -124,7 +140,9 @@
       "handle": "ID-11",
       "scenario": "Cut prefix excludes descendants/siblings",
       "schema_vectors": [],
-      "isolated_tests": [],
+      "isolated_tests": [
+        "internal/identity:TestSliceCutAtExactLine"
+      ],
       "full_scenario_coverage": "not_claimed",
       "remaining": "Set-based ancestry closure including merges; signed wire binding still required."
     },
@@ -142,7 +160,11 @@
       "handle": "ID-13",
       "scenario": "Malformed/unsupported relevant root cut",
       "schema_vectors": [],
-      "isolated_tests": [],
+      "isolated_tests": [
+        "internal/identity:TestSliceCutUncertainty",
+        "internal/identity:TestReviewCutWithWrongIdentityDeniesItsGrant",
+        "internal/identity:TestReviewCutAddressIsTheGrant"
+      ],
       "full_scenario_coverage": "not_claimed",
       "remaining": "Do not drop authenticated control on syntax/lineage failures and falsely pass the grant."
     },
@@ -180,7 +202,12 @@
         "reject-rc2-revoke_key-must-use-raw-rc1"
       ],
       "isolated_tests": [
-        "internal/keylog:TestFixedRootCandidateOldReaderMixedHistory"
+        "internal/keylog:TestFixedRootCandidateOldReaderMixedHistory",
+        "internal/identity:TestSliceRootTerminalAndDelivery",
+        "internal/identity:TestReviewTerminalRootEventIgnoresAncestryDefects",
+        "internal/identity:TestReviewCompromisedRootGrantDiesWithRevoke",
+        "internal/identity:TestReviewMalformedRootKeyEventIsUnknown",
+        "internal/identity:TestReviewUnplaceableTerminalIsUnknownNotRetired"
       ],
       "full_scenario_coverage": "not_claimed",
       "remaining": "Candidate uses raw rc/1 events; terminal identity evaluation and unknown ancestry remain to integrate."
@@ -210,7 +237,10 @@
         "resource-wildcard-not-allowed",
         "duplicate-permission"
       ],
-      "isolated_tests": [],
+      "isolated_tests": [
+        "internal/identity:TestSliceNegatives",
+        "internal/identity:TestReviewUnsupportedGrantAffectsOnlyItself"
+      ],
       "full_scenario_coverage": "not_claimed",
       "remaining": "Permission syntax tested; registered field dispatch and effective authorization need model/integration."
     },
@@ -220,7 +250,9 @@
       "schema_vectors": [
         "absent-amend-not-default-false"
       ],
-      "isolated_tests": [],
+      "isolated_tests": [
+        "internal/identity:TestSliceNegatives"
+      ],
       "full_scenario_coverage": "not_claimed",
       "remaining": "Mandatory Boolean syntax checked; grant breadth and amendment authorization require model."
     },
@@ -280,7 +312,9 @@
       "schema_vectors": [
         "genesis-untyped-carrier-controllers"
       ],
-      "isolated_tests": [],
+      "isolated_tests": [
+        "internal/identity:TestSliceNegatives"
+      ],
       "full_scenario_coverage": "not_claimed",
       "remaining": "Carrier-key mapping is rejected; typed identity slot needs authenticated I/G, never root signature fallback."
     },
@@ -398,7 +432,9 @@
       "isolated_tests": [
         "internal/keylog:TestFixedRootCandidateOldReaderMixedHistory",
         "internal/wire:TestFixedRootCandidateCrypto",
-        "internal/wire:TestFixedRootCandidateLegacyUnmarkedActorIsNotSafe"
+        "internal/wire:TestFixedRootCandidateLegacyUnmarkedActorIsNotSafe",
+        "internal/identity:TestSliceNegatives",
+        "internal/identity:TestUnchangedReaderStackOnCandidateBytes"
       ],
       "full_scenario_coverage": "not_claimed",
       "remaining": "Actual wire/keylog tested, including unknown-major unverified retention; full unsupported-body/resource hardening remains a blocker."
@@ -427,7 +463,9 @@
       "isolated_tests": [
         "internal/wire:TestFixedRootCandidateCrypto",
         "internal/wire:TestFixedRootCandidateCanonicalization",
-        "internal/wire:TestFixedRootCandidateBaseSchemaIsNotBypassed"
+        "internal/wire:TestFixedRootCandidateBaseSchemaIsNotBypassed",
+        "internal/identity:TestSliceNegatives",
+        "internal/identity:TestByteMutationsNeverCreateAuthority"
       ],
       "full_scenario_coverage": "not_claimed",
       "remaining": "Concrete schema negatives and both algorithms tested; full production critical registry still disabled."
@@ -436,7 +474,12 @@
       "handle": "ID-38",
       "scenario": "Cache / replay / permutation invariance",
       "schema_vectors": [],
-      "isolated_tests": [],
+      "isolated_tests": [
+        "internal/identity:TestSliceRootTerminalAndDelivery",
+        "internal/identity:TestReviewTranslationIgnoresMemberOrder",
+        "internal/identity:TestReviewTwoValidSignaturesReceiptOrderIndependent",
+        "internal/identity:TestReviewReceiptIgnoresUnverifiedSig"
+      ],
       "full_scenario_coverage": "not_claimed",
       "remaining": "Pin production evidence-snapshot serialization and test caches/replay; not established by this harness."
     },
@@ -445,7 +488,10 @@
       "scenario": "Deterministic resource caps",
       "schema_vectors": [],
       "isolated_tests": [
-        "internal/wire:TestFixedRootCandidateCanonicalization"
+        "internal/wire:TestFixedRootCandidateCanonicalization",
+        "internal/identity:TestAdmitCapRefusesWholeSnapshot",
+        "internal/identity:TestReviewCandidateMergesCap",
+        "internal/identity:TestReviewDelegateSelfEventsBounded"
       ],
       "full_scenario_coverage": "not_claimed",
       "remaining": "PAE/depth syntax bounds tested; evaluation operation/dependency caps and production exit 3 not implemented."
@@ -467,7 +513,8 @@
       ],
       "isolated_tests": [
         "internal/wire:TestFixedRootCandidateSharedEdition",
-        "internal/wire:TestFixedRootCandidateCrypto"
+        "internal/wire:TestFixedRootCandidateCrypto",
+        "internal/identity:TestSliceNegatives"
       ],
       "full_scenario_coverage": "not_claimed",
       "remaining": "Raw context schema/crypto checked; actual mixed controller semantics and production reader integration remain."
