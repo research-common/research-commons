@@ -3,7 +3,7 @@
 // sets Authentication only for a signature this reader verified, and translates retained evidence without a
 // bare-key Counts() filter. It enables no writer, no global major and no resolver consumer.
 //
-// Contract: research note "Reconciled admission contract" (local), summarized in README.md of this package.
+// Contract: README.md of this package (the admission contract), against docs/DESIGN-notes-fixed-root-identity.md §7.
 package identity
 
 import (
@@ -180,8 +180,8 @@ func vouch(held map[string]*wire.Statement) map[string]bool {
 }
 
 // translate is the single Fact constructor. Authentication is a fact about THIS read (a verified signature, or a
-// verified same-key commitment to the exact bytes), never about keylog placement; validity follows the admission
-// contract §3–§4.
+// verified same-key commitment to the exact bytes), never about keylog placement; validity follows README.md
+// §3–§4.
 func translate(st *wire.Statement, vouched bool) identitymodel.Fact {
 	f := identitymodel.Fact{ID: identitymodel.ID(st.ID), Signer: identitymodel.Key(st.Signer), Seq: uint64(st.Seq),
 		Prev: identitymodel.ID(st.Prev), Validity: identitymodel.Unchecked, Event: identitymodel.Unclassified}

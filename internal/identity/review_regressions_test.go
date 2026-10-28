@@ -131,7 +131,7 @@ func TestReviewUnsupportedRootEventSurvivesBadMerge(t *testing.T) {
 	}
 }
 
-// A malformed root key event (the event itself, clean ancestry) stays unknown, never ineffective (contract §3).
+// A malformed root key event (the event itself, clean ancestry) stays unknown, never ineffective (README.md §3).
 func TestReviewMalformedRootKeyEventIsUnknown(t *testing.T) {
 	w := base(t)
 	w.sign(stmt{name: "Rbad", by: "R", rc: "rc/1", parent: "G2", kind: "revoke_key", body: obj("reason", "Bad Reason")})
