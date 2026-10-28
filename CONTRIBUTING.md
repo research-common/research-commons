@@ -64,6 +64,19 @@ merged design notes until `next` replaces it.
 4. **Documentation in the same change.** If you alter a command's behaviour,
    update `README.md` and the relevant `docs/` file in the same commit.
 
+### What CI runs (Go implementation, `next`)
+
+`.github/workflows/go.yml` runs on every pull request and on pushes to `next` and `main`. The Go
+module lives on `next`; the alpha under `bin/` and `lib/` is still tested with `tests/run-all.sh`
+as above. The workflow has read-only permissions, uses no secrets, and pins every action by commit SHA.
+
+- `go vet ./...` and `go test ./...` on Linux and macOS, with the Go version taken from `go.mod`.
+- `go test ./...` on Linux with `TMPDIR` behind a symlink, so `t.TempDir()` is not a realpath
+  (the macOS situation: `/var` is a symlink to `/private/var`). Path-confinement code must hold up here.
+- `CGO_ENABLED=0 go build ./...`, the static build.
+
+Run the same commands locally before pushing; they are listed in `internal/README.md`.
+
 ## How pull requests land
 
 **Every PR is squash-merged.** `main` gets one commit per PR, titled with the PR title

@@ -1,0 +1,68 @@
+# CI for the Go implementation (module at the repo root, `next` branch).
+# Public repo: read-only token, no secrets, no pull_request_target, actions pinned by SHA.
+name: go
+
+on:
+  pull_request:
+  push:
+    branches: [next, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: go-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: vet + test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test ./...
+
+  test-symlinked-tmpdir:
+    # t.TempDir() under a symlinked TMPDIR (macOS: /var -> /private/var). Path
+    # confinement must hold when the temp root is not a realpath.
+    name: test (symlinked TMPDIR)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: go test with TMPDIR behind a symlink
+        run: |
+          real="$(mktemp -d)"
+          link="$(mktemp -u)-link"
+          ln -s "$real" "$link"
+          test "$(readlink "$link")" = "$real"
+          TMPDIR="$link" go test ./...
+
+  static-build:
+    name: static build (CGO_ENABLED=0)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - run: CGO_ENABLED=0 go build ./...
