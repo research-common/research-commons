@@ -1,7 +1,7 @@
 # Design note: task contracts (`task-contract-v1`)
 
 **Date:** 2026-10-27 · **Status:** request for comments. Nothing here is decided or implemented.
-**Tracking issue:** to be opened with this note
+**Tracking issue:** #109
 **Builds on:** the claims-model note §8 (resources, editions) and §9 (research exchange), #69; the wire-format
 note §1.1, §5, §6; the bitcoin-time note §7, §8, §11; #3 (pre-registration), #65 (stochastic replication)
 **Scope:** the grammar of a task edition's `contents.contract`, one new statement kind (`grant`), two optional
