@@ -540,7 +540,10 @@ func (r *Resolver) readiness(t *Task, b Binding) *Readiness {
 		rd.Why = append(rd.Why, "counting unit identity: no identity profile is active in this reader, so no identity count exists")
 		return rd
 	}
-	var pool []*Submission
+	// pool: counted submissions passing every rubric criterion. undecided: counted submissions with no failing
+	// criterion and at least one unchecked one. They are left out of the count; they can make a short count
+	// unchecked, but never take readiness from submissions that reach the quorum without them (I7).
+	var pool, undecided []*Submission
 	uncheckedRubric, evaluated := false, false
 	for _, s := range t.Submissions {
 		if s.Edition != b.Edition {
@@ -554,12 +557,12 @@ func (r *Resolver) readiness(t *Task, b Binding) *Readiness {
 		case tm.Coordinator != "" && s.Granted == "":
 			rd.Reports = append(rd.Reports, fmt.Sprintf("submission %s admissible, not counted: %s holds no grant signed by coordinator %s", keylog.Short(s.Statement), shortKey(s.Signer), shortKey(tm.Coordinator)))
 		default:
-			ok := true
+			ok, failed := true, false
 			evaluated = true
 			for _, c := range s.Rubric {
 				switch c.Outcome {
 				case RuleFail:
-					ok = false
+					ok, failed = false, true
 					rd.Reports = append(rd.Reports, fmt.Sprintf("submission %s: rubric criterion %s fail: %s", keylog.Short(s.Statement), c.Criterion, c.Why))
 				case RuleUnchecked:
 					ok = false
@@ -567,8 +570,11 @@ func (r *Resolver) readiness(t *Task, b Binding) *Readiness {
 					rd.Reports = append(rd.Reports, fmt.Sprintf("submission %s: rubric criterion %s unchecked: %s", keylog.Short(s.Statement), c.Criterion, c.Why))
 				}
 			}
-			if ok {
+			switch {
+			case ok:
 				pool = append(pool, s)
+			case !failed:
+				undecided = append(undecided, s)
 			}
 		}
 	}
@@ -659,11 +665,23 @@ func (r *Resolver) readiness(t *Task, b Binding) *Readiness {
 	case unchecked != "":
 		rd.Token = ReadyUnchecked
 		rd.Why = append(rd.Why, unchecked)
+	case uncheckedRubric && q.Independence == IndependenceNotRequired && !r.reachesWith(q, append(slices.Clone(pool), undecided...), count):
+		// even counting every undecided submission as passing, no group reaches k: a checked answer
+		rd.Token = NotReady
+		rd.Reports = append(rd.Reports, "submissions with an unchecked rubric criterion would not reach the quorum even if they passed")
+
 	case uncheckedRubric:
 		rd.Token = ReadyUnchecked
 		rd.Why = append(rd.Why, "a rubric criterion is unchecked: the check does not pass")
 	default:
 		rd.Token = NotReady
+	}
+	if rd.Token == Ready && len(undecided) > 0 {
+		// k submissions passed every criterion and agree: undecided ones are listed, never a veto (I7)
+		rd.Check = RuleOK
+		for _, s := range undecided {
+			rd.Reports = append(rd.Reports, fmt.Sprintf("submission %s undecided (a rubric criterion is unchecked); not needed for readiness", keylog.Short(s.Statement)))
+		}
 	}
 	if rd.Token != Ready {
 		rd.SelfDeclared = false
@@ -686,6 +704,17 @@ func (r *Resolver) readiness(t *Task, b Binding) *Readiness {
 		}
 	}
 	return rd
+}
+
+// reachesWith reports whether some group formed from subs reaches the quorum's k distinct keys.
+func (r *Resolver) reachesWith(q *Quorum, subs []*Submission, count func([]*Submission, func(*Submission) bool) int) bool {
+	groups, _, _ := r.quorumGroups(q, subs, r.exch.maxGroup)
+	for _, g := range groups {
+		if count(g, nil) >= q.K {
+			return true
+		}
+	}
+	return false
 }
 
 // quorumGroups forms the result groups of a quorum (§9.3 "grouping is explicit"). Byte equality is transitive, so with
@@ -825,14 +854,17 @@ func (r *Resolver) quorumGroups(q *Quorum, pool []*Submission, limit int) (group
 }
 
 // VerifyExit is the task's `verify` exit (claims §13): 3 (could not check) when its decisions conflict
-// (`contested`), the resource itself does not pass (FORK, contested edition), or the current edition's readiness
-// is `unchecked` or `unknown`; 0 otherwise. `not ready` is a checked answer, not a failure: the token says it.
+// (`contested`), the resource itself does not pass (FORK, contested edition), the current edition's readiness
+// is `unchecked` or `unknown`, or a task settled by review has an unchecked rubric criterion; 0 otherwise.
+// `not ready` is a checked answer, not a failure: the token says it.
 func (t *Task) VerifyExit() int {
 	if len(t.DecisionConflict) > 0 {
 		return 3
 	}
 	for _, rd := range t.Readiness {
-		if rd.Edition == t.Current && (rd.Token == ReadyUnchecked || rd.Token == ReadyUnknown || rd.Check == RuleUnchecked) {
+		// with a quorum the token carries the answer (an undecided submission the count does not need decides
+		// nothing); settled by review, an unchecked rubric still means the check did not pass
+		if rd.Edition == t.Current && (rd.Token == ReadyUnchecked || rd.Token == ReadyUnknown || rd.Token == ByReview && rd.Check == RuleUnchecked) {
 			return 3
 		}
 	}
