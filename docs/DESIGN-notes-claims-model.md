@@ -666,7 +666,8 @@ Refutations and failed reproductions are first-class submissions, credited on th
 rule before the data. Results that fulfil it display "pre-registered" with the bound at verified quality. A
 pre-registration proves the plan existed by time T, not that the author hadn't seen the data. An `observed`
 statement can carry `fulfills` to a task edition, so a pre-registered observation campaign is in scope, not
-only derived results. The opposite case is declared, not inferred: `exploratory` is a disclosure value (§7). A
+only derived results; such a statement is itself a submission of that edition (proposed in the task-contracts
+note §5.1). The opposite case is declared, not inferred: `exploratory` is a disclosure value (§7). A
 **departure check** compares the delivered `sampling` disclosure with the contract's declared n, per group
 where the contract declares groups, and reports `conforms`, `departed`, `unchecked` (no structured count, or
 no count for a declared group) or `not comparable` (unit mismatch). It never moves the grade (I6).
