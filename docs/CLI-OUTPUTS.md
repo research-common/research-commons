@@ -20,7 +20,7 @@ Errors are RFC 9457 problem-details objects (`type`, `title`, `detail`, `class`,
 
 ## State tokens
 
-JSON members carrying tokens: `authorship`, `role`, `state`, `grade`, `step`, `quality`, `time_state`, `status`, `line`, `counted`, `labels`, `bytes`, `causes`, `store_state`, `what`, `verdict`, `class`.
+JSON members carrying tokens: `authorship`, `role`, `state`, `grade`, `step`, `quality`, `time_state`, `status`, `line`, `counted`, `labels`, `bytes`, `causes`, `store_state`, `what`, `verdict`, `class`, `status_scope`.
 
 | token | kind | meaning |
 |---|---|---|
@@ -29,6 +29,8 @@ JSON members carrying tokens: `authorship`, `role`, `state`, `grade`, `step`, `q
 | `derived` | authorship | one derivation group of two or more keys; priority is not computed within it |
 | `default author` | authorship | several claimant units; one is strictly earliest at a quality this reader verified |
 | `contested` | authorship | several claimants (or several values of one field) and none is the default; every claimant is listed |
+| `within statements you hold` | scope | every status of the view is computed from the statements this reader holds; nothing is claimed about statements it never received |
+| `within this hub` | scope | every status of the view is computed from one hub's own holdings only |
 | `author` | role | the only claimant unit |
 | `derivers` | role | the keys of the one derivation group |
 | `later claimant` | role | a claimant after the default author; never shown as proven later |

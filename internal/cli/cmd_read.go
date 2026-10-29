@@ -46,10 +46,10 @@ func showCmd(c *Ctx) (*Obj, int, error) {
 	}
 	ref := c.Args["digest|id"]
 	if isDigest(ref) {
-		return v.showArtifact(ref), ExitOK, nil
+		return v.scoped(v.showArtifact(ref)), ExitOK, nil
 	}
 	o, _ := v.showStatement(ref)
-	return o, ExitOK, nil
+	return v.scoped(o), ExitOK, nil
 }
 
 func (v *view) showArtifact(d string) *Obj {
@@ -172,7 +172,11 @@ func verifyCmd(c *Ctx) (*Obj, int, error) {
 	}
 	ref := c.Args["digest|id"]
 	if _, rerun := c.Flag("rerun"); rerun {
-		return v.verifyRerun(c, ref)
+		o, code, err := v.verifyRerun(c, ref)
+		if err != nil {
+			return nil, 0, err
+		}
+		return v.scoped(o), code, nil
 	}
 	if isDigest(ref) {
 		a := v.r.Artifact(ref)
@@ -182,7 +186,7 @@ func verifyCmd(c *Ctx) (*Obj, int, error) {
 			o.set("claimants", v.claimants(a))
 		}
 		o.set("causes", causes).set("exit", intV(int64(code))).set("exit_name", textV(ExitName(code)))
-		return o, code, nil
+		return v.scoped(o), code, nil
 	}
 	o, st := v.statementCore(ref)
 	code := ExitOK
@@ -204,7 +208,7 @@ func verifyCmd(c *Ctx) (*Obj, int, error) {
 		}
 	}
 	o.set("exit", intV(int64(code))).set("exit_name", textV(ExitName(code)))
-	return o, code, nil
+	return v.scoped(o), code, nil
 }
 
 // --- explain -----------------------------------------------------------------------------------------------
@@ -259,7 +263,7 @@ func explainCmd(c *Ctx) (*Obj, int, error) {
 		set("time_policy_fingerprint", refV(v.timeV.Policy.Fingerprint())).set("reader_policy", c.Policy.readerObj()))
 	o.set("evaluator", evaluatorObj(c.Env.Build))
 	o.set("time_context", textV("none: this answer does not depend on the reader's clock (no shelf life, finality or freshness is evaluated, and no chain backend is configured)"))
-	return o, ExitOK, nil
+	return v.scoped(o), ExitOK, nil
 }
 
 func evaluatorObj(b Build) *Obj {
@@ -309,5 +313,5 @@ func listCmd(c *Ctx) (*Obj, int, error) {
 	for _, d := range ds {
 		l = append(l, v.artifactCore(v.r.Artifact(d)))
 	}
-	return newObj().set("blobs", l).set("count", intV(int64(len(ds)))), ExitOK, nil
+	return v.scoped(newObj().set("blobs", l).set("count", intV(int64(len(ds))))), ExitOK, nil
 }

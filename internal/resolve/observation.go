@@ -216,6 +216,11 @@ func WithBlobIndex(b BlobIndex) Option { return func(r *Resolver) { r.obs.blobs 
 // that resolves only its own holdings passes ScopeHub. A scope never widens what the statements support.
 func WithScope(s string) Option { return func(r *Resolver) { r.obs.scope = s } }
 
+// Scope is the scope this resolver's statuses are printed with: a surface that prints a view's statuses
+// without the scope beside each (authorship, a resource's current edition, a membership, a verify exit) prints
+// it once for the view (§6 (1)).
+func (r *Resolver) Scope() string { return r.obs.scope }
+
 // Scopes.
 const (
 	ScopeHeld = "within statements you hold"

@@ -25,6 +25,10 @@ var vocabulary = []Token{
 	{"derived", "authorship", "one derivation group of two or more keys; priority is not computed within it"},
 	{"default author", "authorship", "several claimant units; one is strictly earliest at a quality this reader verified"},
 	{"contested", "authorship", "several claimants (or several values of one field) and none is the default; every claimant is listed"},
+	// the scope of a view's statuses (claims §6 (1), I4): every status a view prints holds within it, never as a
+	// claim about statements the reader does not hold
+	{"within statements you hold", "scope", "every status of the view is computed from the statements this reader holds; nothing is claimed about statements it never received"},
+	{"within this hub", "scope", "every status of the view is computed from one hub's own holdings only"},
 	// claimant roles beside a unit
 	{"author", "role", "the only claimant unit"},
 	{"derivers", "role", "the keys of the one derivation group"},
@@ -166,7 +170,7 @@ func tok(s string) string {
 // tokenKeys are the JSON member names whose values are state tokens (a string, or an array of strings). Every
 // surface puts tokens in these members only, so a consumer (and the C-core-132 sweep) finds them by name.
 var tokenKeys = []string{"authorship", "role", "state", "grade", "step", "quality", "time_state", "status", "line",
-	"counted", "labels", "bytes", "causes", "store_state", "what", "verdict", "class"}
+	"counted", "labels", "bytes", "causes", "store_state", "what", "verdict", "class", "status_scope"}
 
 // IsTokenKey reports whether a JSON member of that name carries tokens.
 func IsTokenKey(k string) bool { return slices.Contains(tokenKeys, k) }

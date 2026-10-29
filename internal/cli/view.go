@@ -93,3 +93,11 @@ func (v *view) lineState(id string) string {
 	}
 	return "retained"
 }
+
+// scoped adds the view's footer: one status_scope member, last, saying what every status above it holds within
+// (claims-model note §6 (1) "status is always scoped", I4). Authorship, a verify exit, a statement's counted
+// state and the other tokens are printed bare; the scope is printed once per view, not inside each token, so
+// the tokens stay closed and one scope line covers them all.
+func (v *view) scoped(o *Obj) *Obj {
+	return o.set("status_scope", tokV(tok(v.r.Scope())))
+}
