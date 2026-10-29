@@ -1,6 +1,7 @@
 # Design note: task contracts (`task-contract-v1`)
 
-**Date:** 2026-10-27 · **Status:** request for comments. Nothing here is decided or implemented.
+**Date:** 2026-10-27, revised 2026-10-28 (revision 2) · **Status:** request for comments. Nothing here is
+decided or implemented.
 **Tracking issue:** #109
 **Builds on:** the claims-model note §8 (resources, editions) and §9 (research exchange), #69; the wire-format
 note §1.1, §5, §6; the bitcoin-time note §7, §8, §11; #3 (pre-registration), #65 (stochastic replication)
@@ -10,6 +11,23 @@ applies to decide readiness under a contract. It does not change the claims mode
 envelope, or any existing kind's meaning.
 **References:** invariants (I1–I15) and bare §9.x, §10 and §13 are the claims-model note's; other bare section
 numbers are this note's; any other note is named.
+
+**Revision 2 (changes since the first draft).** From the observation-task review on #109:
+
+- **`fulfills` is a submission** (§5.1). An `authored` or `observed` carrying `fulfills: E` is a submission
+  of `E` whose result is its own content digest, read under the same five conditions; `submit` stays for
+  results that are not the submitter's own statement. Q1's current-submission rule reads every kind (§6 Q1);
+  a `fulfills` that fails `E`'s terms is not counted, never malformed. Touches §4.3, §5.2, §5.3, §5.8, §6
+  Q4–Q5, §7 (C-exch-03a, C-exch-07a; new C-exch-15a), §8, and one sentence in the claims-model note §9.4.
+- **Q2 `min_grade`** is for derived results only: it needs a `results: "derived"` declaration, and without
+  one it leaves the contract unread. `min_capture_evidence` waits for an ordered vocabulary of verified
+  capture-evidence levels; corroboration never gates a count (§6 Q2).
+- **Q3 pins** read `provenance` for derived results and `referent.method_edition` / `referent.inputs` for
+  observations, with the same `ok` / `fail` / `unchecked` outcomes (§6 Q3).
+- **New Q12**, counting by a referent member (one per instrument), with the format gap it depends on (§6 Q12).
+- **Q8 display:** an approximate date may be shown beside a height, labelled as an estimate, never used for
+  ordering (§4.3).
+- Leans the review agreed with are marked *Review: agreed* (§3.3, §6 Q1, Q4, Q8, Q10). Nothing is decided.
 
 ## 0. Summary
 
