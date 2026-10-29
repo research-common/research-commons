@@ -283,7 +283,11 @@ func (ProvisionalContract) Read(c *canon.Object) (*Terms, string, bool) {
 		if q.K < 1 || !slices.Contains([]string{IndependenceNotRequired, IndependenceRequired, IndependenceSelfDeclared}, q.Independence) {
 			return bad("quorum")
 		}
-		if g := object(o, "grouping"); g != nil {
+		g, present, ok := memberObject(o, "grouping")
+		if !ok {
+			return bad("quorum.grouping")
+		}
+		if present {
 			q.Grouping, q.Reference = str(g, "rule"), str(g, "reference")
 			if (q.Grouping != GroupAllPairs && q.Grouping != GroupReference) || (q.Grouping == GroupReference) != (q.Reference != "") {
 				return bad("quorum.grouping")
@@ -291,7 +295,11 @@ func (ProvisionalContract) Read(c *canon.Object) (*Terms, string, bool) {
 		}
 		t.Quorum = q
 	}
-	if o := object(c, "sampling"); o != nil {
+	o, present, ok := memberObject(c, "sampling")
+	if !ok {
+		return bad("sampling")
+	}
+	if present {
 		s := &DeclaredSampling{N: intOf(o, "n"), Unit: str(o, "unit")}
 		if v, ok := o.Get("groups"); ok {
 			a, _ := v.(canon.Array)
@@ -303,6 +311,17 @@ func (ProvisionalContract) Read(c *canon.Object) (*Terms, string, bool) {
 		t.Sampling = s
 	}
 	return t, "", true
+}
+
+// memberObject reads member k of o strictly: present is false when the member is absent; ok is false when it
+// is present and not an object (a present member of the wrong type is malformed, never absent).
+func memberObject(o *canon.Object, k string) (x *canon.Object, present, ok bool) {
+	v, present := o.Get(k)
+	if !present {
+		return nil, false, true
+	}
+	x, ok = v.(*canon.Object)
+	return x, true, ok
 }
 
 func intOf(o *canon.Object, k string) int {
