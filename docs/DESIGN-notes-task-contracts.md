@@ -458,10 +458,27 @@ Each question lists options and a lean. A lean is a proposal for review, not a d
      result (I6). A contract that wants agreement among observations says so through `comparator` (§5.2).
 3. **Required inputs and methods.** §9.1 says the contract pins them.
    (a) prose in `question` only;
-   (b) `inputs`, a set of digests every counted submission's result provenance must include, and `workflow`, a
-   digest it must equal; outcome `ok`, `fail`, or `unchecked` when the result's provenance is not held;
+   (b) exact pins, read from where each kind of result records its method and inputs:
+   - for a **derived result**, `provenance` (wire-format note §5): `workflow`, a digest `provenance.workflow`
+     must equal, and `inputs`, a set of digests `provenance.inputs` must include (under
+     `provenance_partial`, a pinned input missing from its pinned `inputs` may be one of its `unpinned`
+     names, so it is `unchecked`, not `fail`);
+   - for an **observation**, its method referent (claims-model note §5.3.1; wire-format note §5, method
+     class): `method_edition`, an edition id `referent.method_edition` must equal, and the same `inputs` set,
+     which `referent.inputs` must include;
+   with the same outcomes for both: `ok`; `fail` when the record is held and does not match (including an
+   observation of another class, or a derived result with no `provenance`, under a contract that pins a
+   method: neither can show it followed one); `unchecked` when the record is not held (a `submit` whose
+   result's `authored` or `observed` the reader does not hold) or a pinned member is `unpinned` in the
+   referent (it is then the observer's omission, not a mismatch). A contract may pin `workflow`,
+   `method_edition` or both; each applies only to the results it can describe, and a pin on the other kind
+   is `fail` for it, never skipped;
    (c) an expression in a rule dialect (claims-model note §8).
-   **Lean: (b).** Exact pins check without a dialect; (c) can follow when the rule-dialect note exists.
+   **Lean: (b).** Exact pins check without a dialect, and "under method edition M, on scenario edition S" is
+   then an exact pin for a benchmark batch. Ranges (a harness commit in a range, an environment within a
+   family) are (c), when the rule-dialect note exists. The environment record is not pinned under (b):
+   which environment fields must match is the workflow author's `environment_match` (execution note §1), not
+   a task term.
 4. **Commit-reveal.** `submit` has an optional `salt`, and no note says what is hashed or how the commitment
    is published.
    (a) reuse the claims-model note §7 mechanism: the commitment is an `authored` statement with availability
