@@ -176,7 +176,8 @@ holds in both: one place per role per major.
   restrictions: eligible issuers, a deadline, a test. A reader that ignored one it did not understand would
   report readiness under weaker terms than the beneficiary set, which is the false assurance I4 forbids. An
   extension to a contract is a new profile name. The departure is local to `contents.contract`; the edition
-  statement around it follows the wire rules as usual.
+  statement around it follows the wire rules as usual. *Review: agreed (#109): a restriction a reader ignores
+  is a weaker contract than the one signed.*
 - A malformed field (wrong type, an empty `eligible_issuers`, a `grouping` without a comparator, duplicate
   rubric ids, a `reference` that is not a key) leaves the contract unread, naming the field. There is never a
   partial reading.
@@ -427,7 +428,8 @@ readiness automatically.
 
 ## 6. Open questions
 
-Each question lists options and a lean. A lean is a proposal for review, not a decision.
+Each question lists options and a lean. A lean is a proposal for review, not a decision. *Review: agreed*
+marks a lean an outside review on #109 agreed with; it records the review, and decides nothing.
 
 1. **Deduplication.** §9.3 asks the predicate to state it. What happens when one counting unit submits several
    results to one edition?
@@ -441,6 +443,7 @@ Each question lists options and a lean. A lean is a proposal for review, not a d
    **Lean: (c).** It uses the one order a key's own statements have, never `ts`, closes the hedge, and gives an
    honest correction a way to replace an error: a corrected export carrying `fulfills` supersedes the
    erroneous one by being later in the same log. A `dedup` field is not needed while there is one rule.
+   *Review: agreed (#109).*
 2. **Required evidence strength.** Does a re-derived result count for more than a bare submission?
    (a) no requirement: any counted submission counts;
    (b) `quorum.min_grade`, `"T0"`/`"T1"`/`"T2"`: a submission counts only if the reader's own grade of its
@@ -502,7 +505,9 @@ Each question lists options and a lean. A lean is a proposal for review, not a d
    Sub-question, for a `submit` that names an earlier commitment: may the commitment's bound, rather than the
    submission's, meet the deadline? Leaning yes, when the submission names that commitment: the plan of
    "commit before the deadline, reveal after" is the use the mechanism exists for. Under every option the
-   match shows possession by T only (C-exch-09 (b), C-btc-19).
+   match shows possession by T only (C-exch-09 (b), C-btc-19). *Review: agreed (#109), the sub-question
+   included: the withheld-availability commitment is the held-out-pool pattern, and its bound meeting the
+   deadline is the use it exists for.*
 5. **Credit definitions.** §9.5 names six counts and defines none; §9.4 says refutations are credited "on
    their own track", which is a seventh. Proposed definitions, each over counted statements in the reader's
    window: **contribution**, the key's submissions (§5.1, whatever their kind); **citation**, other keys'
@@ -530,13 +535,14 @@ Each question lists options and a lean. A lean is a proposal for review, not a d
    **Lean: (a).** (b) makes `nTime` an ordering key, which the bitcoin-time note rules out. (c) would let a
    contract be written that no reader can ever check, which is worse than not offering it. Display is
    separate: an approximate date may be shown beside a height, labelled as an estimate from the bound block's
-   `nTime` (miner-reported), never used for ordering (§4.3).
+   `nTime` (miner-reported), never used for ordering (§4.3). *Review: agreed (#109), with the display ask
+   that §4.3 now answers.*
 9. **The coordinator under identities.** Under `rc/2`, is the coordinator a typed subject, and does it move
    into `task_roles`? **Lean:** a key in the contract for v1; an identity coordinator, and identity grantees,
    wait for the identity profile to be accepted and are a v2 question.
 10. **Who may refute a task.** Should `eligible_issuers` limit bound refutations? **Lean: no.** A refutation
     never counts toward a quorum, and the contract's author should not be able to choose who may criticise the
-    results it accepts.
+    results it accepts. *Review: agreed (#109).*
 11. **Rubric dialects.** Criteria are prose with ids, and the evaluator is the reader's.
     (a) keep it so;
     (b) let a criterion carry `dialect` and `expr`, as edition rules do (claims-model note §8).
