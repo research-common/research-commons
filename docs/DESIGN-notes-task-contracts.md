@@ -370,8 +370,8 @@ key` the unit is the signing key: a key that submits the same result twice count
 of the two submissions (a `submit` of `D` and an `authored` of `D` carrying `fulfills` are one result). With
 `identity` the count needs an identity profile; with none active, readiness is `unknown`, naming the missing
 profile, never a key count presented as an identity count. Every count is displayed with its unit (`2 keys`),
-because keys are not people (TC4). How a unit that submits **different** results counts is open (§6, Q1); counting by a
-member of an observation's referent, such as an instrument, is open too (§6, Q12).
+because keys are not people (TC4). How a unit that submits **different** results counts is open (§6, Q1);
+counting by a member of an observation's referent, such as an instrument, is open too (§6, Q12).
 
 ### 5.4 Independence
 
@@ -440,9 +440,8 @@ check is not itself a comparison. A §13 line saying so is proposed with this no
 A `decide` settles when its signer is the bound edition's beneficiary (or, under `rc/2`, holds what the
 identity profile requires) and it cites at least one submission (§5.1, by statement id, whatever its kind) or
 bound refutation of that edition. It is the beneficiary's judgment and may differ from readiness; both are
-shown. Contradictory decisions stay a visible
-conflict until one explicitly supersedes another (§9.2). Nothing in this profile makes a decision from
-readiness automatically.
+shown. Contradictory decisions stay a visible conflict until one explicitly supersedes another (§9.2).
+Nothing in this profile makes a decision from readiness automatically.
 
 ## 6. Open questions
 
@@ -500,9 +499,9 @@ marks a lean an outside review on #109 agreed with; it records the review, and d
    observation of another class, or a derived result with no `provenance`, under a contract that pins a
    method: neither can show it followed one); `unchecked` when the record is not held (a `submit` whose
    result's `authored` or `observed` the reader does not hold) or a pinned member is `unpinned` in the
-   referent (it is then the observer's omission, not a mismatch). A contract may pin `workflow`,
-   `method_edition` or both; each applies only to the results it can describe, and a pin on the other kind
-   is `fail` for it, never skipped;
+   referent (it is then the observer's omission, not a mismatch). A pin is never skipped: a contract that
+   pins only `workflow` fails every observation submission, one that pins only `method_edition` fails every
+   derived result, and one that pins both checks each result against the pin for its kind;
    (c) an expression in a rule dialect (claims-model note §8).
    **Lean: (b).** Exact pins check without a dialect, and "under method edition M, on scenario edition S" is
    then an exact pin for a benchmark batch. Ranges (a harness commit in a range, an environment within a
