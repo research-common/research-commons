@@ -263,6 +263,13 @@ an upgraded proof that commits at or below `h` turns it into `ok`, as I5 allows 
   ahead of its own clock; nothing a reader verifies bounds it tightly enough for a deadline to use. A calendar
   deadline is therefore not in v1 (§6, Q8). A contract that wants "about a week from now" writes the
   current height plus 1008.
+- **An approximate date may be shown, never used.** Contract authors write heights from dates, so a reader may
+  display an approximate date beside a deadline height, and beside a bound's height in an outcome. It is
+  labelled as an estimate: for a height the reader has validated, the bound block's header `nTime`,
+  miner-reported (as the bitcoin-time note §8.2 displays it); for a height above the validated tip, a
+  projection from the tip, labelled as one. It is never an ordering key and never decides an outcome; it is
+  display only, so it is not part of the contract and two readers may show different estimates for the
+  same deadline.
 - **What a deadline governs.** Only whether a submission counts. It never expires an intent, never turns
   progress into a lease and never makes a submission inadmissible (C-exch-02, TC3). It does not apply to
   bound refutations or to decisions.
@@ -521,7 +528,9 @@ Each question lists options and a lean. A lean is a proposal for review, not a d
    miner-reported;
    (c) `{at: ts}` evaluated by a later time-conversion profile, `unchecked` until one exists.
    **Lean: (a).** (b) makes `nTime` an ordering key, which the bitcoin-time note rules out. (c) would let a
-   contract be written that no reader can ever check, which is worse than not offering it.
+   contract be written that no reader can ever check, which is worse than not offering it. Display is
+   separate: an approximate date may be shown beside a height, labelled as an estimate from the bound block's
+   `nTime` (miner-reported), never used for ordering (§4.3).
 9. **The coordinator under identities.** Under `rc/2`, is the coordinator a typed subject, and does it move
    into `task_roles`? **Lean:** a key in the contract for v1; an identity coordinator, and identity grantees,
    wait for the identity profile to be accepted and are a v2 question.
