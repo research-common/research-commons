@@ -320,10 +320,10 @@ them is read is §6 Q1).
   nothing, shown as the disclosure rules already show it.
 - **Amendments.** An `authored` amended by its signer is read from its current claim (claims-model note §4):
   an amendment that drops `fulfills`, or names another edition, withdraws or moves the submission, in the
-  key's log order (§6 Q1). The deadline (§4.3) reads only the bounds of statements in the chain that name
-  `E`, from the last one that did not onward, never the best bound of the whole chain: an amendment that
-  adds `fulfills` late does not inherit the bound of an earlier statement that made no submission. The
-  chain's bound shows the bytes existed; the deadline asks that the submission did.
+  key's log order (§6 Q1). The deadline (§4.3) reads the bounds of the statements naming `E` in the unbroken
+  run that ends at the current claim, never the best bound of the whole chain: an amendment that adds
+  `fulfills` late does not inherit the bound of an earlier statement that made no submission. The chain's
+  bound shows the bytes existed; the deadline asks that the submission did.
 - **`submit`-only fields.** A statement carrying `fulfills` has no `self_declared_independence`, so under
   `self-declared-accepted` it counts toward `k` only where its independence is established (§5.4).
 - Bound refutations (§4.2) are submissions on the refutation track and never enter what follows.
@@ -368,9 +368,9 @@ that carries `fulfills: E` from a key outside `eligible_issuers` is a valid `obs
 A group's count is the number of distinct counting units among its counted submissions. With `counting_unit:
 key` the unit is the signing key: a key that submits the same result twice counts once, whatever the kinds
 of the two submissions (a `submit` of `D` and an `authored` of `D` carrying `fulfills` are one result). With
-`identity` the count needs an identity profile; with none active, readiness is `unknown`, naming the missing profile, never a
-key count presented as an identity count. Every count is displayed with its unit (`2 keys`), because keys are
-not people (TC4). How a unit that submits **different** results counts is open (§6, Q1); counting by a
+`identity` the count needs an identity profile; with none active, readiness is `unknown`, naming the missing
+profile, never a key count presented as an identity count. Every count is displayed with its unit (`2 keys`),
+because keys are not people (TC4). How a unit that submits **different** results counts is open (§6, Q1); counting by a
 member of an observation's referent, such as an instrument, is open too (§6, Q12).
 
 ### 5.4 Independence
@@ -529,9 +529,10 @@ marks a lean an outside review on #109 agreed with; it records the review, and d
 5. **Credit definitions.** §9.5 names six counts and defines none; §9.4 says refutations are credited "on
    their own track", which is a seventh. Proposed definitions, each over counted statements in the reader's
    window: **contribution**, the key's submissions (§5.1, whatever their kind); **citation**, other keys'
-   `authored` whose provenance names a blob the key authored; **reproduction**, the key's `reproduced`; **refutation**, the key's `refutes`;
-   **review**, the key's counted `decide`s; **corroboration**, the key's `corroborates`; **acceptance**, the
-   key's submissions whose beneficiary decision, after supersession, is `accept`.
+   `authored` whose provenance names a blob the key authored; **reproduction**, the key's `reproduced`;
+   **refutation**, the key's `refutes`; **review**, the key's counted `decide`s; **corroboration**, the key's
+   `corroborates`; **acceptance**, the key's submissions whose beneficiary decision, after supersession, is
+   `accept`.
    (a) these, with §9.5 amended to name refutation;
    (b) leave definitions to readers.
    **Lean: (a)**, with denominators still the reader's choice and no default projection.
