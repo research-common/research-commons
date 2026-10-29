@@ -385,7 +385,9 @@ Rules:
   What the rule buys:
   - *Referent status by rule.* `provisional (SF; final at RF)` while unmet, `final` once met, `revised` when
     the bytes changed before finality, `not canonical` when they changed after it (a deep reorg, a dispute
-    run). The earlier observation stays true of what it pinned in every case. "Changed" compares captures by
+    run). `final` needs the reader's own re-check at a state that meets the rule; when only the observer's
+    asserted `state_at_capture` meets it, the status is `final (as captured, not re-checked)` (I4). The
+    earlier observation stays true of what it pinned in every case. "Changed" compares captures by
     their state in the rule's order, never by `capture.at`, which is the observer's word: a capture at a
     later state with different bytes is a revision, and two captures at the same state with different bytes
     contradict each other (C-core-40). States that the rule cannot order are not comparable.
@@ -516,7 +518,7 @@ the source.
 | capture evidence | §5.3.3 level, verified or not |
 | corroboration | §5.3.2 status, scoped |
 | selection | curated · rule-based · completeness claim · undeclared (§6). Missing means undeclared. |
-| referent status | still canonical · `provisional` · `final` · `revised` · `not canonical` · source still available / unknown · `unpinned` (a field its class requires, or a `system` member its method edition declares, is missing) · `finality unchecked` (a declared rule the reader has no source profile to evaluate) · `pinned` (phenomenon and method classes, whose referent has no re-check) (§5.3.1) |
+| referent status | still canonical · `provisional` · `final` · `final (as captured, not re-checked)` (the observer's asserted state meets the rule; no re-check yet) · `revised` · `not canonical` · source still available / unknown · `unpinned` (a field its class requires, or a `system` member its method edition declares, is missing) · `finality unchecked` (a declared rule the reader has no source profile to evaluate) · `pinned` (phenomenon and method classes, whose referent has no re-check) (§5.3.1) |
 
 | pre-registration | `pre-registered <task edition> (<bound quality>)` · `exploratory` · undeclared (#3). Missing means undeclared, not exploratory. |
 | finality | §5.3.1 rule and rule provenance; state at capture |
