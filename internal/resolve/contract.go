@@ -212,7 +212,7 @@ const ProvisionalProfile = "provisional-task-contract-0"
 //	counting_unit     "key" | "identity" O (absent: rc/1 default, key)
 //	coordinator       key O
 //	deadline          string O (a time value, as written)
-//	rubric            list of {id string R, text string O} O
+//	rubric            list of {id string R, text string O} O (ids unique)
 //	quorum            {k integer >=1 R, independence "not-required"|"required"|"self-declared-accepted" R,
 //	                   grouping {rule "all-pairs"} | {rule "reference", reference key} O,
 //	                   comparator digest O, estimand string O, test digest O} O
@@ -269,10 +269,23 @@ func (ProvisionalContract) Read(c *canon.Object) (*Terms, string, bool) {
 		}
 		for _, x := range a {
 			o, ok := x.(*canon.Object)
-			if !ok || str(o, "id") == "" {
+			if !ok {
 				return bad("rubric")
 			}
-			t.Rubric = append(t.Rubric, Criterion{ID: str(o, "id"), Text: str(o, "text")})
+			id, ok := stringMember(o, "id")
+			if !ok || id == "" {
+				return bad("rubric.id")
+			}
+			if slices.ContainsFunc(t.Rubric, func(c Criterion) bool { return c.ID == id }) {
+				return bad("rubric.id")
+			}
+			text := ""
+			if _, has := o.Get("text"); has {
+				if text, ok = stringMember(o, "text"); !ok {
+					return bad("rubric.text")
+				}
+			}
+			t.Rubric = append(t.Rubric, Criterion{ID: id, Text: text})
 		}
 	}
 	if v, ok := c.Get("quorum"); ok {
@@ -330,6 +343,16 @@ func memberObject(o *canon.Object, k string) (x *canon.Object, present, ok bool)
 	}
 	x, ok = v.(*canon.Object)
 	return x, true, ok
+}
+
+// stringMember reads member k of o as a string; ok is false when it is absent or not a string.
+func stringMember(o *canon.Object, k string) (string, bool) {
+	v, ok := o.Get(k)
+	if !ok {
+		return "", false
+	}
+	s, ok := v.(canon.String)
+	return string(s), ok
 }
 
 func intOf(o *canon.Object, k string) int {

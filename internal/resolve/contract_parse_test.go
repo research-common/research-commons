@@ -104,3 +104,17 @@ func TestProvisionalContractComparatorChoice(t *testing.T) {
 		{"comparator and test, no grouping", pcContract("quorum", quorum(2, IndependenceRequired, "comparator", dig("tol"), "test", dig("welch-t"))), "quorum.test"},
 	})
 }
+
+func TestProvisionalContractRubric(t *testing.T) {
+	rub := func(xs ...canon.Value) canon.Value { return canon.Array(xs) }
+	runPCUnread(t, []pcCase{
+		{"not an array", pcContract("rubric", obj("id", "R1")), "rubric"},
+		{"element string", pcContract("rubric", rub(canon.String("R1"))), "rubric"},
+		{"element null", pcContract("rubric", rub(canon.Null{})), "rubric"},
+		{"id missing", pcContract("rubric", rub(obj("text", "x"))), "rubric.id"},
+		{"id int", pcContract("rubric", rub(obj("id", 1))), "rubric.id"},
+		{"id empty", pcContract("rubric", rub(obj("id", ""))), "rubric.id"},
+		{"id duplicate", pcContract("rubric", rub(obj("id", "R1"), obj("id", "R2"), obj("id", "R1", "text", "again"))), "rubric.id"},
+		{"text int", pcContract("rubric", rub(obj("id", "R1", "text", 3))), "rubric.text"},
+	})
+}
