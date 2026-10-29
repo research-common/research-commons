@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/research-common/research-commons/internal/canon"
+	"github.com/research-common/research-commons/internal/rctime"
 )
 
 // Task contracts (claims-model note §9.1, §9.3; wire-format note §5 `contents.contract`).
@@ -211,7 +212,7 @@ const ProvisionalProfile = "provisional-task-contract-0"
 //	any_issuer        true         }
 //	counting_unit     "key" | "identity" O (absent: rc/1 default, key)
 //	coordinator       key O
-//	deadline          string O (a time value, as written)
+//	deadline          ts O (a UTC time value, wire §1.1; shape checked, kept as written, never evaluated)
 //	rubric            list of {id string R, text string O} O (ids unique)
 //	quorum            {k integer >=1 R, independence "not-required"|"required"|"self-declared-accepted" R,
 //	                   grouping {rule "all-pairs"} | {rule "reference", reference key} O,
@@ -264,6 +265,17 @@ func (ProvisionalContract) Read(c *canon.Object) (*Terms, string, bool) {
 			}
 		}
 		t.EligibleIssuers = l
+	}
+	// The deadline is a time value (wire §1.1), checked for shape only: it is displayed as a term and never
+	// evaluated here.
+	if v, ok := c.Get("deadline"); ok {
+		d, ok := v.(canon.String)
+		if !ok {
+			return bad("deadline")
+		}
+		if _, err := rctime.ParseUTC(string(d)); err != nil {
+			return bad("deadline")
+		}
 	}
 	if t.CountingUnit != "" && t.CountingUnit != CountKey && t.CountingUnit != CountIdentity {
 		return bad("counting_unit")

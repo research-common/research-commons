@@ -145,3 +145,21 @@ func TestProvisionalContractSamplingGroups(t *testing.T) {
 		{"n string", pcContract("sampling", smp(obj("name", "A", "n", "30"))), "sampling.groups.n"},
 	})
 }
+
+func TestProvisionalContractDeadline(t *testing.T) {
+	runPCUnread(t, []pcCase{
+		{"int", pcContract("deadline", 1764547200), "deadline"},
+		{"empty", pcContract("deadline", ""), "deadline"},
+		{"date only", pcContract("deadline", "2026-12-01"), "deadline"},
+		{"numeric offset", pcContract("deadline", "2026-12-01T00:00:00+00:00"), "deadline"},
+		{"lower-case t", pcContract("deadline", "2026-12-01t00:00:00Z"), "deadline"},
+		{"no zone", pcContract("deadline", "2026-12-01T00:00:00"), "deadline"},
+		{"trailing zero fraction", pcContract("deadline", "2026-12-01T00:00:00.50Z"), "deadline"},
+		{"prose", pcContract("deadline", "end of November"), "deadline"},
+	})
+	// shape only: a deadline long past still reads, kept as written
+	tm, why, ok := ProvisionalContract{}.Read(pcContract("deadline", "1999-01-01T00:00:00.5Z"))
+	if !ok || tm.Deadline != "1999-01-01T00:00:00.5Z" {
+		t.Fatalf("a past, well-formed deadline: %v %s", ok, why)
+	}
+}
