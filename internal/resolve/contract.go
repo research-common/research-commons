@@ -217,7 +217,7 @@ const ProvisionalProfile = "provisional-task-contract-0"
 //	                   grouping {rule "all-pairs"} | {rule "reference", reference key} O,
 //	                   comparator digest O, estimand string O, test digest O} O
 //	                  (at most one of comparator and test; grouping only beside one of them)
-//	sampling          {n integer R, unit string R, groups list of {name string, n integer} O} O
+//	sampling          {n integer R, unit string R, groups list of {name string R, n integer R} O (names unique)} O
 //
 // Any malformed or unknown field makes the whole contract unread (never a partial reading).
 type ProvisionalContract struct{}
@@ -329,10 +329,25 @@ func (ProvisionalContract) Read(c *canon.Object) (*Terms, string, bool) {
 	if present {
 		s := &DeclaredSampling{N: intOf(o, "n"), Unit: str(o, "unit")}
 		if v, ok := o.Get("groups"); ok {
-			a, _ := v.(canon.Array)
+			a, ok := v.(canon.Array)
+			if !ok {
+				return bad("sampling.groups")
+			}
 			for _, x := range a {
-				g, _ := x.(*canon.Object)
-				s.Groups = append(s.Groups, SamplingGroup{Name: str(g, "name"), N: intOf(g, "n")})
+				g, ok := x.(*canon.Object)
+				if !ok {
+					return bad("sampling.groups")
+				}
+				name, ok := stringMember(g, "name")
+				if !ok || name == "" || slices.ContainsFunc(s.Groups, func(h SamplingGroup) bool { return h.Name == name }) {
+					return bad("sampling.groups.name")
+				}
+				nv, _ := g.Get("n")
+				n, ok := nv.(canon.Int)
+				if !ok {
+					return bad("sampling.groups.n")
+				}
+				s.Groups = append(s.Groups, SamplingGroup{Name: name, N: int(n)})
 			}
 		}
 		t.Sampling = s

@@ -128,3 +128,20 @@ func TestProvisionalContractEligibleIssuers(t *testing.T) {
 		{"not strings", pcContract("eligible_issuers", canon.Value(canon.Array{canon.Int(1)})), "eligible_issuers"},
 	})
 }
+
+func TestProvisionalContractSamplingGroups(t *testing.T) {
+	smp := func(gs ...canon.Value) canon.Value {
+		return obj("n", 90, "unit", "runs", "groups", canon.Value(canon.Array(gs)))
+	}
+	runPCUnread(t, []pcCase{
+		{"groups object", pcContract("sampling", obj("n", 90, "unit", "runs", "groups", obj("name", "A", "n", 1))), "sampling.groups"},
+		{"element string", pcContract("sampling", smp(canon.String("A"))), "sampling.groups"},
+		{"element null", pcContract("sampling", smp(canon.Null{})), "sampling.groups"},
+		{"name missing", pcContract("sampling", smp(obj("n", 30))), "sampling.groups.name"},
+		{"name int", pcContract("sampling", smp(obj("name", 1, "n", 30))), "sampling.groups.name"},
+		{"name empty", pcContract("sampling", smp(obj("name", "", "n", 30))), "sampling.groups.name"},
+		{"name duplicate", pcContract("sampling", smp(obj("name", "A", "n", 30), obj("name", "A", "n", 60))), "sampling.groups.name"},
+		{"n missing", pcContract("sampling", smp(obj("name", "A"))), "sampling.groups.n"},
+		{"n string", pcContract("sampling", smp(obj("name", "A", "n", "30"))), "sampling.groups.n"},
+	})
+}
