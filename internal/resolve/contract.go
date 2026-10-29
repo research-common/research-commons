@@ -216,6 +216,7 @@ const ProvisionalProfile = "provisional-task-contract-0"
 //	quorum            {k integer >=1 R, independence "not-required"|"required"|"self-declared-accepted" R,
 //	                   grouping {rule "all-pairs"} | {rule "reference", reference key} O,
 //	                   comparator digest O, estimand string O, test digest O} O
+//	                  (at most one of comparator and test; grouping only beside one of them)
 //	sampling          {n integer R, unit string R, groups list of {name string, n integer} O} O
 //
 // Any malformed or unknown field makes the whole contract unread (never a partial reading).
@@ -283,11 +284,18 @@ func (ProvisionalContract) Read(c *canon.Object) (*Terms, string, bool) {
 		if q.K < 1 || !slices.Contains([]string{IndependenceNotRequired, IndependenceRequired, IndependenceSelfDeclared}, q.Independence) {
 			return bad("quorum")
 		}
+		// A pinned test is the comparator; the reading never picks one of two silently.
+		if q.Comparator != "" && q.Test != "" {
+			return bad("quorum.test")
+		}
 		g, present, ok := memberObject(o, "grouping")
 		if !ok {
 			return bad("quorum.grouping")
 		}
 		if present {
+			if q.Comparator == "" && q.Test == "" {
+				return bad("quorum.grouping")
+			}
 			q.Grouping, q.Reference = str(g, "rule"), str(g, "reference")
 			if (q.Grouping != GroupAllPairs && q.Grouping != GroupReference) || (q.Grouping == GroupReference) != (q.Reference != "") {
 				return bad("quorum.grouping")

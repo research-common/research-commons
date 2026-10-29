@@ -95,3 +95,12 @@ func TestProvisionalContractObjectFields(t *testing.T) {
 		{"quorum bool", pcContract("quorum", true), "quorum"},
 	})
 }
+
+func TestProvisionalContractComparatorChoice(t *testing.T) {
+	runPCUnread(t, []pcCase{
+		{"grouping without comparator or test", pcContract("quorum", quorum(2, IndependenceRequired, "grouping", obj("rule", GroupAllPairs))), "quorum.grouping"},
+		{"grouping reference without comparator", pcContract("quorum", quorum(2, IndependenceRequired, "grouping", obj("rule", GroupReference, "reference", pcKeyA))), "quorum.grouping"},
+		{"comparator and test", pcContract("quorum", quorum(2, IndependenceRequired, "comparator", dig("tol"), "test", dig("welch-t"), "grouping", obj("rule", GroupAllPairs))), "quorum.test"},
+		{"comparator and test, no grouping", pcContract("quorum", quorum(2, IndependenceRequired, "comparator", dig("tol"), "test", dig("welch-t"))), "quorum.test"},
+	})
+}
