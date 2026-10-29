@@ -603,7 +603,7 @@ func orDash(s string) string {
 // referent statuses that bear on it and whether it is contradicted, within the reader's scope. It uses the lite
 // status, which never resolves another artifact.
 func (r *Resolver) obsNotes(d string) (contradicted bool, status string) {
-	rank := map[string]int{RefNotCanonical: 5, RefRevised: 4, RefUnavailable: 3, RefProvisional: 2, RefFinal: 1}
+	rank := map[string]int{RefNotCanonical: 6, RefRevised: 5, RefUnavailable: 4, RefProvisional: 3, RefFinalCaptured: 2, RefFinal: 1}
 	best := 0
 	ps, unmet := r.observedFor(d) // every counted observation, or the reader's selected one (policy.go)
 	if unmet != "" {

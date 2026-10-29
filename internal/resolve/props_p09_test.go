@@ -230,12 +230,29 @@ func TestPropertyUnverifiedEvidenceNeverPasses(t *testing.T) {
 		if o := status(depth, WithFinalityRules(unknownRules{})); o.ReferentStatus != RefRuleUnchecked {
 			t.Fatalf("a finality evaluator that knows no rule reached %q", o.ReferentStatus)
 		}
-		// finding PROPS-F4: with no referent checker the observer's own asserted state is enough for `final`
-		// when that state meets the rule (the observer is the only evidence), shown with the re-check
-		// `unchecked`. The note says "an asserted finality state beside a re-check", never in place of one.
+		// PROPS-F4: with no referent checker, the observer's own asserted state meeting the rule is the only
+		// evidence, so the status is `final (as captured, not re-checked)`, never `final` (I4: an asserted state
+		// is shown beside a re-check, never in place of one). A re-check at a depth meeting the rule makes it
+		// final; a re-check below the rule makes it provisional at the re-checked state.
 		self := w.observed("S", "OX", "X2", "exact-bytes", chainRef(9), "finality", depthFinality("confirmations ≥ 6", 9))
-		if o := status(self); o.ReferentStatus == RefFinal {
-			t.Skip("finding PROPS-F4: referent status final rests on the observer's asserted state alone; the re-check is unchecked")
+		if o := status(self); o.ReferentStatus != RefFinalCaptured || !strings.Contains(o.Render(), "referent status: "+RefFinalCaptured+"\n") {
+			t.Fatalf("an asserted state alone reached %q\n%s", o.ReferentStatus, o.Render())
+		}
+		for name, c := range map[string]ReferentChecker{
+			"missing":                           NoReferentChecker{},
+			"re-check unchecked":                fakeReferents{self: {Outcome: ReUnchecked, Why: "node offline"}},
+			"re-check same bytes with no state": fakeReferents{self: {Outcome: ReSame}},
+			"re-check names an unknown outcome": fakeReferents{self: {Outcome: "looks fine"}},
+		} {
+			if o := status(self, WithReferentChecker(c)); o.ReferentStatus != RefFinalCaptured {
+				t.Fatalf("%s: %q, want %q\n%s", name, o.ReferentStatus, RefFinalCaptured, o.Render())
+			}
+		}
+		if o := status(self, WithReferentChecker(fakeReferents{self: {Outcome: ReSame, State: State{HasDepth: true, Depth: 12}}})); o.ReferentStatus != RefFinal {
+			t.Fatalf("a re-check meeting the rule: %q\n%s", o.ReferentStatus, o.Render())
+		}
+		if o := status(self, WithReferentChecker(fakeReferents{self: {Outcome: ReSame, State: State{HasDepth: true, Depth: 2}}})); o.ReferentStatus != "provisional (2; final at 6)" {
+			t.Fatalf("a re-check below the rule kept the asserted state: %q\n%s", o.ReferentStatus, o.Render())
 		}
 	})
 
