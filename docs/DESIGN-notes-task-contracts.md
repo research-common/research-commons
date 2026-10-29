@@ -17,8 +17,8 @@ numbers are this note's; any other note is named.
 - **`fulfills` is a submission** (§5.1). An `authored` or `observed` carrying `fulfills: E` is a submission
   of `E` whose result is its own content digest, read under the same five conditions; `submit` stays for
   results that are not the submitter's own statement. Q1's current-submission rule reads every kind (§6 Q1);
-  a `fulfills` that fails `E`'s terms is not counted, never malformed. Touches §4.3, §5.2, §5.3, §5.8, §6
-  Q4–Q5, §7 (C-exch-03a, C-exch-07a; new C-exch-15a), §8, and one sentence in the claims-model note §9.4.
+  a `fulfills` that fails `E`'s terms is not counted, never malformed. Touches §3.3, §4.3, §5.2, §5.3, §5.8,
+  §6 Q4–Q5, §7 (C-exch-03a, C-exch-07a; new C-exch-15a), §8, and one sentence in the claims-model note §9.4.
 - **Q2 `min_grade`** is for derived results only: it needs a `results: "derived"` declaration, and without
   one it leaves the contract unread. `min_capture_evidence` waits for an ordered vocabulary of verified
   capture-evidence levels; corroboration never gates a count (§6 Q2).
