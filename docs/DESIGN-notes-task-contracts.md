@@ -32,9 +32,10 @@ numbers are this note's; any other note is named.
   one put in. Ready if the first reaches the quorum, not ready if the second does not, `unknown` or `unchecked`
   otherwise. This replaces "any unchecked criterion anywhere makes the task unchecked", which lets any
   eligible issuer hold a ready task at exit 3.
-- Eleven questions stay open (§6), each with options and a lean: deduplication, evidence strength, inputs and
-  methods, commit-reveal, credit definitions, grant withdrawal, counting units, calendar deadlines, the
-  coordinator under identities, refutation eligibility and rubric dialects.
+- Twelve questions stay open (§6), each with options and a lean: deduplication, evidence strength, inputs and
+  methods, commit-reveal, credit definitions, grant withdrawal, counting units for corroboration, calendar
+  deadlines, the coordinator under identities, refutation eligibility, rubric dialects, and counting by a
+  referent member.
 - §7 lists the conformance impact: which exchange cases this grammar unblocks, and six new cases.
 
 **Standards first.** As in the wire-format note §0: where a standard defines something this profile needs, it
@@ -343,7 +344,8 @@ key` the unit is the signing key: a key that submits the same result twice count
 of the two submissions (a `submit` of `D` and an `authored` of `D` carrying `fulfills` are one result). With
 `identity` the count needs an identity profile; with none active, readiness is `unknown`, naming the missing profile, never a
 key count presented as an identity count. Every count is displayed with its unit (`2 keys`), because keys are
-not people (TC4). How a unit that submits **different** results counts is open (§6, Q1).
+not people (TC4). How a unit that submits **different** results counts is open (§6, Q1); counting by a
+member of an observation's referent, such as an instrument, is open too (§6, Q12).
 
 ### 5.4 Independence
 
@@ -531,6 +533,27 @@ Each question lists options and a lean. A lean is a proposal for review, not a d
     (b) let a criterion carry `dialect` and `expr`, as edition rules do (claims-model note §8).
     **Lean: (a) now, (b) when the rule-dialect note exists.** An evaluator that understands nothing yields
     `unchecked`, so prose criteria are honest, if unhelpful to automation.
+12. **Counting by a referent member.** An observation quorum may count instruments, not signers: "at most one
+    per `system.machine_ref` per routing era". One key can run several machines and one machine can be
+    published under several keys, so neither `key` nor `identity` (§5.3) expresses it.
+    (a) a third `counting_unit` form, `{referent: "<member path>"}`, e.g. `{referent: "system.machine_ref"}`:
+    the unit is that member's value in each counted submission's method referent. A submission whose referent
+    lacks the member is undecided (it enters the bracket, §5.6); one with no method referent (a `submit` of a
+    derived result) is not counted, naming why. The count is displayed in its unit (`3 machine_ref values`)
+    and is the observers' word, not a verified count of machines: like a key count it says nothing about
+    independence (TC4). "Per routing era" is a second member read the same way, so (a) would also need a
+    grouping by member, which this option leaves to a later field;
+    (b) counting by a referent member is a rule-dialect matter, as set-level edition rules are ("at most one
+    endorsed member per instrument per era", claims-model note §8), and v1 says so explicitly: a contract
+    that needs it either counts by `key` and says in its `question` what it cannot enforce, or has no
+    `quorum` and is settled by review (§5.6), where the beneficiary applies the rule.
+    **Lean: (b) for v1.** (a) depends on a gap in the format: claims-model note §5.3.1 says a method edition
+    declares the members of the measured system an observation under it must pin, but no wire field carries
+    that declaration (the `edition` contents in wire-format note §5 have no member for it), and the reference
+    implementation meets C-core-32 only in part for that reason. A unit read from members the method has not
+    declared would key on something one observer pins and another omits, or spells differently. Once a method
+    edition can declare its system members, (a) reads well, with "missing member → undecided" and a contract
+    allowed to name only a declared member (any other leaves it unread, §3.3).
 
 ## 7. Conformance impact
 
@@ -568,8 +591,8 @@ New cases, proposed with this note in `CONFORMANCE.md` (exchange profile, by sec
 | C-exch-15a | §5.1 submissions: an `authored` or `observed` carrying `fulfills` is a submission whose result is its content digest; with a `submit` of the same digest it counts once; outside `eligible_issuers` it is not counted, never malformed; a `fulfills` naming no task edition is no submission; the statement's grade is the same with or without the task held |
 | C-exch-18a | §4.2 binding: bound refutation listed and credited on its own track and never grouped; `task` without `edition` malformed; an unbound refutation of a submission is shown beside it but not listed in the task |
 
-Deduplication, evidence strength, inputs and methods, and commit-reveal get cases when their questions are
-answered.
+Deduplication, evidence strength, inputs and methods, commit-reveal and counting by a referent member get
+cases when their questions are answered.
 
 ## 8. Relationship to the provisional reading
 
