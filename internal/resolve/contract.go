@@ -207,7 +207,7 @@ const ProvisionalProfile = "provisional-task-contract-0"
 // contract whose `profile` is ProvisionalProfile, and reads:
 //
 //	beneficiary       key R
-//	eligible_issuers  list of key  } exactly one
+//	eligible_issuers  set of key   } exactly one (non-empty, sorted, duplicate-free)
 //	any_issuer        true         }
 //	counting_unit     "key" | "identity" O (absent: rc/1 default, key)
 //	coordinator       key O
@@ -256,6 +256,12 @@ func (ProvisionalContract) Read(c *canon.Object) (*Terms, string, bool) {
 		l, ok := strings_(c, "eligible_issuers")
 		if !ok || len(l) == 0 {
 			return bad("eligible_issuers")
+		}
+		// a set, as controllers are (wire §1 "arrays"): sorted by the key order, no duplicates
+		for i := 1; i < len(l); i++ {
+			if canon.CompareKeys(l[i-1], l[i]) >= 0 {
+				return bad("eligible_issuers")
+			}
 		}
 		t.EligibleIssuers = l
 	}

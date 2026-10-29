@@ -118,3 +118,13 @@ func TestProvisionalContractRubric(t *testing.T) {
 		{"text int", pcContract("rubric", rub(obj("id", "R1", "text", 3))), "rubric.text"},
 	})
 }
+
+func TestProvisionalContractEligibleIssuers(t *testing.T) {
+	runPCUnread(t, []pcCase{
+		{"empty", pcContract("eligible_issuers", []string{}), "eligible_issuers"},
+		{"unsorted", pcContract("eligible_issuers", []string{pcKeyB, pcKeyA}), "eligible_issuers"},
+		{"duplicate", pcContract("eligible_issuers", []string{pcKeyA, pcKeyA}), "eligible_issuers"},
+		{"duplicate sorted", pcContract("eligible_issuers", []string{pcKeyA, pcKeyB, pcKeyB}), "eligible_issuers"},
+		{"not strings", pcContract("eligible_issuers", canon.Value(canon.Array{canon.Int(1)})), "eligible_issuers"},
+	})
+}
