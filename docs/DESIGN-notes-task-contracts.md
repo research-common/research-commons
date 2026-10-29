@@ -5,8 +5,9 @@
 **Builds on:** the claims-model note §8 (resources, editions) and §9 (research exchange), #69; the wire-format
 note §1.1, §5, §6; the bitcoin-time note §7, §8, §11; #3 (pre-registration), #65 (stochastic replication)
 **Scope:** the grammar of a task edition's `contents.contract`, one new statement kind (`grant`), two optional
-fields on `refutes`, and the rules a reader applies to decide readiness under a contract. It does not change
-the claims model's invariants, the wire envelope, or any existing kind's meaning.
+fields on `refutes`, a reading of the existing `fulfills` field as a submission, and the rules a reader
+applies to decide readiness under a contract. It does not change the claims model's invariants, the wire
+envelope, or any existing kind's meaning.
 **References:** invariants (I1–I15) and bare §9.x, §10 and §13 are the claims-model note's; other bare section
 numbers are this note's; any other note is named.
 
@@ -23,6 +24,10 @@ numbers are this note's; any other note is named.
   grants (§4.1); optional **`task`/`edition`** on `refutes`, so a refutation can be a first-class submission of
   a task (§4.2); and a **deadline clock**: a deadline is a Bitcoin block height compared only with verified
   bounds, never with `ts` (§4.3).
+- **Observation tasks need no second statement.** An `authored` or `observed` statement carrying
+  `fulfills: E` is itself a submission of `E` whose result is its own content digest (§5.1), so in a
+  pre-registered observation campaign each participant signs its observation once. `submit` stays for a
+  result that is not the submitter's own statement.
 - Readiness is computed as a **bracket** (§5.6): once with every undecided submission left out, once with every
   one put in. Ready if the first reaches the quorum, not ready if the second does not, `unknown` or `unchecked`
   otherwise. This replaces "any unchecked criterion anywhere makes the task unchecked", which lets any
@@ -30,7 +35,7 @@ numbers are this note's; any other note is named.
 - Eleven questions stay open (§6), each with options and a lean: deduplication, evidence strength, inputs and
   methods, commit-reveal, credit definitions, grant withdrawal, counting units, calendar deadlines, the
   coordinator under identities, refutation eligibility and rubric dialects.
-- §7 lists the conformance impact: which exchange cases this grammar unblocks, and five new cases.
+- §7 lists the conformance impact: which exchange cases this grammar unblocks, and six new cases.
 
 **Standards first.** As in the wire-format note §0: where a standard defines something this profile needs, it
 is adopted and profiled; where none fits, the note says so.
@@ -173,9 +178,9 @@ holds in both: one place per role per major.
 - A malformed field (wrong type, an empty `eligible_issuers`, a `grouping` without a comparator, duplicate
   rubric ids, a `reference` that is not a key) leaves the contract unread, naming the field. There is never a
   partial reading.
-- A reader that implements `task-contract-v1` implements `grant` (§4.1) and the `refutes` binding (§4.2) as
-  well. A reader that read the terms but not the grants would report a coordinator-gated task `not ready`
-  where the honest answer is that it cannot tell.
+- A reader that implements `task-contract-v1` implements `grant` (§4.1), the `refutes` binding (§4.2) and
+  `fulfills` submissions (§5.1) as well. A reader that read the terms but not the grants, or counted only
+  `submit`s, would report a task `not ready` where the honest answer is that it cannot tell.
 
 ## 4. New wire elements
 
@@ -231,7 +236,7 @@ that answers a task from one that happens to touch it).
 ### 4.3 The deadline clock
 
 A deadline is `{height: h}`: a height of the Bitcoin chain the reader validates (mainnet, bitcoin-time note
-§7). For each submission bound to an edition with a deadline, the reader computes one outcome from the
+§7). For each submission (§5.1) bound to an edition with a deadline, the reader computes one outcome from the
 submission's bound records (bitcoin-time note §8.1):
 
 | Outcome | When |
@@ -249,7 +254,8 @@ an upgraded proof that commits at or below `h` turns it into `ok`, as I5 allows 
   and `explain` says that a later bound does not show lateness. A submission that is `not shown` does not
   count; the honest answer to "is it on time?" for it is "not shown to be", and readiness reports exactly that.
 - **`ts` meets nothing.** A submission whose `ts` is before the deadline and which has no qualifying bound is
-  `unchecked` or `not shown`, never `ok` (TC5, C-exch-07a).
+  `unchecked` or `not shown`, never `ok` (TC5, C-exch-07a). The same holds for an observation's `capture.at`,
+  which is the observer's word: the bound that meets the deadline is the observation statement's own.
 - **Height, not `nTime`.** The bitcoin-time note orders by height and displays `nTime` as miner-reported, never
   an ordering key. Header `nTime` may decrease while height increases, and a node accepts it up to two hours
   ahead of its own clock; nothing a reader verifies bounds it tightly enough for a deadline to use. A calendar
@@ -263,9 +269,38 @@ an upgraded proof that commits at or below `h` turns it into `ok`, as I5 allows 
 
 ## 5. Readiness and settlement
 
-### 5.1 When a submission counts
+### 5.1 Submissions, and when one counts
 
-A `submit` bound to edition `E` with read terms counts toward `E`'s quorum when all of these hold:
+A **submission** of edition `E` is either of:
+
+- a `submit` whose `task` and `edition` name `E`; its result is its `result` digest;
+- an `authored` or `observed` statement whose `fulfills` names `E` (`resource` the task, `edition` the edition
+  id); its result is its own `content.digest`.
+
+`submit` is for a result that is not the submitter's own statement: a digest another key authored, or bytes
+the submitter publishes no statement for. A statement carrying `fulfills` needs no `submit` beside it; a key
+that sends both for the same digest has made two submissions of one result, which count once (§5.3; which of
+them is read is §6 Q1).
+
+- **The disclosure stays.** `fulfills` keeps its meaning as a disclosure (`pre-registered <edition>`,
+  claims-model note §9.4, C-exch-15). Reading it as a submission adds a binding the task reads, exactly as it
+  reads a `submit`'s `task`/`edition`, and changes nothing about the statement itself: its grade (for a
+  derived result), its disclosures and its own `verify` exit are the same whether or not the reader holds the
+  task (I6).
+- **What it names.** A `fulfills` that names something other than an edition of that task (an approval's
+  statement id, a collection's edition, a `resource` that is not the edition's task) is a submission of
+  nothing, shown as the disclosure rules already show it.
+- **Amendments.** An `authored` amended by its signer is read from its current claim (claims-model note §4):
+  an amendment that drops `fulfills`, or names another edition, withdraws or moves the submission, in the
+  key's log order (§6 Q1). The deadline (§4.3) reads only the bounds of statements in the chain that name
+  `E`, from the last one that did not onward, never the best bound of the whole chain: an amendment that
+  adds `fulfills` late does not inherit the bound of an earlier statement that made no submission. The
+  chain's bound shows the bytes existed; the deadline asks that the submission did.
+- **`submit`-only fields.** A statement carrying `fulfills` has no `self_declared_independence`, so under
+  `self-declared-accepted` it counts toward `k` only where its independence is established (§5.4).
+- Bound refutations (§4.2) are submissions on the refutation track and never enter what follows.
+
+A submission of `E`, with `E`'s terms read, counts toward `E`'s quorum when all of these hold:
 
 1. its line counts under its signer's key events (claims-model note §4.1);
 2. its signer is an eligible issuer (`eligible_issuers` contains it, or `any_issuer`);
@@ -274,7 +309,10 @@ A `submit` bound to edition `E` with read terms counts toward `E`'s quorum when 
 5. if `E` has a deadline, its deadline outcome is `ok` (§4.3).
 
 A condition that is `unchecked` makes the submission **undecided**; a condition that is `fail` or `not shown`
-makes it **not counted**. Both are listed with the reason. Every submission stays admissible (TC3).
+makes it **not counted**. Both are listed with the reason. Every submission stays admissible (TC3): one
+that does not meet `E`'s terms is a submission not counted, never a malformed statement. An observation
+that carries `fulfills: E` from a key outside `eligible_issuers` is a valid `observed`, listed under `E` as
+`not counted: not an eligible issuer`.
 
 ### 5.2 Grouping
 
@@ -285,6 +323,12 @@ makes it **not counted**. Both are listed with the reason. Every submission stay
   and requires exactly one such result (none, or several, is `unchecked`, naming the count). A pair the
   comparator cannot decide is undecided, and enters readiness through the bracket (§5.6). No rule ever chains `A≈B`, `B≈C` into `{A,B,C}`
   (C-exch-12).
+- **Observation results.** An observation's result is its content digest, so with no comparator two
+  observation submissions group only when their bytes are identical. In every class but exact-bytes,
+  identical bytes under a second key are a copy, not a second observation (claims-model note §5.3.1); such a
+  group counts keys holding one capture (TC4), and `independence: required` is the term that keeps copies
+  out. A contract that wants observations to agree under an agreement model (claims-model note §5.3.2) names
+  that comparison as its `comparator`.
 - **Bound on work.** All-pairs grouping is exponential in the number of distinct results. A reader declares a
   limit (the provisional reading uses 16 distinct results); above it, grouping is `unchecked` with the limit
   named, an operational limit under I8.
@@ -294,8 +338,9 @@ makes it **not counted**. Both are listed with the reason. Every submission stay
 ### 5.3 Counting
 
 A group's count is the number of distinct counting units among its counted submissions. With `counting_unit:
-key` the unit is the signing key: a key that submits the same result twice counts once. With `identity` the
-count needs an identity profile; with none active, readiness is `unknown`, naming the missing profile, never a
+key` the unit is the signing key: a key that submits the same result twice counts once, whatever the kinds
+of the two submissions (a `submit` of `D` and an `authored` of `D` carrying `fulfills` are one result). With
+`identity` the count needs an identity profile; with none active, readiness is `unknown`, naming the missing profile, never a
 key count presented as an identity count. Every count is displayed with its unit (`2 keys`), because keys are
 not people (TC4). How a unit that submits **different** results counts is open (§6, Q1).
 
@@ -364,8 +409,9 @@ check is not itself a comparison. A §13 line saying so is proposed with this no
 ### 5.8 Settlement
 
 A `decide` settles when its signer is the bound edition's beneficiary (or, under `rc/2`, holds what the
-identity profile requires) and it cites at least one submission or bound refutation of that edition. It is the
-beneficiary's judgment and may differ from readiness; both are shown. Contradictory decisions stay a visible
+identity profile requires) and it cites at least one submission (§5.1, by statement id, whatever its kind) or
+bound refutation of that edition. It is the beneficiary's judgment and may differ from readiness; both are
+shown. Contradictory decisions stay a visible
 conflict until one explicitly supersedes another (§9.2). Nothing in this profile makes a decision from
 readiness automatically.
 
@@ -378,11 +424,13 @@ Each question lists options and a lean. A lean is a proposal for review, not a d
    (a) the unit counts once in each group it appears in (the provisional reading; a unit that hedges across
    divergent results counts toward every one of them);
    (b) a unit with divergent results counts in none;
-   (c) a unit's **current** submission counts: the one with no later `submit` to the same edition in its log
-   order (wire-format note §7), as a key's current `holds` is read; branches of an uncleared fork that disagree
-   count in none and are shown.
+   (c) a unit's **current** submission counts: the one with no later submission to the same edition in its log
+   order (wire-format note §7), whatever the kinds (a `submit`, or an `authored` or `observed` carrying
+   `fulfills`, §5.1), as a key's current `holds` is read; branches of an uncleared fork that disagree count in
+   none and are shown.
    **Lean: (c).** It uses the one order a key's own statements have, never `ts`, closes the hedge, and gives an
-   honest correction a way to replace an error. A `dedup` field is not needed while there is one rule.
+   honest correction a way to replace an error: a corrected export carrying `fulfills` supersedes the
+   erroneous one by being later in the same log. A `dedup` field is not needed while there is one rule.
 2. **Required evidence strength.** Does a re-derived result count for more than a bare submission?
    (a) no requirement: any counted submission counts;
    (b) `quorum.min_grade`, `"T0"`/`"T1"`/`"T2"`: a submission counts only if the reader's own grade of its
@@ -405,14 +453,16 @@ Each question lists options and a lean. A lean is a proposal for review, not a d
    the plain digest and the salt;
    (c) drop commit-reveal from tasks.
    **Lean: (a).** It needs no new construction, and its cautions (possession by T, never independence;
-   a nonce for low-entropy content) are already written. Sub-question: may the commitment's bound, rather than
-   the submission's, meet the deadline? Leaning yes, when the submission names that commitment: the plan of
+   a nonce for low-entropy content) are already written. Under (a), a commitment that itself carries
+   `fulfills` is the submission (§5.1) and needs no `submit`; its own bound is the one the deadline reads.
+   Sub-question, for a `submit` that names an earlier commitment: may the commitment's bound, rather than the
+   submission's, meet the deadline? Leaning yes, when the submission names that commitment: the plan of
    "commit before the deadline, reveal after" is the use the mechanism exists for. Under every option the
    match shows possession by T only (C-exch-09 (b), C-btc-19).
 5. **Credit definitions.** §9.5 names six counts and defines none; §9.4 says refutations are credited "on
    their own track", which is a seventh. Proposed definitions, each over counted statements in the reader's
-   window: **contribution**, the key's `submit`s; **citation**, other keys' `authored` whose provenance names a
-   blob the key authored; **reproduction**, the key's `reproduced`; **refutation**, the key's `refutes`;
+   window: **contribution**, the key's submissions (§5.1, whatever their kind); **citation**, other keys'
+   `authored` whose provenance names a blob the key authored; **reproduction**, the key's `reproduced`; **refutation**, the key's `refutes`;
    **review**, the key's counted `decide`s; **corroboration**, the key's `corroborates`; **acceptance**, the
    key's submissions whose beneficiary decision, after supersession, is `accept`.
    (a) these, with §9.5 amended to name refutation;
@@ -466,7 +516,7 @@ specified; the implementation still has to meet it.
 | C-exch-11 | independence term unreadable | unblocked by `self-declared-accepted` (§5.4) |
 | C-exch-12, C-exch-14 | grouping rule unreadable | unblocked by `quorum.grouping` (§5.2) |
 | C-exch-13 | estimand and test unreadable | fields unblocked; the test itself is a comparison-dialect matter |
-| C-exch-15, C-exch-16 | no term needed | unchanged (`fulfills` names the edition) |
+| C-exch-15, C-exch-16 | a `fulfills` statement is displayed, never counted | display unchanged; the statement is also a submission of the edition it names (§5.1), pinned by C-exch-15a |
 | C-exch-17 | declared sampling unreadable | unblocked by `sampling` (§3.1) |
 | C-exch-18 | a refutation cannot name a task | unblocked by §4.2 |
 | C-exch-19, C-exch-20 | counts named, not defined | waits on §6 Q5 |
@@ -476,10 +526,11 @@ New cases, proposed with this note in `CONFORMANCE.md` (exchange profile, by sec
 
 | id | pins |
 |---|---|
-| C-exch-03a | §3.3 recognition: unknown profile, unknown field (including `x_`), malformed field, the provisional profile name, a role field in the wrong place for the major; all unread, exit 3 |
+| C-exch-03a | §3.3 recognition: unknown profile, unknown field (including `x_`), malformed field, the provisional profile name, a role field in the wrong place for the major; all unread, exit 3, and no submission counted, a `fulfills` one included |
 | C-exch-03b | §4.1 grant scope: coordinator vs other signer, grant naming another edition, grant not carried to a later edition, grant published after the submission still counts, in every delivery order |
-| C-exch-07a | §4.3 deadline outcomes: `ok`, `unchecked` (tip below `h`; pending proof), `not shown` (bound above `h`; `local` only); `ts` before `h` never `ok`; no output says "missed" or "late" |
+| C-exch-07a | §4.3 deadline outcomes: `ok`, `unchecked` (tip below `h`; pending proof), `not shown` (bound above `h`; `local` only); `ts` before `h` never `ok`; no output says "missed" or "late"; a `fulfills` submission read from its own bound |
 | C-exch-08a | §5.6 bracket and §5.7 exit: `k` passing submissions plus one undecided elsewhere is `ready`, exit 0; `k−1` plus one undecided is `unchecked`, exit 3; `k−1` plus one failing is `not ready`, exit 0 |
+| C-exch-15a | §5.1 submissions: an `authored` or `observed` carrying `fulfills` is a submission whose result is its content digest; with a `submit` of the same digest it counts once; outside `eligible_issuers` it is not counted, never malformed; a `fulfills` naming no task edition is no submission; the statement's grade is the same with or without the task held |
 | C-exch-18a | §4.2 binding: bound refutation listed and credited on its own track and never grouped; `task` without `edition` malformed; an unbound refutation of a submission is shown beside it but not listed in the task |
 
 Deduplication, evidence strength, inputs and methods, and commit-reveal get cases when their questions are
@@ -501,6 +552,7 @@ change, and the provisional reading keeps its own name, so no contract silently 
 | `grouping` without a comparator | accepted and unused | malformed |
 | `comparator` and `test` together; `estimand` without `test` | accepted (`test` wins) | malformed |
 | `eligible_issuers` order | any order, duplicates accepted | a set: sorted, duplicate-free |
+| what is a submission | `submit` only; a `fulfills` statement is a disclosure | `submit`, and an `authored` or `observed` carrying `fulfills` (§5.1) |
 | refutation binding | inferred from `of` | explicit `task`/`edition` (§4.2) |
 | grants | read through a stand-in, not a wire kind | `grant` (§4.1) |
 | credit | seven counts, as in §6 Q5 | the same, pending Q5 |
