@@ -139,7 +139,8 @@ and duplicate-free in the key order of the wire-format note §1, as `controllers
 with like. The contract reads `n`, `unit` and `groups`; `window` and `dispersion` are disclosure fields with no
 contract meaning, and a contract carrying them is unread (§3.3), not silently trimmed.
 
-Not in the table, on purpose: required inputs and methods, deduplication, evidence strength (§6, Q1–Q3). A
+Not in the table, on purpose: required inputs and methods, deduplication, evidence strength and the
+`results` declaration it needs (§6, Q1–Q3). A
 field added before this note is accepted joins `task-contract-v1`; one added after is `task-contract-v2`. A
 profile never changes meaning under a fixed name.
 
@@ -436,8 +437,25 @@ Each question lists options and a lean. A lean is a proposal for review, not a d
    (b) `quorum.min_grade`, `"T0"`/`"T1"`/`"T2"`: a submission counts only if the reader's own grade of its
    result (claims-model note §7) is at least that, `unchecked` while ungraded;
    (c) weights per evidence class.
-   **Lean: (b), as an optional field.** It reuses the grades the reader already computes. (c) is rejected: a
-   weighted sum hides why a quorum was reached.
+   **Lean: (b), as an optional field, for derived results only.** It reuses the grades the reader already
+   computes. (c) is rejected: a weighted sum hides why a quorum was reached.
+   Grades rank derivation, and observations are not a tier (claims-model note §7), so `min_grade` cannot
+   apply to an observation submission (§5.1): read literally, it would fail every one. Under (b), therefore:
+   - `min_grade` is read only on a contract that accepts derived results alone. Since every contract accepts
+     `fulfills` observations as submissions (§5.1), that needs a declaration: (b) brings an optional
+     `results`, `"derived"` · `"observed"` (absent: either), and `min_grade` without `results: "derived"`
+     leaves the contract unread, naming the field (§3.3), so a quorum is never computed under a term that
+     cannot apply to its submissions. Under `results: "derived"`, an `observed` carrying `fulfills` is a
+     submission not counted, `not a derived result`; under `"observed"`, a `submit` or an `authored` is not
+     counted, `not an observation`. Neither is malformed (§5.1).
+   - The observation analogue of a grade is capture evidence (claims-model note §5.3.3). A
+     `min_capture_evidence` beside `min_grade` reads well but waits: the declared levels are a closed set
+     (wire-format note §5, `capture.evidence`), but the claims-model note gives them no order and the tool
+     displays only the levels it verified (`device-attested (unverified)`), so there is no closed vocabulary
+     of verified, ordered levels for a contract to name yet. Until there is, a contract cannot require one.
+   - Corroboration never gates a count. It is a disclosure, scoped to the statements a reader holds and the
+     agreement models it trusts (claims-model note §5.3.2), and a disclosure never moves a verification
+     result (I6). A contract that wants agreement among observations says so through `comparator` (§5.2).
 3. **Required inputs and methods.** §9.1 says the contract pins them.
    (a) prose in `question` only;
    (b) `inputs`, a set of digests every counted submission's result provenance must include, and `workflow`, a
