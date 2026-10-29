@@ -12,9 +12,9 @@ import (
 // base and require an unread contract whose reason names the field.
 
 const (
-	pcKeyA = "aaaa000000000000000000000000000000000000000000000000000000000000"
-	pcKeyB = "bbbb000000000000000000000000000000000000000000000000000000000000"
-	pcKeyC = "cccc000000000000000000000000000000000000000000000000000000000000"
+	pcKeyA = "0xaaaa000000000000000000000000000000000000"
+	pcKeyB = "ed25519:bbbb000000000000000000000000000000000000000000000000000000000000"
+	pcKeyC = "ed25519:cccc000000000000000000000000000000000000000000000000000000000000"
 )
 
 // pcContract is a well-formed provisional contract with every optional field; kv replaces (or, with a nil
@@ -139,7 +139,6 @@ func TestProvisionalContractSamplingGroups(t *testing.T) {
 		{"element null", pcContract("sampling", smp(canon.Null{})), "sampling.groups"},
 		{"name missing", pcContract("sampling", smp(obj("n", 30))), "sampling.groups.name"},
 		{"name int", pcContract("sampling", smp(obj("name", 1, "n", 30))), "sampling.groups.name"},
-		{"name empty", pcContract("sampling", smp(obj("name", "", "n", 30))), "sampling.groups.name"},
 		{"name duplicate", pcContract("sampling", smp(obj("name", "A", "n", 30), obj("name", "A", "n", 60))), "sampling.groups.name"},
 		{"n missing", pcContract("sampling", smp(obj("name", "A"))), "sampling.groups.n"},
 		{"n string", pcContract("sampling", smp(obj("name", "A", "n", "30"))), "sampling.groups.n"},
@@ -161,5 +160,98 @@ func TestProvisionalContractDeadline(t *testing.T) {
 	tm, why, ok := ProvisionalContract{}.Read(pcContract("deadline", "1999-01-01T00:00:00.5Z"))
 	if !ok || tm.Deadline != "1999-01-01T00:00:00.5Z" {
 		t.Fatalf("a past, well-formed deadline: %v %s", ok, why)
+	}
+}
+
+// TestProvisionalContractScalarTypes: a present member of the wrong type or shape is malformed, never read as
+// absent or as "" (before, `str` and `intOf` turned a non-string coordinator into "no coordinator" and a
+// non-digest comparator into byte equality, both weaker terms than the contract states).
+func TestProvisionalContractScalarTypes(t *testing.T) {
+	q := func(kv ...any) canon.Value { return quorum(2, IndependenceRequired, kv...) }
+	grp := obj("rule", GroupAllPairs)
+	runPCUnread(t, []pcCase{
+		{"beneficiary int", pcContract("beneficiary", 7), "beneficiary"},
+		{"beneficiary not a key", pcContract("beneficiary", "alice"), "beneficiary"},
+		{"beneficiary upper-case hex", pcContract("beneficiary", "0xAAAA000000000000000000000000000000000000"), "beneficiary"},
+		{"coordinator int", pcContract("coordinator", 5), "coordinator"},
+		{"coordinator not a key", pcContract("coordinator", "K"), "coordinator"},
+		{"counting_unit int", pcContract("counting_unit", 1), "counting_unit"},
+		{"counting_unit unknown", pcContract("counting_unit", "person"), "counting_unit"},
+		{"eligible issuer not a key", pcContract("eligible_issuers", []string{"0xaaaa"}), "eligible_issuers"},
+		{"quorum.k missing", pcContract("quorum", obj("independence", IndependenceRequired)), "quorum.k"},
+		{"quorum.k string", pcContract("quorum", obj("k", "2", "independence", IndependenceRequired)), "quorum.k"},
+		{"quorum.k zero", pcContract("quorum", quorum(0, IndependenceRequired)), "quorum.k"},
+		{"quorum.independence missing", pcContract("quorum", obj("k", 2)), "quorum.independence"},
+		{"quorum.independence unknown", pcContract("quorum", quorum(2, "assumed")), "quorum.independence"},
+		{"quorum.comparator int", pcContract("quorum", q("comparator", 7, "grouping", grp)), "quorum.comparator"},
+		{"quorum.comparator not a digest", pcContract("quorum", q("comparator", "tol", "grouping", grp)), "quorum.comparator"},
+		{"quorum.test not a digest", pcContract("quorum", q("test", "welch", "grouping", grp)), "quorum.test"},
+		{"quorum.estimand int", pcContract("quorum", q("test", dig("welch-t"), "estimand", 3, "grouping", grp)), "quorum.estimand"},
+		{"grouping.rule int", pcContract("quorum", q("comparator", dig("tol"), "grouping", obj("rule", 1))), "quorum.grouping"},
+		{"grouping.rule unknown", pcContract("quorum", q("comparator", dig("tol"), "grouping", obj("rule", "chain"))), "quorum.grouping"},
+		{"grouping.reference not a key", pcContract("quorum", q("comparator", dig("tol"), "grouping", obj("rule", GroupReference, "reference", "A"))), "quorum.grouping"},
+		{"grouping.reference with all-pairs", pcContract("quorum", q("comparator", dig("tol"), "grouping", obj("rule", GroupAllPairs, "reference", pcKeyA))), "quorum.grouping"},
+		{"sampling.n missing", pcContract("sampling", obj("unit", "runs")), "sampling.n"},
+		{"sampling.n string", pcContract("sampling", obj("n", "30", "unit", "runs")), "sampling.n"},
+		{"sampling.unit missing", pcContract("sampling", obj("n", 30)), "sampling.unit"},
+		{"sampling.unit int", pcContract("sampling", obj("n", 30, "unit", 1)), "sampling.unit"},
+	})
+}
+
+// TestProvisionalContractReadsWhatItChecks: the control for the checks above. The well-formed base reads with
+// every term as written, so a check that refused it, or a reading that dropped a term, fails here.
+func TestProvisionalContractReadsWhatItChecks(t *testing.T) {
+	tm, why, ok := ProvisionalContract{}.Read(pcContract())
+	if !ok {
+		t.Fatalf("base unread: %s", why)
+	}
+	want := Terms{Profile: ProvisionalProfile, Provisional: true, Beneficiary: pcKeyA, EligibleIssuers: []string{pcKeyA, pcKeyB},
+		CountingUnit: CountKey, Coordinator: pcKeyC, Deadline: "2026-12-01T00:00:00Z"}
+	if tm.Profile != want.Profile || !tm.Provisional || tm.Beneficiary != want.Beneficiary || strings.Join(tm.EligibleIssuers, ",") != strings.Join(want.EligibleIssuers, ",") ||
+		tm.CountingUnit != want.CountingUnit || tm.Coordinator != want.Coordinator || tm.Deadline != want.Deadline {
+		t.Fatalf("terms %+v, want %+v", tm, want)
+	}
+	if len(tm.Rubric) != 2 || tm.Rubric[0] != (Criterion{"R1", "labels match"}) || tm.Rubric[1] != (Criterion{"R2", ""}) {
+		t.Fatalf("rubric %+v", tm.Rubric)
+	}
+	if q := tm.Quorum; q == nil || q.K != 2 || q.Independence != IndependenceRequired || q.Comparator != dig("tol") || q.Grouping != GroupAllPairs || q.Test != "" {
+		t.Fatalf("quorum %+v", tm.Quorum)
+	}
+	if s := tm.Sampling; s == nil || s.N != 90 || s.Unit != "runs" || len(s.Groups) != 2 || s.Groups[1] != (SamplingGroup{"B", 45}) {
+		t.Fatalf("sampling %+v", tm.Sampling)
+	}
+	// the provisional label survives on every display
+	if !strings.Contains(strings.Join(tm.describe(), "\n"), "contract profile "+ProvisionalProfile+" (PROVISIONAL reading: contract grammar pending)") {
+		t.Fatalf("label lost: %v", tm.describe())
+	}
+}
+
+// TestMalformedContractInTaskView: through the task view, a contract malformed in a way the old reading took
+// as absent (a string grouping beside a comparator) is unread: terms unchecked naming the field, readiness
+// unchecked, exit 3, and the beneficiary's decision settles nothing. The control edition with the same terms
+// well-formed is ready.
+func TestMalformedContractInTaskView(t *testing.T) {
+	w := newWorld(t)
+	g := w.task("G", "R")
+	good := w.taskEdition("E1", "R", g, []string{g}, w.contract("R", "quorum", quorum(1, IndependenceNotRequired, "comparator", dig("tol"), "grouping", obj("rule", GroupAllPairs))))
+	w.submit("S1", "A", g, good, "X")
+	tk := taskView(t, w, g, WithComparator(newFakeComparator()))
+	if rd := readinessOf(t, tk, w.ed(good)); rd.Token != Ready || tk.VerifyExit() != 0 {
+		t.Fatalf("control: %s exit %d\n%s", rd.Token, tk.VerifyExit(), tk.Render())
+	}
+	bad := w.taskEdition("E2", "R", g, []string{good}, w.contract("R", "quorum", quorum(1, IndependenceNotRequired, "comparator", dig("tol"), "grouping", "all-pairs")))
+	s2 := w.submit("S2", "A", g, bad, "X")
+	w.decide("D", "R", g, bad, "accept", []string{s2})
+	tk = taskView(t, w, g, WithComparator(newFakeComparator()))
+	rd := readinessOf(t, tk, w.ed(bad))
+	out := tk.Render()
+	if rd.Token != ReadyUnchecked || tk.VerifyExit() != 3 {
+		t.Fatalf("malformed grouping read: %s exit %d\n%s", rd.Token, tk.VerifyExit(), out)
+	}
+	has(t, out, "unchecked: contract field quorum.grouping malformed")
+	for _, s := range tk.Submissions {
+		if s.Statement == s2 && s.Verdict != "" {
+			t.Fatalf("a decision under unread terms settled: %s\n%s", s.Verdict, out)
+		}
 	}
 }

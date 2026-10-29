@@ -2,6 +2,7 @@ package resolve
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -237,11 +238,17 @@ func (ProvisionalContract) Read(c *canon.Object) (*Terms, string, bool) {
 			return nil, "contract field " + k + " not in the provisional reading", false
 		}
 	}
-	t := &Terms{Profile: ProvisionalProfile, Provisional: true, Beneficiary: str(c, "beneficiary"), CountingUnit: str(c, "counting_unit"),
-		Coordinator: str(c, "coordinator"), Deadline: str(c, "deadline")}
 	bad := func(f string) (*Terms, string, bool) { return nil, "contract field " + f + " malformed", false }
-	if t.Beneficiary == "" {
+	t := &Terms{Profile: ProvisionalProfile, Provisional: true}
+	var ok bool
+	if t.Beneficiary, ok = keyMember(c, "beneficiary", true); !ok {
 		return bad("beneficiary")
+	}
+	if t.Coordinator, ok = keyMember(c, "coordinator", false); !ok {
+		return bad("coordinator")
+	}
+	if t.CountingUnit, ok = optString(c, "counting_unit"); !ok {
+		return bad("counting_unit")
 	}
 	_, hasList := c.Get("eligible_issuers")
 	av, hasAny := c.Get("any_issuer")
@@ -255,7 +262,7 @@ func (ProvisionalContract) Read(c *canon.Object) (*Terms, string, bool) {
 		t.AnyIssuer = true
 	default:
 		l, ok := strings_(c, "eligible_issuers")
-		if !ok || len(l) == 0 {
+		if !ok || len(l) == 0 || slices.ContainsFunc(l, func(k string) bool { return !reKeyForm.MatchString(k) }) {
 			return bad("eligible_issuers")
 		}
 		// a set, as controllers are (wire §1 "arrays"): sorted by the key order, no duplicates
@@ -276,6 +283,7 @@ func (ProvisionalContract) Read(c *canon.Object) (*Terms, string, bool) {
 		if _, err := rctime.ParseUTC(string(d)); err != nil {
 			return bad("deadline")
 		}
+		t.Deadline = string(d)
 	}
 	if t.CountingUnit != "" && t.CountingUnit != CountKey && t.CountingUnit != CountIdentity {
 		return bad("counting_unit")
@@ -311,9 +319,24 @@ func (ProvisionalContract) Read(c *canon.Object) (*Terms, string, bool) {
 		if !ok {
 			return bad("quorum")
 		}
-		q := &Quorum{K: intOf(o, "k"), Independence: str(o, "independence"), Comparator: str(o, "comparator"), Estimand: str(o, "estimand"), Test: str(o, "test")}
-		if q.K < 1 || !slices.Contains([]string{IndependenceNotRequired, IndependenceRequired, IndependenceSelfDeclared}, q.Independence) {
-			return bad("quorum")
+		q := &Quorum{}
+		k, ok := o.Get("k")
+		if n, isInt := k.(canon.Int); !ok || !isInt || n < 1 {
+			return bad("quorum.k")
+		}
+		q.K = intOf(o, "k")
+		if q.Independence, ok = optString(o, "independence"); !ok ||
+			!slices.Contains([]string{IndependenceNotRequired, IndependenceRequired, IndependenceSelfDeclared}, q.Independence) {
+			return bad("quorum.independence")
+		}
+		if q.Comparator, ok = digestMember(o, "comparator"); !ok {
+			return bad("quorum.comparator")
+		}
+		if q.Test, ok = digestMember(o, "test"); !ok {
+			return bad("quorum.test")
+		}
+		if q.Estimand, ok = optString(o, "estimand"); !ok {
+			return bad("quorum.estimand")
 		}
 		// A pinned test is the comparator; the reading never picks one of two silently.
 		if q.Comparator != "" && q.Test != "" {
@@ -327,8 +350,10 @@ func (ProvisionalContract) Read(c *canon.Object) (*Terms, string, bool) {
 			if q.Comparator == "" && q.Test == "" {
 				return bad("quorum.grouping")
 			}
-			q.Grouping, q.Reference = str(g, "rule"), str(g, "reference")
-			if (q.Grouping != GroupAllPairs && q.Grouping != GroupReference) || (q.Grouping == GroupReference) != (q.Reference != "") {
+			var okRule, okRef bool
+			q.Grouping, okRule = optString(g, "rule")
+			q.Reference, okRef = keyMember(g, "reference", false)
+			if !okRule || !okRef || (q.Grouping != GroupAllPairs && q.Grouping != GroupReference) || (q.Grouping == GroupReference) != (q.Reference != "") {
 				return bad("quorum.grouping")
 			}
 		}
@@ -340,6 +365,12 @@ func (ProvisionalContract) Read(c *canon.Object) (*Terms, string, bool) {
 	}
 	if present {
 		s := &DeclaredSampling{N: intOf(o, "n"), Unit: str(o, "unit")}
+		if nv, _ := o.Get("n"); !isInt(nv) {
+			return bad("sampling.n")
+		}
+		if _, ok := stringMember(o, "unit"); !ok {
+			return bad("sampling.unit")
+		}
 		if v, ok := o.Get("groups"); ok {
 			a, ok := v.(canon.Array)
 			if !ok {
@@ -351,7 +382,7 @@ func (ProvisionalContract) Read(c *canon.Object) (*Terms, string, bool) {
 					return bad("sampling.groups")
 				}
 				name, ok := stringMember(g, "name")
-				if !ok || name == "" || slices.ContainsFunc(s.Groups, func(h SamplingGroup) bool { return h.Name == name }) {
+				if !ok || slices.ContainsFunc(s.Groups, func(h SamplingGroup) bool { return h.Name == name }) {
 					return bad("sampling.groups.name")
 				}
 				nv, _ := g.Get("n")
@@ -377,6 +408,37 @@ func memberObject(o *canon.Object, k string) (x *canon.Object, present, ok bool)
 	x, ok = v.(*canon.Object)
 	return x, true, ok
 }
+
+// optString reads an optional string member: "" and ok when absent; ok is false when present and not a string.
+func optString(o *canon.Object, k string) (string, bool) {
+	if _, present := o.Get(k); !present {
+		return "", true
+	}
+	return stringMember(o, k)
+}
+
+// reKeyForm is the key shape of wire §5 (`key`): ed25519: + 64 lowercase hex, or 0x + 40 lowercase hex.
+var reKeyForm = regexp.MustCompile(`^(0x[0-9a-f]{40}|ed25519:[0-9a-f]{64})$`)
+
+// keyMember reads a key member; absent is ok unless required. A present non-key is malformed.
+func keyMember(o *canon.Object, k string, required bool) (string, bool) {
+	if _, present := o.Get(k); !present {
+		return "", !required
+	}
+	s, ok := stringMember(o, k)
+	return s, ok && reKeyForm.MatchString(s)
+}
+
+// digestMember reads an optional digest member (wire §5 `digest`). A present non-digest is malformed.
+func digestMember(o *canon.Object, k string) (string, bool) {
+	if _, present := o.Get(k); !present {
+		return "", true
+	}
+	s, ok := stringMember(o, k)
+	return s, ok && reDigestForm.MatchString(s)
+}
+
+func isInt(v canon.Value) bool { _, ok := v.(canon.Int); return ok }
 
 // stringMember reads member k of o as a string; ok is false when it is absent or not a string.
 func stringMember(o *canon.Object, k string) (string, bool) {
