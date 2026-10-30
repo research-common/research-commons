@@ -586,7 +586,8 @@ marks a lean an outside review on #109 agreed with; it records the review, and d
     implementation meets C-core-32 only in part for that reason. A unit read from members the method has not
     declared would key on something one observer pins and another omits, or spells differently. Once a method
     edition can declare its system members, (a) reads well, with "missing member → undecided" and a contract
-    allowed to name only a declared member (any other leaves it unread, §3.3).
+    allowed to name only a declared member (any other leaves it unread, §3.3). The field is proposed in #112
+    (`edition.contents.system_keys`, C-core-32a – 32d); the lean is revisited when it is accepted and built.
 
 ## 7. Conformance impact
 
