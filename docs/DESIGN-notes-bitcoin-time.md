@@ -201,6 +201,7 @@ not conform, whichever library it uses.
 | Bitcoin attestation | tag `0588960d73d71901`; payload = varuint height | the only tag that can yield `bitcoin` quality |
 | pending attestation | tag `83dfe30d2ef90c8e`; payload = URI ≤ 1000 bytes from `A–Z a–z 0–9 - . _ / :` | displayed `pending`; never dereferenced (§2) |
 | other attestations | any other tag, including Litecoin `06869a0d73d71b45` | retained as `unsupported attestation`, granting nothing (I5) |
+| varuint encoding | every varuint (version, argument and payload lengths, Bitcoin height) | minimal only: a final byte `00` after a continuation byte (`81 00` for 1, `80 00` for 0) is `invalid-proof`, as is a value over 64 bits. The library reads a non-minimal varuint but its writer never emits one; refusing it gives each value one byte string, so "same operation and argument" in the duplicate-sibling row is byte-canonical, and no conforming file is refused |
 | end of file | no bytes after the tree | `invalid-proof` |
 
 `varuint` is the library's base-128 little-endian encoding (seven bits per byte, high bit = continuation). The
@@ -230,7 +231,9 @@ share. The accepted chain ends at the tied tips' fork point, so a block above it
 the accepted chain, and an attestation there has no live eligibility (`stale-chain` when the block is held on a
 tied branch, `unknown-height` when it is not) until more work breaks the tie (C-btc-15).
 
-Baseline: full header history from genesis (~80 MB per million headers), obtained headers-first (BIP 130
+Baseline: full header history from genesis (~80 MB per million headers on disk; held in memory with
+per-header chainwork and links it costs several times that, about 0.5 KB per header in this repository's
+implementation, so a reader sizes memory separately), obtained headers-first (BIP 130
 `sendheaders` announcements; a BIP 157 compact-filter client is an acceptable header source). Pruned or
 checkpointed bootstraps may be offered with an explicit trust root and retained retarget/MTP context; a
 height-to-time table is not a bootstrap. **The tool ships no checkpoint** (§17, decided 3): a checkpoint or
