@@ -267,9 +267,39 @@ type Observation struct {
 	// Others are the other observations of the same bytes, with how each relates to this one.
 	Others []string
 	// Comparability lists, for a method-class observation, each other method-class observation of the same
-	// method edition and whether the two pin the same clause members (C-core-32).
-	Comparability []string
+	// method edition and whether the two pin the same clause members (C-core-32). Readers decide from the
+	// structured fields; the display is rendered from them.
+	Comparability []Comparability
 	Explain       []string
+}
+
+// Comparability is one method-class comparison (C-core-32): the other statement, whether the two pin the same
+// clause members, and what each lacks.
+type Comparability struct {
+	With, WithSigner string // the other statement's full id and signer
+	Comparable       bool
+	MissingHere      []string // members the other pins and this observation does not ("system.<k>")
+	MissingThere     []string // members this observation pins and the other does not
+	Unpinned         []string // unpinned fields of either statement
+}
+
+// String renders one comparison for display; it is never read back.
+func (c Comparability) String() string {
+	line := fmt.Sprintf("vs %s by %s: ", keylog.Short(c.With), shortKey(c.WithSigner))
+	if c.Comparable {
+		return line + "same pinned clause members (comparable; agreement needs a declared model)"
+	}
+	var parts []string
+	if len(c.MissingHere) > 0 {
+		parts = append(parts, "this observation does not pin "+strings.Join(c.MissingHere, ", "))
+	}
+	if len(c.MissingThere) > 0 {
+		parts = append(parts, "it does not pin "+strings.Join(c.MissingThere, ", "))
+	}
+	if len(c.Unpinned) > 0 {
+		parts = append(parts, "unpinned "+strings.Join(c.Unpinned, ", "))
+	}
+	return line + "comparability unchecked (" + strings.Join(parts, "; ") + ")"
 }
 
 // Observations resolves every `observed` statement for blob d, by signer then statement id.
@@ -534,7 +564,13 @@ func (r *Resolver) referentStatus(o *Observation, st *wire.Statement) {
 
 // revision finds a later capture of the same referent, by any key, at a different state with different bytes
 // while the rule was unmet at this capture: the referent was revised (§5.3.1), which is not a contradiction.
+//
+// An exact-bytes referent is never revised: its bytes are fixed by the block hash, so different bytes at the
+// same hash are a contradiction (corroboration.go), and a reorg is `not canonical`, not a revision.
 func (r *Resolver) revision(o *Observation, st *wire.Statement) string {
+	if o.Class == "exact-bytes" {
+		return ""
+	}
 	for _, q := range r.byKind["observed"] {
 		if !q.Counts() || q.St.ID == st.ID || contentDigest(q.St.Body) == o.Digest || !sameReferent(st, q.St) {
 			continue
@@ -653,25 +689,14 @@ func (r *Resolver) comparability(o *Observation, st *wire.Statement) {
 				missingThere = append(missingThere, "system."+k)
 			}
 		}
-		line := fmt.Sprintf("vs %s by %s: ", keylog.Short(q.St.ID), shortKey(q.St.Signer))
-		if len(missingHere)+len(missingThere) == 0 && len(o.Unpinned) == 0 && len(q.St.Unpinned) == 0 {
-			line += "same pinned clause members (comparable; agreement needs a declared model)"
-		} else {
-			var parts []string
-			if len(missingHere) > 0 {
-				parts = append(parts, "this observation does not pin "+strings.Join(missingHere, ", "))
-			}
-			if len(missingThere) > 0 {
-				parts = append(parts, "it does not pin "+strings.Join(missingThere, ", "))
-			}
-			if len(o.Unpinned)+len(q.St.Unpinned) > 0 {
-				parts = append(parts, "unpinned "+strings.Join(append(append([]string{}, o.Unpinned...), q.St.Unpinned...), ", "))
-			}
-			line += "comparability unchecked (" + strings.Join(parts, "; ") + ")"
+		c := Comparability{With: q.St.ID, WithSigner: q.St.Signer, MissingHere: missingHere, MissingThere: missingThere}
+		if len(o.Unpinned)+len(q.St.Unpinned) > 0 {
+			c.Unpinned = append(append([]string{}, o.Unpinned...), q.St.Unpinned...)
 		}
-		o.Comparability = append(o.Comparability, line)
+		c.Comparable = len(missingHere)+len(missingThere)+len(c.Unpinned) == 0
+		o.Comparability = append(o.Comparability, c)
 	}
-	slices.Sort(o.Comparability)
+	slices.SortFunc(o.Comparability, func(a, b Comparability) int { return strings.Compare(a.With, b.With) })
 }
 
 func memberKeys(o *canon.Object) []string {

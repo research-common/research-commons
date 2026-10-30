@@ -3,6 +3,7 @@ package resolve
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -265,6 +266,24 @@ func TestMethodComparability(t *testing.T) {
 	has(t, o.Render(), "it does not pin system.routing_era")
 	wantStatus(t, o, "unchecked within statements you hold")
 	hasNot(t, o.Render(), "corroborated")
+	// the decision is structured, keyed by the full statement id, and the display is rendered from it
+	if len(o.Comparability) != 1 || o.Comparability[0].With != part || o.Comparability[0].Comparable ||
+		!slices.Equal(o.Comparability[0].MissingThere, []string{"system.routing_era"}) {
+		t.Fatalf("comparability: %+v", o.Comparability)
+	}
+	// control: with the routing era pinned on both, the two are comparable and the corroboration counts
+	w2 := newWorld(t)
+	f2 := w2.observed("M1", "O1", "B1", "method", ref(obj("model", "m-1", "provider", "p", "routing_era", "2026-q3")))
+	p2 := w2.observed("M2", "O2", "B2", "method", ref(obj("model", "m-1", "provider", "p", "routing_era", "2026-q3")))
+	w2.workflow("WA", "W", "bytes", "")
+	res2 := w2.result("R", "C", "cmp", "W", "B1", "B2")
+	w2.corroborates("CS", "C", f2, res2, "supports")
+	o2 := obsView(t, w2, f2)
+	if len(o2.Comparability) != 1 || o2.Comparability[0].With != p2 || !o2.Comparability[0].Comparable {
+		t.Fatalf("control comparability: %+v", o2.Comparability)
+	}
+	has(t, o2.Render(), "same pinned clause members")
+	wantStatus(t, o2, "corroborated 1 within statements you hold")
 }
 
 // TestForkDoesNotFalsify: C-core-33. H orphaned: referent status not canonical; O2's archival re-read still
@@ -398,6 +417,44 @@ func TestRuleProvenance(t *testing.T) {
 	has(t, obsView(t, w, a).Render(), "cited (document not held)")
 }
 
+// unorderedRules is settlementRules plus a run label "SF*" it can evaluate (unmet) but not order against any other
+// state: two vintages of one run label.
+type unorderedRules struct{ settlementRules }
+
+func (u unorderedRules) Evaluate(rule string, s State) (bool, string, bool) {
+	if s.Run == "SF*" {
+		return false, "RF", true
+	}
+	return u.settlementRules.Evaluate(rule, s)
+}
+
+func (u unorderedRules) Compare(rule string, a, b State) (int, bool) {
+	if a.Run == "SF*" || b.Run == "SF*" {
+		return 0, a == b
+	}
+	return u.settlementRules.Compare(rule, a, b)
+}
+
+// TestUnorderedStatesNotComparable: C-core-39a. Two captures with different bytes at states the rule cannot order
+// are `inconclusive (not comparable under the rule)`, never `referent revised` (which asserts an order).
+func TestUnorderedStatesNotComparable(t *testing.T) {
+	conformance.Covers(t, "C-core-39a")
+	w := newWorld(t)
+	x := w.observed("A", "O1", "S1", "source", apiRef("https://api.example/settle"), "finality", runFinality("SF"))
+	y := w.observed("B", "O2", "S2", "source", apiRef("https://api.example/settle"), "finality", runFinality("SF*"), "at", "2026-10-17T00:00:00Z")
+	for _, id := range []string{x, y} {
+		o := obsView(t, w, id, WithFinalityRules(unorderedRules{}))
+		wantStatus(t, o, "unchecked within statements you hold")
+		has(t, o.Render(), "("+NotComparableUnderRule+")")
+		hasNot(t, o.Render(), "referent revised")
+	}
+	// control: two ordered states give the revision token
+	w2 := newWorld(t)
+	a := w2.observed("A", "O1", "S1", "source", apiRef("https://api.example/settle"), "finality", runFinality("SF"))
+	w2.observed("B", "O2", "S2", "source", apiRef("https://api.example/settle"), "finality", runFinality("SF+1"), "at", "2026-10-17T00:00:00Z")
+	has(t, obsView(t, w2, a, WithFinalityRules(unorderedRules{})).Render(), "(referent revised)")
+}
+
 // TestRevisionIsNotContradiction: C-core-39 and C-core-40. Different bytes across states before RF are
 // inconclusive (referent revised); at one state, or both past RF, they contradict, symmetrically.
 func TestRevisionIsNotContradiction(t *testing.T) {
@@ -424,22 +481,53 @@ func TestRevisionIsNotContradiction(t *testing.T) {
 	}
 }
 
-// TestClassMigrationByRule: C-core-41. R1 at depth 4 (rule unmet) is evaluated under the source-class model and
-// shown so; R2 at depth 9 is an exact-bytes corroboration; the asserted class never changes.
+// TestClassMigrationByRule: C-core-41. A source-class referent under a finality rule: R1 before the rule holds is
+// evaluated under the source-class model and shown so; R2 once it holds is an exact-bytes corroboration; the
+// asserted class never changes.
 func TestClassMigrationByRule(t *testing.T) {
 	conformance.Covers(t, "C-core-41")
+	rules := WithFinalityRules(settlementRules{})
+	w := newWorld(t)
+	s1 := w.observed("S1", "O1", "X", "source", apiRef("https://api.example/settle"), "finality", runFinality("SF"))
+	w.observed("R1", "O2", "X", "source", apiRef("https://api.example/settle"), "finality", runFinality("SF+1"), "at", "2026-10-16T00:01:00Z")
+	o := obsView(t, w, s1, rules)
+	wantStatus(t, o, "unchecked within statements you hold")
+	has(t, o.Render(), "re-capture by "+shortKey(w.signer("O2")))
+	has(t, o.Render(), "source-class model")
+	w.observed("R2", "O3", "X", "source", apiRef("https://api.example/settle"), "finality", runFinality("RF"), "at", "2026-10-18T00:00:00Z")
+	o = obsView(t, w, s1, rules)
+	wantStatus(t, o, "corroborated 1 within statements you hold")
+	has(t, o.Render(), "class migration by rule")
+	if o.Class != "source" {
+		t.Fatalf("class changed: %s", o.Class)
+	}
+}
+
+// TestExactBytesFinalityIsStatusOnly: C-core-41a. For an exact-bytes referent the finality rule drives the
+// referent status only: a re-read at depth 4 under `confirmations >= 6` is an exact-bytes corroboration (the
+// bytes at a block hash never change), while the referent stays provisional; different bytes at the same hash
+// contradict at any depth and are never `revised`.
+func TestExactBytesFinalityIsStatusOnly(t *testing.T) {
+	conformance.Covers(t, "C-core-41a")
 	w := newWorld(t)
 	o1 := w.observed("O1", "O1", "X", "exact-bytes", chainRef(3), "finality", depthFinality("confirmations >= 6", 3))
 	w.observed("R1", "O2", "X", "exact-bytes", chainRef(4), "at", "2026-10-16T00:01:00Z")
 	o := obsView(t, w, o1)
-	wantStatus(t, o, "unchecked within statements you hold")
-	has(t, o.Render(), "re-capture by "+shortKey(w.signer("O2")))
-	has(t, o.Render(), "source-class model")
-	w.observed("R2", "O3", "X", "exact-bytes", chainRef(9), "at", "2026-10-16T01:00:00Z")
-	o = obsView(t, w, o1)
 	wantStatus(t, o, "corroborated 1 within statements you hold")
-	if o.Class != "exact-bytes" {
-		t.Fatalf("class changed: %s", o.Class)
+	wantRef(t, o, "provisional (3; final at 6)")
+	has(t, o.Render(), "re-read by "+shortKey(w.signer("O2")))
+	hasNot(t, o.Render(), "source-class model")
+	// different bytes at the same hash and a depth still under the rule: a contradiction, not a revision
+	w.observed("D1", "O3", "Y", "exact-bytes", chainRef(4), "finality", depthFinality("confirmations >= 6", 4), "at", "2026-10-16T00:02:00Z")
+	o = obsView(t, w, o1)
+	wantStatus(t, o, "corroborated 1 · contradicted 1 within statements you hold")
+	wantRef(t, o, "provisional (3; final at 6)")
+	hasNot(t, o.Render(), "revised")
+	// the reader's own re-check with different bytes at depth 4 contradicts too
+	r := obsView(t, w, o1, WithReferentChecker(fakeReferents{o1: {Outcome: ReDifferent, Digest: dig("Z"), State: State{HasDepth: true, Depth: 4}}}))
+	has(t, r.Render(), "reader re-check")
+	if r.Corroboration.Contradicted != 2 {
+		t.Fatalf("reader re-check with different bytes at depth 4: contradicted %d, want 2\n%s", r.Corroboration.Contradicted, r.Render())
 	}
 }
 

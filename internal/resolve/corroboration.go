@@ -20,11 +20,14 @@ import (
 //   - a `corroborates` statement about the observation: a signed verdict naming the derived result that
 //     computed it (a corroboration is a derivation, so its own grade is shown beside it, never gating it);
 //   - another key's re-read of an exact-bytes referent: its own `observed` of the same chain and block hash
-//     with identical bytes and its own capture record (§5.3.1); a source-class re-capture counts only once the
-//     source's finality rule holds at it (class migration by rule); identical bytes in any other case are a
-//     second publication or a copy, not a corroboration;
-//   - the reader's finality-aware comparison of two captures of one referent with different bytes:
-//     `inconclusive (referent revised)` across states before finality, `contradicts` at one state or past it;
+//     with identical bytes and its own capture record (§5.3.1), at any confirmation depth (the bytes at a hash
+//     never change; finality drives the referent status, not agreement); a source-class re-capture counts only
+//     once the source's finality rule holds at it (class migration by rule); identical bytes in any other case
+//     are a second publication or a copy, not a corroboration;
+//   - the reader's comparison of two captures of one referent with different bytes: at one block hash they
+//     contradict; for a source under a finality rule, `inconclusive (referent revised)` across ordered states
+//     before finality, `inconclusive (not comparable under the rule)` when the rule cannot order them,
+//     `contradicts` at one state or both past it;
 //   - the reader's own re-check of the referent (ReferentChecker).
 //
 // Counting is behind Counter. Which unit corroboration counts (signing keys, identities, operators,
@@ -322,10 +325,13 @@ func (r *Resolver) recaptures(c *Corroboration, o *Observation, st *wire.Stateme
 		case same && e.Capture == myCapture:
 			e.Via, e.Verdict = "re-read", "supports"
 			e.Cause = "shares its capture record byte for byte with this observation: not its own capture, not counted"
-		case same && o.Class == "exact-bytes" && o.Finality != nil && !r.finalAt(st, q.St):
+		case same && o.Class == "source" && o.Finality != nil && !r.finalAt(st, q.St):
 			e.Via, e.Verdict, e.Model = "re-capture", "inconclusive", "source (class model before finality)"
-			e.Cause = "re-capture before the finality rule holds: evaluated under the source-class model (near-equality around the same time), not an exact-bytes corroboration"
+			e.Cause = "re-capture before the finality rule holds: evaluated under the source-class model (near-equality around the same time, which needs a declared tolerance), not an exact-bytes corroboration"
 		case same && o.Class == "exact-bytes":
+			// The bytes at a block hash never change (a reorg orphans the block, it does not alter what the hash
+			// holds), so a re-read counts at any confirmation depth; the finality rule drives the referent status
+			// only (§5.3.1).
 			e.Via, e.Verdict, e.Counted = "re-read", "supports", true
 			e.Model = "exact-bytes (identical bytes at the pinned block hash)"
 		case same && o.Class == "source" && r.finalAt(st, q.St):
@@ -344,14 +350,17 @@ func (r *Resolver) recaptures(c *Corroboration, o *Observation, st *wire.Stateme
 }
 
 // finalityAware compares two captures of one referent with different bytes (§5.3.1 "expected revision is not
-// contradiction"). Without a finality rule on both, an exact-bytes pair at one block hash contradicts and a
-// source pair is not compared (the source-class model needs a declared tolerance).
+// contradiction"). An exact-bytes pair at one block hash contradicts at any depth: those bytes cannot be revised,
+// so the finality rule never applies to the comparison. A source pair is compared under its finality rule; with
+// none on both it is not compared (the source-class model needs a declared tolerance).
 func (r *Resolver) finalityAware(e *Evidence, o *Observation, st, q *wire.Statement) {
 	e.Via = "reader finality-aware comparison"
+	if o.Class == "exact-bytes" {
+		e.Via = "reader comparison"
+		e.Verdict, e.Counted, e.Model = "contradicts", true, "exact-bytes (different bytes at the pinned block hash)"
+		return
+	}
 	if o.Finality == nil || (captureState(q) == State{}) {
-		if o.Class == "exact-bytes" {
-			e.Verdict, e.Counted, e.Model = "contradicts", true, "exact-bytes (different bytes at the pinned block hash)"
-		}
 		return
 	}
 	e.Model = "finality-aware (" + o.Finality.Rule + ")"
@@ -369,9 +378,15 @@ func finalityVerdict(rules FinalityRules, rule string, a, b State) (verdict stri
 	switch {
 	case ok && c == 0, metA && metB:
 		return "contradicts", true, ""
+	case !ok:
+		return "inconclusive", false, NotComparableUnderRule
 	}
 	return "inconclusive", false, "referent revised"
 }
+
+// NotComparableUnderRule is the cause for two captures at states the finality rule cannot order (§5.3.1: "states
+// that the rule cannot order are not comparable"): no revision is asserted, because the reader has no order.
+const NotComparableUnderRule = "not comparable under the rule"
 
 // readerCheck turns the reader's own re-check into evidence.
 func (r *Resolver) readerCheck(c *Corroboration, o *Observation) {
@@ -382,7 +397,7 @@ func (r *Resolver) readerCheck(c *Corroboration, o *Observation) {
 		e.Verdict, e.Counted = "supports", true
 	case ReDifferent:
 		e.Verdict, e.Counted = "contradicts", true
-		if o.Finality != nil && (rc.State != State{}) {
+		if o.Class != "exact-bytes" && o.Finality != nil && (rc.State != State{}) {
 			e.Model = "finality-aware (" + o.Finality.Rule + ")"
 			e.Verdict, e.Counted, e.Cause = finalityVerdict(r.obs.finality, o.Finality.Rule, o.Finality.State, rc.State)
 		}
@@ -419,8 +434,8 @@ func (r *Resolver) comparisonData(result, observed string) []string {
 func (r *Resolver) incomparableInput(o *Observation, result string) bool {
 	for _, in := range r.comparisonData(result, o.Digest) {
 		for _, q := range r.observedOf(in, true) {
-			for _, line := range o.Comparability {
-				if strings.Contains(line, keylog.Short(q.St.ID)) && strings.Contains(line, "unchecked") {
+			for _, c := range o.Comparability {
+				if c.With == q.St.ID && !c.Comparable {
 					return true
 				}
 			}
