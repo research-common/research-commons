@@ -21,7 +21,7 @@ import (
 // statement naming a real task edition among them) is refused at push, intrinsic, scope that object, and
 // reported as a draft; the hub's held set is unchanged. Control: the same body signed is admitted.
 func TestUnsignedDraftsRefused(t *testing.T) {
-	conformance.Partial(t, "C-core-108", "push refuses every unsigned draft (intrinsic, scope the object, reported as a draft) and the hub is unchanged; first-run key generation belongs to the command layer")
+	conformance.Partial(t, "C-core-108", "push refuses every unsigned draft (intrinsic, scope the object, reported as a draft) and the hub is unchanged; commons key new generates a key and publish never stores a draft unsigned (internal/cli), and first-run setup tells the user to generate a key (no implicit key, no default key path; decided): a signing command without a key exits 2 pointing at key new, which is the CLI's surface")
 	w := newWorld(t)
 	g := w.sign("A", "genesis", obj("type", "task", "name", "t", "controllers", []string{w.signer("A")}, "rule", obj("any_one", true)))
 	held := w.held(g)
@@ -555,7 +555,7 @@ func TestLabelsNeverRefuse(t *testing.T) {
 	if r := wantAdmitted(t, rep, w.path(second)); !r.HasLabel(LabelDetached) || !strings.Contains(r.Labels[0].Detail, "seq 0..0") {
 		t.Fatalf("%v", r.Labels)
 	}
-	if rep.Exit(false) != 0 {
+	if rep.Exit() != 0 {
 		t.Fatal("labels changed the exit")
 	}
 }
@@ -587,21 +587,26 @@ func TestPeerTextInert(t *testing.T) {
 	}
 }
 
-// TestExitMapping: 0 admitted (labels allowed), 1 refused, 3 undecided; an operational refusal maps to 1 or,
-// on request, 3.
+// TestExitMapping: claims §13 gate exits. 0 admitted (labels allowed), 1 refused under any class (an operational
+// refusal over a size limit is a decided verdict on the object: 1), 3 nothing refused and something undecided.
 func TestExitMapping(t *testing.T) {
 	op := DefaultPolicy()
 	op.Limits[LimitBlobBytes] = 1
 	rep := mustAdmit(t, "pull", Package{Objects: []Object{blobObject([]byte("xx"))}}, MemHeld{}, op, Options{})
-	if rep.Exit(false) != 1 || rep.Exit(true) != 3 {
-		t.Fatal(rep.Exit(false), rep.Exit(true))
+	if rep.Results[0].Verdict != Refused || rep.Results[0].Refusal.Class != refusal.Operational || rep.Exit() != 1 {
+		t.Fatalf("an operational refusal: exit %d\n%s", rep.Exit(), rep.Render())
+	}
+	// a refusal outweighs an undecided object: still 1
+	rep.Results = append(rep.Results, Result{Verdict: Undecided})
+	if rep.Exit() != 1 {
+		t.Fatal(rep.Exit())
 	}
 	rep = mustAdmit(t, "pull", Package{Objects: []Object{blobObject([]byte("x"))}}, MemHeld{}, nil, Options{})
-	if rep.Exit(false) != 0 {
+	if rep.Exit() != 0 {
 		t.Fatal(rep.Render())
 	}
 	rep.Results = append(rep.Results, Result{Verdict: Undecided})
-	if rep.Exit(false) != 3 {
+	if rep.Exit() != 3 {
 		t.Fatal()
 	}
 }

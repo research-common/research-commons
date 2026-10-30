@@ -651,7 +651,6 @@ func TestDetachedEditionWaitsForRevocation(t *testing.T) {
 // TestResourcePermutationProperty: P-01 over resources. Seeded random histories of genesis, editions (k-of-n
 // approvals, forks, merges, controller changes, outsiders) and revocations; every delivery order resolves alike.
 func TestResourcePermutationProperty(t *testing.T) {
-	conformance.Partial(t, "P-01", "resources: every derived answer of the resource view; other views as they land")
 	for seed := uint64(1); seed <= 40; seed++ {
 		w := genHistory(t, seed)
 		g := w.ids["G"]

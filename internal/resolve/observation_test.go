@@ -246,7 +246,7 @@ func TestSourceAndPhenomenonReferents(t *testing.T) {
 // the other method-class observation is unchecked and names the missing field, and a corroboration whose
 // comparison data is that observation is never counted as supports.
 func TestMethodComparability(t *testing.T) {
-	conformance.Partial(t, "C-core-32", "omission detected against another observation of the same method edition; the note does not say which system members a method edition requires, so an omission with no comparison partner is not detectable (spec finding)")
+	conformance.Partial(t, "C-core-32", "omission detected against another observation of the same method edition (the claims §5.3.1 fallback with no declaration); a method edition's declared system members (a missing one `unpinned`, with no comparison partner) are pending editions reader: no wire field carries the declaration yet")
 	ed := strings.Repeat("e1", 32)
 	ref := func(system *canon.Object) *canon.Object {
 		return obj("method_edition", ed, "environment", obj("image_digest", dig("img"), "platform", "linux/amd64", "harness_commit", strings.Repeat("c", 40)),
@@ -628,22 +628,32 @@ func TestCohortRuleReapplied(t *testing.T) {
 }
 
 // TestHandPickedCohort: C-core-48. A hand-picked cohort is labelled; a corroboration declaring neither a rule nor
-// hand-picked cannot be admitted: the wire schema makes `cohort` required with exactly one of the two.
+// hand-picked is malformed (claims §5.3.2, wire §5: `cohort` is required with exactly one of the two), refused
+// intrinsically at the gate naming `cohort`. The mutation reaches the cohort rule: the same body with a cohort
+// reads, and the only difference is the cohort member (absent, or an object with neither).
 func TestHandPickedCohort(t *testing.T) {
-	conformance.Partial(t, "C-core-48", "hand-picked labelled; `cohort: undeclared` is unreachable because wire §5 requires cohort with exactly one of rule/hand_picked (spec finding)")
+	conformance.Covers(t, "C-core-48")
 	w := newWorld(t)
 	o1 := w.observed("O1", "O1", "X", "phenomenon", obj("instrument", "urn:s", "location", "geo:1,2", "at", "2026-07-01T12:00:00Z"))
 	w.workflow("WA", "W", "bytes", "")
 	res := w.result("R", "C", "v", "W", "X", "a", "b", "c")
 	w.corroborates("CC", "C", o1, res, "supports", "cohort", canon.Value(obj("hand_picked", true)))
 	has(t, obsView(t, w, o1).Render(), "cohort: hand-picked")
-	// neither: refused at the schema, so it reaches nothing (the mutation reaches the cohort rule: the only
-	// difference from a valid body is the cohort member)
-	line, _ := wire.Sign(wire.Draft{Kind: "corroborates", TS: "2026-10-16T00:00:00Z",
-		Body: obj("of", o1, "result", res, "verdict", "supports", "model", "M", "cohort", obj())}, testKey("C"))
-	_, err := wire.Read(line)
-	if r, ok := err.(*refusal.Refusal); !ok || !strings.Contains(r.Error(), "cohort") {
-		t.Fatalf("got %v, want a malformed refusal naming cohort", err)
+	read := func(kv ...any) error {
+		line, _ := wire.Sign(wire.Draft{Kind: "corroborates", TS: "2026-10-16T00:00:00Z",
+			Body: obj(append([]any{"of", o1, "result", res, "verdict", "supports", "model", "M"}, kv...)...)}, testKey("C"))
+		_, err := wire.Read(line)
+		return err
+	}
+	if err := read("cohort", obj("rule", "every station in R within 50 km")); err != nil {
+		t.Fatalf("control: the body with a cohort is refused: %v", err)
+	}
+	for name, kv := range map[string][]any{"no cohort member": nil, "cohort declares neither": {"cohort", obj()}} {
+		err := read(kv...)
+		r, ok := err.(*refusal.Refusal)
+		if !ok || r.Class != refusal.Intrinsic || r.Reason != refusal.MalformedStatement || !strings.Contains(r.Error(), "cohort") {
+			t.Fatalf("%s: got %v, want an intrinsic malformed refusal naming cohort", name, err)
+		}
 	}
 }
 
@@ -716,9 +726,10 @@ func TestDisagreementIsSymmetric(t *testing.T) {
 // --- §5.3.3 capture evidence -------------------------------------------------------------------------------
 
 // TestDeviceAttestedUnverified: C-core-52. An attestation bound to other bytes and one with no verifier both
-// display device-attested (unverified) and contribute no verified level.
+// display device-attested (unverified) and contribute no verified level; no exit rests on it: the observation's
+// verify exit is the same whether the attestation verifies or not (claims §13, capture evidence never moves it).
 func TestDeviceAttestedUnverified(t *testing.T) {
-	conformance.Partial(t, "C-core-52", "display and verified level; \"no exit 0 rests on it\" needs an observation verify exit, which the note does not define yet")
+	conformance.Covers(t, "C-core-52")
 	w := newWorld(t)
 	o1 := w.observed("O1", "O1", "X", "none-yet", obj(), "capture", canon.Value(obj("at", "2026-10-16T00:00:00Z", "evidence", "device-attested", "attestation", obj("format", "x"))))
 	for _, opt := range []Option{WithAttestationVerifier(fakeAttest{false}), WithAttestationVerifier(NoAttestationVerifier{})} {
@@ -728,9 +739,43 @@ func TestDeviceAttestedUnverified(t *testing.T) {
 			t.Fatalf("verified level %s", o.Capture.Verified)
 		}
 	}
-	if o := obsView(t, w, o1, WithAttestationVerifier(fakeAttest{true})); o.Capture.Display != "device-attested" {
-		t.Fatalf("control: %s", o.Capture.Display)
+	ok := obsView(t, w, o1, WithAttestationVerifier(fakeAttest{true}))
+	if ok.Capture.Display != "device-attested" {
+		t.Fatalf("control: %s", ok.Capture.Display)
 	}
+	want, _ := ok.VerifyExit()
+	for _, opt := range []Option{WithAttestationVerifier(fakeAttest{false}), WithAttestationVerifier(NoAttestationVerifier{})} {
+		if got, why := obsView(t, w, o1, opt).VerifyExit(); got != want {
+			t.Fatalf("an unverified attestation moved the verify exit: %d %v, verified %d", got, why, want)
+		}
+	}
+}
+
+// TestObservationVerifyExit: claims §13, `verify` of an observation. 0 when its signature and pins hold; 3 when
+// the referent is unpinned or its finality rule cannot be evaluated by this reader; the corroboration status
+// (corroborated, contradicted, unchecked) and the reader's re-check never move it.
+func TestObservationVerifyExit(t *testing.T) {
+	exit := func(o *Observation, want int, cause string) {
+		t.Helper()
+		got, why := o.VerifyExit()
+		if got != want || (cause != "" && !strings.Contains(strings.Join(why, "; "), cause)) || (want == 0 && why != nil) {
+			t.Fatalf("exit %d %v, want %d %q\n%s", got, why, want, cause, o.Render())
+		}
+	}
+	// pinned, rule evaluable: 0 whatever corroboration says
+	w := newWorld(t)
+	o1 := w.observed("O1", "O1", "X", "exact-bytes", chainRef(3), "finality", canon.Value(depthFinality("confirmations >= 6", 3)))
+	exit(obsView(t, w, o1), 0, "")
+	exit(obsView(t, w, o1, WithReferentChecker(fakeReferents{o1: {Outcome: ReDifferent, Digest: dig("Y"), State: State{HasDepth: true, Depth: 12}}})), 0, "")
+	hw, x := hotReading(t) // corroborated 2, contradicted 1
+	exit(obsView(t, hw, x), 0, "")
+	// unpinned: 3, naming the missing pin (the control above pins all three fields)
+	m := w.observed("O2", "O2", "Y", "exact-bytes", obj("chain_id", "bip122:000000000019d6689c085ae165831e93", "height", 860000, "depth", 3))
+	exit(obsView(t, w, m), 3, "referent: unpinned")
+	// a finality rule this reader cannot evaluate: 3; the same observation under a reader that can: 0
+	src := w.observed("S1", "O3", "Z", "source", apiRef("https://api.example/settlements"), "finality", runFinality("RF"))
+	exit(obsView(t, w, src), 3, "referent: finality unchecked")
+	exit(obsView(t, w, src, WithFinalityRules(settlementRules{})), 0, "")
 }
 
 // TestAnchoredAtCapture: C-core-53. A local anchor displays (local, self-declared); a bitcoin-verified one

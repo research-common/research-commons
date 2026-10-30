@@ -85,12 +85,13 @@ func TestFsckInvalidStatementAndJournal(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(dir, badID), bad, 0o444)
 	// a verified statement stored under the wrong name
 	_ = os.WriteFile(filepath.Join(dir, strings.Repeat("d", 64)), good, 0o444)
-	// stray in blobs, stale temp, odd retained
+	// stray in blobs, stale temp, a retained/ area from an earlier layout
 	_ = os.WriteFile(filepath.Join(root, "blobs", "sha256", "README"), []byte("hi"), 0o644)
 	old := filepath.Join(root, "tmp", "w-old")
 	_ = os.WriteFile(old, []byte("partial"), 0o644)
 	past := time.Now().Add(-48 * time.Hour)
 	_ = os.Chtimes(old, past, past)
+	_ = os.MkdirAll(filepath.Join(root, "retained"), 0o755)
 	_ = os.WriteFile(filepath.Join(root, "retained", "notahash"), []byte("x"), 0o644)
 	// pending record, done orphan, undecodable record
 	w := &Store{root: root, opt: Options{NoSync: true, crash: func(p string) error {
@@ -144,7 +145,7 @@ func TestFsckInvalidStatementAndJournal(t *testing.T) {
 // and step 5: the commit reports `committed, needs repair: blob <hash> missing`, nothing is rolled back,
 // fsck lists the unresolved reference, and re-installing the bytes plus repair finishes it.
 func TestFsckMissingBlobInRecord(t *testing.T) {
-	conformance.Partial(t, "C-core-138", "the failure message names what failed (blob <hash> missing), what is committed, and the next step; the publish command's wording and exit codes are a later layer")
+	conformance.Covers(t, "C-core-138") // the store half; the publish command is internal/cli.TestPublishCommittedPendingInstall
 	root := t.TempDir()
 	k := testKey("A")
 	data := []byte("removed mid-publish")

@@ -28,6 +28,9 @@ const (
 	SizeLimit          = "size limit"
 	// WrongLog: a line whose signer is not the key the log is named for (wire-format note §7, ownership rule).
 	WrongLog = "line in another key's log"
+	// InvalidAnchor: an `anchors` statement whose `covered` is a line of its signer's own log that is not in the
+	// anchor line's own prefix (bitcoin-time note §4 check 2, C-btc-09). Scoped to the statement.
+	InvalidAnchor = "invalid-anchor"
 )
 
 // Refusal is an error that names its class, its reason and what it applies to.

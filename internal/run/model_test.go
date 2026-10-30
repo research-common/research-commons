@@ -1,6 +1,7 @@
 package run
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -131,6 +132,55 @@ func sandboxRecord() *Record {
 		HarnessCommit: strings.Repeat("ab", 20), Runtime: "oci-runtime 1", Interpreter: "sh 5",
 		Caps: Resources{CapMemory: 1 << 20}, Grants: []string{}, PeakRSS: &rss, WallTimeMs: 12, ExitStatus: "0",
 		Result: "match", StagingCheck: "ok", Boundary: "sandbox: oci, image " + imgDigest}
+}
+
+// TestNetworkEnforcedDisclosure: execution §6. A granted network carries `enforced`: `all` when it was opened as
+// a whole (the OCI runner, or a runner that does not say), `per-endpoint` when egress was limited to the declared
+// endpoints; the display says which. `network: none` carries no `enforced`, and a record claiming one, or an
+// unknown value, is refused by Validate.
+func TestNetworkEnforcedDisclosure(t *testing.T) {
+	r := sandboxRecord()
+	if got := string(canon.Encode(r.Object().Members["network"])); got != `"none"` || r.NetworkLine() != "network none" {
+		t.Fatalf("no network: %s / %s", got, r.NetworkLine())
+	}
+	r.Network, r.NetworkEnforced = []string{"https://api.example/v1"}, EnforcedAll
+	if err := r.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if got := string(canon.Encode(r.Object().Members["network"])); got != `{"enforced":"all","granted":["https://api.example/v1"]}` {
+		t.Fatalf("granted: %s", got)
+	}
+	has(t, r.NetworkLine(), "network granted (not limited to the declared endpoints)")
+	r.NetworkEnforced = EnforcedPerEndpoint
+	has(t, r.NetworkLine(), "network granted (limited to the declared endpoints)")
+	for _, bad := range []struct {
+		net []string
+		enf string
+	}{{nil, EnforcedAll}, {[]string{"https://x.example"}, ""}, {[]string{"https://x.example"}, "some"}} {
+		b := sandboxRecord()
+		b.Network, b.NetworkEnforced = bad.net, bad.enf
+		if b.Validate() == nil {
+			t.Fatalf("record accepted network %v enforced %q", bad.net, bad.enf)
+		}
+	}
+	// through Execute: the fake runner does not say how it confined the network, so the record says `all`
+	spec := mustSpec(t, specB("net", nil, "network", object("required", strings2array([]string{"https://api.example/v1"}))))
+	f := newFake().step("net", writeStep("ok"))
+	p := grantAll()
+	p.Network = []string{spec.Digest}
+	res, err := Execute(context.Background(), p, f, Invocation{Request: Request{Spec: spec, Signer: ownerKey}, Blobs: blobsFor(spec, "net", nil)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Record.NetworkEnforced != EnforcedAll || !strings.Contains(string(canon.Encode(res.Record.Object())), `"enforced":"all"`) {
+		t.Fatalf("executed record: %s", canon.Encode(res.Record.Object()))
+	}
+	// and a run with no network records none, with no enforced member
+	spec0 := mustSpec(t, specB("net0", nil))
+	res0, err := Execute(context.Background(), p, newFake().step("net0", writeStep("ok")), Invocation{Request: Request{Spec: spec0, Signer: ownerKey}, Blobs: blobsFor(spec0, "net0", nil)})
+	if err != nil || res0.Record.NetworkEnforced != "" || strings.Contains(string(canon.Encode(res0.Record.Object())), "enforced") {
+		t.Fatalf("no-network record: %v %s", err, canon.Encode(res0.Record.Object()))
+	}
 }
 
 // TestRecordRidesTheWireSchema: the record's object passes the one validation core as an `authored`

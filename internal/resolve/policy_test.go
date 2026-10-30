@@ -267,10 +267,12 @@ func TestObservationSelection(t *testing.T) {
 
 // --- trust ---------------------------------------------------------------------------------------------------
 
-// TestCorroborationTrust: claims §5.3.2 "holds and trusts", once a policy is configured (identity note §6: no
-// configured trust is not trusted). Trusting S1 and S2 for corroboration counts only them; trusting nobody
-// counts nothing (unchecked) with every statement still listed and attributed; trust for another purpose or
-// another content does not count. The reader's own re-check is never filtered.
+// TestCorroborationTrust: claims §5.3.2 "holds and trusts", with trust configured per purpose (identity note
+// §6). Trusting S1 and S2 for corroboration counts only them; trusting K alone counts only K; a policy that
+// names nobody for corroboration (empty, a workflow pin only, or admission only) leaves corroboration not
+// configured: every statement counted, as with no policy, and labelled so; once an entry names anyone for
+// corroboration, trust for another purpose or another content does not count. The reader's own re-check is
+// never filtered.
 func TestCorroborationTrust(t *testing.T) {
 	w, x := hotReading(t)
 	X := dig("X")
@@ -282,12 +284,30 @@ func TestCorroborationTrust(t *testing.T) {
 	has(t, out, "corroborates by "+shortKey(w.signer("C3"))+" in "+keylog.Short(w.ids["C3"])+": contradicts under M (not trusted for corroboration")
 	hasNot(t, out, "not configured")
 
+	base := obsView(t, w, x).Corroboration.Status()
+	const unconfigured = "your trust in these keys: not configured (every counted statement is counted)"
 	none := pol(t, nil, nil)
-	n := obsView(t, w, x, WithPolicy(none))
-	wantStatus(t, n, "unchecked within statements you hold")
-	for _, name := range []string{"S1", "S2", "C3"} {
-		has(t, n.Render(), keylog.Short(w.ids[name]))
+	pinOnly := pol(t, []*canon.Object{pinSel(dig("W"), policy.RoleWorkflow, w.ids["wf:W:WA"])}, nil)
+	admOnly := pol(t, nil, []*canon.Object{trustKey(w.signer("S1"), []string{"admission"})})
+	for name, p := range map[string]*policy.Policy{"empty": none, "workflow pin only": pinOnly, "admission only": admOnly} {
+		n := obsView(t, w, x, WithPolicy(p))
+		if got := n.Corroboration.Status(); got != base {
+			t.Fatalf("%s policy moved the corroboration count: %q, want %q as with no policy", name, got, base)
+		}
+		has(t, n.Render(), unconfigured)
+		for _, k := range []string{"S1", "S2", "C3"} {
+			has(t, n.Render(), keylog.Short(w.ids[k]))
+		}
 	}
+	if !strings.Contains(base, "contradicted 1") {
+		t.Fatalf("fixture: no-policy status %q should count C3", base)
+	}
+
+	onlyK := pol(t, nil, []*canon.Object{trustKey(w.signer("C3"), []string{"corroboration"})})
+	k := obsView(t, w, x, WithPolicy(onlyK))
+	wantStatus(t, k, "contradicted 1 within statements you hold")
+	has(t, k.Render(), "(1 trusted, 2 not trusted")
+	hasNot(t, k.Render(), "not configured")
 
 	wrong := pol(t, nil, []*canon.Object{
 		trustKey(w.signer("S1"), []string{"admission", "attestation"}),
@@ -303,7 +323,7 @@ func TestCorroborationTrust(t *testing.T) {
 }
 
 // TestRunAttestationTrust: A5 + A12. A runner's signed result and environment show the reader's attestation
-// trust in the runner once a policy is configured; the grade never reads it.
+// trust in the runner once the policy names anyone for attestation; the grade never reads it.
 func TestRunAttestationTrust(t *testing.T) {
 	w := groupWorld(t, "bytes", "", map[string]string{"A": "X"})
 	w.sign("BR", "BB", "reproduced", obj("of", w.ids["A1"], "result", "match", "content", contentOf("X"),
@@ -311,9 +331,12 @@ func TestRunAttestationTrust(t *testing.T) {
 	base := w.store(nil).Artifact(dig("X"))
 	has(t, base.Render(), "your trust in this key: not configured")
 	yes := pol(t, nil, []*canon.Object{trustKey(w.signer("BB"), []string{"attestation"})})
-	no := pol(t, nil, []*canon.Object{trustKey(w.signer("BB"), []string{"corroboration"})})
+	no := pol(t, nil, []*canon.Object{trustKey(w.signer("BB"), []string{"corroboration"}), trustKey(w.signer("A"), []string{"attestation"})})
+	other := pol(t, nil, []*canon.Object{trustKey(w.signer("BB"), []string{"corroboration"})})
 	ay := w.store(nil, WithPolicy(yes)).Artifact(dig("X"))
 	an := w.store(nil, WithPolicy(no)).Artifact(dig("X"))
+	// trust is configured per purpose: a policy naming nobody for attestation leaves the line as with no policy
+	has(t, w.store(nil, WithPolicy(other)).Artifact(dig("X")).Render(), "your trust in this key: not configured")
 	has(t, ay.Render(), "your trust in this key: trusted for attestation of sha256:"+keylog.Short(strings.TrimPrefix(dig("X"), "sha256:"))[:5])
 	has(t, an.Render(), "your trust in this key: not trusted for attestation")
 	if ay.Step != base.Step || an.Step != base.Step || ay.Outcome() != an.Outcome() {
@@ -329,7 +352,7 @@ func TestRunAttestationTrust(t *testing.T) {
 // statements each lists, and their verification, are identical. Covers a workflow pin (grade), an authorship pin
 // (default) and a trust difference (corroboration status).
 func TestPolicyDifferenceExplained(t *testing.T) {
-	conformance.Partial(t, "P-11", "resolver views (grades, defaults, corroboration status); the CLI surfaces that print the policy digest need the CLI")
+	conformance.Covers(t, "P-11") // resolver views here; the CLI prints both policy digests on explain (cli TestReaderPolicy)
 	conformance.Partial(t, "P-08", "a policy change between two runs is named by policy.Diff and cited in explain; statement, evaluator, time and execution-context causes and the CLI diff surface remain")
 	w := groupWorld(t, "bytes", "", map[string]string{"A": "r~1", "BB": "r~2"})
 	q := w.workflow("Q", "W", "protocol", "K")

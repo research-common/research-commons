@@ -672,3 +672,107 @@ func shuffle(n int, seed uint64) []int {
 	}
 	return p
 }
+
+// anchorsLine signs an `anchors` line of k at seq after prev, covering `covered`, with merges.
+func anchorsLine(k wire.Key, seq int64, prev, covered string, merges ...string) line {
+	return signed(k, "anchors", seq, prev, obj("covered", covered, "proof", "sha256:"+strings.Repeat("ab", 32), "proof_format", "ots-detached-v1"), merges...)
+}
+
+// TestAnchorCoveredOutsideItsPrefix: C-btc-09 and bitcoin-time §4 check 2. An `anchors` whose `covered` is a line of
+// the signer's own log that the anchor line does not reach is refused (intrinsic, invalid-anchor), scoped to that
+// statement; the rest of the log is what it was without it. The boundary: a covered that is the anchor's prev, an
+// older line of its prefix, or reached only through `merges` is accepted; a covered on a sibling branch, or at a
+// seq the anchor cannot reach, is refused. A covered not held, or a prefix with a gap the covered may sit behind,
+// refuses nothing (wire §5: it bounds nothing until it arrives), so every delivery order reaches the same view.
+func TestAnchorCoveredOutsideItsPrefix(t *testing.T) {
+	conformance.Covers(t, "C-btc-09")
+	a := key("A")
+	base := chain(a, 3)                     // seq 0, 1, 2
+	side := mk(a, 2, base[1].id, 0x77, "")  // a sibling of base[2] on the same prev
+	sideNext := mk(a, 3, side.id, 0x78, "") // continues the sibling branch
+	ahead := mk(a, 3, base[2].id, 0x79, "") // another line at the anchor's own seq
+	merged := mk(a, 3, base[2].id, 0x7a, "", side.id)
+	for _, c := range []struct {
+		name    string
+		lines   []line
+		anchor  line
+		refused bool
+	}{
+		{"covered is prev", base, anchorsLine(a, 3, base[2].id, base[2].id), false},
+		{"covered is an older line of the prefix", base, anchorsLine(a, 3, base[2].id, base[0].id), false},
+		{"covered reached only through merges", []line{base[0], base[1], base[2], side, merged}, anchorsLine(a, 4, merged.id, side.id), false},
+		// the sibling is held and the anchor's prefix does not reach it: seq 3 after base[2], covering seq 2' (the boundary)
+		{"covered on a sibling branch", []line{base[0], base[1], base[2], side}, anchorsLine(a, 3, base[2].id, side.id), true},
+		{"covered on a sibling branch, deeper", []line{base[0], base[1], base[2], side, sideNext}, anchorsLine(a, 3, base[2].id, sideNext.id), true},
+		{"covered at the anchor's own seq", []line{base[0], base[1], base[2], ahead}, anchorsLine(a, 3, base[2].id, ahead.id), true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			ls := append(slices.Clone(c.lines), c.anchor)
+			out, v := renderAll(t, a, ls, nil)
+			if c.refused {
+				if len(v.Refused) != 1 || v.Refused[0].St.ID != c.anchor.id || v.Refused[0].Reason.Reason != refusal.InvalidAnchor ||
+					v.Refused[0].Reason.Class != refusal.Intrinsic || !strings.Contains(v.Refused[0].Reason.Detail, "scope this anchor") {
+					t.Fatalf("not refused as invalid-anchor:\n%s", out)
+				}
+				// scoped to the statement: the other lines are what they were without it
+				s := NewStore()
+				for _, l := range c.lines {
+					deliver(t, s, a, l)
+				}
+				if want := s.Log(a.Signer()).View(); placed(want) != placed(v) || fmt.Sprint(want.Forks) != fmt.Sprint(v.Forks) {
+					t.Fatal("refusing the anchor changed the rest of the log")
+				}
+				// delivered last, Add itself reports the refusal, and keeps the line (a view)
+				s2 := NewStore()
+				for _, l := range c.lines {
+					deliver(t, s2, a, l)
+				}
+				_, err := s2.Log(a.Signer()).Add(c.anchor.bytes)
+				wantRefused(t, err, refusal.InvalidAnchor, "not in the anchor's own prefix")
+			} else if len(v.Refused) != 0 {
+				t.Fatalf("an anchor over its own prefix was refused:\n%s", out)
+			}
+		})
+	}
+
+	t.Run("covered not held bounds nothing and refuses nothing", func(t *testing.T) {
+		ls := []line{base[0], base[1], base[2], anchorsLine(a, 3, base[2].id, side.id)} // side is never delivered
+		out, v := renderAll(t, a, ls, nil)
+		if len(v.Refused) != 0 || len(v.Lines) != 4 {
+			t.Fatalf("an unheld covered was refused:\n%s", out)
+		}
+		// the covered line then arrives: now the held lines decide, and the anchor is refused in every order
+		_, v = renderAll(t, a, append(ls, side), nil)
+		if len(v.Refused) != 1 || v.Refused[0].Reason.Reason != refusal.InvalidAnchor {
+			t.Fatalf("after the covered arrived:\n%s", v.Render())
+		}
+		// and arrives as a line the anchor does reach: accepted
+		_, v = renderAll(t, a, []line{base[0], base[1], base[2], anchorsLine(a, 3, base[2].id, base[1].id)}, nil)
+		if len(v.Refused) != 0 {
+			t.Fatalf("an anchor over an older line was refused:\n%s", v.Render())
+		}
+	})
+
+	t.Run("a gap under the anchor leaves the prefix undecided", func(t *testing.T) {
+		// base[2] is missing: the walk from the anchor stops at an unheld prev, which may lead to the covered line
+		anc := anchorsLine(a, 3, base[2].id, base[0].id)
+		out, v := renderAll(t, a, []line{base[0], base[1], anc}, nil)
+		if len(v.Refused) != 0 {
+			t.Fatalf("refused across a gap:\n%s", out)
+		}
+		_, v = renderAll(t, a, []line{base[0], base[1], base[2], anc}, nil)
+		if len(v.Refused) != 0 {
+			t.Fatalf("refused once the gap filled with the covered in its prefix:\n%s", v.Render())
+		}
+		// a covered on a sibling branch behind the same gap: undecided until the gap fills, then refused
+		anc2 := anchorsLine(a, 3, base[2].id, side.id)
+		_, v = renderAll(t, a, []line{base[0], base[1], side, anc2}, nil)
+		if len(v.Refused) != 0 {
+			t.Fatalf("refused across a gap:\n%s", v.Render())
+		}
+		_, v = renderAll(t, a, []line{base[0], base[1], base[2], side, anc2}, nil)
+		if len(v.Refused) != 1 || v.Refused[0].St.ID != anc2.id {
+			t.Fatalf("not refused once the gap filled:\n%s", v.Render())
+		}
+	})
+}

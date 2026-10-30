@@ -50,8 +50,10 @@ type Record struct {
 	Caps     Resources
 	Declared Resources
 	Advisory bool
-	// Network is nil for `none`, else the granted endpoints.
-	Network []string
+	// Network is nil for `none`, else the granted endpoints. NetworkEnforced, with a granted network, is how it
+	// was confined: EnforcedAll (opened as a whole) or EnforcedPerEndpoint (§6).
+	Network         []string
+	NetworkEnforced string
 	// Grants are the names (never values) of policy grants that crossed the boundary (§6).
 	Grants []string
 	// PeakRSS is nil when unmeasured (native only).
@@ -120,6 +122,12 @@ func (r *Record) Validate() error {
 			return badRecord("caps.declared.%s names a cap not in force", k)
 		}
 	}
+	switch {
+	case r.Network == nil && r.NetworkEnforced != "":
+		return badRecord("network.enforced %q without a granted network", r.NetworkEnforced)
+	case r.Network != nil && r.NetworkEnforced != EnforcedAll && r.NetworkEnforced != EnforcedPerEndpoint:
+		return badRecord("network.enforced %q is neither %q nor %q", r.NetworkEnforced, EnforcedAll, EnforcedPerEndpoint)
+	}
 	if !slices.IsSorted(r.Grants) {
 		return badRecord("grants are not sorted")
 	}
@@ -166,7 +174,8 @@ func (r *Record) Object() *canon.Object {
 	if r.Network == nil {
 		set("network", canon.String("none"))
 	} else {
-		set("network", &canon.Object{Keys: []string{"granted"}, Members: map[string]canon.Value{"granted": strings2array(r.Network)}})
+		set("network", &canon.Object{Keys: []string{"enforced", "granted"}, Members: map[string]canon.Value{
+			"enforced": canon.String(r.NetworkEnforced), "granted": strings2array(r.Network)}})
 	}
 	set("grants", strings2array(r.Grants))
 	if r.PeakRSS == nil {
@@ -211,6 +220,19 @@ func strings2array(s []string) canon.Array {
 		a = append(a, canon.String(x))
 	}
 	return a
+}
+
+// NetworkLine is the record's network as displayed (execution §6): `network none`, `network granted (limited to
+// the declared endpoints)`, or, for a network opened as a whole, `network granted (not limited to the declared
+// endpoints)`.
+func (r *Record) NetworkLine() string {
+	switch {
+	case r.Network == nil:
+		return "network none"
+	case r.NetworkEnforced == EnforcedPerEndpoint:
+		return "network granted (limited to the declared endpoints)"
+	}
+	return "network granted (not limited to the declared endpoints)"
 }
 
 // Fields reads a received environment object as field name → canonical JSON of the value, for comparison by
