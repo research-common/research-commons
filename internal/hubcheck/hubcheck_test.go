@@ -476,6 +476,9 @@ func TestPrematureFreeze(t *testing.T) {
 	if r.Series == nil || r.Series.Comparison != "flagged" || !strings.Contains(r.Refusal.Detail, "scope series edition") || res.Exit(false) != 1 {
 		t.Fatalf("%v", r.Refusal)
 	}
+	if !strings.Contains(r.Refusal.Detail, gate.ReaderRecheck) {
+		t.Fatalf("the refusal does not say where the boundary came from: %v", r.Refusal)
+	}
 	// without the reader's re-check, the boundary is unchecked: could not check, exit 3
 	res = h.check("main")
 	if r := verdict(t, res, ep); r.Verdict != gate.Undecided || res.Exit(false) != 3 {
@@ -501,6 +504,57 @@ func TestPrematureFreeze(t *testing.T) {
 	n.commit("x")
 	if r := verdict(t, n.check("main", resolve.WithSegments(f)), ep); r.Verdict != gate.Admitted {
 		t.Fatalf("%s %v", r.Verdict, r.Refusal)
+	}
+}
+
+// TestPrematureFreezeShippedTool: the production path of series.refuse_premature_freeze. hub check builds its
+// resolver from the base alone (no WithSegments: no command can supply one), and the only segment reader
+// shipped records positions without re-checking finality. So with the knob on, every added series edition is
+// could not check, the supported declaration as much as the premature one, and the verdict says why in this
+// exact wording, never a pass and never a refusal. Control: the same tree with a configured re-check decides
+// both editions (the wording is absent there), so the label comes from the missing re-check, not the series.
+func TestPrematureFreezeShippedTool(t *testing.T) {
+	h := newHub(t, `{"policy":"rc-hub-policy/1","series":{"refuse_premature_freeze":true}}`)
+	s := newSigner()
+	gp, gline, g := s.sign("C", "genesis", obj("type", "series", "name", "runs", "controllers", []string{s.key("C").Signer()}, "rule", obj("any_one", true)))
+	h.write(gp, gline)
+	segs := canon.Array{}
+	f := fakeSegments{}
+	for _, m := range []string{"01", "02", "03"} {
+		p, line, id := s.sign("O", "observed", obj("content", contentOf([]byte("r"+m)), "class", "none-yet", "referent", canon.Value(obj()),
+			"capture", canon.Value(obj("at", "2026-01-02T00:00:00Z", "evidence", "self-asserted"))))
+		h.write(p, line)
+		segs = append(segs, obj("statement", id, "role", "segment"))
+		f[id] = resolve.SegmentState{From: day("2025-" + m + "-01"), Rule: true, Final: "final"}
+	}
+	h.commit("series")
+	for _, tc := range []struct{ name, frozen, decided string }{{"early", "2025-02-01", "admitted"}, {"late", "2025-09-01", "refused"}} {
+		h.git("checkout", "-q", "main")
+		h.branch(tc.name)
+		s2 := *s
+		s2.head, s2.seq = maps(s.head), maps64(s.seq)
+		ep, eline, _ := s2.sign("C", "edition", editionBody(g, []string{g}, "members", segs, "frozen_before", obj("date", tc.frozen)))
+		h.write(ep, eline)
+		h.commit(tc.name)
+		res, err := Check(h.dir, Config{Base: "main"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		r := verdict(t, res, ep)
+		want := "unchecked: frozen_before " + tc.frozen + " (declared) · members' finality unchecked; " +
+			"this tool version ships no finality re-check for series segments, so with series.refuse_premature_freeze on every series edition is could not check until a re-check ships"
+		if r.Verdict != gate.Undecided || res.Exit(false) != 3 || len(r.Labels) != 1 || r.Labels[0].Token != gate.LabelSeriesUnknown || r.Labels[0].Detail != want {
+			t.Fatalf("%s: %s %v\n%s", tc.name, r.Verdict, r.Labels, res.Render())
+		}
+		if r.Next != gate.SeriesNoRecheckNext || !strings.Contains(r.Next, "no finality re-check ships") {
+			t.Fatalf("%s: next %q", tc.name, r.Next)
+		}
+		// control: a configured re-check decides the edition, and the no-re-check wording is gone
+		c := h.check("main", resolve.WithSegments(f))
+		cr := verdict(t, c, ep)
+		if string(cr.Verdict) != tc.decided || strings.Contains(c.Render(), "ships no finality re-check for series segments, so") {
+			t.Fatalf("%s control: %s %v\n%s", tc.name, cr.Verdict, cr.Refusal, c.Render())
+		}
 	}
 }
 
