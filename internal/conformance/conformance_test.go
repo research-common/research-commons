@@ -4,7 +4,6 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -19,16 +18,21 @@ func TestConformanceCases(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	doc, err := os.ReadFile(filepath.Join(root, "docs", "CONFORMANCE.md"))
+	ids, home, err := LoadCaseIDs(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ids, err := CaseIDs(doc)
-	if err != nil {
-		t.Fatal(err)
+	perDoc := map[string]int{}
+	for _, f := range home {
+		perDoc[f]++
 	}
-	if len(ids) < 200 {
-		t.Fatalf("found only %d case rows in CONFORMANCE.md; the row pattern no longer matches the document", len(ids))
+	if perDoc["docs/CONFORMANCE.md"] < 200 {
+		t.Fatalf("found only %d case rows in CONFORMANCE.md; the row pattern no longer matches the document", perDoc["docs/CONFORMANCE.md"])
+	}
+	for _, n := range ProfileNotes {
+		if perDoc[n] == 0 {
+			t.Fatalf("profile note %s defines no case rows; the row pattern no longer matches it", n)
+		}
 	}
 	cov, part, problems, err := ScanCoverage(root)
 	if err != nil {
@@ -43,12 +47,12 @@ func TestConformanceCases(t *testing.T) {
 	}
 	for _, id := range SortedKeys(cov) {
 		if !known[id] {
-			t.Errorf("Covers(%q) in %v names a case CONFORMANCE.md does not define", id, cov[id])
+			t.Errorf("Covers(%q) in %v names a case no case document defines", id, cov[id])
 		}
 	}
 	for _, id := range SortedKeys(part) {
 		if !known[id] {
-			t.Errorf("Partial(%q) in %v names a case CONFORMANCE.md does not define", id, part[id])
+			t.Errorf("Partial(%q) in %v names a case no case document defines", id, part[id])
 		}
 	}
 	covered := map[string]int{}
@@ -119,6 +123,15 @@ func TestCaseIDsRefusesDuplicates(t *testing.T) {
 	_, err := CaseIDs([]byte("| C-core-01 | a |\n| C-core-01 | b |\n"))
 	if err == nil {
 		t.Fatal("a duplicated case id was accepted")
+	}
+	// across documents: a profile note may not redefine a CONFORMANCE.md case, but may restate it in backticks
+	_, _, err = CaseIDsAcross(Doc{"a", []byte("| C-btc-01 | x |\n")}, Doc{"b", []byte("| C-btc-01 | y |\n")})
+	if err == nil || !strings.Contains(err.Error(), "in a and b") {
+		t.Fatalf("an id defined in two documents: %v", err)
+	}
+	ids, home, err := CaseIDsAcross(Doc{"a", []byte("| C-btc-01 | x |\n")}, Doc{"b", []byte("| `C-btc-01` | restated |\n| C-btc-07 | y |\n")})
+	if err != nil || len(ids) != 2 || home["C-btc-07"] != "b" || home["C-btc-01"] != "a" {
+		t.Fatalf("restated id: %v %v %v", ids, home, err)
 	}
 }
 

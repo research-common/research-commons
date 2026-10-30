@@ -468,7 +468,7 @@ func (r *Resolver) held(a *Artifact) []*Placed {
 	var out []*Placed
 	for _, kind := range []string{"describes", "refutes", "retracts", "reproduced"} {
 		for _, p := range r.byKind[kind] {
-			if !p.Evaluable {
+			if !p.EvidenceReady() {
 				continue
 			}
 			b := p.St.Body
@@ -665,7 +665,12 @@ func heldDetail(p *Placed) string {
 
 // helpers
 
+// contentDigest also associates non-counting evidence with a blob for display. It must tolerate an
+// unvalidated or absent body (another wire major exposes linkage only); association never grants a claim.
 func contentDigest(b *canon.Object) string {
+	if b == nil {
+		return ""
+	}
 	c, ok := b.Get("content")
 	if !ok {
 		return ""
@@ -690,7 +695,7 @@ func notCountedWhy(p *Placed) string {
 	switch {
 	case !p.Chained:
 		return "detached"
-	case !p.Evaluable:
+	case !p.EvidenceReady():
 		return string(p.St.Status)
 	case len(p.After) > 0:
 		return p.After[0]
@@ -715,6 +720,12 @@ func better(a, b Bound) Bound {
 		return b
 	case a.Quality != b.Quality:
 		if a.Quality == Local {
+			return a
+		}
+		return b
+	case a.Quality == NoBound && (a.Anchor == "") != (b.Anchor == ""):
+		// neither bounds anything; the one naming a refused anchor is shown, so the refusal is not hidden
+		if a.Anchor != "" {
 			return a
 		}
 		return b

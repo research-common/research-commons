@@ -6,7 +6,9 @@
 // This file holds the shared index and the key-event rules. Each kind of answer lives in its own file:
 // resources (collections, tasks, series; claims-model note §8) in resource.go; authorship, priority and
 // single-party defaults (§5.1, §5.2) in artifact.go; derivation groups and grades (§5.2, §7) in group.go; time
-// bounds (§10) in time.go.
+// bounds (§10) in time.go; edition rules (§8) in edition_rules.go; membership and the pre-pin check in
+// membership.go; growing series in series.go; observations, referent status and capture evidence (§5.3.1,
+// §5.3.3) in observation.go; corroboration status and reputation projections (§5.3.2, §5.4) in corroboration.go.
 //
 // Every answer is a pure function of the set of held lines, so delivery order cannot change it (I14, P-01).
 package resolve
@@ -25,7 +27,9 @@ type Placed struct {
 	// Chained is true when the statement's line has chained in its signer's log. A detached statement is shown,
 	// attributed, and evaluated toward nothing.
 	Chained bool
-	// Evaluable is true when the statement is chained, verified and fully understood (status valid).
+	// Evaluable is true when the statement is chained, verified and fully understood (status valid),
+	// independently of its signer's key events. EvidenceReady exposes this evidence-only boundary;
+	// BareKeyEligible additionally applies the legacy key-event exclusions.
 	Evaluable bool
 	// After names the in-force key events of the signer that come before this line in the log's order (they
 	// are among its ancestors). The key had already rotated or revoked when it signed this line, so the line
@@ -39,9 +43,9 @@ type Placed struct {
 	Doubted []string
 }
 
-// Counts reports whether the statement counts toward any answer: chained, valid, and let through by every
-// in-force key event of its signer (the intersection rule, §4.1).
-func (p *Placed) Counts() bool { return p.Evaluable && len(p.After) == 0 && len(p.Doubted) == 0 }
+// Counts preserves the existing bare-key counting contract. It is a compatibility
+// alias for BareKeyEligible, not a general identity-authorization decision.
+func (p *Placed) Counts() bool { return p.BareKeyEligible() }
 
 // Resolver is the reader's view over every log it holds. Build it with New after the logs change; it keeps
 // no state of its own beyond that snapshot.
@@ -58,13 +62,19 @@ type Resolver struct {
 	// pair of outputs, so every pair runs at most once per snapshot whichever blobs are viewed (group.go, pair).
 	cmpMu   sync.Mutex
 	cmpRuns map[[3]string]cmpResult
+	// rules is the reader's edition-rule configuration: dialects, content, limits, segments (edition_rules.go).
+	rules ruleConfig
+	// obs is the reader's configuration for observations and corroboration (observation.go); origins is its
+	// delivery-metadata index, shown in explain and an input to nothing (corroboration.go).
+	obs     *obsConfig
+	origins OriginIndex
 }
 
 // New indexes every placed line of every log in s. With no options the reader verifies no proof format and
 // runs no comparator, so no bound orders anything and no comparison is made.
 func New(s *keylog.Store, opts ...Option) *Resolver {
 	r := &Resolver{logs: s, chained: map[string]map[string]*wire.Statement{}, byID: map[string]*Placed{}, byKind: map[string][]*Placed{}, keys: map[string]keylog.KeyState{},
-		time: NoTimeVerifier{}, cmp: NoComparator{}, cmpRuns: map[[3]string]cmpResult{}}
+		time: NoTimeVerifier{}, cmp: NoComparator{}, cmpRuns: map[[3]string]cmpResult{}, obs: defaultObsConfig()}
 	for _, o := range opts {
 		o(r)
 	}

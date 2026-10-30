@@ -1,0 +1,21 @@
+statement st:BAD missing
+statement st:G -> st:G signer=key:A kind=genesis alg=ed25519 status="valid" verified=true chained=true evaluable=true counts=true
+  wire-why="" after=[] doubted=[]
+statement st:WD missing
+statement st:XA -> st:XA signer=key:A kind=edition alg=ed25519 status="valid" verified=true chained=true evaluable=true counts=true
+  wire-why="" after=[] doubted=[]
+statement st:XA2 -> st:XA2 signer=key:A kind=edition alg=ed25519 status="valid" verified=true chained=true evaluable=true counts=true
+  wire-why="" after=[] doubted=[]
+statement st:XB missing
+statement st:YA missing
+statement st:YB missing
+resource st:G current="st:G" tips=["st:G"] contested=[] no-controller=false verify=0
+  edition ed:XA state=pending predecessors=["st:G"] controllers=[] k=0
+    approval st:XA2 signer=key:A counted=true doubted=false withdrawn="" why=""
+    approval st:XA signer=key:A counted=true doubted=false withdrawn="" why=""
+    explain=["pending under st:G: 2 of 3 of {key:BB,key:A,key:C}, 1 of 2 approvals"]
+  lookup ed:XA statement=missing edition=ed:XA
+  lookup st:XA2 statement=st:XA2 edition=ed:XA
+  lookup st:XA statement=st:XA edition=ed:XA
+  lookup st:G statement=st:G edition=missing
+  lookup 0000000000000000000000000000000000000000000000000000000000000000 statement=missing edition=missing

@@ -37,6 +37,12 @@ type Bound struct {
 	Height  int64
 	// Why says why a bound is not of a verified quality ("not verified by this reader: ...").
 	Why string
+	// Margin is the reader's priority margin (bitcoin-time note §7, §8.3) that the verifier applies: a verified
+	// bound ranks before another only when it leads by more than Margin blocks. One verifier gives every bound
+	// the same margin.
+	Margin int64
+	// Detail is the verifier's further disclosure for explain (block hash, confirmations, validation mode).
+	Detail string
 }
 
 func (b Bound) verified() bool { return b.Quality == Bitcoin }
@@ -44,9 +50,17 @@ func (b Bound) verified() bool { return b.Quality == Bitcoin }
 func (b Bound) String() string {
 	switch b.Quality {
 	case NoBound:
+		if b.Anchor != "" {
+			// an anchor the verifier refused: no bound is derived from it (bitcoin-time note §4)
+			return "no anchor (anchor " + keylog.Short(b.Anchor) + " refused: " + b.Why + ")"
+		}
 		return "no anchor"
 	case Bitcoin:
-		return fmt.Sprintf("bitcoin %s height %d (anchor %s)", b.Network, b.Height, keylog.Short(b.Anchor))
+		s := fmt.Sprintf("bitcoin %s height %d (anchor %s)", b.Network, b.Height, keylog.Short(b.Anchor))
+		if b.Detail != "" {
+			s += ": " + b.Detail
+		}
+		return s
 	}
 	s := "(local, self-declared) anchor " + keylog.Short(b.Anchor)
 	if b.Why != "" {
@@ -94,9 +108,11 @@ func (r *Resolver) bound(st *wire.Statement) Bound {
 		switch {
 		case b.verified() && (!best.verified() || b.Height < best.Height || (b.Height == best.Height && b.Anchor < best.Anchor)):
 			best = b
-		case !b.verified() && best.Quality == NoBound:
-			best = b
-		case !b.verified() && best.Quality == Local && b.Anchor < best.Anchor:
+		case b.Quality == NoBound && best.Quality == NoBound && (best.Anchor == "" || b.Anchor < best.Anchor):
+			best = b // a refused anchor, shown as such; still no bound
+		case b.Quality == Local && best.Quality == NoBound:
+			best = b // a local bound beats an anchor the verifier refused
+		case b.Quality == Local && best.Quality == Local && b.Anchor < best.Anchor:
 			best = b // deterministic choice among unverified bounds; none of them orders anything
 		}
 	}
@@ -105,8 +121,8 @@ func (r *Resolver) bound(st *wire.Statement) Bound {
 
 // earlier reports whether bound a ranks strictly before bound b for priority (bitcoin-time note §8.3, claims
 // §5.2): a is verified, and b is either unverified (the earliest verified claim, C-btc-01 (b)) or verified on
-// the same network at a strictly lower height (margin 0). Same height, different networks or an unverified a
-// never rank.
+// the same network at a lower height by more than the reader's margin. Same height, a gap within the margin,
+// different networks or an unverified a never rank.
 func earlier(a, b Bound) (bool, string) {
 	switch {
 	case !a.verified():
@@ -117,8 +133,10 @@ func earlier(a, b Bound) (bool, string) {
 		return false, "incomparable"
 	case a.Height == b.Height:
 		return false, "same-block"
-	case a.Height < b.Height:
+	case a.Height < b.Height && b.Height-a.Height > a.Margin:
 		return true, "earlier-commitment"
+	case a.Height > b.Height && a.Height-b.Height > a.Margin:
+		return false, "later"
 	}
-	return false, "later"
+	return false, fmt.Sprintf("within-margin (gap %d, margin %d)", max(a.Height-b.Height, b.Height-a.Height), a.Margin)
 }
