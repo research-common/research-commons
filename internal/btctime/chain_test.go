@@ -248,6 +248,38 @@ func TestForkChoice(t *testing.T) {
 	}
 }
 
+// TestSnapshotReuse: a snapshot is rebuilt only when the chain changed. Two snapshots at one epoch share the
+// tree; a new header, a sync mark or a fork moves the epoch and gives a view of the new chain; the exported TipWork
+// is a copy, so a caller that changes it changes no other view.
+func TestSnapshotReuse(t *testing.T) {
+	p := testParams("reuse", 0x207fffff)
+	s := newSynth(t, p)
+	base := s.extend(s.genesis(), 3, 0, "")
+	a, b := s.c.Snapshot(), s.c.Snapshot()
+	if a.Epoch != b.Epoch || a.tip != b.tip || len(a.active) != len(b.active) {
+		t.Fatalf("two snapshots at one epoch differ: %d/%d", a.Epoch, b.Epoch)
+	}
+	a.TipWork.SetInt64(0)
+	if b.TipWork.Sign() == 0 || s.c.Snapshot().TipWork.Sign() == 0 {
+		t.Fatal("TipWork shared between snapshots")
+	}
+	tip := s.extend(base, 1, 0, "")
+	c := s.c.Snapshot()
+	if c.Epoch == a.Epoch || c.TipHash != tip || c.TipHeight != 4 || a.TipHeight != 3 {
+		t.Fatalf("after a new header: epoch %d→%d, tip %d (old view %d)", a.Epoch, c.Epoch, c.TipHeight, a.TipHeight)
+	}
+	s.c.MarkSynced(s.now)
+	if d := s.c.Snapshot(); d.Epoch == c.Epoch || !d.LastSync.Equal(s.now) || !c.LastSync.IsZero() {
+		t.Fatalf("after a sync mark: epoch %d→%d, last sync %v (old view %v)", c.Epoch, d.Epoch, d.LastSync, c.LastSync)
+	}
+	// a heavier fork from base replaces the tip; the earlier view still shows the chain it was taken at
+	fork := s.extend(base, 3, 0, "fork")
+	e := s.c.Snapshot()
+	if e.TipHash != fork || e.IsActive(tip, 4) || !c.IsActive(tip, 4) {
+		t.Fatalf("after a reorg: tip %s, old tip active in new view %v, in old view %v", e.TipHash, e.IsActive(tip, 4), c.IsActive(tip, 4))
+	}
+}
+
 // TestNetworkPolicy: C-btc-16. A testnet/signet/regtest chain under mainnet policy is refused as production
 // evidence, even when the proof verifies against it.
 func TestNetworkPolicy(t *testing.T) {

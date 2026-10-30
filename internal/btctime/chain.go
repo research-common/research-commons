@@ -105,6 +105,9 @@ type Chain struct {
 	byHeight  map[int64][]*node
 	lastSync  time.Time
 	epoch     uint64
+	// view is the last snapshot built, reused while the epoch is unchanged: building one walks every held
+	// header, which is the cost of a verify on a chain synced from genesis.
+	view *ChainView
 }
 
 // HeaderError is a header the chain refused, with Core's reject reason where there is one.
@@ -285,9 +288,22 @@ func medianTimePast(n *node) int64 {
 
 // Snapshot returns an immutable view of the chain now (§6.3). One batch of verifications uses one snapshot, so a
 // header from one view is never compared with another view's tip.
+//
+// A view is immutable, so one built at the current epoch is shared: every snapshot taken before the chain changes
+// returns the same tree (with its own copy of TipWork, the one exported pointer).
 func (c *Chain) Snapshot() *ChainView {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.view == nil || c.view.Epoch != c.epoch {
+		c.view = c.snapshot()
+	}
+	v := *c.view
+	v.TipWork = new(big.Int).Set(c.view.TipWork)
+	return &v
+}
+
+// snapshot builds a view of the chain now; the caller holds c.mu.
+func (c *Chain) snapshot() *ChainView {
 	v := &ChainView{
 		Network: c.p.Network, Provider: c.provider, Mode: ModeHeadersSPV, Bootstrap: c.bootstrap,
 		LastSync: c.lastSync, Epoch: c.epoch, Base: c.base,
