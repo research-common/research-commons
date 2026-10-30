@@ -198,7 +198,10 @@ func (p *parser) take(n int) ([]byte, error) {
 }
 
 // varuint reads the library's base-128 little-endian integer. The library sets no maximum; this reader refuses
-// one that does not fit 64 bits, which no conforming writer produces.
+// one that does not fit 64 bits, which no conforming writer produces. It also refuses a non-minimal encoding (a
+// final byte 00 after a continuation byte, such as 81 00 for 1): the library reads one, but its writer never
+// emits one, and accepting it would give one value two byte strings, so two siblings that the library merges
+// as the same operation and argument would differ here (§5.1, "varuint").
 func (p *parser) varuint() (uint64, error) {
 	start := p.pos
 	var v uint64
@@ -212,6 +215,9 @@ func (p *parser) varuint() (uint64, error) {
 		}
 		v |= uint64(c&0x7f) << shift
 		if c&0x80 == 0 {
+			if c == 0 && shift > 0 {
+				return 0, p.failAt(start, "non-minimal varuint (a final byte 00 after a continuation byte)")
+			}
 			return v, nil
 		}
 	}

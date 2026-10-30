@@ -117,7 +117,11 @@ func TestProofRefusals(t *testing.T) {
 	}{
 		{"bad magic", append([]byte{1}, good[1:]...), StateInvalidProof, "magic"},
 		{"major version 2", cat(HeaderMagic, []byte{0x02, opSHA256}, d, attBitcoin(1)), StateUnsupported, "major version 2"},
-		{"major version 1 as a two-byte varuint", cat(HeaderMagic, []byte{0x81, 0x00, opSHA256}, d, attBitcoin(1)), StateInvalidProof, "single byte"},
+		{"major version 1 as a two-byte varuint", cat(HeaderMagic, []byte{0x81, 0x00, opSHA256}, d, attBitcoin(1)), StateInvalidProof, "non-minimal varuint"},
+		{"major version 2 as a non-minimal varuint", cat(HeaderMagic, []byte{0x82, 0x80, 0x00, opSHA256}, d, attBitcoin(1)), StateInvalidProof, "non-minimal varuint"},
+		{"non-minimal varuint in an append length", otsFile(d, []byte{opAppend, 0x81, 0x00, 0x41}, attBitcoin(1)), StateInvalidProof, "non-minimal varuint"},
+		{"non-minimal varuint in a bitcoin height", otsFile(d, append(append([]byte{tagAttestation}, TagBitcoin[:]...), vbytes([]byte{0x87, 0x00})...)), StateInvalidProof, "non-minimal varuint"},
+		{"non-minimal zero", otsFile(d, append(append([]byte{tagAttestation}, TagBitcoin[:]...), vbytes([]byte{0x80, 0x00})...)), StateInvalidProof, "non-minimal varuint"},
 		{"file hash sha1", cat(HeaderMagic, []byte{0x01, opSHA1}, d[:20], attBitcoin(1)), StateInvalidProof, "file-hash operation 0x02"},
 		{"trailing bytes", append(append([]byte{}, good...), 0x00), StateInvalidProof, "trailing"},
 		{"truncated tree", good[:len(good)-1], StateInvalidProof, "truncated"},
