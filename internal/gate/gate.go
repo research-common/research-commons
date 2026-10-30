@@ -321,9 +321,7 @@ func Admit(gate string, pkg Package, held Held, pol *Policy, opt Options) (*Repo
 	refBlobs := map[string]bool{} // blobs some statement of the evaluated set names
 	pkgBlobs := map[string]bool{} // blobs this package adds and the gate admits
 	for _, line := range heldLines {
-		if st, err := wire.Read(line); err == nil {
-			addRefs(st, refBlobs)
-		}
+		addRefs(lineRefs(line), refBlobs)
 	}
 
 	// 2. Per-object checks that need nothing but the object and the policy.
@@ -443,7 +441,7 @@ func Admit(gate string, pkg Package, held Held, pol *Policy, opt Options) (*Repo
 	for _, i := range cands {
 		if r := &results[i]; r.Verdict == Admitted {
 			evaluated[r.ID] = r.st.Line()
-			addRefs(r.st, refBlobs)
+			addRefs(refsOf(r.st), refBlobs)
 		}
 	}
 
@@ -470,10 +468,16 @@ func Admit(gate string, pkg Package, held Held, pol *Policy, opt Options) (*Repo
 				r.label(LabelUnreferenced, "no statement in the evaluated set names it")
 			}
 		case KindStatement:
-			for _, d := range refsOf(r.st) {
+			// Availability labels come from typed references only: a digest an opaque body mentions pins the
+			// blob (above) but is not known to be content, so it is not reported as missing.
+			for _, d := range r.st.References() {
 				if reason, ok := pol.NotServed[d]; ok {
 					r.label(LabelNotHeldHere, notServedDetail(d, reason))
-				} else if !pkgBlobs[d] && !held.HasBlob(d) {
+				} else if pkgBlobs[d] || held.HasBlob(d) {
+					continue
+				} else if pol.ExternalOnly {
+					r.label(LabelNotHeldHere, d+" is not held here ("+inert(pol.Name)+" is external-only: it carries statements and no blob bytes)")
+				} else {
 					r.label(LabelUnavailable, "not held locally: "+d)
 				}
 			}
@@ -717,29 +721,31 @@ func gapText(g keylog.Gap) string {
 	return strings.Join(parts, ", ")
 }
 
-// refsOf lists the blobs a statement names as its content.
+// refsOf lists the blobs a statement references: for a statement this reader interprets (verified, valid),
+// every value the body schema types as a digest (wire.Statement.References: content, provenance, anchors.proof,
+// request logs, …); for one it cannot interpret (an unknown kind, an unsupported major, alg or crit), every
+// `sha256:<64 hex>` its line mentions (wire.ScanDigests), the rule store gc pins by, so a blob such a statement
+// names is never `unreferenced` here while gc keeps it.
 func refsOf(st *wire.Statement) []string {
-	if st == nil || !st.Verified || st.Status != wire.Valid || st.Body == nil {
+	if st == nil {
 		return nil
 	}
-	c, ok := st.Body.Get("content")
-	if !ok {
-		return nil
+	if st.Verified && st.Status == wire.Valid {
+		return st.References()
 	}
-	co, ok := c.(*canon.Object)
-	if !ok {
-		return nil
-	}
-	if d, ok := co.Get("digest"); ok {
-		if s, ok := d.(canon.String); ok {
-			return []string{string(s)}
-		}
-	}
-	return nil
+	return wire.ScanDigests(st.Line())
 }
 
-func addRefs(st *wire.Statement, into map[string]bool) {
-	for _, d := range refsOf(st) {
+// lineRefs is refsOf for a held line that may not read at all: a line wire.Read refuses is scanned.
+func lineRefs(line []byte) []string {
+	if st, err := wire.Read(line); err == nil {
+		return refsOf(st)
+	}
+	return wire.ScanDigests(line)
+}
+
+func addRefs(refs []string, into map[string]bool) {
+	for _, d := range refs {
 		into[d] = true
 	}
 }
