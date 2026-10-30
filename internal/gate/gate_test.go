@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/conformance"
@@ -602,5 +603,122 @@ func TestExitMapping(t *testing.T) {
 	rep.Results = append(rep.Results, Result{Verdict: Undecided})
 	if rep.Exit(false) != 3 {
 		t.Fatal()
+	}
+}
+
+// TestReferencesBeyondContent: the gate's referenced set is wire.Statement.References for a statement it
+// interprets, and the line scan (wire.ScanDigests, gc's rule) for one it cannot. An anchors statement admitted
+// with its proof blob leaves the proof referenced; without the blob it is unavailable, naming the proof digest.
+// An opaque statement (an unknown kind) naming a digest pins that blob too, without a missing-content label. On
+// an external-only hub the absent proof reads not held here (policy). Control: the same proof blob with no
+// statement naming it is unreferenced, so the boundary is the reference, not the blob.
+func TestReferencesBeyondContent(t *testing.T) {
+	w := newWorld(t)
+	proof := []byte("an ots proof")
+	anchor := w.sign("A", "anchors", obj("covered", strings.Repeat("ab", 32), "proof", blobDigest(proof), "proof_format", "ots-detached-v1"))
+	rep := mustAdmit(t, "hub check", Package{Objects: []Object{w.object(anchor), blobObject(proof)}}, MemHeld{}, nil, Options{})
+	if r := wantAdmitted(t, rep, BlobPath(blobDigest(proof))); r.HasLabel(LabelUnreferenced) {
+		t.Fatalf("proof blob: %v", r.Labels)
+	}
+	if r := wantAdmitted(t, rep, w.path(anchor)); len(r.Labels) != 0 {
+		t.Fatalf("anchor with its proof: %v", r.Labels)
+	}
+	// control: the blob alone is unreferenced
+	rep = mustAdmit(t, "hub check", Package{Objects: []Object{blobObject(proof)}}, MemHeld{}, nil, Options{})
+	if r := wantAdmitted(t, rep, BlobPath(blobDigest(proof))); !r.HasLabel(LabelUnreferenced) {
+		t.Fatalf("control: %v", r.Labels)
+	}
+	// held anchor, proof added later: referenced through the held line
+	rep = mustAdmit(t, "hub check", Package{Objects: []Object{blobObject(proof)}}, w.held(anchor), nil, Options{})
+	if r := wantAdmitted(t, rep, BlobPath(blobDigest(proof))); r.HasLabel(LabelUnreferenced) {
+		t.Fatalf("held anchor: %v", r.Labels)
+	}
+	// without the blob: unavailable, naming the proof's digest
+	rep = mustAdmit(t, "hub check", Package{Objects: []Object{w.object(anchor)}}, MemHeld{}, nil, Options{})
+	if r := wantAdmitted(t, rep, w.path(anchor)); !r.HasLabel(LabelUnavailable) || r.Labels[0].Detail != "not held locally: "+blobDigest(proof) {
+		t.Fatalf("anchor without proof: %v", r.Labels)
+	}
+	// external-only: not held here (policy), not unavailable
+	ext, err := ParseHubPolicy([]byte(`{"blobs":"external-only","policy":"rc-hub-policy/1"}`), "rev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rep = mustAdmit(t, "hub check", Package{Objects: []Object{w.object(anchor)}}, MemHeld{}, ext, Options{})
+	if r := wantAdmitted(t, rep, w.path(anchor)); !r.HasLabel(LabelNotHeldHere) || r.HasLabel(LabelUnavailable) || !strings.Contains(r.Labels[0].Detail, blobDigest(proof)) {
+		t.Fatalf("external-only: %v", r.Labels)
+	}
+	// an opaque statement naming a digest pins it, and is not labelled as missing content
+	named := []byte("named by an extension")
+	opaque := w.sign("B", "x_extension", obj("payload", blobDigest(named)))
+	rep = mustAdmit(t, "hub check", Package{Objects: []Object{w.object(opaque), blobObject(named)}}, MemHeld{}, nil, Options{})
+	if r := wantAdmitted(t, rep, w.path(opaque)); !r.HasLabel(LabelUnknownKind) || r.HasLabel(LabelUnavailable) {
+		t.Fatalf("opaque: %v", r.Labels)
+	}
+	if r := wantAdmitted(t, rep, BlobPath(blobDigest(named))); r.HasLabel(LabelUnreferenced) {
+		t.Fatalf("blob named by an opaque statement: %v", r.Labels)
+	}
+	rep = mustAdmit(t, "hub check", Package{Objects: []Object{w.object(opaque)}}, MemHeld{}, nil, Options{})
+	if r := wantAdmitted(t, rep, w.path(opaque)); r.HasLabel(LabelUnavailable) {
+		t.Fatalf("opaque without its blob: %v", r.Labels)
+	}
+}
+
+// TestGateAndGCAgree: one fixture set asked of both. The blobs the gate reports as referenced (not
+// `unreferenced`) are exactly the blobs store gc keeps as referenced, across content, provenance, an anchors
+// proof, an opaque statement and a blob nothing names (the control, which both release).
+func TestGateAndGCAgree(t *testing.T) {
+	w := newWorld(t)
+	blobs := map[string][]byte{}
+	b := func(n string) []byte { blobs[n] = []byte("agree " + n); return blobs[n] }
+	w.authored("A", b("content"), "provenance", canon.Value(obj("workflow", blobDigest(b("workflow")), "inputs", []string{blobDigest(b("input"))})))
+	w.sign("A", "anchors", obj("covered", strings.Repeat("ab", 32), "proof", blobDigest(b("proof")), "proof_format", "ots-detached-v1"))
+	w.sign("B", "x_extension", obj("payload", blobDigest(b("opaque"))))
+	b("orphan")
+
+	var objs []Object
+	for _, id := range sortedIDs(w.lines) {
+		objs = append(objs, w.object(id))
+	}
+	for _, x := range blobs {
+		objs = append(objs, blobObject(x))
+	}
+	rep := mustAdmit(t, "pull", Package{Objects: objs}, MemHeld{}, nil, Options{})
+	gateRefs := map[string]bool{}
+	for _, x := range blobs {
+		r := wantAdmitted(t, rep, BlobPath(blobDigest(x)))
+		gateRefs[blobDigest(x)] = !r.HasLabel(LabelUnreferenced)
+	}
+
+	s, err := store.Open(t.TempDir(), store.Options{NoSync: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Commit(s, rep); err != nil {
+		t.Fatal(err)
+	}
+	zero := time.Duration(0)
+	plan, err := s.GC(store.GCConfig{PerRun: &zero}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gcRefs := map[string]bool{}
+	for _, k := range plan.Kept {
+		gcRefs[string(k.Digest)] = strings.Contains(k.Why, "referenced by")
+	}
+	for _, c := range plan.Candidates {
+		gcRefs[string(c.Digest)] = false
+	}
+	for n, x := range blobs {
+		d := blobDigest(x)
+		g, ok := gcRefs[d]
+		if !ok {
+			t.Fatalf("gc does not list %s", n)
+		}
+		if g != gateRefs[d] {
+			t.Fatalf("%s: gate referenced=%v, gc referenced=%v", n, gateRefs[d], g)
+		}
+		if want := n != "orphan"; g != want {
+			t.Fatalf("%s: referenced=%v, want %v", n, g, want)
+		}
 	}
 }

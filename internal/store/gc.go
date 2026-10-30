@@ -5,8 +5,8 @@ package store
 // What pins a blob (gc never deletes it):
 //
 //   - an installed statement, of any kind or format major, other than a `holds`, whose stored line mentions
-//     its digest (found by scanning for `sha256:<64 hex>`, so a statement this reader cannot interpret pins
-//     too), and any file under statements/ or retained/ that does not read: kept, never interpreted;
+//     its digest (found by scanning for `sha256:<64 hex>` with wire.ScanDigests, the rule the gate applies to
+//     a statement it cannot interpret, so a statement this reader cannot interpret pins too), and any file under statements/ or retained/ that does not read: kept, never interpreted;
 //   - any journal record, pending or done, that names it (a record is in transit; gc never touches one);
 //   - a serving `holds`: the current `holds` of an operator key for that digest that is not withdrawn
 //     (GCConfig.Operators; with none configured every key's serving holds pins, which can only keep more).
@@ -25,7 +25,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -56,8 +55,6 @@ const (
 	GraceBelowFloor = "grace window below floor"
 	SigningRefused  = "signing refused"
 )
-
-var reDigestAny = regexp.MustCompile(`sha256:[0-9a-f]{64}`)
 
 // GCConfig configures one gc run.
 type GCConfig struct {
@@ -218,7 +215,7 @@ func (ri *refIndex) refresh() error {
 				return err
 			}
 			op := strings.TrimSuffix(e.Name(), ".json")
-			for _, m := range slices.Compact(slices.Sorted(slices.Values(reDigestAny.FindAllString(string(b), -1)))) {
+			for _, m := range wire.ScanDigests(b) {
 				ri.jpins[Digest(m)] = append(ri.jpins[Digest(m)], fmt.Sprintf("journal record %s (%s)", op, sub))
 			}
 		}
@@ -301,7 +298,7 @@ func (ri *refIndex) readFile(top, name string, b []byte) {
 			why = "statement " + name
 		}
 	}
-	for _, m := range slices.Compact(slices.Sorted(slices.Values(reDigestAny.FindAllString(string(b), -1)))) {
+	for _, m := range wire.ScanDigests(b) {
 		ri.pins[Digest(m)] = append(ri.pins[Digest(m)], why)
 	}
 }

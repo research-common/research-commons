@@ -405,7 +405,8 @@ func TestNotServed(t *testing.T) {
 }
 
 // TestExternalOnly: H-27. A hub with blobs external-only refuses an added blob under reader policy and
-// admits the statements (with holds naming external locations) of the same change.
+// admits the statements (with holds naming external locations) of the same change, labelled not held here
+// (policy).
 func TestExternalOnly(t *testing.T) {
 	h := newHub(t, `{"blobs":"external-only","policy":"rc-hub-policy/1"}`)
 	s := newSigner()
@@ -417,7 +418,10 @@ func TestExternalOnly(t *testing.T) {
 	h.commit("holds + blob")
 	res := h.check("main")
 	refusedAs(t, res, gate.BlobPath(dig(b)), refusal.Policy, gate.HubRules+": blobs")
-	if r := verdict(t, res, hp); r.Verdict != gate.Admitted || !r.HasLabel(gate.LabelUnavailable) {
+	// an external-only hub holds no bytes by its own policy: the content reads not held here (policy), never
+	// unavailable (not held locally)
+	if r := verdict(t, res, hp); r.Verdict != gate.Admitted || !r.HasLabel(gate.LabelNotHeldHere) || r.HasLabel(gate.LabelUnavailable) ||
+		!strings.Contains(r.Labels[0].Detail, dig(b)) || !strings.Contains(r.Labels[0].Detail, "external-only") {
 		t.Fatalf("%s %v", r.Verdict, r.Labels)
 	}
 }
