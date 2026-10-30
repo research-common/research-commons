@@ -422,6 +422,162 @@ func TestExternalOnly(t *testing.T) {
 	}
 }
 
+// TestControlPlaneMember: CLI-CONTRACT §2.2 "or a maintainer adds". A hub whose base policy lists
+// CITATION.cff, NOTICE and scripts/ in control_plane passes the full check with those files at the root, and a
+// change touching only them is not applied (control plane, H-33). Control: without the member the same files
+// are outside the data surface (H-31), in the full check and in the change. A change that adds the member to
+// the policy together with the files gets nothing from it: the policy is read at the base. The defaults stay.
+func TestControlPlaneMember(t *testing.T) {
+	extra := map[string][]byte{"CITATION.cff": []byte("cff-version: 1.2.0\n"), "NOTICE": []byte("notice\n"), "scripts/build.sh": []byte("#!/bin/sh\n")}
+	member := `{"control_plane":["CITATION.cff","NOTICE","scripts/"],"policy":"rc-hub-policy/1"}`
+	paths := []string{"CITATION.cff", "NOTICE", "scripts/build.sh"}
+
+	with := newHub(t, member)
+	for p, b := range extra {
+		with.write(p, b)
+	}
+	with.commit("hub files")
+	full := with.check("")
+	for _, p := range paths {
+		if r := verdict(t, full, p); r.Verdict != gate.NotApplied || !r.HasLabel(gate.LabelControlPlane) {
+			t.Fatalf("full check, %s: %s %v", p, r.Verdict, r.Refusal)
+		}
+	}
+	if full.Exit(false) != 0 {
+		t.Fatal(full.Render())
+	}
+	with.branch("edit")
+	for p, b := range extra {
+		with.write(p, append(b, 'x'))
+	}
+	with.commit("edit hub files")
+	res := with.check("main")
+	for _, p := range paths {
+		if r := verdict(t, res, p); r.Verdict != gate.NotApplied || !r.HasLabel(gate.LabelControlPlane) {
+			t.Fatalf("change, %s: %s %v", p, r.Verdict, r.Refusal)
+		}
+	}
+	if res.Exit(false) != 0 {
+		t.Fatal(res.Render())
+	}
+	// the defaults are still control plane with the member present
+	with.write("docs/x.md", []byte("x"))
+	with.commit("docs too")
+	if r := verdict(t, with.check("main"), "docs/x.md"); r.Verdict != gate.NotApplied {
+		t.Fatalf("docs/: %s", r.Verdict)
+	}
+
+	// control: no member, same tree
+	without := newHub(t, defaultPolicy)
+	for p, b := range extra {
+		without.write(p, b)
+	}
+	without.commit("hub files")
+	full = without.check("")
+	for _, p := range paths {
+		refusedAs(t, full, p, refusal.Intrinsic, gate.OutsideSurface)
+	}
+	without.branch("edit")
+	for p, b := range extra {
+		without.write(p, append(b, 'x'))
+	}
+	without.commit("edit hub files")
+	res = without.check("main")
+	for _, p := range paths {
+		refusedAs(t, res, p, refusal.Intrinsic, gate.OutsideSurface)
+	}
+
+	// a change that adds the member in the same change gets no benefit: the policy is read at the base
+	self := newHub(t, defaultPolicy)
+	self.branch("pr")
+	self.write(PolicyFile, []byte(member))
+	for p, b := range extra {
+		self.write(p, b)
+	}
+	self.commit("grant myself a control plane")
+	res = self.check("main")
+	for _, p := range paths {
+		refusedAs(t, res, p, refusal.Intrinsic, gate.OutsideSurface)
+	}
+	if r := verdict(t, res, PolicyFile); r.Verdict != gate.NotApplied {
+		t.Fatalf("policy edit: %s", r.Verdict)
+	}
+	if res.PolicyRev != res.Base {
+		t.Fatal("policy not read at the base")
+	}
+}
+
+// TestControlPlaneMemberInvalid: every invalid control_plane entry class stops the check before any work
+// (did not start, exit 2) and names the entry. Control: the valid spelling of each shape parses, and the
+// member is part of what the policy digest covers.
+func TestControlPlaneMemberInvalid(t *testing.T) {
+	pol := func(entries ...string) string {
+		var q []string
+		for _, e := range entries {
+			q = append(q, string(canon.Encode(canon.String(e))))
+		}
+		return `{"control_plane":[` + strings.Join(q, ",") + `],"policy":"rc-hub-policy/1"}`
+	}
+	for _, c := range []struct{ entry, why string }{
+		{"", "is empty"},
+		{"/etc/x", "absolute"},
+		{"a\\b", "backslash"},
+		{"a\x00b", "NUL"},
+		{"../x", "`..`"},
+		{"a/../b", "`..`"},
+		{"./", "`.` segment"},
+		{"a//b", "empty or `.` segment"},
+		{"blobs", "data surface"},
+		{"blobs/", "data surface"},
+		{"blobs/sha256/", "data surface"},
+		{"statements", "data surface"},
+		{"statements/0xab/", "data surface"},
+		{"rc-store", "layout marker"},
+		{"rc-store/", "layout marker"},
+	} {
+		_, err := gate.ParseHubPolicy([]byte(pol(c.entry)), "rev")
+		d := didNotStart(t, err)
+		if !strings.Contains(d.Detail, "control_plane[0]") || !strings.Contains(d.Detail, c.why) {
+			t.Fatalf("%q: %s", c.entry, d.Detail)
+		}
+	}
+	for _, bad := range []string{
+		`{"control_plane":"NOTICE","policy":"rc-hub-policy/1"}`,
+		`{"control_plane":[1],"policy":"rc-hub-policy/1"}`,
+		pol("NOTICE", "NOTICE"),
+	} {
+		didNotStart(t, func() error { _, err := gate.ParseHubPolicy([]byte(bad), "rev"); return err }())
+	}
+	many := make([]string, gate.MaxControlPlane+1)
+	for i := range many {
+		many[i] = fmt.Sprintf("f%03d", i)
+	}
+	if d := didNotStart(t, func() error { _, err := gate.ParseHubPolicy([]byte(pol(many...)), "rev"); return err }()); !strings.Contains(d.Detail, "more than") {
+		t.Fatal(d.Detail)
+	}
+	// controls: the valid shapes parse (any order; a default repeated is merged, not refused); the limit is inclusive
+	p, err := gate.ParseHubPolicy([]byte(pol("scripts/", "NOTICE", "a/b/CODEOWNERS", "statementsX/", "blobs.md", "docs/")), "rev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"scripts/", "NOTICE", "a/b/CODEOWNERS", "statementsX/", "blobs.md", "README.md", "docs/"} {
+		if !slices.Contains(p.ControlPlane, want) {
+			t.Fatalf("%s missing from %v", want, p.ControlPlane)
+		}
+	}
+	if _, err := gate.ParseHubPolicy([]byte(pol(many[:gate.MaxControlPlane]...)), "rev"); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := gate.ParseHubPolicy([]byte(pol("NOTICE")), "rev")
+	b, _ := gate.ParseHubPolicy([]byte(pol("NOTICE", "CITATION.cff")), "rev")
+	if a.Digest == b.Digest {
+		t.Fatal("the policy digest does not cover control_plane")
+	}
+	if d := gate.DefaultPolicy(); len(d.ControlPlane) != 0 {
+		t.Fatalf("the local reader's default policy has a control plane: %v", d.ControlPlane)
+	}
+}
+
 // fakeSegments is the reader's segment re-check by member key.
 type fakeSegments map[string]resolve.SegmentState
 
