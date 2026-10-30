@@ -388,7 +388,7 @@ func TestHeldObjectAsksHeld(t *testing.T) {
 			t.Fatalf("%s: %s %v %v", p, r.Verdict, r.Labels, r.Refusal)
 		}
 	}
-	if res.Exit(false) != 0 {
+	if res.Exit() != 0 {
 		t.Fatal(res.Render())
 	}
 	// replacing the corrupt blob with its right bytes: an addition, admitted
@@ -411,7 +411,7 @@ func TestHeldObjectAsksHeld(t *testing.T) {
 	h.git("update-index", "--chmod=+x", gate.BlobPath(dig(good)))
 	h.git("commit", "-q", "-m", "chmod")
 	res = h.check("main")
-	if _, ok := res.Report.Result(gate.BlobPath(dig(good))); ok || res.Exit(false) != 0 {
+	if _, ok := res.Report.Result(gate.BlobPath(dig(good))); ok || res.Exit() != 0 {
 		t.Fatalf("chmod-only change judged:\n%s", res.Render())
 	}
 
@@ -538,7 +538,7 @@ func TestControlPlaneMember(t *testing.T) {
 			t.Fatalf("full check, %s: %s %v", p, r.Verdict, r.Refusal)
 		}
 	}
-	if full.Exit(false) != 0 {
+	if full.Exit() != 0 {
 		t.Fatal(full.Render())
 	}
 	with.branch("edit")
@@ -552,7 +552,7 @@ func TestControlPlaneMember(t *testing.T) {
 			t.Fatalf("change, %s: %s %v", p, r.Verdict, r.Refusal)
 		}
 	}
-	if res.Exit(false) != 0 {
+	if res.Exit() != 0 {
 		t.Fatal(res.Render())
 	}
 	// the defaults are still control plane with the member present
@@ -794,7 +794,7 @@ func TestPrematureFreezeShippedTool(t *testing.T) {
 		r := verdict(t, res, ep)
 		want := "unchecked: frozen_before " + tc.frozen + " (declared) · members' finality unchecked; " +
 			"this tool version ships no finality re-check for series segments, so with series.refuse_premature_freeze on every series edition is could not check until a re-check ships"
-		if r.Verdict != gate.Undecided || res.Exit(false) != 3 || len(r.Labels) != 1 || r.Labels[0].Token != gate.LabelSeriesUnknown || r.Labels[0].Detail != want {
+		if r.Verdict != gate.Undecided || res.Exit() != 3 || len(r.Labels) != 1 || r.Labels[0].Token != gate.LabelSeriesUnknown || r.Labels[0].Detail != want {
 			t.Fatalf("%s: %s %v\n%s", tc.name, r.Verdict, r.Labels, res.Render())
 		}
 		if r.Next != gate.SeriesNoRecheckNext || !strings.Contains(r.Next, "no finality re-check ships") {
