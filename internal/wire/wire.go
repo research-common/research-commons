@@ -79,6 +79,9 @@ type Statement struct {
 	// Unpinned names the referent fields an observed statement's class requires and the statement lacks. Such
 	// a statement is valid and admitted; its referent status reads unpinned (§5, claims-model note §5.3.1).
 	Unpinned []string
+	// Actor is the candidate rc/2 signed identity context (identity.go), set only by IdentityReader on a
+	// verified rc/2 line that carries one. It is a claim to be evaluated, never authority. Read never sets it.
+	Actor *Actor
 
 	env *canon.Object // the envelope without sig
 }
