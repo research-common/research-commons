@@ -2,6 +2,7 @@ package wire
 
 import (
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -31,10 +32,15 @@ var (
 	reToken = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 )
 
-// rule checks one value at path. ctx collects unpinned referent fields.
+// rule checks one value at path. ctx collects unpinned referent fields and the values typed as digests.
 type rule func(v canon.Value, path string, ctx *schemaCtx) error
 
-type schemaCtx struct{ unpinned []string }
+// schemaCtx is what one body check collects besides its verdict: the unpinned referent fields, and every value
+// the schema typed with digest() (the blobs the body references; Statement.References).
+type schemaCtx struct {
+	unpinned []string
+	refs     []string
+}
 
 type field struct {
 	name string
@@ -66,8 +72,22 @@ func pattern(re *regexp.Regexp, what string) rule {
 	}
 }
 
-func digest() rule { return pattern(reDigest, "a content digest (sha256: + 64 lowercase hex)") }
-func id() rule     { return pattern(reID, "a statement id (64 lowercase hex)") }
+// digest is the one rule for a value that names a blob. It records every value it accepts in ctx.refs, so the
+// references of a body are exactly the values this schema types as digests (Statement.References): a field
+// added to the tables with digest() is a reference with no second list to update.
+func digest() rule {
+	check := pattern(reDigest, "a content digest (sha256: + 64 lowercase hex)")
+	return func(v canon.Value, p string, ctx *schemaCtx) error {
+		if err := check(v, p, ctx); err != nil {
+			return err
+		}
+		if ctx != nil {
+			ctx.refs = append(ctx.refs, string(v.(canon.String)))
+		}
+		return nil
+	}
+}
+func id() rule { return pattern(reID, "a statement id (64 lowercase hex)") }
 func key() rule {
 	return pattern(reKey, "a key (ed25519: + 64 lowercase hex, or 0x + 40 lowercase hex)")
 }
@@ -360,28 +380,54 @@ var (
 // stored and grants nothing, so its body is not interpreted. unpinned lists the class-required referent fields
 // an observed lacks.
 func checkBody(kind string, body *canon.Object) (known bool, unpinned []string, err error) {
+	known, ctx, err := bodySchema(kind, body)
+	return known, ctx.unpinned, err
+}
+
+// bodySchema is checkBody with everything the check collected, the body's typed references included.
+func bodySchema(kind string, body *canon.Object) (bool, *schemaCtx, error) {
 	ctx := &schemaCtx{}
 	if kind == "observed" {
-		err := checkObserved(body, ctx)
-		return true, ctx.unpinned, err
+		return true, ctx, checkObserved(body, ctx)
 	}
 	fields, ok := kinds[kind]
 	if !ok {
-		return false, nil, nil
+		return false, ctx, nil
 	}
 	if err := checkFields(body, "body", ctx, fields); err != nil {
-		return true, nil, err
+		return true, ctx, err
 	}
 	if kind == "genesis" {
-		return true, nil, satisfiable(body, "body")
+		return true, ctx, satisfiable(body, "body")
 	}
 	if kind == "holds" {
 		_, w := body.Get("withdrawn")
 		if _, l := body.Get("locations"); w && l {
-			return true, nil, bad("body.locations", "is present with withdrawn: a withdrawal serves nothing")
+			return true, ctx, bad("body.locations", "is present with withdrawn: a withdrawal serves nothing")
 		}
 	}
-	return true, nil, nil
+	return true, ctx, nil
+}
+
+// sortedRefs is a reference list sorted and without repeats.
+func sortedRefs(refs []string) []string {
+	if len(refs) == 0 {
+		return nil
+	}
+	out := slices.Clone(refs)
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
+// reDigestAny finds a digest anywhere in bytes (not anchored).
+var reDigestAny = regexp.MustCompile(`sha256:[0-9a-f]{64}`)
+
+// ScanDigests returns every `sha256:<64 hex>` in b, sorted and without repeats. It is the reference rule for
+// bytes this reader does not interpret (an opaque body, a file that does not read, a journal record): any
+// digest the bytes mention counts, which can only keep more. Store gc and the gate both use it, so the two
+// agree on what pins a blob.
+func ScanDigests(b []byte) []string {
+	return sortedRefs(reDigestAny.FindAllString(string(b), -1))
 }
 
 // satisfiable refuses a genesis whose rule no set of its controllers can ever meet: no controllers, or a
@@ -442,12 +488,14 @@ func checkReferent(ref *canon.Object, class string, ctx *schemaCtx) error {
 			sub := &schemaCtx{}
 			if err := f.r(fv, p+"."+f.name, sub); err != nil {
 				// A nested object missing a required member is unpinned too; a wrong type is malformed.
-				if m, ok := missingOnly(fv, f, p); ok {
+				if m, refs, ok := missingOnly(fv, f, p); ok {
 					ctx.unpinned = append(ctx.unpinned, m...)
+					ctx.refs = append(ctx.refs, refs...)
 					continue
 				}
 				return err
 			}
+			ctx.refs = append(ctx.refs, sub.refs...)
 		}
 		return nil
 	}
@@ -476,10 +524,10 @@ func checkReferent(ref *canon.Object, class string, ctx *schemaCtx) error {
 
 // missingOnly re-checks a nested referent object with its required members relaxed. If that passes, the only
 // faults were absent members, which are reported as unpinned paths (C-core-30, C-core-32).
-func missingOnly(v canon.Value, f field, p string) ([]string, bool) {
+func missingOnly(v canon.Value, f field, p string) ([]string, []string, bool) {
 	o, ok := v.(*canon.Object)
 	if !ok {
-		return nil, false
+		return nil, nil, false
 	}
 	var sub []field
 	switch f.name {
@@ -490,18 +538,19 @@ func missingOnly(v canon.Value, f field, p string) ([]string, bool) {
 	case "requests":
 		sub = []field{req("digest", digest()), req("format", text()), req("count", integer())}
 	default:
-		return nil, false
+		return nil, nil, false
 	}
 	var missing []string
+	ctx := &schemaCtx{}
 	for _, s := range sub {
 		fv, present := o.Get(s.name)
 		if !present {
 			missing = append(missing, "referent."+f.name+"."+s.name)
 			continue
 		}
-		if s.r(fv, p, &schemaCtx{}) != nil {
-			return nil, false
+		if s.r(fv, p, ctx) != nil {
+			return nil, nil, false
 		}
 	}
-	return missing, len(missing) > 0
+	return missing, ctx.refs, len(missing) > 0
 }
