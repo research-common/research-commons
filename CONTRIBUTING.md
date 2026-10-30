@@ -73,6 +73,10 @@ as above. The workflow has read-only permissions, uses no secrets, and pins ever
 - `go vet ./...` and `go test ./...` on Linux and macOS, with the Go version taken from `go.mod`.
 - `go test ./...` on Linux with `TMPDIR` behind a symlink, so `t.TempDir()` is not a realpath
   (the macOS situation: `/var` is a symlink to `/private/var`). Path-confinement code must hold up here.
+- `go test -race` on Linux, on the packages that start goroutines in code or tests (a `go` statement or
+  `WaitGroup.Go`; the job computes the list). The detector only sees races that happen while tests run, and on
+  the signature-heavy packages it is 10-20x slower, so the whole module is not run under it. If you add
+  concurrency, add a test that exercises it concurrently, and the package joins the job.
 - `CGO_ENABLED=0 go build ./...`, the static build.
 
 Run the same commands locally before pushing; they are listed in `internal/README.md`.

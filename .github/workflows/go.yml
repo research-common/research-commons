@@ -57,6 +57,30 @@ jobs:
           test "$(readlink "$link")" = "$real"
           TMPDIR="$link" go test ./...
 
+  test-race:
+    # The race detector on the packages that start goroutines (in code or tests): it reports only races
+    # that happen while tests run, so a package whose tests never run code concurrently gains nothing,
+    # and on the signature-heavy packages it costs 10-20x (over 10 minutes per package). The list is
+    # computed, so a package that starts a goroutine joins the job without a workflow edit.
+    name: test -race (packages that start goroutines)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: go test -race
+        run: |
+          # a go statement, or sync.WaitGroup.Go
+          pkgs="$(grep -rlE --include='*.go' '(^|[^A-Za-z_.])go (func|[A-Za-z_][A-Za-z0-9_.]*\()|\.Go\(func' . \
+            | xargs -r -n1 dirname | sort -u)"
+          if [ -z "$pkgs" ]; then echo "no package starts a goroutine"; exit 0; fi
+          echo "$pkgs"
+          go test -race $pkgs
+
   static-build:
     name: static build (CGO_ENABLED=0)
     runs-on: ubuntu-latest
