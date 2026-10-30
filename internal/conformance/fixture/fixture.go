@@ -26,6 +26,10 @@ type Statement struct {
 	Blob   string
 	Prov   *Provenance
 	Fields map[string]string
+	// Label names the statement across shrinking and renumbering ("s0", "s1", ...); Of names the earlier
+	// statement (by Label) that corroborates, retracts, refutes or an edition entry refers to. A label that no
+	// longer exists (a shrunk fixture) is a reference to a statement the reader does not hold.
+	Label, Of string
 	// Time is the signer-asserted ts as seconds after a fixed epoch.
 	Time int
 }
@@ -46,10 +50,19 @@ type Fixture struct {
 type Options struct {
 	Keys, Blobs, MaxStatements int
 	Kinds                      []string
+	// Extended draws the fields the later views read: an observation's class and a corroboration's verdict,
+	// and the Of reference of the kinds that name another statement. It consumes randomness only for the kinds
+	// it adds, so the fixtures of Default are unchanged by this option existing.
+	Extended bool
 }
 
 // Default draws from three keys, four blobs and the kinds the wire layer reads today.
 var Default = Options{Keys: 3, Blobs: 4, MaxStatements: 12, Kinds: []string{"authored", "holds", "describes", "observed"}}
+
+// Extended draws every statement kind the resolver reads: the Default kinds plus editions of one resource,
+// corroborations, retractions and refutations that name an earlier statement, anchors and reproductions.
+var Extended = Options{Keys: 4, Blobs: 4, MaxStatements: 12, Extended: true,
+	Kinds: []string{"authored", "holds", "describes", "observed", "observed", "edition", "corroborates", "retracts", "refutes", "anchors", "reproduced"}}
 
 // Gen draws one fixture from seed. Each signer's statements carry consecutive seq from 0, so every fixture
 // is a set of well-formed per-key logs; a property that needs gaps or forks builds them from this.
@@ -66,12 +79,28 @@ func Gen(seed uint64, o Options) Fixture {
 			Seq:    seq[signer],
 			Blob:   blob(r, o),
 			Time:   seq[signer]*60 + r.IntN(60),
+			Label:  fmt.Sprint("s", i),
 		}
 		seq[signer]++
+		if o.Extended {
+			switch s.Kind {
+			case "corroborates", "retracts", "refutes", "reproduced", "edition":
+				if i > 0 {
+					s.Of = fmt.Sprint("s", r.IntN(i))
+				}
+			}
+			switch s.Kind {
+			case "corroborates":
+				s.Fields = map[string]string{"verdict": []string{"supports", "contradicts", "inconclusive"}[r.IntN(3)]}
+			case "observed":
+				s.Fields = map[string]string{"class": []string{"exact-bytes", "source", "none-yet"}[r.IntN(3)],
+					"licence": []string{"CC0-1.0", "MIT"}[r.IntN(2)]}
+			}
+		}
 		if s.Kind == "authored" && r.IntN(2) == 0 {
 			s.Prov = &Provenance{Workflow: "W", Inputs: []string{blob(r, o)}}
 		}
-		if s.Kind == "authored" || s.Kind == "observed" {
+		if s.Fields == nil && (s.Kind == "authored" || s.Kind == "observed") {
 			s.Fields = map[string]string{"licence": []string{"CC0-1.0", "CC-BY-4.0", "MIT"}[r.IntN(3)]}
 		}
 		f.Statements = append(f.Statements, s)
@@ -96,6 +125,12 @@ func (f Fixture) JSON() string {
 		o := obj("kind", canon.String(s.Kind), "signer", canon.String(s.Signer), "seq", canon.Int(s.Seq), "time", canon.Int(s.Time))
 		if s.Blob != "" {
 			set(o, "blob", canon.String(s.Blob))
+		}
+		if s.Label != "" {
+			set(o, "label", canon.String(s.Label))
+		}
+		if s.Of != "" {
+			set(o, "of", canon.String(s.Of))
 		}
 		if s.Prov != nil {
 			in := canon.Array{}

@@ -189,7 +189,11 @@ type Artifact struct {
 	Grade, Step Grade
 	// RestsOn summarises the leaves under the chain (§7, scoped summary).
 	RestsOn []string
-	Explain []string
+	// Selection is the reader's authorship-declaration selection for the blob (policy.go); nil without one.
+	Selection *Selected
+	Explain   []string
+	// PreReg is the pre-registration disclosure (prereg.go); nil when its fields have no default.
+	PreReg *PreRegistration
 }
 
 // Artifact resolves the view of the blob with content digest d ("sha256:" + hex).
@@ -256,6 +260,8 @@ func (r *Resolver) authorship(d string) *Artifact {
 		r.priority(a)
 	}
 	a.Fields = r.fields(a)
+	r.selectDefaults(a) // the reader's authorship-declaration selection, if any (policy.go)
+	a.PreReg = r.artifactPreReg(a)
 	a.Explain = append(a.Explain, forked(a)...)
 	a.Holders = r.holders(d)
 	a.Held = r.held(a)
@@ -524,6 +530,9 @@ func (a *Artifact) VerifyExit() (int, []string) {
 			why = append(why, "field "+f.Name+": contested")
 		}
 	}
+	if a.Selection != nil && !a.Selection.Met() {
+		why = append(why, "reader's authorship selection: "+a.Selection.State)
+	}
 	if a.Group != nil {
 		switch a.Step.Why {
 		case DivergedToken:
@@ -602,6 +611,14 @@ func (a *Artifact) Render() string {
 		fmt.Fprintf(&b, "  authored %s by %s not counted: %s\n", keylog.Short(n.Statement), shortKey(n.Signer), n.Why)
 	}
 	for _, f := range a.Fields {
+		switch {
+		case f.Name == "pre_registration" && a.PreReg != nil:
+			fmt.Fprintf(&b, "  %s: %s\n", f.Name, a.PreReg.Display)
+			for _, x := range a.PreReg.Explain {
+				fmt.Fprintf(&b, "    %s\n", x)
+			}
+			continue
+		}
 		switch f.State {
 		case FieldAbsent:
 			if !slices.Contains(Disclosures, f.Name) && len(f.Rivals) == 0 {

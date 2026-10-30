@@ -14,6 +14,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -83,7 +84,22 @@ type Statement struct {
 	// verified rc/2 line that carries one. It is a claim to be evaluated, never authority. Read never sets it.
 	Actor *Actor
 
-	env *canon.Object // the envelope without sig
+	env  *canon.Object // the envelope without sig
+	refs []string      // the body's typed references, set when the body schema ran and passed
+}
+
+// References returns the blobs the statement's body references: every value the body schema (§5) types as a
+// digest, at any depth (content.digest, provenance.workflow and inputs, anchors.proof, refutes.evidence,
+// comparator, report, members[].content, a source referent's response_digest or requests.digest, …), sorted
+// and without repeats. It is computed by the schema check itself, so it lists exactly the fields the schema
+// tables type with digest(). It returns nil for a statement this reader did not interpret (not verified, not
+// Valid: an unknown kind, an unsupported major, alg or crit): such a body is opaque, and a caller that needs
+// its references falls back to ScanDigests over the stored line.
+func (s *Statement) References() []string {
+	if s == nil || !s.Verified || s.Status != Valid {
+		return nil
+	}
+	return slices.Clone(s.refs)
 }
 
 // Line returns the canonical stored form: the envelope with the canonical sig, JCS-encoded, no newline.
@@ -290,14 +306,14 @@ func (r *Reader) fromEnvelope(full *canon.Object) (*Statement, error) {
 	// so its body is not read.
 	supported := r.supports(s.Crit)
 	if supported {
-		known, unpinned, err := checkBody(s.Kind, body)
+		known, ctx, err := bodySchema(s.Kind, body)
 		if err != nil {
 			return nil, err
 		}
 		if err := checkBodyTimes(s.Kind, body); err != nil {
 			return nil, err
 		}
-		s.Unpinned = unpinned
+		s.Unpinned, s.refs = ctx.unpinned, sortedRefs(ctx.refs)
 		if !known {
 			s.Status, s.Why = UnknownKind, s.Kind
 		}

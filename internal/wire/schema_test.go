@@ -1,6 +1,8 @@
 package wire
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"slices"
 	"strings"
 	"testing"
@@ -327,5 +329,128 @@ func TestRevokeReasonToken(t *testing.T) {
 		if st, err := readBody(t, k, setField(minimal(k), "effective", s("not even a time"))); err != nil || st.Status != Valid {
 			t.Fatalf("%s with a legacy effective: %v", k, err)
 		}
+	}
+}
+
+// dg is a distinct digest per name, for reference tests.
+func dg(n string) string {
+	h := sha256.Sum256([]byte("ref " + n))
+	return "sha256:" + hex.EncodeToString(h[:])
+}
+
+// TestReferences: Statement.References lists every value the body schema types as a digest, at every depth
+// the brief of the hub gate names, sorted and without repeats, and nothing else. Each fixture puts a distinct
+// digest in every typed digest field it carries; the boundary is shown by the control beside it: the same
+// digest in an unknown (untyped) field is not a typed reference, while ScanDigests over the line finds it.
+func TestReferences(t *testing.T) {
+	c := func(n string) *canon.Object { return body("digest", dg(n), "size", 1) }
+	prov := body("workflow", dg("workflow"), "inputs", arr(s(dg("in1")), s(dg("in2"))), "environment", body("image_digest", dg("image")))
+	cases := []struct {
+		kind string
+		b    *canon.Object
+		want []string
+	}{
+		{"authored", body("content", c("content"), "type", "dataset", "provenance", prov, "supersedes", dg("sup"), "extends", dg("ext"),
+			"comparator", dg("cmp")), []string{"content", "workflow", "in1", "in2", "image", "sup", "ext", "cmp"}},
+		{"holds", body("content", c("held")), []string{"held"}},
+		{"describes", body("about", body("content", dg("about")), "links", arr(body("content", dg("link"), "rel", "r"), body("url", "x", "rel", "r"))),
+			[]string{"about", "link"}},
+		{"reproduced", body("of", tID, "result", "match", "content", c("rc"), "provenance", prov, "comparator", dg("cmp"), "report", dg("rep")),
+			[]string{"rc", "workflow", "in1", "in2", "image", "cmp", "rep"}},
+		{"refutes", body("of", tID, "evidence", dg("ev")), []string{"ev"}},
+		{"anchors", body("covered", tID, "proof", dg("proof"), "proof_format", "ots-detached-v1"), []string{"proof"}},
+		{"edition", body("resource", tID, "predecessors", arr(s(tID)), "contents", body("schema", dg("schema"),
+			"members", arr(body("content", dg("m1"), "role", "x"), body("statement", tID2, "role", "y")))), []string{"schema", "m1"}},
+		{"submit", body("task", tID, "edition", tID2, "result", dg("result")), []string{"result"}},
+		{"decide", body("task", tID, "edition", tID2, "submissions", arr(s(tID)), "verdict", "accept", "evaluations", arr(s(dg("e1")), s(dg("e2")))),
+			[]string{"e1", "e2"}},
+		{"observed", body("content", c("obs"), "class", "source", "capture", body("at", tTS, "evidence", "self-asserted"),
+			"referent", body("endpoint", "e", "parameters", body(), "response_digest", dg("resp"))), []string{"obs", "resp"}},
+		{"observed", body("content", c("obs"), "class", "source", "capture", body("at", tTS, "evidence", "self-asserted"),
+			"referent", body("requests", body("digest", dg("reqlog"), "format", "f", "count", 2))), []string{"obs", "reqlog"}},
+		// an unpinned batch referent still names its request log
+		{"observed", body("content", c("obs"), "class", "source", "capture", body("at", tTS, "evidence", "self-asserted"),
+			"referent", body("requests", body("digest", dg("reqlog"), "format", "f"))), []string{"obs", "reqlog"}},
+		{"observed", body("content", c("obs"), "class", "method", "capture", body("at", tTS, "evidence", "self-asserted"),
+			"referent", body("method_edition", tID, "environment", body("image_digest", dg("img"), "platform", "p", "harness_commit", strings.Repeat("a", 40)),
+				"system", body(), "inputs", arr(s(dg("mi"))), "window", body("from", tTS, "to", tTS))), []string{"obs", "img", "mi"}},
+		// a repeated digest is listed once
+		{"authored", body("content", c("same"), "type", "dataset", "supersedes", dg("same")), []string{"same"}},
+		{"retracts", body("of", tID), nil},
+	}
+	for _, tc := range cases {
+		st, err := readBody(t, tc.kind, tc.b)
+		if err != nil || st.Status != Valid {
+			t.Fatalf("%s: %v %v", tc.kind, err, st)
+		}
+		var want []string
+		for _, n := range tc.want {
+			want = append(want, dg(n))
+		}
+		slices.Sort(want)
+		want = slices.Compact(want)
+		if got := st.References(); !slices.Equal(got, want) {
+			t.Fatalf("%s: references %v, want %v (%v)", tc.kind, got, want, tc.want)
+		}
+		// every digest in these bodies sits in a typed field: the typed list equals the scan of the line
+		if got := ScanDigests(st.Line()); !slices.Equal(got, want) {
+			t.Fatalf("%s: scan %v, typed %v", tc.kind, got, want)
+		}
+		// control: the same body plus an untyped field naming another digest; the scan sees it, References does not
+		u, err := readBody(t, tc.kind, setField(tc.b, "x_note", s(dg("untyped"))))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if slices.Contains(u.References(), dg("untyped")) || !slices.Contains(ScanDigests(u.Line()), dg("untyped")) {
+			t.Fatalf("%s: untyped field: references %v", tc.kind, u.References())
+		}
+	}
+	// an unknown kind is not interpreted: no typed references (a caller falls back to ScanDigests)
+	st, err := readBody(t, "x_custom", body("content", c("opaque")))
+	if err != nil || st.Status != UnknownKind || st.References() != nil || !slices.Contains(ScanDigests(st.Line()), dg("opaque")) {
+		t.Fatalf("%v %v", err, st)
+	}
+}
+
+// TestReferencesCoverSchema: References is derived from the schema tables (the digest() rule records what it
+// accepts), so no hand list can fall behind them. This walks the tables and requires every digest() field to
+// show up in some body's References: if a field were checked by a rule that bypasses digest(), or a new
+// digest() field were reachable only through code that drops the collected references, this fails.
+func TestReferencesCoverSchema(t *testing.T) {
+	probe := canon.String(dg("probe"))
+	paths := 0
+	// The tables are closures, so walk them by probing: for each kind and each top-level field, set the field
+	// to a probe digest (or a list of one); where the probe validates and an ordinary string does not, the
+	// schema typed that position as digest(), and the probe must be a reference. Nested digest positions are
+	// pinned field by field in TestReferences.
+	for _, kind := range allKinds() {
+		base := minimal(kind)
+		var fs []field
+		if kind == "observed" {
+			fs = with(disclosures, req("content", contentObj), opt("finality", finalityObj))
+		} else {
+			fs = kinds[kind]
+		}
+		valid := func(b *canon.Object) (*Statement, bool) {
+			st, err := readBody(t, kind, b)
+			return st, err == nil && st.Status == Valid
+		}
+		for _, f := range fs {
+			for _, v := range [][2]canon.Value{{probe, s("not a digest")}, {arr(probe), arr(s("not a digest"))}} {
+				// typed as a digest: the probe validates there and another string does not
+				st, ok := valid(setField(base, f.name, v[0]))
+				if _, other := valid(setField(base, f.name, v[1])); !ok || other {
+					continue
+				}
+				paths++
+				if !slices.Contains(st.References(), string(probe)) {
+					t.Fatalf("%s.%s validates as a digest but is not a reference", kind, f.name)
+				}
+			}
+		}
+	}
+	// supersedes, extends, comparator (×2 kinds), refutes.evidence, anchors.proof, submit.result, decide.evaluations
+	if paths < 8 {
+		t.Fatalf("only %d top-level digest fields found: the probe proves nothing", paths)
 	}
 }

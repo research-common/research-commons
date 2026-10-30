@@ -204,7 +204,7 @@ func TestCommit(t *testing.T) {
 // operation (crash at or after it); Status before reopening reports the operation as committed exactly when
 // it is; a statement in a pending record is never visible before replay.
 func TestCrashAtEveryPoint(t *testing.T) {
-	conformance.Partial(t, "C-core-125", "every commit boundary of the store's protocol, recovery to previous-or-complete, status reporting: checked on the store; publish's own steps (pre-pin check, anchor) and the resolver's listing need those layers")
+	conformance.Partial(t, "C-core-125", "every commit boundary of the store's protocol, and of the release operation (TestReleaseCrash) and gc's move-aside (TestGCCrashMidDeletion), recovery to previous-or-complete, status and fsck reporting of pending, done and missing-blob states: checked on the store; publish's own steps (pre-pin check, anchor) and the resolver's listing need those layers")
 	conformance.Partial(t, "P-10", "crash injection at every reported commit point of the store; process crash model (the declared durability with NoSync)")
 	k := testKey("A")
 	data := []byte("dataset")
@@ -284,7 +284,7 @@ func TestCrashAtEveryPoint(t *testing.T) {
 // nothing is rolled back; repair re-projects; a record whose statement fails verification is quarantined on
 // recovery and none of its statements is installed.
 func TestProjectionFailure(t *testing.T) {
-	conformance.Partial(t, "C-core-126", "committed + needs repair, nothing rolled back, repair re-projects, a corrupt record quarantined with nothing installed: checked; the projection itself (an index) is a later layer")
+	conformance.Partial(t, "C-core-126", "committed + needs repair, nothing rolled back, repair re-projects, a corrupt record quarantined with nothing installed: checked; the projection cache and its rebuild/drift check exist now (cache.go, TestCacheColdEqualsWarm, fsck --rebuild) and a missing blob after commit is needs repair (TestFsckMissingBlobInRecord); the resolver's own index is not wired to the cache")
 	root := t.TempDir()
 	fail := true
 	proj := func(Record) error {
