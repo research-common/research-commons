@@ -223,8 +223,10 @@ func treePackage(r *repo, rev string) (gate.Package, treeContent, error) {
 	return pkg, content, nil
 }
 
-// heldAt is the data surface of the tree at rev: its statements (those wire.Read accepts under their id)
-// and its blobs. Nothing else in the tree is history.
+// heldAt is the data surface of the tree at rev: its statements (those wire.Read accepts under their id, at
+// their signer's path) and its blobs (regular files whose bytes hash to their name). Nothing else in the tree is
+// history, so a corrupt blob or an unreadable statement file at the base held nothing and may be removed or
+// replaced (gate: not held).
 func heldAt(r *repo, rev string) (gate.MemHeld, treeContent, error) {
 	h := gate.MemHeld{Lines: map[string][]byte{}, Blobs: map[string]bool{}}
 	es, err := r.tree(rev)
@@ -248,8 +250,11 @@ func heldAt(r *repo, rev string) (gate.MemHeld, treeContent, error) {
 			continue
 		}
 		if strings.HasPrefix(e.path, "blobs/sha256/") {
-			h.Blobs["sha256:"+e.path[len("blobs/sha256/"):]] = true
-			content.add(e.path, b)
+			// held only when the bytes are the blob the name says: a corrupt file holds nothing
+			if sum := sha256.Sum256(b); gate.BlobPath("sha256:"+hex.EncodeToString(sum[:])) == e.path {
+				h.Blobs["sha256:"+e.path[len("blobs/sha256/"):]] = true
+				content.add(e.path, b)
+			}
 			continue
 		}
 		if st, err := wire.Read(b); err == nil && gate.StatementPath(st.Signer, st.ID) == e.path {
@@ -279,6 +284,9 @@ func changePackage(r *repo, mergeBase, head string) (gate.Package, treeContent, 
 	var pkg gate.Package
 	content := treeContent{}
 	for _, c := range cs {
+		if modeOnly(c) {
+			continue
+		}
 		o := gate.Object{Path: c.path}
 		switch c.status {
 		case "A":
@@ -297,6 +305,22 @@ func changePackage(r *repo, mergeBase, head string) (gate.Package, treeContent, 
 		pkg.Objects = append(pkg.Objects, o)
 	}
 	return pkg, content, nil
+}
+
+// modeOnly reports a change that only flips git's executable bit on a data-surface file: the same object id,
+// both modes regular (100644, 100755). A store file is its bytes; the contract asks data files to be regular
+// files and says nothing of the executable bit (an added 100755 blob is admitted alike), so such a change
+// changes nothing held and is not part of the package. A change to or from any other mode (a symlink, a
+// submodule) stays in, and the gate refuses it as an unsafe path. Control-plane paths always stay in: a
+// maintainer reviews every change to them.
+func modeOnly(c change) bool {
+	if c.status != "M" && c.status != "T" {
+		return false
+	}
+	if !strings.HasPrefix(c.path, "blobs/") && !strings.HasPrefix(c.path, "statements/") {
+		return false
+	}
+	return c.oldOID == c.newOID && modeOf(c.oldMode) == gate.Regular && modeOf(c.newMode) == gate.Regular
 }
 
 // Render is the human output (H-50): the report, then the revisions and the side-effects line.

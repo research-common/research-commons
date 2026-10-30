@@ -51,7 +51,7 @@ func PrePin(pkg Package, held Held, pol *Policy, opt Options) (*Report, error) {
 // commits (storage note §3.2: the package's admitted set as one operation).
 func (r *Report) Admitted() (lines [][]byte, blobs []Result) {
 	for _, x := range r.Results {
-		if x.Verdict != Admitted || x.Change != Add {
+		if x.Verdict != Admitted || x.Change == Delete {
 			continue
 		}
 		switch x.Kind {
