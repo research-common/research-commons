@@ -949,6 +949,11 @@ as an optional field (a minor change, §6) modelled on RFC 9581 §3.5.4 and FITS
   `proof_format` with its own note and its own quality, never `bitcoin`. Dropped from the first draft: `head_seq`
   (derivable), `quality_claimed` (a claim grants nothing), and the Bitcoin-time draft's `stamped_digest`
   (always the raw bytes of `covered`, so it could only ever disagree).
+- **Method system keys** (2026-10-30, review of #109). `edition.contents.system_keys`: a method edition declares
+  the `referent.system` keys an `observed` under it must pin, read only from an authorized edition the reader
+  holds; empty is malformed (omit the field to declare nothing); an unheld edition leaves comparability
+  `unchecked`. No `method` resource type: `genesis.type` is a closed list, and a new value would be malformed
+  to an older reader (§6) (§5; C-core-32a – 32d).
 
 **Open.**
 
