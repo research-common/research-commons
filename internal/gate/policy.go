@@ -87,8 +87,9 @@ type Policy struct {
 	// Hooks are further reader-policy checks (a trust floor).
 	Hooks []StatementHook
 	// ControlPlane lists the non-data paths this receiver reviews instead of refusing outright (a hub's own
-	// files: exact paths, or prefixes ending in "/"). A local reader has none: every non-data path of an
-	// incoming tree is outside the surface.
+	// files: exact paths, or prefixes ending in "/"): for a hub, HubControlPlane merged with the policy
+	// file's `control_plane` member. A local reader has none: every non-data path of an incoming tree is
+	// outside the surface.
 	ControlPlane []string
 	// Resolver carries the receiver's resolver configuration (rule dialects, content reader, segment re-check)
 	// used to re-apply edition rules and series boundaries.
@@ -105,8 +106,46 @@ func DefaultPolicy() *Policy {
 	return p
 }
 
-// HubControlPlane is the control plane of a hub repository (hub template contract §2.2).
+// HubControlPlane is the control plane of a hub repository (hub template contract §2.2): the paths the
+// template ships. A hub policy's `control_plane` member adds the paths its maintainers add; it never removes
+// one of these.
 var HubControlPlane = []string{"hub-policy.json", "rc-store", "README.md", "LICENSE", "CONTRIBUTING.md", "docs/", ".github/", ".gitignore", ".gitattributes"}
+
+// MaxControlPlane bounds the entries of a hub policy's `control_plane` member.
+const MaxControlPlane = 256
+
+// controlPlaneEntry names why s cannot be a `control_plane` entry, or "". An entry is a relative path (an
+// exact file) or a prefix ending in "/" (a directory and everything under it), with the same path rules the
+// gate applies to package paths, and it may not name or cover the data surface (`blobs/`, `statements/`) or
+// the layout marker: data never becomes control (I9).
+func controlPlaneEntry(s string) string {
+	switch {
+	case s == "":
+		return "is empty"
+	case strings.HasPrefix(s, "/"):
+		return "is an absolute path"
+	case strings.ContainsRune(s, '\\'):
+		return "contains a backslash"
+	case strings.ContainsRune(s, 0):
+		return "contains NUL"
+	}
+	for _, seg := range strings.Split(strings.TrimSuffix(s, "/"), "/") {
+		switch seg {
+		case "..":
+			return "has a `..` segment"
+		case ".", "":
+			return "has an empty or `.` segment"
+		}
+	}
+	top := strings.SplitN(s, "/", 2)[0]
+	switch {
+	case top == "blobs" || top == "statements":
+		return "names or covers the data surface (" + top + "/)"
+	case s == "rc-store" || top == "rc-store":
+		return "names the layout marker rc-store"
+	}
+	return ""
+}
 
 func (p *Policy) isControlPlane(path string) bool {
 	for _, c := range p.ControlPlane {
@@ -240,6 +279,32 @@ func ParseHubPolicy(data []byte, source string) (*Policy, error) {
 					return nil, fail("not_served[%d] has no digest", i)
 				}
 				p.NotServed[d] = reason
+			}
+		case "control_plane":
+			arr, ok := val.(canon.Array)
+			if !ok {
+				return nil, fail("control_plane is not an array")
+			}
+			if len(arr) > MaxControlPlane {
+				return nil, fail("control_plane has %d entries, more than %d", len(arr), MaxControlPlane)
+			}
+			seen := map[string]bool{}
+			for i, e := range arr {
+				es, ok := e.(canon.String)
+				if !ok {
+					return nil, fail("control_plane[%d] is not a string", i)
+				}
+				entry := string(es)
+				if why := controlPlaneEntry(entry); why != "" {
+					return nil, fail("control_plane[%d] %q %s", i, inert(entry), why)
+				}
+				if seen[entry] {
+					return nil, fail("control_plane[%d] %q repeats an entry", i, inert(entry))
+				}
+				seen[entry] = true
+				if !slices.Contains(p.ControlPlane, entry) {
+					p.ControlPlane = append(p.ControlPlane, entry)
+				}
 			}
 		case "series":
 			so, ok := val.(*canon.Object)
