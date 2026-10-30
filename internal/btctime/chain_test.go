@@ -280,6 +280,51 @@ func TestSnapshotReuse(t *testing.T) {
 	}
 }
 
+// TestSnapshotConcurrent: snapshots taken while headers are added are each a consistent view (run with -race).
+func TestSnapshotConcurrent(t *testing.T) {
+	p := testParams("concurrent", 0x207fffff)
+	s := newSynth(t, p)
+	tip := s.genesis()
+	var hs []Header
+	for i := 0; i < 200; i++ {
+		h := s.next(tip, 0, 0, "")
+		hs = append(hs, h)
+		tip = h.Hash
+		// next() needs the parent held, so mine on s.c; the concurrent adds below replay onto a second chain
+		if err := s.c.Add(h.Raw[:], s.now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	c, err := NewChain(p, "concurrent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for _, h := range hs {
+			if err := c.Add(h.Raw[:], s.now); err != nil {
+				t.Error(err)
+				return
+			}
+		}
+	}()
+	for {
+		v := c.Snapshot()
+		if n, ok := v.HeaderAt(v.TipHeight); !ok || n.Hash != v.TipHash {
+			t.Fatalf("inconsistent view at epoch %d: tip %d", v.Epoch, v.TipHeight)
+		}
+		select {
+		case <-done:
+			if v := c.Snapshot(); v.TipHeight != int64(len(hs)) {
+				t.Fatalf("final tip %d, want %d", v.TipHeight, len(hs))
+			}
+			return
+		default:
+		}
+	}
+}
+
 // TestNetworkPolicy: C-btc-16. A testnet/signet/regtest chain under mainnet policy is refused as production
 // evidence, even when the proof verifies against it.
 func TestNetworkPolicy(t *testing.T) {
