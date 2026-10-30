@@ -158,6 +158,7 @@ const (
 	LabelOverridden    = "admitted by override"
 	LabelSeriesUnknown = "series boundary"
 	LabelTrustFloor    = "below trust floor"
+	LabelNotHeld       = "not held"
 )
 
 // Label is one admitted-and-labelled annotation.
@@ -355,20 +356,31 @@ func Admit(gate string, pkg Package, held Held, pol *Policy, opt Options) (*Repo
 			r.label(LabelMarker, "not installed")
 			continue
 		}
-		// Data surface. A delivery never changes what is held.
+		// Data surface. A delivery never changes what is held; a path that held nothing (bytes that did not hash
+		// to the name, a statement that did not read as its name says) is not held, so changing it changes
+		// nothing held: a modification is judged as an addition of the new bytes, a deletion is not applied.
 		if o.Change == Modify || o.Change == Delete {
-			if r.Kind == KindBlob && o.Change == Delete {
-				d := "sha256:" + lastSeg(r.Path)
-				r.ID = d
-				if _, ok := pol.NotServed[d]; ok {
-					r.Verdict = Admitted
-					r.label(LabelTakedown, "listed in "+pol.Name+" not_served")
+			if !heldPath(r, held, heldLines) {
+				if o.Change == Delete {
+					r.Verdict = NotApplied
+					r.label(LabelNotHeld, notHeldDetail(r.Kind))
 					continue
 				}
+				// a Modify of a path that held nothing: the new bytes are checked as an addition below
+			} else {
+				if r.Kind == KindBlob && o.Change == Delete {
+					d := "sha256:" + lastSeg(r.Path)
+					r.ID = d
+					if _, ok := pol.NotServed[d]; ok {
+						r.Verdict = Admitted
+						r.label(LabelTakedown, "listed in "+pol.Name+" not_served")
+						continue
+					}
+				}
+				r.refuse(&refusal.Refusal{Class: refusal.Intrinsic, Reason: HeldObjectChanged,
+					Detail: fmt.Sprintf("%s %s; a delivery never replaces or removes what is held (a correction is a new statement); scope %s", r.Kind, o.Change, scope)}, scope)
+				continue
 			}
-			r.refuse(&refusal.Refusal{Class: refusal.Intrinsic, Reason: HeldObjectChanged,
-				Detail: fmt.Sprintf("%s %s; a delivery never replaces or removes what is held (a correction is a new statement); scope %s", r.Kind, o.Change, scope)}, scope)
-			continue
 		}
 		if r.Kind == KindBlob {
 			checkBlob(r, pol, scope, opt.Audit)
@@ -464,7 +476,7 @@ func Admit(gate string, pkg Package, held Held, pol *Policy, opt Options) (*Repo
 		}
 		switch r.Kind {
 		case KindBlob:
-			if r.Change == Add && !refBlobs[r.ID] {
+			if r.Change != Delete && !refBlobs[r.ID] {
 				r.label(LabelUnreferenced, "no statement in the evaluated set names it")
 			}
 		case KindStatement:
@@ -566,6 +578,32 @@ func dirSigner(d string) string {
 		return d[:i] + ":" + d[i+1:]
 	}
 	return d
+}
+
+// heldPath reports whether the receiver holds the object at a data-surface path: for a blob path, the blob
+// named there; for a statement path, a held line whose id is the file name and whose signer's directory is the
+// path's (what a hub's held history enters only when the bytes read under that id).
+func heldPath(r *Result, held Held, heldLines map[string][]byte) bool {
+	switch r.Kind {
+	case KindBlob:
+		return held.HasBlob("sha256:" + lastSeg(r.Path))
+	case KindStatement:
+		line, ok := heldLines[lastSeg(r.Path)]
+		if !ok {
+			return false
+		}
+		st, err := wire.Read(line)
+		return err == nil && StatementPath(st.Signer, st.ID) == r.Path
+	}
+	return false
+}
+
+func notHeldDetail(k Kind) string {
+	why := "its bytes did not hash to its name, or it was not a regular file"
+	if k == KindStatement {
+		why = "the file did not read as the statement its name says, or was not a regular file"
+	}
+	return "the path held nothing (" + why + "); removing it changes nothing held"
 }
 
 func dirSeg(p string) string  { return strings.Split(p, "/")[1] }

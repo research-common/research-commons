@@ -355,6 +355,97 @@ func TestAppendOnly(t *testing.T) {
 	refusedAs(t, res, "blobs/sha256/"+strings.Repeat("0", 64), refusal.Intrinsic, gate.HashMismatch)
 }
 
+// TestHeldObjectAsksHeld: H-30 asks the base's held history. A corrupt blob at the base (bytes that do not hash
+// to the name) held nothing: deleting it is not applied with a label, and replacing it with the right bytes is
+// an addition, admitted. A statement file at the base that does not read held nothing and can be removed. A
+// chmod-only change on a held blob (100644 to 100755, same object) changes no held bytes and is no object of the
+// change. Controls: a held blob modified or deleted, and a held statement deleted, are still held object
+// changed; a not_served deletion is still the takedown; a held blob turned into a symlink is still refused.
+func TestHeldObjectAsksHeld(t *testing.T) {
+	good, gone := []byte("good bytes"), []byte("served no more")
+	h := newHub(t, `{"not_served":[{"digest":"`+dig(gone)+`"}],"policy":"rc-hub-policy/1"}`)
+	s := newSigner()
+	sp, sline, _ := s.sign("A", "authored", obj("content", contentOf(good), "type", "dataset"))
+	h.write(sp, sline)
+	h.write(gate.BlobPath(dig(good)), good)
+	h.write(gate.BlobPath(dig(gone)), gone)
+	corrupt := gate.BlobPath(dig([]byte("the right bytes")))
+	h.write(corrupt, []byte("the wrong bytes"))
+	_, other, oid := s.sign("B", "authored", obj("content", contentOf(good), "type", "dataset"))
+	junk := gate.StatementPath(s.key("B").Signer(), oid)
+	h.write(junk, append([]byte("garbage "), other...))
+	h.commit("base with a corrupt blob and an unreadable statement file")
+
+	// deleting what held nothing: not applied, labelled
+	h.branch("clean")
+	h.rm(corrupt)
+	h.rm(junk)
+	h.commit("remove junk")
+	res := h.check("main")
+	for _, p := range []string{corrupt, junk} {
+		r := verdict(t, res, p)
+		if r.Verdict != gate.NotApplied || !r.HasLabel(gate.LabelNotHeld) || !strings.Contains(r.Labels[0].Detail, "removing it changes nothing held") {
+			t.Fatalf("%s: %s %v %v", p, r.Verdict, r.Labels, r.Refusal)
+		}
+	}
+	if res.Exit(false) != 0 {
+		t.Fatal(res.Render())
+	}
+	// replacing the corrupt blob with its right bytes: an addition, admitted
+	h.git("checkout", "-q", "main")
+	h.branch("repair")
+	h.write(corrupt, []byte("the right bytes"))
+	h.commit("repair")
+	res = h.check("main")
+	if r := verdict(t, res, corrupt); r.Verdict != gate.Admitted || r.Change != gate.Modify {
+		t.Fatalf("repair: %s %v", r.Verdict, r.Refusal)
+	}
+	// ... and wrong bytes again are judged as an addition too: hash mismatch, not held object changed
+	h.write(corrupt, []byte("still wrong"))
+	h.commit("still wrong")
+	refusedAs(t, h.check("main"), corrupt, refusal.Intrinsic, gate.HashMismatch)
+
+	// chmod only on a held blob: no object of the change
+	h.git("checkout", "-q", "main")
+	h.branch("chmod")
+	h.git("update-index", "--chmod=+x", gate.BlobPath(dig(good)))
+	h.git("commit", "-q", "-m", "chmod")
+	res = h.check("main")
+	if _, ok := res.Report.Result(gate.BlobPath(dig(good))); ok || res.Exit(false) != 0 {
+		t.Fatalf("chmod-only change judged:\n%s", res.Render())
+	}
+
+	// controls: what was held stays protected (the working-tree mode lags the index after update-index)
+	h.git("checkout", "-q", "-f", "main")
+	h.branch("rewrite")
+	h.write(gate.BlobPath(dig(good)), []byte("replaced"))
+	h.rm(sp)
+	h.rm(gate.BlobPath(dig(gone)))
+	h.commit("rewrite held")
+	res = h.check("main")
+	refusedAs(t, res, gate.BlobPath(dig(good)), refusal.Intrinsic, gate.HeldObjectChanged)
+	refusedAs(t, res, sp, refusal.Intrinsic, gate.HeldObjectChanged)
+	if r := verdict(t, res, gate.BlobPath(dig(gone))); r.Verdict != gate.Admitted || !r.HasLabel(gate.LabelTakedown) {
+		t.Fatalf("takedown: %s %v", r.Verdict, r.Labels)
+	}
+	h.git("checkout", "-q", "main")
+	h.branch("delete-held")
+	h.rm(gate.BlobPath(dig(good)))
+	h.commit("delete held")
+	refusedAs(t, h.check("main"), gate.BlobPath(dig(good)), refusal.Intrinsic, gate.HeldObjectChanged)
+	// a held blob turned into a symlink is not a mode-only change
+	h.git("checkout", "-q", "main")
+	h.branch("symlink")
+	h.rm(gate.BlobPath(dig(good)))
+	if err := os.Symlink("../../README.md", filepath.Join(h.dir, filepath.FromSlash(gate.BlobPath(dig(good))))); err != nil {
+		t.Fatal(err)
+	}
+	h.commit("symlink")
+	if r := verdict(t, h.check("main"), gate.BlobPath(dig(good))); r.Verdict != gate.Refused {
+		t.Fatalf("symlink over a held blob: %s", r.Verdict)
+	}
+}
+
 // TestNotServed: C-core-140. The hub drops retracted bytes under its own policy (two merges: the not_served
 // entry, then the deletion). The retraction and the authored statement stay; the full check shows the content
 // as not held here (policy); nothing claims the artifact is erased.
