@@ -226,12 +226,7 @@ func explainCmd(c *Ctx) (*Obj, int, error) {
 	if isDigest(ref) {
 		a := v.r.Artifact(ref)
 		o = v.showArtifact(ref)
-		inputs = artifactInputs(a)
-		for _, u := range a.Units {
-			if u.Bound.Anchor != "" {
-				inputs = append(inputs, u.Bound.Anchor)
-			}
-		}
+		inputs = v.answerInputs(a)
 		code, causes := v.verifyArtifact(ref)
 		o.set("verify", newObj().set("causes", causes).set("exit", intV(int64(code))))
 		o.set("reasoning", texts(a.Explain...))
@@ -245,6 +240,11 @@ func explainCmd(c *Ctx) (*Obj, int, error) {
 				inputs = append(inputs, st.Prev)
 			}
 			inputs = append(inputs, st.Merges...)
+			// showStatement prints the blob an authored names (its authorship and grade): the statements behind
+			// those tokens are inputs of this answer too (I14), or a rival claim would change it unlisted
+			if d := contentOf(st); d != "" && st.Kind == "authored" {
+				inputs = append(inputs, v.answerInputs(v.r.Artifact(d))...)
+			}
 		}
 	}
 	slices.Sort(inputs)
@@ -277,6 +277,25 @@ func explainCmd(c *Ctx) (*Obj, int, error) {
 func evaluatorObj(b Build) *Obj {
 	vo := versionObj(b)
 	return newObj().set("tool", vo.get("version")).set("commit", vo.get("commit")).set("time_verifier", textV(btctime.VerifierVersion))
+}
+
+// answerInputs is every statement an artifact answer read: the artifact's own (artifactInputs), the anchors
+// behind each claimant's bound, and for each derivation group the counted authored statements of its workflow,
+// which declare the replication mode and comparator the group is graded under (a workflow claim arriving or
+// leaving changes the grade, so it is an input, I14).
+func (v *view) answerInputs(a *resolve.Artifact) []string {
+	ids := artifactInputs(a)
+	for _, u := range a.Units {
+		if u.Bound.Anchor != "" {
+			ids = append(ids, u.Bound.Anchor)
+		}
+	}
+	for _, g := range a.Groups {
+		for _, cl := range v.r.Artifact(g.Provenance.Workflow).Claims {
+			ids = append(ids, cl.Statements...)
+		}
+	}
+	return ids
 }
 
 // artifactInputs is every statement the artifact view read: claims (current and amended), statements not
