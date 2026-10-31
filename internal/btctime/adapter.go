@@ -30,7 +30,7 @@ func (t TimeVerifier) Verify(a *wire.Statement) resolve.Bound {
 func BoundOf(e Evidence, margin int64) resolve.Bound {
 	switch {
 	case e.Live():
-		return resolve.Bound{Quality: resolve.Bitcoin, Anchor: e.Anchor, Network: e.Network, Height: e.BlockHeight, Margin: margin,
+		return resolve.Bound{Quality: resolve.Bitcoin, Anchor: e.Anchor, Network: e.Network, Height: e.BlockHeight, Time: int64(e.HeaderTime), Margin: margin,
 			Detail: e.String() + ", verified by this reader"}
 	case e.State == StateInvalidProof || e.State == StateInvalidAnchor || e.State == StateRefused:
 		why := fmt.Sprintf("%s: %s", e.State, e.Why)
