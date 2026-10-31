@@ -35,8 +35,11 @@ import (
 //	                    unchanged, explanation shows it as "an annotation, confers nothing".
 //	observation O       L does not name O's statement id, O's bytes, or a referent O's class compares (same
 //	                    chain id + block hash for exact-bytes; same endpoint + parameters for source), is not a
-//	                    method-class observation of O's method edition, and is not a `corroborates` whose result
-//	                    names O's bytes as comparison data. A `corroborates`, `refutes`, `retracts` or `describes`
+//	                    method-class observation of O's method edition, is not an `edition` whose edition id
+//	                    O's `referent.method_edition` names (nor a statement that changes that edition's state:
+//	                    its genesis, another approval, a withdrawal or a controller's key event), since its
+//	                    `system_keys` declaration bears on O (claims §5.3.1), and is not a `corroborates` whose
+//	                    result names O's bytes as comparison data. A `corroborates`, `refutes`, `retracts` or `describes`
 //	                    naming O from Q bears on O's explanation (held and listed, never an input to the
 //	                    status); only a counted corroborates moves the status.
 //
@@ -81,6 +84,10 @@ func outsideAdditions() []addition {
 		{"revokes its own key", func(pw *propWorld) {
 			pw.authored("LA", outsider, "ZZ")
 			pw.revoke("L", outsider, "key_compromise")
+		}},
+		{"declares system_keys in an edition of its own resource that no observation pins", func(pw *propWorld) {
+			g := pw.genesis("LG", outsider, 0, outsider)
+			pw.editionWith("L", outsider, g, []string{g}, "system_keys", []string{"model", "routing_era"})
 		}},
 		{"withdraws an approval of a resource nobody holds", func(pw *propWorld) {
 			pw.sign("L", outsider, "withdraw_approval", obj("resource", unheldID("g"), "edition", unheldID("e")))
@@ -302,6 +309,16 @@ func TestPropertyNonInterferenceMembership(t *testing.T) {
 	})
 }
 
+// withMethodObservations adds two method-class observations of one method edition id to the base, so the
+// observation class reaches comparability and the system_keys read. The edition is not held: its explanation
+// names it so, and an outsider's statement that does not name it must leave that unchanged.
+func withMethodObservations(pw *propWorld) *propWorld {
+	ed := unheldID("method edition")
+	pw.observed("OM1", "C", "XM1", "method", methodRef(ed, obj("model", "m")))
+	pw.observed("OM2", "A", "XM2", "method", methodRef(ed, obj("model", "m")))
+	return pw
+}
+
 func TestPropertyNonInterferenceObservations(t *testing.T) {
 	conformance.Partial(t, "P-03", "observations/corroboration here; see TestPropertyNonInterferenceResources")
 	obsAnswers := func(pw *propWorld) (full, status map[string]string) {
@@ -328,8 +345,12 @@ func TestPropertyNonInterferenceObservations(t *testing.T) {
 	for _, a := range outsideAdditions() {
 		t.Run(a.name, func(t *testing.T) {
 			fixture.Check(t, propBaseSeed+5000, 12, fixture.Extended, func(f fixture.Fixture) string {
-				full, _ := obsAnswers(concretize(t, f))
-				pw, _ := withOutsider(t, f, a)
+				full, _ := obsAnswers(withMethodObservations(concretize(t, f)))
+				pw := withMethodObservations(concretize(t, f))
+				n := len(pw.lines)
+				if a.add(pw); len(pw.lines) == n {
+					t.Fatalf("%s: added no statement", a.name)
+				}
 				after, _ := obsAnswers(pw)
 				if d := diff(full, after); d != "" {
 					return "an observation's answer or explanation changed: " + d
@@ -365,6 +386,23 @@ func TestPropertyNonInterferenceObservations(t *testing.T) {
 		_, after := obsAnswers(pw)
 		if diff(before, after) == "" {
 			t.Fatal("a counted corroboration changed nothing: the harness does not reach corroboration")
+		}
+	})
+	// the edition a method-class observation pins bears on it: Q, sole controller of its own method resource,
+	// publishes the edition the observations name, declaring a key they lack, so both read unpinned
+	t.Run("control: the pinned method edition by Q bears (system_keys)", func(t *testing.T) {
+		pw := concretize(t, fixture.Gen(propBaseSeed, fixture.Extended))
+		g := pw.genesis("QG", outsider, 0, outsider)
+		body := pw.editionBody(g, []string{g}, nil, "system_keys", []string{"model", "routing_era"})
+		ed := EditionID(body)
+		pw.observed("OM1", "C", "XM1", "method", methodRef(ed, obj("model", "m")))
+		pw.observed("OM2", "A", "XM2", "method", methodRef(ed, obj("model", "m")))
+		_, before := obsAnswers(pw)
+		pw.sign("L", outsider, "edition", body)
+		_, after := obsAnswers(pw)
+		om := pw.ids["OM1"]
+		if before[om] == after[om] || !strings.Contains(after[om], RefUnpinned) {
+			t.Fatalf("the pinned edition changed nothing: %q -> %q", before[om], after[om])
 		}
 	})
 	t.Run("control: a same-referent capture by Q bears", func(t *testing.T) {
