@@ -33,6 +33,14 @@ func WithReadTime(t time.Time) Option {
 	return func(r *Resolver) { u := t.UTC(); r.readTime = &u }
 }
 
+// ReadTime is the evaluation time the reader passed (zero when none).
+func (r *Resolver) ReadTime() time.Time {
+	if r.readTime == nil {
+		return time.Time{}
+	}
+	return *r.readTime
+}
+
 // Availability is the availability disclosure of one blob.
 type Availability struct {
 	// Declared is true when the field has a default value; the members below are that value.
@@ -45,7 +53,9 @@ type Availability struct {
 	// Revealed is true for a withheld availability when some key's serving `holds` exists and the bytes it names
 	// are held and verified here.
 	Revealed bool
-	Display  string
+	// Holders are the keys with a serving `holds` for the blob (Artifact.Holders): each one's word.
+	Holders []string
+	Display string
 }
 
 // ShelfLife is the shelf-life disclosure of one blob.
@@ -78,6 +88,7 @@ func (r *Resolver) availability(a *Artifact) *Availability {
 		av.Obtainable = bool(b)
 	}
 	av.Held = r.obs.blobs.Has(a.Digest)
+	av.Holders = a.Holders
 	var parts []string
 	red := "redistribution " + av.Redistribution
 	if av.Redistribution == "withheld" && av.WithheldUntil != "" {

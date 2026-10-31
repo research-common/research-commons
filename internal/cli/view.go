@@ -37,6 +37,19 @@ func (b storeBlobs) OpenBlob(d string) (io.ReadCloser, bool) {
 	return f, true
 }
 
+// verifiedBlobs tells the resolver which blobs this store holds intact: a blob counts as held only when its
+// bytes re-hash to its digest (storage note §2), so a corrupt copy is never shown as a reveal.
+type verifiedBlobs struct{ s *store.Store }
+
+func (b verifiedBlobs) Has(d string) bool {
+	f, err := b.s.OpenBlob(store.Digest(d))
+	if err != nil {
+		return false
+	}
+	f.Close()
+	return true
+}
+
 // The reader's time verifier. No chain backend is configured by any command yet (the receipt store and the
 // header sync command are not built), so every anchor whose proof parses evaluates to backend-unconfigured:
 // a state, exit 3 where a bound is needed, never a failed invocation (claims-model note §13, C-core-133a (e)).
@@ -65,7 +78,12 @@ func loadView(s *store.Store, rp *policy.Policy, opts ...resolve.Option) (*view,
 		logs.Log(st.Signer).Add(lines[id]) // a log-relative refusal keeps the line; it is part of the view
 	}
 	tv := newTimeVerifier(s)
-	r := resolve.New(logs, append([]resolve.Option{resolve.WithTimeVerifier(btctime.TimeVerifier{V: tv}), resolve.WithPolicy(rp)}, opts...)...)
+	// The read time is the writer/reader clock Now (tests replace it), passed in: the resolver reads no clock of
+	// its own, so an answer that depends on time (a shelf-life age) is a function of the held set and this
+	// time context (claims-model note I14; storage note §5.1). The blob index re-hashes on every question.
+	base := []resolve.Option{resolve.WithTimeVerifier(btctime.TimeVerifier{V: tv}), resolve.WithPolicy(rp),
+		resolve.WithBlobIndex(verifiedBlobs{s}), resolve.WithReadTime(Now())}
+	r := resolve.New(logs, append(base, opts...)...)
 	return &view{r: r, logs: logs, st: s, timeV: tv, evidence: map[string]btctime.Evidence{}}, nil
 }
 

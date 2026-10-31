@@ -2,6 +2,7 @@ package cli
 
 import (
 	"slices"
+	"time"
 
 	"github.com/research-common/research-commons/internal/btctime"
 	"github.com/research-common/research-commons/internal/canon"
@@ -262,7 +263,13 @@ func explainCmd(c *Ctx) (*Obj, int, error) {
 	o.set("policy", newObj().set("source", textV(c.Policy.Source)).set("digest", refV(c.Policy.Digest)).
 		set("time_policy_fingerprint", refV(v.timeV.Policy.Fingerprint())).set("reader_policy", c.Policy.readerObj()))
 	o.set("evaluator", evaluatorObj(c.Env.Build))
-	o.set("time_context", textV("none: this answer does not depend on the reader's clock (no shelf life, finality or freshness is evaluated, and no chain backend is configured)"))
+	tc := "none: this answer does not depend on the reader's clock (no shelf life, finality or freshness is evaluated, and no chain backend is configured)"
+	if isDigest(ref) {
+		if s := v.r.Artifact(ref).ShelfLife; s != nil && s.UsedReadTime {
+			tc = "read time " + v.r.ReadTime().Format(time.RFC3339) + ": the shelf-life age is counted to it from the verified bound of anchor " + s.Since.Anchor
+		}
+	}
+	o.set("time_context", textV(tc))
 	return v.scoped(o), ExitOK, nil
 }
 
