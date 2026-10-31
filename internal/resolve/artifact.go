@@ -198,6 +198,9 @@ type Artifact struct {
 	// has no default value.
 	Availability *Availability
 	ShelfLife    *ShelfLife
+	// Inputs is the scoped summary of the disclosures of the inputs of the derivation the grade comes from, with
+	// the declared sampling n beside the computed one (disclosure.go); nil without a derivation group.
+	Inputs *InputSummary
 }
 
 // Artifact resolves the view of the blob with content digest d ("sha256:" + hex).
@@ -208,6 +211,7 @@ func (r *Resolver) Artifact(d string) *Artifact {
 func (r *Resolver) artifact(d string, visiting map[string]bool) *Artifact {
 	a := r.authorship(d)
 	r.grade(a, visiting)
+	a.Inputs = r.inputSummary(a)
 	return a
 }
 
@@ -588,6 +592,11 @@ func (a *Artifact) Render() string {
 	b.WriteString("\n")
 	for _, s := range a.RestsOn {
 		fmt.Fprintf(&b, "  rests on %s\n", s)
+	}
+	if a.Inputs != nil {
+		for _, l := range a.Inputs.Lines() {
+			fmt.Fprintf(&b, "  inputs %s\n", l)
+		}
 	}
 	for _, u := range a.Units {
 		role := "claimant"

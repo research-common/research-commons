@@ -437,11 +437,11 @@ func TestAmendment(t *testing.T) {
 	}
 }
 
-// TestDisclosuresMissing: C-core-67 (a), C-core-69 (the artifact's own field). Missing licence reads unknown,
+// TestDisclosuresMissing: C-core-67 (a), and the artifact's own sampling field (C-core-69 is
+// TestNoInputSamplingNoAggregate). Missing licence reads unknown,
 // never open; missing sampling reads undeclared; no default licence text is written.
 func TestDisclosuresMissing(t *testing.T) {
 	conformance.Partial(t, "C-core-67", "(a) missing licence shows unknown; (b) unparsable SPDX and (c) LicenseRef citation need the licence parser")
-	conformance.Partial(t, "C-core-69", "the artifact's own sampling shows undeclared; the aggregate n over inputs lands with scoped summaries")
 	w := newWorld(t)
 	w.authored("A1", "A", "X")
 	a := w.store(nil).Artifact(dig("X"))

@@ -2,6 +2,8 @@ package resolve
 
 import (
 	"strings"
+
+	"github.com/research-common/research-commons/internal/canon"
 	"testing"
 	"time"
 
@@ -210,4 +212,136 @@ func TestRetractionIsDisplay(t *testing.T) {
 		}
 		wantExit(t, a, 0, "")
 	})
+}
+
+// TestSamplingDeclaredBesideComputed: C-core-71. A synthesis declares sampling n = 50 runs; its three pinned
+// inputs declare 20, 12 and 10 runs. The display shows `n 50 runs (declared) · 42 runs (computed from 3 of 3
+// inputs) · declared and computed disagree`; the declared value is still the field's default (neither replaces
+// the other); the grade and exit are those of the same synthesis with no sampling. Controls: a declared 42 shows
+// no disagreement; inputs in different units compute nothing and say why; one input without sampling gives
+// `computed from 2 of 3 inputs`.
+func TestSamplingDeclaredBesideComputed(t *testing.T) {
+	conformance.Covers(t, "C-core-71")
+	build := func(declared int, units [3]string, ns [3]int) *Artifact {
+		w := newWorld(t)
+		for i, in := range []string{"I1", "I2", "I3"} {
+			if units[i] == "" {
+				w.authored("IN"+in, "S", in)
+				continue
+			}
+			w.authored("IN"+in, "S", in, "sampling", obj("n", ns[i], "unit", units[i]))
+		}
+		w.workflow("WA", "W", "bytes", "")
+		kv := []any{"prov", []string{"W", "I1", "I2", "I3"}, "type", "synthesis"}
+		if declared > 0 {
+			kv = append(kv, "sampling", obj("n", declared, "unit", "runs"))
+		}
+		w.authored("A1", "A", "X", kv...)
+		w.authored("B1", "BB", "X", kv...)
+		return w.store(nil).Artifact(dig("X"))
+	}
+	runs := [3]string{"runs", "runs", "runs"}
+	a := build(50, runs, [3]int{20, 12, 10})
+	out := a.Render()
+	has(t, out, "inputs sampling n 50 runs (declared) · 42 runs (computed from 3 of 3 inputs) · declared and computed disagree (within statements you hold)")
+	has(t, out, "sampling per input (3 of 3 declare): "+shortDigest(dig("I1"))+" 20 runs, "+shortDigest(dig("I2"))+" 12 runs, "+shortDigest(dig("I3"))+" 10 runs")
+	wantField(t, a, "sampling", FieldDefault, `{"n":50,"unit":"runs"}`)
+	if !a.Inputs.Disagree || a.Inputs.Computed != 42 || a.Inputs.Declared != 50 {
+		t.Fatalf("%+v", a.Inputs)
+	}
+	base := build(0, runs, [3]int{20, 12, 10})
+	ac, _ := a.VerifyExit()
+	bc, _ := base.VerifyExit()
+	if a.Grade != base.Grade || ac != bc || a.Grade.Tier != "T0" {
+		t.Fatalf("sampling moved the grade/exit: %s %d vs %s %d", a.Grade, ac, base.Grade, bc)
+	}
+	has(t, base.Render(), "inputs sampling n undeclared · 42 runs (computed from 3 of 3 inputs) (within")
+
+	agree := build(42, runs, [3]int{20, 12, 10})
+	hasNot(t, agree.Render(), "disagree")
+	mixed := build(50, [3]string{"runs", "slots", "runs"}, [3]int{20, 12, 10})
+	has(t, mixed.Render(), "not computed: inputs use different units (runs, slots)")
+	if mixed.Inputs.Disagree || mixed.Inputs.NComputed {
+		t.Fatal("a mixed-unit sum was computed")
+	}
+	partial := build(50, [3]string{"runs", "", "runs"}, [3]int{20, 0, 10})
+	has(t, partial.Render(), "30 runs (computed from 2 of 3 inputs)")
+}
+
+// TestDerivedScopedSummary: C-core-73, the parts this reader computes. A derived result over three observation
+// inputs with replication bytes/protocol/bytes, shelf lives 30/7/90 days and per-input n; one input contradicted
+// once. Beside the grade: replication `protocol` (weakest), shelf life `7 days` (shortest), the per-input n listed,
+// `1 contradicted within statements you hold`, each scoped; the grade is that of the same derivation with no
+// disclosures on its inputs. The finality half is the observation leaf summary's (`rests on …`), checked here as
+// it renders. Each input observes its own block, so no two inputs share a referent.
+func TestDerivedScopedSummary(t *testing.T) {
+	conformance.Partial(t, "C-core-73", "weakest replication, shortest shelf life, per-input n with denominators and the contradicted count beside an unchanged grade, scoped; the leaf summary counts captures per referent status (`2 final (as captured, not re-checked); 1 provisional`) without the case's `until RF` horizon wording, and `explain` lists the derivation's statements but not each input's disclosure sources")
+	build := func(disclose bool) (*world, *Artifact) {
+		w := newWorld(t)
+		spec := []struct {
+			name, repl string
+			shelf, n   int
+			depth      int
+		}{{"O1", "bytes", 30, 10, 12}, {"O2", "protocol", 7, 20, 12}, {"O3", "bytes", 90, 5, 2}}
+		var ids []string
+		for _, s := range spec {
+			kv := []any{"finality", depthFinality("confirmations ≥ 6", s.depth)}
+			if disclose {
+				kv = append(kv, "replication", s.repl, "shelf_life_days", s.shelf, "sampling", obj("n", s.n, "unit", "blocks"))
+			}
+			ids = append(ids, w.observed(s.name, "OB"+s.name, s.name, "exact-bytes", blockRef(s.name, s.depth), kv...))
+		}
+		w.sign("CC", "C", "corroborates", obj("of", ids[0], "result", strings.Repeat("ab", 32), "verdict", "contradicts",
+			"model", "bounds/1", "cohort", obj("rule", "chain record")))
+		w.workflow("WA", "W", "bytes", "")
+		w.authored("A1", "A", "X", "prov", []string{"W", "O1", "O2", "O3"})
+		w.authored("B1", "BB", "X", "prov", []string{"W", "O1", "O2", "O3"})
+		return w, w.store(nil).Artifact(dig("X"))
+	}
+	_, a := build(true)
+	out := a.Render()
+	has(t, out, "inputs replication: protocol (weakest; 3 of 3 inputs declare one) (within statements you hold)")
+	has(t, out, "inputs shelf life: 7 days (shortest; 3 of 3 inputs declare one) (within statements you hold)")
+	has(t, out, "inputs sampling per input (3 of 3 declare): "+shortDigest(dig("O1"))+" 10 blocks, "+shortDigest(dig("O2"))+" 20 blocks, "+shortDigest(dig("O3"))+" 5 blocks")
+	has(t, out, "rests on 3 observation(s): 2 final (as captured, not re-checked); 1 provisional; 1 contradicted within statements you hold")
+	_, base := build(false)
+	ac, _ := a.VerifyExit()
+	bc, _ := base.VerifyExit()
+	if a.Grade != base.Grade || ac != bc {
+		t.Fatalf("summary moved the grade/exit: %s %d vs %s %d", a.Grade, ac, base.Grade, bc)
+	}
+	has(t, base.Render(), "inputs replication: none declared by the 3 inputs")
+	// two observers of one input disagreeing on its shelf life: that input counts as undeclared and is named
+	w, _ := build(true)
+	w.observed("O1b", "OBX", "O1", "exact-bytes", blockRef("O1", 12), "finality", depthFinality("confirmations ≥ 6", 12), "shelf_life_days", 1)
+	d := w.store(nil).Artifact(dig("X"))
+	has(t, d.Render(), "shelf life of input "+shortDigest(dig("O1"))+" not counted: its observations disagree")
+	has(t, d.Render(), "inputs shelf life: 7 days (shortest; 2 of 3 inputs declare one)")
+}
+
+// blockRef is an exact-bytes chain referent at its own block (one per name), so observations of different inputs
+// never share a referent.
+func blockRef(name string, depth int) *canon.Object {
+	return obj("chain_id", "bip122:000000000019d6689c085ae165831e93", "block_hash", strings.TrimPrefix(dig("block:"+name), "sha256:"), "depth", depth)
+}
+
+// TestNoInputSamplingNoAggregate: C-core-69. A derived result whose inputs carry no sampling disclosure: the
+// result's sampling reads undeclared, the summary says no input declares one, and no aggregate n or confidence is
+// printed (no number beside "computed").
+func TestNoInputSamplingNoAggregate(t *testing.T) {
+	conformance.Covers(t, "C-core-69")
+	w := newWorld(t)
+	w.authored("I1", "S", "I1")
+	w.authored("I2", "S", "I2")
+	w.workflow("WA", "W", "bytes", "")
+	w.authored("A1", "A", "X", "prov", []string{"W", "I1", "I2"})
+	w.authored("B1", "BB", "X", "prov", []string{"W", "I1", "I2"})
+	a := w.store(nil).Artifact(dig("X"))
+	out := a.Render()
+	has(t, out, "  sampling: undeclared")
+	has(t, out, "inputs sampling per input: none of the 2 inputs declares sampling")
+	has(t, out, "inputs sampling n undeclared · not computed: no input declares sampling")
+	if a.Inputs.NComputed || strings.Contains(out, "(computed from") || strings.Contains(strings.ToLower(out), "confidence") {
+		t.Fatalf("an aggregate was printed\n%s", out)
+	}
 }

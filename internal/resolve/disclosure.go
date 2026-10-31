@@ -193,3 +193,188 @@ func (a *Artifact) renderDisclosure(name string) (string, bool) {
 	}
 	return "", false
 }
+
+// Declared beside computed, and the scoped summary of a derived result (claims-model note §7). A derived result's
+// inputs carry their own disclosures; the reader computes, over the direct inputs of the derivation it grades
+// from, the weakest replication, the shortest shelf life and the per-input sampling n, each with its denominator
+// (how many inputs declare it), and shows the result's own declared sampling n beside the n computed from its
+// inputs, flagging a disagreement. Neither replaces the other, and none of it moves the grade (I6). The computed n
+// is the sum of the inputs' n when every declaring input uses the result's unit; otherwise it is not computed and
+// the display says why. An input's value is its default (an authored input) or the value its counted observations
+// agree on (an observation input); a value they disagree on counts as undeclared and is named.
+
+// InputN is one input's declared sampling.
+type InputN struct {
+	Input string
+	N     int64
+	Unit  string
+}
+
+// InputSummary is the scoped summary of a derived result's disclosures over its direct inputs.
+type InputSummary struct {
+	Inputs int
+	// Replication is the weakest declared replication (bytes > protocol > none); ReplDeclared counts the inputs
+	// that declare one.
+	Replication  string
+	ReplDeclared int
+	// ShelfDays is the shortest declared shelf life; ShelfDeclared counts the inputs that declare one.
+	ShelfDays     int64
+	ShelfDeclared int
+	// PerInput lists every input's declared sampling, in input order.
+	PerInput []InputN
+	// Computed is the n computed from the inputs, valid when NComputed; NWhy says why not otherwise.
+	Computed  int64
+	NComputed bool
+	NWhy      string
+	// Declared is the result's own declared n and unit (DeclaredOK when it declares one); Disagree flags a
+	// computed n that differs from it.
+	Declared   int64
+	DeclUnit   string
+	DeclaredOK bool
+	Disagree   bool
+	Notes      []string
+	// Scope is the scope the summary holds within (§6 (1)).
+	Scope string
+}
+
+var replRank = map[string]int{"bytes": 3, "protocol": 2, "none": 1}
+
+// inputValue is input d's value of a disclosure: an authored input's default; an observation input's value its
+// counted observations agree on. ok is false when undeclared or disagreed (why names which).
+func (r *Resolver) inputValue(d, name string) (v canon.Value, ok bool, why string) {
+	if r.isObservation(d) {
+		ps, unmet := r.observedFor(d)
+		if unmet != "" {
+			return nil, false, unmet
+		}
+		var seen string
+		for _, p := range ps {
+			x, has := p.St.Body.Get(name)
+			if !has {
+				continue
+			}
+			e := string(canon.Encode(x))
+			if seen != "" && e != seen {
+				return nil, false, "its observations disagree"
+			}
+			seen, v = e, x
+		}
+		return v, v != nil, ""
+	}
+	a := r.authorship(d)
+	f := a.Field(name)
+	s, has := f.Default()
+	if !has {
+		if f.State == FieldContested || f.State == FieldNoDefault {
+			return nil, false, string(f.State)
+		}
+		return nil, false, ""
+	}
+	x, err := canon.Parse([]byte(s))
+	return x, err == nil, ""
+}
+
+// inputSummary computes a's summary over the direct inputs of the derivation it grades from (nil when a has no
+// derivation group).
+func (r *Resolver) inputSummary(a *Artifact) *InputSummary {
+	if a.Group == nil || len(a.Group.Provenance.Inputs) == 0 {
+		return nil
+	}
+	s := &InputSummary{Inputs: len(a.Group.Provenance.Inputs), ShelfDays: -1, Scope: r.obs.scope}
+	if v, ok := a.Field("sampling").Default(); ok {
+		if o := parseObj(v); o != nil {
+			if n, ok := o.Members["n"].(canon.Int); ok {
+				s.Declared, s.DeclUnit, s.DeclaredOK = int64(n), str(o, "unit"), true
+			}
+		}
+	}
+	units := map[string]bool{}
+	var sum int64
+	for _, in := range a.Group.Provenance.Inputs {
+		if v, ok, why := r.inputValue(in, "replication"); ok {
+			if m, isStr := v.(canon.String); isStr && replRank[string(m)] > 0 {
+				s.ReplDeclared++
+				if s.Replication == "" || replRank[string(m)] < replRank[s.Replication] {
+					s.Replication = string(m)
+				}
+			}
+		} else if why != "" {
+			s.Notes = append(s.Notes, "replication of input "+shortDigest(in)+" not counted: "+why)
+		}
+		if v, ok, why := r.inputValue(in, "shelf_life_days"); ok {
+			if n, isInt := v.(canon.Int); isInt {
+				s.ShelfDeclared++
+				if s.ShelfDays < 0 || int64(n) < s.ShelfDays {
+					s.ShelfDays = int64(n)
+				}
+			}
+		} else if why != "" {
+			s.Notes = append(s.Notes, "shelf life of input "+shortDigest(in)+" not counted: "+why)
+		}
+		if v, ok, why := r.inputValue(in, "sampling"); ok {
+			if o, isObj := v.(*canon.Object); isObj {
+				if n, isInt := o.Members["n"].(canon.Int); isInt {
+					s.PerInput = append(s.PerInput, InputN{Input: in, N: int64(n), Unit: str(o, "unit")})
+					units[str(o, "unit")] = true
+					sum += int64(n)
+				}
+			}
+		} else if why != "" {
+			s.Notes = append(s.Notes, "sampling of input "+shortDigest(in)+" not counted: "+why)
+		}
+	}
+	switch {
+	case len(s.PerInput) == 0:
+		s.NWhy = "no input declares sampling"
+	case len(units) > 1:
+		s.NWhy = "inputs use different units (" + strings.Join(sortedKeys(units), ", ") + ")"
+	case s.DeclaredOK && !units[s.DeclUnit]:
+		s.NWhy = "inputs count " + s.PerInput[0].Unit + ", the result declares " + s.DeclUnit
+	default:
+		s.Computed, s.NComputed = sum, true
+		s.Disagree = s.DeclaredOK && s.Declared != sum
+	}
+	return s
+}
+
+// samplingLine is the declared-beside-computed line for the result's sampling n.
+func (s *InputSummary) samplingLine() string {
+	decl := "undeclared"
+	if s.DeclaredOK {
+		decl = fmt.Sprintf("%d %s (declared)", s.Declared, s.DeclUnit)
+	}
+	comp := fmt.Sprintf("not computed: %s", s.NWhy)
+	if s.NComputed {
+		comp = fmt.Sprintf("%d %s (computed from %d of %d inputs)", s.Computed, s.PerInput[0].Unit, len(s.PerInput), s.Inputs)
+	}
+	line := "n " + decl + " · " + comp
+	if s.Disagree {
+		line += " · declared and computed disagree"
+	}
+	return line
+}
+
+// Lines is the summary as displayed beside the grade, scoped to the statements held.
+func (s *InputSummary) Lines() []string {
+	repl := fmt.Sprintf("replication: none declared by the %d inputs", s.Inputs)
+	if s.ReplDeclared > 0 {
+		repl = fmt.Sprintf("replication: %s (weakest; %d of %d inputs declare one)", s.Replication, s.ReplDeclared, s.Inputs)
+	}
+	shelf := fmt.Sprintf("shelf life: none declared by the %d inputs", s.Inputs)
+	if s.ShelfDeclared > 0 {
+		shelf = fmt.Sprintf("shelf life: %d days (shortest; %d of %d inputs declare one)", s.ShelfDays, s.ShelfDeclared, s.Inputs)
+	}
+	var per []string
+	for _, p := range s.PerInput {
+		per = append(per, fmt.Sprintf("%s %d %s", shortDigest(p.Input), p.N, p.Unit))
+	}
+	n := fmt.Sprintf("sampling per input: none of the %d inputs declares sampling", s.Inputs)
+	if len(per) > 0 {
+		n = fmt.Sprintf("sampling per input (%d of %d declare): %s", len(per), s.Inputs, strings.Join(per, ", "))
+	}
+	out := []string{repl, shelf, n, "sampling " + s.samplingLine()}
+	for i := range out {
+		out[i] += " (" + s.Scope + ")"
+	}
+	return append(out, s.Notes...)
+}

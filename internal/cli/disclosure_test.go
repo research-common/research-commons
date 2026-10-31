@@ -319,3 +319,47 @@ func (p *pubWorld) publishHuman(t *testing.T, c struct {
 	}
 	return r.stdout
 }
+
+// TestInputsSummarySurfaces: C-core-71 on the CLI surfaces. A synthesis declaring n = 50 over inputs declaring
+// 20 + 12 + 10: show, list, verify and explain print the same inputs_summary with the declared-beside-computed
+// line and the disagreement flag; a blob with no derivation prints none.
+func TestInputsSummarySurfaces(t *testing.T) {
+	conformance.Covers(t, "C-core-71")
+	w := newWorld(t)
+	for i, n := range []int{20, 12, 10} {
+		in := "in" + strconv.Itoa(i)
+		w.blob(in, []byte(in))
+		w.authored("A:"+in, "K3", in, "sampling", obj("n", n, "unit", "runs"))
+	}
+	w.workflow("K1", "wf", "bytes", "")
+	for _, k := range []string{"K1", "K2"} {
+		w.authored("S:"+k, k, "syn", "type", "synthesis", "prov", []string{"wf", "in0", "in1", "in2"}, "sampling", obj("n", 50, "unit", "runs"))
+	}
+	d := dig("syn")
+	list := jsonOf(t, w.run("list", "--json")).Members["blobs"].(canon.Array)
+	var listed *canon.Object
+	for _, b := range list {
+		if o := b.(*canon.Object); o.Members["digest"] == canon.String(d) {
+			listed = o
+		}
+	}
+	var first string
+	for name, src := range map[string]*canon.Object{"list": listed, "show": jsonOf(t, w.run("show", d, "--json")),
+		"verify": jsonOf(t, w.run("verify", d, "--json")), "explain": jsonOf(t, w.run("explain", d, "--json"))} {
+		s := string(canon.Encode(src.Members["inputs_summary"]))
+		if !strings.Contains(s, "n 50 runs (declared) · 42 runs (computed from 3 of 3 inputs) · declared and computed disagree") {
+			t.Fatalf("%s: %s", name, s)
+		}
+		if first == "" {
+			first = s
+		} else if s != first {
+			t.Fatalf("%s disagrees:\n%s\n%s", name, s, first)
+		}
+	}
+	if v := w.run("verify", d); v.code != 0 {
+		t.Fatalf("verify %d", v.code)
+	}
+	if _, ok := jsonOf(t, w.run("show", dig("in0"), "--json")).Members["inputs_summary"]; ok {
+		t.Fatal("a blob with no derivation prints an inputs summary")
+	}
+}

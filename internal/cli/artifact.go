@@ -28,6 +28,10 @@ func (v *view) artifactCore(a *resolve.Artifact) *Obj {
 		o.set("step", tokV(tok(a.Step.Token())))
 	}
 	o.set("disclosures", disclosures(a))
+	if a.Inputs != nil {
+		// the derived result's scoped summary over its inputs, declared beside computed (claims-model note §7)
+		o.set("inputs_summary", texts(a.Inputs.Lines()...))
+	}
 	return o
 }
 
