@@ -96,7 +96,8 @@ func TestMethodSystemKeysMissing(t *testing.T) {
 		if c.With == o3 {
 			vs3 = &v2.Comparability[i]
 		}
-		if c.With == o1 && (c.Comparable || !slices.Contains(c.Unpinned, "referent.system.routing_era")) {
+		// O1 lacks the declared routing_era: named once, as unpinned, not again as a key O1 does not pin
+		if c.With == o1 && (c.Comparable || !slices.Equal(c.Unpinned, []string{"referent.system.routing_era"}) || len(c.MissingThere)+len(c.MissingHere) != 0) {
 			t.Fatalf("O2 vs O1: %+v", c)
 		}
 	}

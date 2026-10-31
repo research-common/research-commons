@@ -760,16 +760,23 @@ func (r *Resolver) comparability(o *Observation, st *wire.Statement) {
 		c := Comparability{With: q.St.ID, WithSigner: q.St.Signer, EditionUnread: d.Unread}
 		if len(o.Unpinned)+len(qUnpinned) > 0 {
 			c.Unpinned = append(slices.Clone(o.Unpinned), qUnpinned...)
+			if d.Keys != nil {
+				// a declared key both lack is one fact, named once
+				slices.Sort(c.Unpinned)
+				c.Unpinned = slices.Compact(c.Unpinned)
+			}
 		}
 		if d.read() {
+			// under a declaration, a declared key one side lacks is already in Unpinned; Missing* list only the
+			// keys outside it, shown and never compared
 			theirs := memberKeys(object(qr, "system"))
 			for _, k := range theirs {
-				if !slices.Contains(mine, k) {
+				if !slices.Contains(mine, k) && !slices.Contains(d.Keys, k) {
 					c.MissingHere = append(c.MissingHere, "system."+k)
 				}
 			}
 			for _, k := range mine {
-				if !slices.Contains(theirs, k) {
+				if !slices.Contains(theirs, k) && !slices.Contains(d.Keys, k) {
 					c.MissingThere = append(c.MissingThere, "system."+k)
 				}
 			}
