@@ -64,9 +64,9 @@ var limits = []limit{
 	},
 	{
 		id:  "L-02",
-		gap: "No chain backend, header sync or receipt store: no anchor is ever verified, and every answer is clock-free",
+		gap: "No chain backend or header sync, and no command opens the receipt store: no anchor is ever verified, and every answer is clock-free",
 		sources: []limitSource{
-			{file: "internal/README.md", says: "Not built: the receipt store (§9) and the commands (§10)"},
+			{file: "internal/README.md", says: "Not built: the commands (§10), persisted headers and policy"},
 			{file: "docs/CLI-OUTPUTS.md", says: "no chain backend is configured, so no bound is verified; a state, not a failed invocation (exit 3)"},
 		},
 		probe:  "no registered command starts with `anchor`; `explain` says no chain backend is configured",
