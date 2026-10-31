@@ -242,42 +242,52 @@ func TestSourceAndPhenomenonReferents(t *testing.T) {
 	}
 }
 
-// TestMethodComparability: C-core-32. Every clause member shown; with the routing era omitted, comparability to
-// the other method-class observation is unchecked and names the missing field, and a corroboration whose
-// comparison data is that observation is never counted as supports.
+// TestMethodComparability: C-core-32. The method edition is held, authorized, and declares no system_keys, so the
+// claims §5.3.1 fallback applies: every clause member shown; with the routing era omitted, comparability to
+// another method-class observation of the same edition is unchecked, never supports, and the display names the
+// missing field. Control: both pin it, so the pair is comparable and the corroboration counts.
 func TestMethodComparability(t *testing.T) {
-	conformance.Partial(t, "C-core-32", "omission detected against another observation of the same method edition (the claims §5.3.1 fallback with no declaration); a method edition's declared system members (a missing one `unpinned`, with no comparison partner) are pending editions reader: no wire field carries the declaration yet")
-	ed := strings.Repeat("e1", 32)
-	ref := func(system *canon.Object) *canon.Object {
-		return obj("method_edition", ed, "environment", obj("image_digest", dig("img"), "platform", "linux/amd64", "harness_commit", strings.Repeat("c", 40)),
-			"system", system, "inputs", []string{dig("seeds")}, "window", obj("from", "2026-10-01T00:00:00Z", "to", "2026-10-02T00:00:00Z"))
+	conformance.Covers(t, "C-core-32")
+	setup := func(era2 bool) (*world, string, string) {
+		w := newWorld(t)
+		g := w.genesis("MG", "MC", 0, "MC")
+		ed := w.ed(w.editionWith("ME", "MC", g, []string{g}, "selection", "curated"))
+		ref := func(system *canon.Object) *canon.Object {
+			return obj("method_edition", ed, "environment", obj("image_digest", dig("img"), "platform", "linux/amd64", "harness_commit", strings.Repeat("c", 40)),
+				"system", system, "inputs", []string{dig("seeds")}, "window", obj("from", "2026-10-01T00:00:00Z", "to", "2026-10-02T00:00:00Z"))
+		}
+		sys2 := obj("model", "m-1", "provider", "p")
+		if era2 {
+			sys2 = obj("model", "m-1", "provider", "p", "routing_era", "2026-q3")
+		}
+		full := w.observed("M1", "O1", "B1", "method", ref(obj("model", "m-1", "provider", "p", "routing_era", "2026-q3")))
+		part := w.observed("M2", "O2", "B2", "method", ref(sys2))
+		w.workflow("WA", "W", "bytes", "")
+		res := w.result("R", "C", "cmp", "W", "B1", "B2")
+		w.corroborates("CS", "C", full, res, "supports")
+		return w, full, part
 	}
-	w := newWorld(t)
-	full := w.observed("M1", "O1", "B1", "method", ref(obj("model", "m-1", "provider", "p", "routing_era", "2026-q3")))
-	part := w.observed("M2", "O2", "B2", "method", ref(obj("model", "m-1", "provider", "p")))
-	w.workflow("WA", "W", "bytes", "")
-	res := w.result("R", "C", "cmp", "W", "B1", "B2")
-	w.corroborates("CS", "C", full, res, "supports")
+	w, full, part := setup(false)
 	o := obsView(t, w, full)
 	for _, f := range []string{"method_edition", "environment", "system", "inputs", "window"} {
 		has(t, o.Render(), "referent."+f+":")
 	}
+	has(t, o.Render(), "declares no system_keys")
 	has(t, o.Render(), "comparability vs "+keylog.Short(part))
 	has(t, o.Render(), "it does not pin system.routing_era")
 	wantStatus(t, o, "unchecked within statements you hold")
 	hasNot(t, o.Render(), "corroborated")
 	// the decision is structured, keyed by the full statement id, and the display is rendered from it
-	if len(o.Comparability) != 1 || o.Comparability[0].With != part || o.Comparability[0].Comparable ||
+	if len(o.Comparability) != 1 || o.Comparability[0].With != part || o.Comparability[0].Comparable || o.Comparability[0].EditionUnread != "" ||
 		!slices.Equal(o.Comparability[0].MissingThere, []string{"system.routing_era"}) {
 		t.Fatalf("comparability: %+v", o.Comparability)
 	}
+	// with no declaration nothing is unpinned on that account
+	if wantRef(t, o, RefPinned); len(o.Unpinned) != 0 {
+		t.Fatalf("unpinned %v", o.Unpinned)
+	}
 	// control: with the routing era pinned on both, the two are comparable and the corroboration counts
-	w2 := newWorld(t)
-	f2 := w2.observed("M1", "O1", "B1", "method", ref(obj("model", "m-1", "provider", "p", "routing_era", "2026-q3")))
-	p2 := w2.observed("M2", "O2", "B2", "method", ref(obj("model", "m-1", "provider", "p", "routing_era", "2026-q3")))
-	w2.workflow("WA", "W", "bytes", "")
-	res2 := w2.result("R", "C", "cmp", "W", "B1", "B2")
-	w2.corroborates("CS", "C", f2, res2, "supports")
+	w2, f2, p2 := setup(true)
 	o2 := obsView(t, w2, f2)
 	if len(o2.Comparability) != 1 || o2.Comparability[0].With != p2 || !o2.Comparability[0].Comparable {
 		t.Fatalf("control comparability: %+v", o2.Comparability)
