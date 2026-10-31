@@ -241,4 +241,16 @@ func TestMethodSystemKeysUnread(t *testing.T) {
 		}
 		wantStatus(t, v, "corroborated 1 within statements you hold")
 	})
+	// an approval's statement id names no edition (wire §3): pinning it reads as not held, never as the edition
+	t.Run("an approval's statement id is not an edition id", func(t *testing.T) {
+		w := newWorld(t)
+		g := w.genesis("G", "MA", 0, "MA")
+		ms := w.editionWith("M", "MA", g, []string{g}, "system_keys", []string{"model", "provider"})
+		o1 := w.observed("O1", "P1", "B1", "method", methodRef(ms, sys))
+		w.observed("O2", "P2", "B2", "method", methodRef(ms, sys))
+		v := obsView(t, w, o1)
+		if len(v.Comparability) != 1 || v.Comparability[0].Comparable || v.Comparability[0].EditionUnread != DeclNotHeld {
+			t.Fatalf("comparability %+v", v.Comparability)
+		}
+	})
 }
