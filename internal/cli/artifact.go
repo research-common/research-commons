@@ -224,8 +224,16 @@ func (v *view) groups(a *resolve.Artifact) listV {
 	for _, g := range a.Groups {
 		e := newObj().set("workflow", refV(g.Provenance.Workflow)).set("inputs", refs(g.Provenance.Inputs...)).
 			set("replication", textV(g.Mode))
+		if g.ModeFrom != "" {
+			e.set("replication_from", textV(g.ModeFrom))
+		}
 		if g.Comparator != "" {
 			e.set("comparator", refV(g.Comparator))
+		}
+		// the group's own reasoning (why it is unchecked, diverged, re-derived by its author only): the resolver's
+		// words, so a display that grades the group also says why (C-core-18a: "the workflow declares no comparator")
+		if len(g.Explain) > 0 {
+			e.set("explain", texts(g.Explain...))
 		}
 		e.set("derivers", refs(g.Derivers...))
 		runs := listV{}
