@@ -514,7 +514,7 @@ the source.
 | availability | redistribution permission and byte obtainability, separately |
 | replication | `bytes` (public deterministic source named) · `protocol` (re-measurable, never the same bytes; method named) · `none` · undeclared (#1, #7) |
 | sampling | n with its unit, per-group n where the design has arms, dispersion, window (#2) |
-| shelf life | publisher-declared validity; age shown at read time (#4) |
+| shelf life | publisher-declared validity; age shown at read time (#4). *(Proposed.)* The age is counted from a verified bound (§10: the committing block's header time, miner-reported) to the reader's evaluation time, which is part of the answer's time context (I14); with only a local or self-declared time the age reads `unknown`, never a number. |
 | capture evidence | §5.3.3 level, verified or not |
 | corroboration | §5.3.2 status, scoped |
 | selection | curated · rule-based · completeness claim · undeclared (§6). Missing means undeclared. |
@@ -543,6 +543,12 @@ a commitment proves possession by T, not independence (§9.3), and a commitment 
 seed, a one-line rule) is enumerable against its hash, so the author should include a nonce. The tool cannot
 tell low-entropy content from high, so this is guidance, not a check: `publish` with `withheld` warns when
 the content is shorter than a documented threshold and proceeds (a heuristic, documented as one, I11).
+*(Proposed.)* The threshold is 64 bytes: room for a 128-bit nonce written as hex (32 bytes) beside a short
+payload. Size stands in for entropy and is a poor proxy in both directions (a 10 KB file of one repeated
+guessable value is enumerable; 16 random bytes are not), so the warning names the threshold and the risk and
+is never recorded in the statement. A withheld artifact reads `revealed` only once a `holds` exists **and**
+the reader holds the bytes re-hashed to the statement's digest; a `holds` alone is its signer's word, and the
+author's own copy with no `holds` is not a reveal.
 
 ## 8. Resources: collections, tasks, series
 
