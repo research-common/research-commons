@@ -247,3 +247,75 @@ func trashBlobs(t *testing.T, pkg string) {
 		t.Fatal(err)
 	}
 }
+
+// TestWithheldShortWarning: C-core-76a. publish with availability withheld: (a) content one byte under the
+// documented threshold prints the warning naming the threshold and the enumeration risk, and publication
+// proceeds; (b) content at the threshold, and (c) short content that is not withheld, print none. The signed
+// statement is the same either way (the warning is never recorded): the body of (a) carries no member the
+// body of a withheld publish at the threshold lacks, and verify exits 0 for both.
+func TestWithheldShortWarning(t *testing.T) {
+	conformance.Partial(t, "C-core-76a", "warning below the threshold, none at it or when not withheld, nothing recorded, verify unchanged; the threshold (64 bytes) is a proposed value awaiting a decision, documented in the claims-model note as a heuristic")
+	withheld := `{"obtainable":false,"redistribution":"withheld","withheld_until":"after the season"}`
+	cases := []struct {
+		name, data, av string
+		warn           bool
+	}{
+		{"under", strings.Repeat("s", WithheldWarnBelow-1), withheld, true},
+		{"at", strings.Repeat("s", WithheldWarnBelow), withheld, false},
+		{"not withheld", "s", `{"obtainable":true,"redistribution":"permitted"}`, false},
+	}
+	var bodies []*canon.Object
+	for _, c := range cases {
+		p := newPubWorld(t)
+		r := p.publish("--kind", "authored", "--content", p.file("c", c.data), "--no-holds", "--availability", c.av)
+		if r.code != 0 {
+			t.Fatalf("%s: publication did not proceed: %d %s", c.name, r.code, r.stdout)
+		}
+		o := outObj(t, r)
+		w, has := o.Members["warnings"]
+		switch {
+		case c.warn && !has:
+			t.Fatalf("%s: no warning\n%s", c.name, r.stdout)
+		case !c.warn && has:
+			t.Fatalf("%s: unexpected warning %s", c.name, canon.Encode(w))
+		case c.warn:
+			msg := string(canon.Encode(w))
+			for _, s := range []string{"threshold of 64 bytes", "enumerable against its hash", "nonce", "heuristic", "not recorded"} {
+				if !strings.Contains(msg, s) {
+					t.Fatalf("%s: warning lacks %q: %s", c.name, s, msg)
+				}
+			}
+			if !strings.Contains(p.publishHuman(t, c), "warnings:") {
+				t.Fatalf("%s: warning missing on the human surface", c.name)
+			}
+		}
+		d := run.Digest([]byte(c.data))
+		if v := p.run("verify", d); v.code != 0 {
+			t.Fatalf("%s: verify %d", c.name, v.code)
+		}
+		st := jsonOf(t, p.run("show", idsOf(o)[0], "--json")).Members["body"].(*canon.Object)
+		bodies = append(bodies, st)
+	}
+	// the warned statement and the unwarned one at the threshold carry the same members
+	if strings.Join(bodies[0].Keys, ",") != strings.Join(bodies[1].Keys, ",") {
+		t.Fatalf("the warning was recorded: %v vs %v", bodies[0].Keys, bodies[1].Keys)
+	}
+	for _, k := range bodies[0].Keys {
+		if strings.Contains(k, "warn") {
+			t.Fatalf("member %q recorded", k)
+		}
+	}
+}
+
+// publishHuman re-runs the withheld publish on the human surface with --dry-run (nothing written).
+func (p *pubWorld) publishHuman(t *testing.T, c struct {
+	name, data, av string
+	warn           bool
+}) string {
+	t.Helper()
+	r := runIn(p.root, nil, "publish", "--key", p.key, "--kind", "authored", "--content", p.file("c2", c.data), "--no-holds", "--availability", c.av, "--dry-run")
+	if r.code != 0 {
+		t.Fatalf("human dry run: %d %s", r.code, r.stdout)
+	}
+	return r.stdout
+}
