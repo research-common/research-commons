@@ -345,6 +345,10 @@ var kinds = map[string][]field{
 		opt("contract", anyObject()),
 		opt("selection", enum("curated", "rule-based", "completeness")),
 		opt("frozen_before", exactlyOne([]field{opt("date", date()), opt("height", integer()), opt("run", text())})),
+		// system_keys: a method edition's declaration of the referent.system keys an observed under it must
+		// pin. A non-empty set (omit the field to declare nothing); flat key names, so "system.model" is
+		// well-formed and simply matches no key (C-core-32a).
+		opt("system_keys", set(text(), true)),
 		opt("controllers", set(key(), false)),
 		opt("rule", ruleObj),
 	))},
