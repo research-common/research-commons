@@ -70,6 +70,16 @@ var rerunFlags = []Flag{
 	{Name: "exec-policy", Value: "file", Help: "the reader's execution policy file (format " + ExecPolicyFormat + ", provisional); only applies alongside --rerun"},
 }
 
+// rerunBefore repeats prepareRerun's blob-only check once a display alias has been resolved: an alias that
+// named a statement is the same malformed --rerun as a statement id given in full.
+func rerunBefore(c *Ctx) *Problem {
+	if _, rerun := c.Flag("rerun"); rerun && isID(c.Args["digest|id"]) {
+		return usage("malformed-argument", "--rerun applies to a blob", "the alias names a statement, and a statement names no derivation to re-run; nothing was done",
+			"argument digest|id", "give the blob's digest", c.Args["digest|id"])
+	}
+	return nil
+}
+
 // prepareRerun checks the re-run options before any work: --exec-policy only with --rerun, --rerun only for a
 // blob, and the policy file strict-parsed (an unreadable or malformed policy exits 2, like the hub policy).
 func prepareRerun(c *Ctx) *Problem {
@@ -83,7 +93,8 @@ func prepareRerun(c *Ctx) *Problem {
 	if !rerun {
 		return nil
 	}
-	if !isDigest(c.Args["digest|id"]) {
+	if isID(c.Args["digest|id"]) {
+		// a display alias is resolved once the store is known (resolveAliases); rerunBefore checks what it names
 		return usage("malformed-argument", "--rerun applies to a blob", "a statement id names no derivation to re-run; nothing was done",
 			"argument digest|id", "give the blob's digest", c.Args["digest|id"])
 	}
