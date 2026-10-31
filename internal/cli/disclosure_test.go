@@ -103,7 +103,7 @@ func TestShelfLifeSurfaces(t *testing.T) {
 // author's own store holds the bytes from the start and does not read as revealed.
 func TestWithheldReveal(t *testing.T) {
 	conformance.Partial(t, "C-core-75", "publish withheld (--no-holds), pull to a second store, reveal by a later holds, fetch by full hash, revealed: covered through the store's fetch, since no `fetch` command exists; the `anchored` half needs an anchor writer (no command writes one yet)")
-	conformance.Covers(t, "C-core-76")
+	conformance.Partial(t, "C-core-76", "the mismatching reveal is refused intrinsic (hash mismatch) scoped to that fetch, installs nothing and leaves the statement withheld, through the store's fetch; no `fetch` command prints the refusal yet")
 	author := newPubWorld(t)
 	data := "season seed 0x5eed with a 128-bit nonce 4f1c9a2e7b3d5a60c8e1f2a3b4c5d6e7"
 	c := author.file("seed", data)

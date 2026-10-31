@@ -195,7 +195,7 @@ func TestWithheldRevealResolver(t *testing.T) {
 // retraction is listed beside X, the second key stays a holder (retraction stops nobody serving), and the
 // retraction moves no field, grade or exit.
 func TestRetractionIsDisplay(t *testing.T) {
-	conformance.Partial(t, "C-core-139", "resolver: the author's retracts is listed beside X with `(retracted)`, a mirror's holds keeps it a holder, and nothing else moves; the CLI label on every surface and the fetch from the mirror are internal/cli.TestRetractionEverywhere; a mirror on another hub needs pull between two stores (internal/cli covers one store holding both)")
+	conformance.Partial(t, "C-core-139", "resolver: the author's retracts is listed beside X with `(retracted)`, a mirror's holds keeps it a holder, and nothing else moves; the CLI label on every surface and the fetch from the mirror are internal/cli.TestRetractionEverywhere; the hub view of the mirror's own store is not a command")
 	w := newWorld(t)
 	a1 := w.authored("A1", "A", "X", "licence", "CC0-1.0")
 	w.sign("H", "A", "holds", obj("content", contentOf("X")))
