@@ -148,13 +148,22 @@ type Verifier struct {
 	Blobs       BlobSource
 	// Now is the reader's clock (freshness, §7).
 	Now func() time.Time
+	// Receipts, when set, is the receipt store of §9: a cache that may stand in for re-parsing a proof, never
+	// evidence. Nil reads every proof cold, with the same answers.
+	Receipts *Receipts
 }
 
 // Evaluate runs §4's binding checks 3–7 and §5's attestation selection on one anchors statement, then applies the
 // policy in the current view. Checks 1 and 2 (the statement verifies, is chained in its signer's log, and its
 // covered head is in its own prefix) are the log's and the resolver's, which call a TimeVerifier only for an
 // anchors statement that passed them.
+//
+// With a receipt store (Receipts set), a stored receipt may stand in for re-parsing the proof, after every check of
+// §9.3; the answer is the one a cold evaluation gives (receipt.go).
 func (v *Verifier) Evaluate(a *wire.Statement) Evidence {
+	if v.Receipts != nil {
+		return v.Receipts.evaluate(v, a)
+	}
 	e, held, done := v.anchorChecks(a)
 	if done {
 		return e
