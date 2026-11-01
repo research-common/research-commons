@@ -23,6 +23,11 @@ A conformance result is only as good as its record. For each case an implementat
 - **typed expected and actual results**: the state token, exit code, displayed value or refusal class and scope
   that the case requires, next to what was observed, in the same vocabulary as §13 of the note.
 
+A **view digest** (C-core-02, C-core-04) is the digest of the canonical machine-readable output, with its exit
+code, of every view command over a stated universe of refs, under a named policy digest and evaluator version.
+The record states the universe (which ids and digests, including at least one nobody holds), the commands, the
+policy digest and the evaluator version; two readers' view digests are comparable only when all four match.
+
 Tests use **disposable keys** generated for the run and **throwaway roots**; no case touches a live hub or a key
 that signs anything outside the test.
 
@@ -73,7 +78,7 @@ refer to `verify` unless another command is named (§13).
 | C-core-02 | §2 ("given the same statements, policy and evaluator"), I14 | Two readers behind different relayers eventually hold the identical statement set, policy digest and evaluator version. | Identical view digests; any surface that differed earlier is explained by the statements one reader lacked at the time. |
 | C-core-02a | §4 ("one signature over everything"; identity = hash of the canonical signed body), I1, I2 | Two valid statements from one key that differ only in one field (a reason, a TTL, an unknown extension); separately, one body signed twice with equivalent signature encodings. | The first pair are two statements with two identities, neither displayed as a replay of the other; the second pair is one statement with one identity. |
 | C-core-03 | §4 (content identity), I1 | Brute-force two blobs whose full hashes share the display-alias prefix in a throwaway root; look up by the shared prefix. | An error listing both candidate full hashes; no blob is selected; a lookup by either full hash succeeds. |
-| C-core-04 | §2 ("given the same statements, policy and evaluator"), §11 (byte-exact transport), I14 | One fixed statement set delivered (a) as a local tree, (b) via a hub pull, (c) as an archive, each in a random order and with every statement duplicated. | Identical resolved view and identical `verify` exit across all six deliveries; `explain` output differs only in delivery metadata. |
+| C-core-04 | §2 ("given the same statements, policy and evaluator"), §11 (byte-exact transport), I14 | One fixed statement set delivered (a) as a local tree, (b) via a hub pull, (c) as an archive, each in a random order and with every statement duplicated. Delivery (c) needs an archive ingest path: one that reads an archive's members under the same limits and refusals as a tree. | Identical resolved view and identical `verify` exit across all six deliveries; `explain` output differs only in delivery metadata. |
 | C-core-05 | §4 (statement kinds), §5.1, I5, I7 | Established blob with sole author `A`. Key `C` (no authority) publishes `describes`, `refutes` and `holds` about it. | `A`'s single-party defaults, the grade and the `verify` exit code are unchanged; `explain` lists `C`'s statements as held, not as inputs to the default. |
 | C-core-06 | §4 (key events), §13 (explain), I5 | State `S` shows a non-pass result (a `contradicted 1` observation). Deliver (a) a verified corroboration that moves the status, (b) a revocation of the contradicting key, (c) a reader policy change that stops trusting it. | In each case the result changes; the earlier statement is still listed in `explain`; the change names its cause (statement id, key event, or policy digest). |
 | C-core-07 | §5.2 (example: the #59 limit), I11 | For each limit documented where users read it (for example "every multi-author construction is `contested` until #59"), the suite carries a test asserting the gap is open. | The test fails when the gap closes, forcing the documentation update; the list of such tests is published with the conformance report. |
