@@ -2,11 +2,12 @@
 // (§2), the DSSE PAE signed string (§2), statement identity (§3), the two signature algorithms (§4) and the
 // extension rules (§6).
 //
-// Read is the single entry point for received bytes. It refuses with a typed refusal (package refusal) or
-// returns a Statement whose Status says whether it can be evaluated (Valid) or is retained without
-// interpretation (Unsupported). The checks run in a fixed order so that a negative test can show which
-// boundary refused it: parse (size, depth, JSON subset) → envelope fields → body schema → body time values →
-// signature.
+// Read (or an explicitly configured Reader.Read) is the entry point for received bytes. It refuses with a
+// typed refusal (package refusal) or returns a Statement whose Status says whether it can be evaluated
+// (Valid) or is retained without interpretation (Unsupported). The checks run in a fixed order so that a
+// negative test can show which boundary refused it: parse (size, depth, JSON subset) → envelope fields →
+// body schema → body time values → signature → registered critical-extension validators. An unsupported
+// crit skips all body validation.
 package wire
 
 import (
@@ -137,8 +138,14 @@ var (
 // being parsed. Lines between the two bounds are parsed and then held to MaxSignedString exactly.
 const MaxLine = 6*MaxSignedString + 1024
 
-// Read parses, validates and verifies one received statement.
+// Read parses, validates and verifies one received statement, with no registered extensions.
 func Read(line []byte) (*Statement, error) {
+	return (&Reader{}).Read(line)
+}
+
+// Read parses, validates and verifies one received statement using this reader's fixed extension registry.
+// Unsupported critical extensions skip both base-body validation and every extension validator.
+func (r *Reader) Read(line []byte) (*Statement, error) {
 	if len(line) > MaxLine {
 		return nil, &refusal.Refusal{Class: refusal.Operational, Reason: refusal.SizeLimit,
 			Detail: "size limit " + strconv.Itoa(MaxSignedString) + " (line of " + strconv.Itoa(len(line)) + " bytes refused before parsing)"}
@@ -151,10 +158,10 @@ func Read(line []byte) (*Statement, error) {
 	if !ok {
 		return nil, refusal.Malformed("top level is not an object")
 	}
-	return fromEnvelope(env)
+	return r.fromEnvelope(env)
 }
 
-func fromEnvelope(full *canon.Object) (*Statement, error) {
+func (r *Reader) fromEnvelope(full *canon.Object) (*Statement, error) {
 	sigV, ok := full.Get("sig")
 	if !ok {
 		return nil, refusal.Malformed("missing sig")
@@ -278,7 +285,8 @@ func fromEnvelope(full *canon.Object) (*Statement, error) {
 	// checked on every statement this reader can evaluate.
 	// A statement whose crit names an extension this reader lacks is evaluated under no interpretation (§6),
 	// so its body is not read.
-	if len(s.Crit) == 0 {
+	supported := r.supports(s.Crit)
+	if supported {
 		known, unpinned, err := checkBody(s.Kind, body)
 		if err != nil {
 			return nil, err
@@ -296,8 +304,10 @@ func fromEnvelope(full *canon.Object) (*Statement, error) {
 		return nil, err
 	}
 	s.Verified = true
-	if len(s.Crit) > 0 {
+	if !supported {
 		s.Status, s.Why = Unsupported, "crit "+strings.Join(s.Crit, ",")
+	} else if err := r.validateExtensions(s.Crit, env); err != nil {
+		return nil, err
 	}
 	return s, nil
 }

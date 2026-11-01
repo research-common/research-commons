@@ -1,12 +1,12 @@
 // Package conformance ties the Go tests to docs/CONFORMANCE.md and to the wire-format vectors.
 //
-// Every case id in CONFORMANCE.md is a subtest of TestConformanceCases. A case passes there only when at
+// Every case id in CONFORMANCE.md and in the profile notes (ProfileNotes) is a subtest of TestConformanceCases. A case passes there only when at
 // least one test elsewhere in the module declares it with Covers(t, "<id>"), meaning that test checks the
 // case's whole required outcome. A test that checks only the layers built so far declares
 // Partial(t, "<id>", "<what is still unchecked>"); the case stays skipped and the report names both. Every
 // other case is pending (skipped), so the list of what is not built yet is always one `go test -v` away. A
 // call naming an id the document does not contain fails the build, so a renamed or mistyped case cannot pass
-// silently.
+// silently. An id defined in two documents fails too.
 //
 // The coverage scan is static (go/parser over every _test.go file), so it sees a Covers call whether or not
 // that test ran in this invocation. Run the whole module (`go test ./...`) to run the tests themselves.
@@ -40,20 +40,57 @@ func Partial(t testing.TB, id, remaining string) {
 // caseRow matches a table row that defines a case: "| C-core-12 | ..." or "| P-03 | ...".
 var caseRow = regexp.MustCompile(`(?m)^\| ((?:C-(?:core|exec|exch|btc)-[0-9]+[a-z]?)|(?:P-[0-9]+)) \|`)
 
-// CaseIDs returns every case id defined in CONFORMANCE.md, in document order, and an error if any id is
+// ProfileNotes are the design notes, besides CONFORMANCE.md, whose tables define conformance cases: a profile's
+// supplementary regressions stay in its own note. Paths are relative to the repository root.
+var ProfileNotes = []string{"docs/DESIGN-notes-bitcoin-time.md"}
+
+// Doc is one document the case ids are read from.
+type Doc struct {
+	Name  string
+	Bytes []byte
+}
+
+// CaseIDs returns every case id defined in one document, in document order, and an error if any id is
 // defined twice.
 func CaseIDs(doc []byte) ([]string, error) {
+	ids, _, err := CaseIDsAcross(Doc{Name: "document", Bytes: doc})
+	return ids, err
+}
+
+// CaseIDsAcross returns every case id defined in docs, in order (document by document), with the document
+// that defines each. An id defined twice, in one document or in two, is an error: every case has exactly one
+// home. A note that wants to restate a case defined elsewhere writes the id in backticks, which the row
+// pattern does not match.
+func CaseIDsAcross(docs ...Doc) ([]string, map[string]string, error) {
 	var ids []string
-	seen := map[string]bool{}
-	for _, m := range caseRow.FindAllSubmatch(doc, -1) {
-		id := string(m[1])
-		if seen[id] {
-			return nil, errors.New("case defined twice: " + id)
+	home := map[string]string{}
+	for _, d := range docs {
+		for _, m := range caseRow.FindAllSubmatch(d.Bytes, -1) {
+			id := string(m[1])
+			if prev, ok := home[id]; ok {
+				if prev == d.Name {
+					return nil, nil, errors.New("case defined twice: " + id + " in " + d.Name)
+				}
+				return nil, nil, errors.New("case defined twice: " + id + " in " + prev + " and " + d.Name)
+			}
+			home[id] = d.Name
+			ids = append(ids, id)
 		}
-		seen[id] = true
-		ids = append(ids, id)
 	}
-	return ids, nil
+	return ids, home, nil
+}
+
+// LoadCaseIDs reads docs/CONFORMANCE.md and every ProfileNotes file under root and returns their case ids.
+func LoadCaseIDs(root string) ([]string, map[string]string, error) {
+	var docs []Doc
+	for _, rel := range append([]string{"docs/CONFORMANCE.md"}, ProfileNotes...) {
+		b, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+		if err != nil {
+			return nil, nil, err
+		}
+		docs = append(docs, Doc{Name: rel, Bytes: b})
+	}
+	return CaseIDsAcross(docs...)
 }
 
 // Profile returns the scope a case belongs to: core, exec, exch, btc or property.

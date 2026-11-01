@@ -1,0 +1,12 @@
+statement st:A1 -> st:A1 signer=key:A kind=authored alg=ed25519 status="valid" verified=true chained=true evaluable=true counts=true
+  wire-why="" after=[] doubted=[]
+statement st:A2 -> st:A2 signer=key:A kind=authored alg=ed25519 status="valid" verified=true chained=true evaluable=true counts=true
+  wire-why="" after=[] doubted=[]
+statement st:HOLDER -> st:HOLDER signer=key:BB kind=holds alg=eip191-secp256k1 status="valid" verified=true chained=true evaluable=true counts=true
+  wire-why="" after=[] doubted=[]
+artifact X state="sole author" verify=0 why=[] explain=[] holders=["key:BB"]
+  claim signer=key:A statements=["st:A1" "st:A2"] current=["st:A2"]
+    st:A2 amends=["st:A1"]
+  field description state="default" default="\"readings, fixed\"" present=true from=[{Value:"readings, fixed" Signer:key:A Statement:st:A2}] rivals=[]
+  field licence state="undeclared" default="" present=false from=[] rivals=[]
+  field type state="default" default="\"dataset\"" present=true from=[{Value:"dataset" Signer:key:A Statement:st:A2}] rivals=[]

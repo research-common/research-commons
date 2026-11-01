@@ -1,0 +1,29 @@
+statement st:E1 -> st:E1 signer=key:K kind=edition alg=ed25519 status="valid" verified=true chained=true evaluable=true counts=false
+  wire-why="" after=[] doubted=["on a branch revoke_key st:REV does not include (sibling rule)"]
+statement st:E2 -> st:E2 signer=key:M kind=edition alg=ed25519 status="valid" verified=true chained=true evaluable=true counts=true
+  wire-why="" after=[] doubted=[]
+statement st:G -> st:G signer=key:K kind=genesis alg=ed25519 status="valid" verified=true chained=true evaluable=true counts=true
+  wire-why="" after=[] doubted=[]
+statement st:LATE -> st:LATE signer=key:K kind=edition alg=ed25519 status="valid" verified=true chained=true evaluable=true counts=false
+  wire-why="" after=["after revoke_key st:REV"] doubted=[]
+statement st:REV -> st:REV signer=key:K kind=revoke_key alg=ed25519 status="valid" verified=true chained=true evaluable=true counts=true
+  wire-why="" after=[] doubted=[]
+resource st:G current="st:G" tips=["st:G"] contested=["ed:E1" "ed:E2"] no-controller=false verify=3
+  retired key:K by st:REV
+  edition ed:E1 state=contested predecessors=["st:G"] controllers=[] k=0
+    approval st:E1 signer=key:K counted=false doubted=true withdrawn="" why="on a branch revoke_key st:REV does not include (sibling rule)"
+    explain=["contested under st:G: any one of {key:K,key:M}, 0 counted approval(s) and 1 a key event doubts" "approval st:E1 by key:K doubted: on a branch revoke_key st:REV does not include (sibling rule)"]
+  lookup ed:E1 statement=missing edition=ed:E1
+  lookup st:E1 statement=st:E1 edition=ed:E1
+  edition ed:E2 state=contested predecessors=["ed:E1"] controllers=[] k=0
+    approval st:E2 signer=key:M counted=true doubted=false withdrawn="" why=""
+    explain=["predecessor ed:E1 is contested" "authorized under ed:E1: any one of {key:K,key:M}, 1 approval(s)"]
+  lookup ed:E2 statement=missing edition=ed:E2
+  lookup st:E2 statement=st:E2 edition=ed:E2
+  edition ed:LATE state=unauthorized predecessors=["st:G"] controllers=[] k=0
+    approval st:LATE signer=key:K counted=false doubted=false withdrawn="" why="after revoke_key st:REV"
+    explain=["approval st:LATE by key:K not counted: after revoke_key st:REV"]
+  lookup ed:LATE statement=missing edition=ed:LATE
+  lookup st:LATE statement=st:LATE edition=ed:LATE
+  lookup st:G statement=st:G edition=missing
+  lookup 0000000000000000000000000000000000000000000000000000000000000000 statement=missing edition=missing

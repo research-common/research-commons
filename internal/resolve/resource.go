@@ -94,9 +94,9 @@ type Approval struct {
 type Edition struct {
 	ID           string
 	Resource     string
-	Predecessors []string // as edition ids (or the genesis id), sorted
-	Body         *canon.Object
-	Approvals    []Approval // by signer then statement id
+	Predecessors []string      // as edition ids (or the genesis id), sorted; nil for an uninterpreted body
+	Body         *canon.Object // retained raw body, not necessarily understood
+	Approvals    []Approval    // by signer then statement id
 	State        EditionState
 	// Explain is one line per reason, citing the rule and the predecessor it was evaluated under.
 	Explain []string
@@ -104,7 +104,7 @@ type Edition struct {
 	// Authorized editions only. K is the number of distinct controllers the rule needs (1 for any_one).
 	Controllers []string
 	K           int
-	// Members, as the edition lists them; nil when absent.
+	// Members, as the edition lists them; nil when absent or the body is not understood.
 	Members canon.Array
 }
 
@@ -156,16 +156,18 @@ func (a authority) describe() string {
 // held, or the held one has not chained or is not valid (it is shown by the log, and resolves nothing yet).
 func (r *Resolver) Resource(id string) (*Resource, bool) {
 	g, ok := r.byID[id]
-	if !ok || g.St.Kind != "genesis" || !g.Evaluable {
+	if !ok || g.St.Kind != "genesis" || !g.EvidenceReady() {
 		return nil, false
 	}
 	res := &Resource{ID: id, Genesis: g, RevokedControllers: map[string]string{}}
 	res.Type, res.Name, res.ForkedFrom = str(g.St.Body, "type"), str(g.St.Body, "name"), str(g.St.Body, "forked_from")
 	genAuth, _ := authorityOf(g.St.Body)
 
-	// Group approvals by body.
+	// Group approvals by raw body. A string resource field associates retained evidence for display only;
+	// unsupported bodies have not passed the kind's schema and must not supply members or predecessor links.
 	props := map[string]*Edition{}
-	alias := map[string]string{} // approval statement id -> edition id
+	understood := map[string]bool{} // at least one verified, valid approval has schema-checked this exact body
+	alias := map[string]string{}    // approval statement id -> edition id
 	for _, p := range r.byKind["edition"] {
 		if str(p.St.Body, "resource") != id {
 			continue
@@ -174,19 +176,19 @@ func (r *Resolver) Resource(id string) (*Resource, bool) {
 		e, ok := props[eid]
 		if !ok {
 			e = &Edition{ID: eid, Resource: id, Body: p.St.Body}
-			if c, ok := p.St.Body.Get("contents"); ok {
-				if m, ok := c.(*canon.Object).Get("members"); ok {
-					e.Members = m.(canon.Array)
-				}
-			}
 			props[eid] = e
+		}
+		// Schema validity is separate from chaining: well-formed detached proposals keep their display,
+		// but no approval counts until it is evaluable and its signer's key events let it count.
+		if p.St.Verified && p.St.Status == wire.Valid {
+			understood[eid] = true
 		}
 		alias[p.St.ID] = eid
 		a := Approval{Statement: p.St.ID, Signer: p.St.Signer, Counted: true}
 		switch {
 		case !p.Chained:
 			a.Counted, a.Why = false, "detached"
-		case !p.Evaluable:
+		case !p.EvidenceReady():
 			a.Counted, a.Why = false, string(p.St.Status)
 		case len(p.After) > 0:
 			a.Counted, a.Why = false, p.After[0]
@@ -200,6 +202,14 @@ func (r *Resolver) Resource(id string) (*Resource, bool) {
 		slices.SortFunc(e.Approvals, func(a, b Approval) int {
 			return strings.Compare(a.Signer+a.Statement, b.Signer+b.Statement)
 		})
+		if !understood[e.ID] {
+			continue
+		}
+		if c, ok := e.Body.Get("contents"); ok {
+			if m, ok := c.(*canon.Object).Get("members"); ok {
+				e.Members = m.(canon.Array)
+			}
+		}
 		e.Predecessors = ids(e.Body, "predecessors")
 		slices.Sort(e.Predecessors)
 		e.Predecessors = slices.Compact(e.Predecessors)

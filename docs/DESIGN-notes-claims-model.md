@@ -388,14 +388,22 @@ Rules:
     later state with different bytes is a revision, and two captures at the same state with different bytes
     contradict each other (C-core-40). States that the rule cannot order are not comparable.
   - *Expected revision is not contradiction.* A finality-aware agreement model (§5.3.2) returns
-    `inconclusive (referent revised)` for two captures at different states before finality, and `contradicts`
-    only when both are at the same state or past it.
-  - *Class migration by rule.* While the rule is unmet, agreement is source-class (near-equality around the
-    same time). Near-equality needs a declared tolerance, from the agreement model or the source profile;
-    without one no default tolerance is applied and the source-class result is `inconclusive`, never counted,
-    as for a `protocol` workflow with no comparator (§5.2). Once it holds, a re-capture of the same referent
-    with identical bytes is an exact-bytes corroboration. The observer still asserts the class; the rule is what
-    lets a reader apply the stronger agreement model.
+    `inconclusive (referent revised)` for two captures at different states before finality, `inconclusive
+    (not comparable under the rule)` for two captures at states the rule cannot order, and `contradicts` only
+    when both are at the same state or past it.
+  - *For an exact-bytes referent, the rule drives the referent status only.* The referent is pinned by block
+    hash, and the bytes at a hash never change: a reorg orphans the block, it does not alter what the hash
+    holds. So agreement is byte equality at the pinned hash at every depth: another key's re-read with
+    identical bytes is a corroboration whether or not the rule holds yet, different bytes contradict, and the
+    rule decides only `provisional (d; final at N)` · `final` · `not canonical`. An exact-bytes referent is
+    never `revised`.
+  - *Class migration by rule* applies to source-class referents, whose bytes can be revised before the rule is
+    met. While the rule is unmet, agreement is source-class (near-equality around the same time). Near-equality
+    needs a declared tolerance, from the agreement model or the source profile; without one no default
+    tolerance is applied and the source-class result is `inconclusive`, never counted, as for a `protocol`
+    workflow with no comparator (§5.2). Once it holds, a re-capture of the same referent with identical bytes
+    is an exact-bytes corroboration. The observer still asserts the class; the rule is what lets a reader apply
+    the stronger agreement model.
   - *Derived results inherit the horizon*, shown beside the grade: "rests on 3 captures: 2 final, 1
     provisional until RF" (§7).
 - **Identical bytes mean different things per class.** For most classes, a second key publishing the same bytes

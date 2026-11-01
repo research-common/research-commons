@@ -1,0 +1,13 @@
+statement st:A0 -> st:A0 signer=key:A kind=authored alg=ed25519 status="valid" verified=true chained=true evaluable=true counts=true
+  wire-why="" after=[] doubted=[]
+statement st:LATE -> st:LATE signer=key:A kind=authored alg=ed25519 status="valid" verified=true chained=false evaluable=false counts=false
+  wire-why="" after=[] doubted=[]
+statement st:REV missing
+statement st:UNKNOWN -> st:UNKNOWN signer=key:A kind=endorses alg=ed25519 status="unknown kind" verified=true chained=true evaluable=false counts=false
+  wire-why="endorses" after=[] doubted=[]
+artifact X state="sole author" verify=0 why=[] explain=[] holders=[]
+  claim signer=key:A statements=["st:A0"] current=["st:A0"]
+  not-counted st:LATE signer=key:A why="detached"
+  field description state="undeclared" default="" present=false from=[] rivals=[]
+  field licence state="default" default="\"MIT\"" present=true from=[{Value:"MIT" Signer:key:A Statement:st:A0}] rivals=[]
+  field type state="default" default="\"dataset\"" present=true from=[{Value:"dataset" Signer:key:A Statement:st:A0}] rivals=[]

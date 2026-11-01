@@ -1,0 +1,40 @@
+statement st:BAD -> st:BAD signer=key:A kind=edition alg=ed25519 status="valid" verified=true chained=true evaluable=true counts=true
+  wire-why="" after=[] doubted=[]
+statement st:G -> st:G signer=key:A kind=genesis alg=ed25519 status="valid" verified=true chained=true evaluable=true counts=true
+  wire-why="" after=[] doubted=[]
+statement st:WD missing
+statement st:XA -> st:XA signer=key:A kind=edition alg=ed25519 status="valid" verified=true chained=true evaluable=true counts=true
+  wire-why="" after=[] doubted=[]
+statement st:XA2 -> st:XA2 signer=key:A kind=edition alg=ed25519 status="valid" verified=true chained=true evaluable=true counts=true
+  wire-why="" after=[] doubted=[]
+statement st:XB -> st:XB signer=key:BB kind=edition alg=eip191-secp256k1 status="valid" verified=true chained=true evaluable=true counts=true
+  wire-why="" after=[] doubted=[]
+statement st:YA -> st:YA signer=key:A kind=edition alg=ed25519 status="valid" verified=true chained=true evaluable=true counts=true
+  wire-why="" after=[] doubted=[]
+statement st:YB -> st:YB signer=key:BB kind=edition alg=eip191-secp256k1 status="valid" verified=true chained=true evaluable=true counts=true
+  wire-why="" after=[] doubted=[]
+resource st:G current="" tips=["ed:XA" "ed:YA"] contested=[] no-controller=false verify=3
+  edition ed:XA state=edition predecessors=["st:G"] controllers=["key:BB" "key:A" "key:C"] k=2
+    approval st:XB signer=key:BB counted=true doubted=false withdrawn="" why=""
+    approval st:XA2 signer=key:A counted=true doubted=false withdrawn="" why=""
+    approval st:XA signer=key:A counted=true doubted=false withdrawn="" why=""
+    explain=["authorized under st:G: 2 of 3 of {key:BB,key:A,key:C}, 2 approval(s)"]
+  lookup ed:XA statement=missing edition=ed:XA
+  lookup st:XB statement=st:XB edition=ed:XA
+  lookup st:XA2 statement=st:XA2 edition=ed:XA
+  lookup st:XA statement=st:XA edition=ed:XA
+  edition ed:YA state=edition predecessors=["st:G"] controllers=["key:BB" "key:A" "key:C"] k=2
+    approval st:YB signer=key:BB counted=true doubted=false withdrawn="" why=""
+    approval st:YA signer=key:A counted=true doubted=false withdrawn="" why=""
+    explain=["authorized under st:G: 2 of 3 of {key:BB,key:A,key:C}, 2 approval(s)"]
+  lookup ed:YA statement=missing edition=ed:YA
+  lookup st:YB statement=st:YB edition=ed:YA
+  lookup st:YA statement=st:YA edition=ed:YA
+  edition ed:BAD state=orphan predecessors=["st:XA"] controllers=[] k=0
+    approval st:BAD signer=key:A counted=true doubted=false withdrawn="" why=""
+    explain=["predecessor st:XA is the statement id of an approval of ed:XA, not an edition id"]
+  lookup ed:BAD statement=missing edition=ed:BAD
+  lookup st:BAD statement=st:BAD edition=ed:BAD
+  fork {At:st:G Branches:[ed:XA ed:YA] Tips:[ed:XA ed:YA] ClearedBy:} cleared=false
+  lookup st:G statement=st:G edition=missing
+  lookup 0000000000000000000000000000000000000000000000000000000000000000 statement=missing edition=missing

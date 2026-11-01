@@ -627,6 +627,7 @@ func (r *Resolver) grade(a *Artifact, visiting map[string]bool) {
 	prov := a.Group.Provenance
 	exempt := r.isRefutation(a.Digest)
 	var obs, contra, leaves, missing int
+	refs := map[string]int{}
 	for _, in := range prov.Inputs {
 		if visiting[in] {
 			a.Explain = append(a.Explain, "input "+shortDigest(in)+" is on a cycle of provenance; not followed")
@@ -634,8 +635,12 @@ func (r *Resolver) grade(a *Artifact, visiting map[string]bool) {
 		}
 		if r.isObservation(in) {
 			obs++
-			if r.contradicted(in) > 0 {
+			c, ref := r.obsNotes(in) // observation.go: lite status and the referent status that bears on the input
+			if c {
 				contra++
+			}
+			if ref != "" {
+				refs[ref]++
 			}
 			continue
 		}
@@ -658,8 +663,15 @@ func (r *Resolver) grade(a *Artifact, visiting map[string]bool) {
 	}
 	if obs > 0 {
 		s := fmt.Sprintf("%d observation(s)", obs)
+		var parts []string
+		for _, k := range sortedKeys(refs) {
+			parts = append(parts, fmt.Sprintf("%d %s", refs[k], k))
+		}
 		if contra > 0 {
-			s += fmt.Sprintf(": %d contradicted within statements you hold", contra)
+			parts = append(parts, fmt.Sprintf("%d contradicted %s", contra, r.obs.scope))
+		}
+		if len(parts) > 0 {
+			s += ": " + strings.Join(parts, "; ")
 		}
 		a.RestsOn = append(a.RestsOn, s)
 	}
@@ -726,23 +738,4 @@ func (r *Resolver) isRefutation(d string) bool {
 		}
 	}
 	return false
-}
-
-// contradicted counts the counted `corroborates` with verdict `contradicts` on any counted `observed` of d,
-// within the statements held. The full corroboration status (agreement models, trust, scope, §5.3.2) is a
-// later slice; this count is what the scoped summary beside a grade needs today.
-func (r *Resolver) contradicted(d string) int {
-	obs := map[string]bool{}
-	for _, p := range r.byKind["observed"] {
-		if p.Counts() && contentDigest(p.St.Body) == d {
-			obs[p.St.ID] = true
-		}
-	}
-	n := 0
-	for _, p := range r.byKind["corroborates"] {
-		if p.Counts() && obs[str(p.St.Body, "of")] && str(p.St.Body, "verdict") == "contradicts" {
-			n++
-		}
-	}
-	return n
 }

@@ -475,10 +475,11 @@ func TestKeyEventsReachAuthorship(t *testing.T) {
 
 // --- derivation groups (§5.2) ------------------------------------------------------------------------------
 
-// TestDerivationGroupNoPriority: C-core-20 (and the bitcoin-time note's C-btc-26, which CONFORMANCE.md does not list yet). Two derivers of W on the same inputs,
-// both bitcoin-verified, A earlier: one group, no default author, no later claimant, no contested.
+// TestDerivationGroupNoPriority: C-core-20 and C-btc-26 (bitcoin-time note §14.4). Two derivers of W on the same
+// inputs, both bitcoin-verified, A earlier: one group, no default author, no later claimant, no contested.
 func TestDerivationGroupNoPriority(t *testing.T) {
 	conformance.Covers(t, "C-core-20")
+	conformance.Partial(t, "C-btc-26", "resolver display under a stand-in verifier; members verified by the OTS verifier against a header chain")
 	w := newWorld(t)
 	w.workflow("A", "W", "bytes", "")
 	w.authored("A1", "A", "X", "prov", []string{"W", "I"})
