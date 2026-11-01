@@ -441,6 +441,9 @@ the tool does not decide which side is wrong. A counted `contradicts` counts aga
 each observation in its comparison data (the result's inputs other than the original); a `supports` counts for
 the original only, because a check against data says nothing about the data (C-core-51).
 
+In `rc/1` the counting unit is the signing key; every count names it, and keys are not people (§9.3). A reader
+policy may choose another unit once a profile defines one.
+
 #### 5.3.3 Capture evidence
 
 No mechanism proves that an observer saw what they claim. Each level of capture evidence changes *whose word*
@@ -462,8 +465,9 @@ stand for one person.
 
 Reputation is a projection a reader chooses: for example, an observer's corroboration record against sources
 unrelated to it, over a window, under rules the reader picks. The tool computes projections on demand and ships
-none as defaults. A well-corroborated track record legitimately earns weight for the reading nobody else could
-have taken. That is the honest place for "trust this observer" to come from.
+none as defaults. A reputation record is per signing key, the counting unit of §5.3.2. A well-corroborated
+track record legitimately earns weight for the reading nobody else could have taken. That is the honest place
+for "trust this observer" to come from.
 
 ## 6. Curation and hubs
 
