@@ -19,6 +19,12 @@
 //     and a receipt that is corrupt, copied, foreign or of an unknown version never trusted. A receipt is a cache:
 //     every answer equals the cold one.
 //
+// The receipt store is opt-in: a Verifier reads every proof cold unless the caller sets Verifier.Receipts, and
+// nothing does so by default. Measured, a small proof (a few hundred bytes, the common case) verifies faster
+// cold than through the cache, which reads, parses and authenticates a receipt and re-hashes the proof bytes on
+// every read anyway (check 1 of §9.3); the cache only pays for large proofs. Enable it by default once proofs
+// are large or verification moves to a helper process with its own time budget (§12).
+//
 // Nothing in this package opens a network connection. Headers arrive through Chain.Add from whatever explicit
 // sync command the reader runs; calendars and transports are interfaces the writer supplies. Reads touch the
 // snapshot and the blobs the reader already holds, nothing else (§9.4, C-btc-25).

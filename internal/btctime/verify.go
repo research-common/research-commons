@@ -149,7 +149,7 @@ type Verifier struct {
 	// Now is the reader's clock (freshness, §7).
 	Now func() time.Time
 	// Receipts, when set, is the receipt store of §9: a cache that may stand in for re-parsing a proof, never
-	// evidence. Nil reads every proof cold, with the same answers.
+	// evidence. Nil (the default) reads every proof cold, with the same answers; the store is opt-in (doc.go).
 	Receipts *Receipts
 }
 
