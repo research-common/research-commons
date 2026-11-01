@@ -523,7 +523,7 @@ the source.
 | availability | redistribution permission and byte obtainability, separately |
 | replication | `bytes` (public deterministic source named) · `protocol` (re-measurable, never the same bytes; method named) · `none` · undeclared (#1, #7) |
 | sampling | n with its unit, per-group n where the design has arms, dispersion, window (#2) |
-| shelf life | publisher-declared validity; age shown at read time (#4). *(Proposed.)* The age is counted from a verified bound (§10: the committing block's header time, miner-reported) to the reader's evaluation time, which is part of the answer's time context (I14); with only a local or self-declared time the age reads `unknown`, never a number. |
+| shelf life | publisher-declared validity; age shown at read time (#4). The age is counted from a verified bound (§10: the header time of the verified anchor's block, labelled miner-reported) to the reader's evaluation time, which is part of the answer's time context (I14); with no verified anchor, only a local or self-declared time, the age reads `unknown`, never a number. The age is display only, never an ordering key. |
 | capture evidence | §5.3.3 level, verified or not |
 | corroboration | §5.3.2 status, scoped |
 | selection | curated · rule-based · completeness claim · undeclared (§6). Missing means undeclared. |
@@ -537,9 +537,11 @@ the tool never assumes one silently.
 
 **Declared beside computed.** Where a declaration can be checked against the statements a reader holds, the
 tool shows both and flags disagreement; it never substitutes one for the other. A synthesis author's declared
-sampling n beside the n computed from its inputs (with denominators); a contract's declared n beside the
-delivered sampling disclosure (§9.4); a series' declared `frozen_before` beside its members' finality (§8); an
-asserted finality state beside a re-check. A derived result carries each disclosure as a scoped summary
+sampling n beside the n computed from its inputs (the sum of the direct inputs' declared n when they share one
+unit, with the denominator: k of the N direct inputs declare one, `computed from k of N inputs`; across units it
+is not computed, and the reason is shown); a contract's declared n beside the delivered sampling disclosure
+(§9.4); a series' declared `frozen_before` beside its members' finality (§8); an asserted finality state beside
+a re-check. A derived result carries each disclosure as a scoped summary
 ("rests on 3 observations: 2 final, 1 provisional; 1 contradicted within statements you hold"), computed as
 the weakest replication, the shortest shelf life, the per-input n, and the count of final captures, with
 `explain` (§13) for the detail.
@@ -552,7 +554,7 @@ a commitment proves possession by T, not independence (§9.3), and a commitment 
 seed, a one-line rule) is enumerable against its hash, so the author should include a nonce. The tool cannot
 tell low-entropy content from high, so this is guidance, not a check: `publish` with `withheld` warns when
 the content is shorter than a documented threshold and proceeds (a heuristic, documented as one, I11).
-*(Proposed.)* The threshold is 64 bytes: room for a 128-bit nonce written as hex (32 bytes) beside a short
+The threshold is 64 bytes: room for a 128-bit nonce written as hex (32 bytes) beside a short
 payload. Size stands in for entropy and is a poor proxy in both directions (a 10 KB file of one repeated
 guessable value is enumerable; 16 random bytes are not), so the warning names the threshold and the risk and
 is never recorded in the statement. A withheld artifact reads `revealed` only once a `holds` exists **and**
