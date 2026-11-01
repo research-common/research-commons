@@ -284,11 +284,16 @@ type Observation struct {
 	Explain         []string
 	// finalityUnevaluable: the declared finality rule was read and this reader cannot evaluate it.
 	finalityUnevaluable bool
+	// methodUnread is, for a method-class observation, why the reader could not read the pinned method edition's
+	// system_keys declaration ("not held", "pending", …); "" when it read it (systemkeys.go).
+	methodUnread, methodEdition string
 }
 
 // VerifyExit is `verify` for an observation (claims §13): it checks the statement's signature and its pins. 0
 // when they hold; 3 when the body was not interpreted, the statement counts toward nothing, the referent is
-// `unpinned`, or its declared finality rule cannot be evaluated by this reader. Corroboration status, the
+// `unpinned`, its declared finality rule cannot be evaluated by this reader, or, for a method-class observation,
+// the method edition it pins is not held as authorized (whether that edition declares system_keys, and so whether
+// the pins hold, cannot be read). Corroboration status, the
 // reader's re-check and capture evidence are disclosures shown beside it (I6) and never change the exit, so no
 // exit rests on a capture level the reader did not verify (C-core-52). Why lists each cause.
 func (o *Observation) VerifyExit() (int, []string) {
@@ -304,6 +309,9 @@ func (o *Observation) VerifyExit() (int, []string) {
 	}
 	if o.finalityUnevaluable {
 		why = append(why, "referent: "+RefRuleUnchecked+" (rule "+strconv.Quote(o.Finality.Rule)+")")
+	}
+	if o.methodUnread != "" {
+		why = append(why, "referent: method edition "+keylog.Short(o.methodEdition)+" "+o.methodUnread+": whether it declares system_keys cannot be read")
 	}
 	if len(why) > 0 {
 		return 3, why
@@ -413,6 +421,7 @@ func (r *Resolver) observationBase(p *Placed) *Observation {
 		o.Unpinned = unpinned
 		if d.Edition != "" {
 			o.ReferentHistory = append(o.ReferentHistory, d.history(missing))
+			o.methodUnread, o.methodEdition = d.Unread, d.Edition
 		}
 	}
 	return o

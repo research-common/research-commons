@@ -175,8 +175,10 @@ func TestMethodSystemKeysPinnedEdition(t *testing.T) {
 // (b) M held only as pending (one of two approvals) declaring model, provider, routing_era: neither referent is
 // unpinned on account of a declaration, comparability is unchecked naming the edition not held / pending, never
 // comparable, and a corroboration of O1 on O2 does not count. (c) the second approval arrives: both unpinned
-// naming system.routing_era, explain cites M. Control: an authorized M declaring model, provider makes the pair
-// comparable and the corroboration counts, so the unchecked in (a) and (b) is the edition's state.
+// naming system.routing_era, explain cites M. verify exits 3 in (a) and (b) naming the edition, and in (c) for the
+// unpinned key only. Control: an authorized M declaring model, provider makes the pair
+// comparable, the corroboration counts and verify exits 0, so the unchecked and the exit 3 in (a) and (b) are the
+// edition's state.
 func TestMethodSystemKeysUnread(t *testing.T) {
 	conformance.Covers(t, "C-core-32d")
 	w := newWorld(t)
@@ -211,6 +213,11 @@ func TestMethodSystemKeysUnread(t *testing.T) {
 				has(t, v.Render(), "comparability unchecked (method edition "+c.unread)
 				hasNot(t, v.Render(), "comparable;")
 				has(t, v.Render(), "method edition "+keylog.Short(m)+" "+c.unread)
+				// the pins cannot be judged without the declaration: verify could not check (claims §13)
+				code, why := v.VerifyExit()
+				if code != 3 || !strings.Contains(strings.Join(why, ";"), "method edition "+keylog.Short(m)+" "+c.unread+": whether it declares system_keys cannot be read") {
+					t.Fatalf("verify %d %v", code, why)
+				}
 			}
 			v := subsetView(t, w, c.lines, o1)
 			wantStatus(t, v, "unchecked within statements you hold")
@@ -225,6 +232,11 @@ func TestMethodSystemKeysUnread(t *testing.T) {
 				t.Fatalf("unpinned %v", v.Unpinned)
 			}
 			has(t, v.Render(), "method edition "+keylog.Short(m)+" (authorized) declares system_keys model, provider, routing_era")
+			// read now: verify exits 3 for the unpinned key, not for the edition
+			code, why := v.VerifyExit()
+			if j := strings.Join(why, ";"); code != 3 || !strings.Contains(j, "referent.system.routing_era") || strings.Contains(j, "cannot be read") {
+				t.Fatalf("verify %d %v", code, why)
+			}
 		}
 	})
 	t.Run("control: an authorized declaration both meet", func(t *testing.T) {
@@ -240,6 +252,10 @@ func TestMethodSystemKeysUnread(t *testing.T) {
 			t.Fatalf("comparability %+v", v.Comparability)
 		}
 		wantStatus(t, v, "corroborated 1 within statements you hold")
+		// the declaration read and met: verify passes, so the exit 3 in (a) and (b) is the edition's state
+		if code, why := v.VerifyExit(); code != 0 {
+			t.Fatalf("verify %d %v", code, why)
+		}
 	})
 	// an approval's statement id names no edition (wire §3): pinning it reads as not held, never as the edition
 	t.Run("an approval's statement id is not an edition id", func(t *testing.T) {
