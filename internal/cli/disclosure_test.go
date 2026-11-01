@@ -254,7 +254,7 @@ func trashBlobs(t *testing.T, pkg string) {
 // statement is the same either way (the warning is never recorded): the body of (a) carries no member the
 // body of a withheld publish at the threshold lacks, and verify exits 0 for both.
 func TestWithheldShortWarning(t *testing.T) {
-	conformance.Partial(t, "C-core-76a", "warning below the threshold, none at it or when not withheld, nothing recorded, verify unchanged; the threshold (64 bytes) is a proposed value awaiting a decision, documented in the claims-model note as a heuristic")
+	conformance.Covers(t, "C-core-76a")
 	withheld := `{"obtainable":false,"redistribution":"withheld","withheld_until":"after the season"}`
 	cases := []struct {
 		name, data, av string
