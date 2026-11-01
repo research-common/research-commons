@@ -96,12 +96,17 @@ type SegmentReader interface {
 func WithSegments(s SegmentReader) Option { return func(r *Resolver) { r.rules.segments = s } }
 
 // RecordSegments is the default SegmentReader: the position is the date of referent.window.from (to
-// referent.window.to), or of referent.at; finality is not re-checked.
+// referent.window.to), or of referent.at; finality is not re-checked. It is the only SegmentReader this tool
+// ships, so without WithSegments no members' boundary is ever computed.
 type RecordSegments struct{}
+
+// NotRechecked is the Why of every segment state RecordSegments returns for a member it found: the mark of a
+// boundary left unchecked because no finality re-check is configured, not because of the series itself.
+const NotRechecked = "finality not re-checked by this reader"
 
 // Segment implements SegmentReader.
 func (RecordSegments) Segment(m *Member) SegmentState {
-	s := SegmentState{Final: "unchecked", Why: "finality not re-checked by this reader"}
+	s := SegmentState{Final: "unchecked", Why: NotRechecked}
 	if m.record == nil {
 		s.Why = m.recordWhy
 		return s
@@ -325,6 +330,12 @@ func (s *Series) compare() {
 			s.Comparison = "agrees"
 		}
 	}
+}
+
+// NoRecheck reports whether the boundary is unchecked because some segment had no finality re-check at all
+// (the default RecordSegments reader), rather than for a reason in the series' own data.
+func (s *Series) NoRecheck() bool {
+	return slices.ContainsFunc(s.Segments, func(g Segment) bool { return g.Final == "unchecked" && g.Why == NotRechecked })
 }
 
 // Line is the one-line display: declared beside computed.

@@ -1,6 +1,7 @@
 package resolve
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -35,8 +36,9 @@ import (
 // text reads today, and every status says so. Independence is never inferred: distinct keys prove nothing about
 // it (§5.3.2, §9.3), so it reads `unknown` and declared shared sources are grouped beside the count.
 //
-// Trust: the note computes the status from the corroborations a reader "holds and trusts". The resolver takes
-// no trust input yet, so every counted statement is counted and the status says trust is not configured.
+// Trust: the note computes the status from the corroborations a reader "holds and trusts". With no reader policy
+// every counted statement is counted and the status says trust is not configured; with one (WithPolicy), only
+// evidence from keys it trusts for corroboration of the observation's content is counted (policy.go).
 
 // Evidence is one input to a corroboration status.
 type Evidence struct {
@@ -148,6 +150,8 @@ type Corroboration struct {
 	Held    []string
 	Left    []string
 	Explain []string
+	// Trust is the reader's trust line: not configured, or the policy and what it left uncounted (policy.go).
+	Trust string
 }
 
 // Status is the status token with its scope: `corroborated n · contradicted m within …`, or `unchecked within
@@ -265,6 +269,7 @@ func (r *Resolver) corroborate(o *Observation, st *wire.Statement, full bool) *C
 	slices.SortFunc(c.Evidence, func(a, b Evidence) int {
 		return strings.Compare(a.Via+a.Key+a.Statement, b.Via+b.Key+b.Statement)
 	})
+	r.trustFilter(c, o) // the reader's corroboration trust, before Counter (policy.go)
 	var sup, con []Evidence
 	for _, e := range c.Evidence {
 		if !e.Counted {
@@ -536,7 +541,7 @@ func (c *Corroboration) render(indent string) string {
 	for _, s := range sortedKeys(c.Shared) {
 		fmt.Fprintf(&b, "%s  declared shared source %q: %s\n", indent, s, strings.Join(c.Shared[s], ", "))
 	}
-	fmt.Fprintf(&b, "%s  %s\n", indent, "your trust in these keys: not configured (every counted statement is counted)")
+	fmt.Fprintf(&b, "%s  %s\n", indent, cmp.Or(c.Trust, "your trust in these keys: not configured (every counted statement is counted)"))
 	for _, e := range c.Evidence {
 		who := "the reader"
 		if !e.Reader() {
@@ -598,7 +603,11 @@ func orDash(s string) string {
 func (r *Resolver) obsNotes(d string) (contradicted bool, status string) {
 	rank := map[string]int{RefNotCanonical: 5, RefRevised: 4, RefUnavailable: 3, RefProvisional: 2, RefFinal: 1}
 	best := 0
-	for _, p := range r.observedOf(d, true) {
+	ps, unmet := r.observedFor(d) // every counted observation, or the reader's selected one (policy.go)
+	if unmet != "" {
+		return false, unmet
+	}
+	for _, p := range ps {
 		o := r.observationLite(p)
 		if o.Corroboration.Contradicted > 0 && !o.Corroboration.Unchecked {
 			contradicted = true

@@ -10,6 +10,7 @@
 //	<root>/statements/<signer>/<id>     one canonical statement line, read-only
 //	<root>/journal/pending/<op>.json    committed, not yet installed (§3.1 step 2)
 //	<root>/journal/done/<op>.json       installed, projections pending (§3.1 step 4)
+//	<root>/cache/<projection>/<digest>   projections (disposable; created on first use)
 //	<root>/retained/<hex>               reserved: lines under an rc major this reader cannot compute ids for,
 //	                                    keyed by the sha256 of their canonical form (wire §6, §8); written by pull
 //	<root>/quarantine/                  corrupt blobs, statements and records, moved aside, never deleted

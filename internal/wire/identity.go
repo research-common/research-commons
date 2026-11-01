@@ -243,14 +243,14 @@ func interpretV1(s *Statement, env *canon.Object) (Status, string) {
 }
 
 func baseBody(s *Statement) (Status, string) {
-	known, unpinned, err := checkBody(s.Kind, s.Body)
+	known, ctx, err := bodySchema(s.Kind, s.Body)
 	if err != nil {
 		return Invalid, err.Error()
 	}
 	if err := checkBodyTimes(s.Kind, s.Body); err != nil {
 		return Invalid, err.Error()
 	}
-	s.Unpinned = unpinned
+	s.Unpinned, s.refs = ctx.unpinned, sortedRefs(ctx.refs)
 	if !known {
 		return UnknownKind, s.Kind
 	}
