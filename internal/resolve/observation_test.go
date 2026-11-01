@@ -670,7 +670,7 @@ func TestHandPickedCohort(t *testing.T) {
 // TestSharedSourceAndIndependence: C-core-49 and C-core-50. Declared shared sources are grouped beside the count;
 // independence is unknown whatever the keys.
 func TestSharedSourceAndIndependence(t *testing.T) {
-	conformance.Partial(t, "C-core-49", "counting unit pending identity decision (counts distinct signing keys, labelled); quorums requiring independence are the exchange profile")
+	conformance.Covers(t, "C-core-49")
 	conformance.Covers(t, "C-core-50")
 	w := newWorld(t)
 	o1 := w.observed("O1", "O1", "X", "phenomenon", obj("instrument", "urn:s", "location", "geo:1,2", "at", "2026-07-01T12:00:00Z"))
@@ -688,6 +688,33 @@ func TestSharedSourceAndIndependence(t *testing.T) {
 	}
 	has(t, out, "independence: unknown")
 	has(t, out, "counted as: "+UnitKeys)
+	// the variant: two observations from distinct keys of the same feed, one corroborating the other: corroborated
+	// 1 (the unit is the signing key), the shared feed declared beside it
+	wv := newWorld(t)
+	ov := wv.observed("O1", "O1", "X", "phenomenon", obj("instrument", "urn:s", "location", "geo:1,2", "at", "2026-07-01T12:00:00Z"))
+	wv.observed("O2", "O2", "Y", "phenomenon", obj("instrument", "urn:t", "location", "geo:1,2", "at", "2026-07-01T12:00:00Z"))
+	wv.workflow("WA", "W", "bytes", "")
+	wv.corroborates("K2", "O2", ov, wv.result("R2", "O2", "v2", "W", "X", "Y"), "supports", "shares", []string{"upstream feed F"})
+	vv := obsView(t, wv, ov)
+	wantStatus(t, vv, "corroborated 1 within statements you hold")
+	has(t, vv.Render(), `declared shared source "upstream feed F": corroborates `)
+	has(t, vv.Render(), "counted as: "+UnitKeys)
+	// a quorum requiring independence, met by the two corroborators' keys submitting one result, reads unknown,
+	// never 2 (§9.3: distinct keys establish nothing)
+	g := w.task("G", "R")
+	e := w.taskEdition("E", "R", g, []string{g}, w.contract("R", "quorum", quorum(2, IndependenceRequired)))
+	w.submit("S1", "C1", g, e, "X")
+	w.submit("S2", "C2", g, e, "X")
+	if rd := readinessOf(t, taskView(t, w, g), w.ed(e)); rd.Token != ReadyUnknown {
+		t.Fatalf("readiness %s, want unknown", rd.Token)
+	}
+	// control: the same two submissions under a quorum not requiring independence are ready
+	e2 := w.taskEdition("E2", "R", g, []string{e}, w.contract("R", "quorum", quorum(2, IndependenceNotRequired)))
+	w.submit("S3", "C1", g, e2, "X")
+	w.submit("S4", "C2", g, e2, "X")
+	if rd := readinessOf(t, taskView(t, w, g), w.ed(e2)); rd.Token != Ready {
+		t.Fatalf("control: readiness %s, want ready", rd.Token)
+	}
 
 	// C-core-50: no shares declared, distinct keys: independence still unknown, never 2
 	w2 := newWorld(t)
@@ -705,7 +732,7 @@ func TestSharedSourceAndIndependence(t *testing.T) {
 // TestDisagreementIsSymmetric: C-core-51. D contradicted by 2 under M; each neighbour contradicted by 1; nothing
 // marked wrong, false or an outlier.
 func TestDisagreementIsSymmetric(t *testing.T) {
-	conformance.Partial(t, "C-core-51", "counting unit pending identity decision (D's 2 counts distinct signing keys, labelled)")
+	conformance.Covers(t, "C-core-51")
 	w := newWorld(t)
 	ph := func(name, n, x, inst string) string {
 		return w.observed(name, n, x, "phenomenon", obj("instrument", inst, "location", "geo:39.7,-105.0", "at", "2026-07-01T12:00:00Z"))
@@ -837,9 +864,10 @@ func TestCaptureRoles(t *testing.T) {
 // --- §5.4 reputation ---------------------------------------------------------------------------------------
 
 // TestReputationIsChosen: C-core-56. Two projections under different windows and rules each show rule, window
-// and denominator; the package defines no rule of its own (fresh-install control: nothing ranks observers).
+// and denominator and name the unit (a record is per signing key); no source of the install tree defines a rule
+// or computes a projection (fresh-install control: nothing ranks observers).
 func TestReputationIsChosen(t *testing.T) {
-	conformance.Partial(t, "C-core-56", "counting unit pending identity decision (a record is per signing key); install-tree scan covers this package only, the CLI tree does not exist yet")
+	conformance.Covers(t, "C-core-56")
 	w := newWorld(t)
 	x1 := w.observed("O1", "O", "X1", "exact-bytes", chainRef(3), "at", "2026-01-10T00:00:00Z")
 	w.observed("O2", "O", "X2", "phenomenon", obj("instrument", "urn:s", "location", "geo:1,2", "at", "2026-06-01T00:00:00Z"), "at", "2026-06-01T00:00:00Z")
@@ -861,15 +889,40 @@ func TestReputationIsChosen(t *testing.T) {
 		has(t, s, "of "+string(rune('0'+p.Denominator))+" observation(s)")
 	}
 	_ = x1
-	// no shipped rule: no non-test source file constructs a ReputationRule
-	files, _ := filepath.Glob("*.go")
-	for _, f := range files {
-		if strings.HasSuffix(f, "_test.go") {
-			continue
+	has(t, all.String(), "one signing key per observer (not people; independence unknown)")
+	// fresh install: no non-test Go source in the install tree (internal/ and cmd/, the binary's whole source)
+	// constructs a ReputationRule or calls Reputation, so nothing computes, ships or ranks by a reputation by
+	// default (§5.4)
+	ranks := func(src string) bool {
+		return strings.Contains(src, "ReputationRule{") || strings.Contains(src, ".Reputation(")
+	}
+	if !ranks("r.Reputation(k, rule)") || !ranks("ReputationRule{Name: \"x\"}") || ranks("func (r *Resolver) Reputation(") {
+		t.Fatal("control: the scan's detector is wrong")
+	}
+	scanned := map[string]bool{}
+	for _, dir := range []string{filepath.Join("..", "..", "internal"), filepath.Join("..", "..", "cmd")} {
+		err := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+			if err != nil || d.IsDir() || !strings.HasSuffix(p, ".go") || strings.HasSuffix(p, "_test.go") {
+				return err
+			}
+			b, err := os.ReadFile(p)
+			if err != nil {
+				return err
+			}
+			scanned[filepath.ToSlash(p)] = true
+			if ranks(string(b)) {
+				t.Errorf("%s computes a reputation projection: the tool ships no reputation default (§5.4)", p)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
 		}
-		b, _ := os.ReadFile(f)
-		if strings.Contains(string(b), "ReputationRule{") {
-			t.Fatalf("%s constructs a ReputationRule: the tool ships no reputation default (§5.4)", f)
+	}
+	// control: the scan reached the CLI, the binary's entry point and this package
+	for _, f := range []string{"../../cmd/commons/main.go", "../../internal/cli/cmd_read.go", "../../internal/resolve/corroboration.go"} {
+		if !scanned[f] {
+			t.Fatalf("the install-tree scan did not reach %s (%d files scanned)", f, len(scanned))
 		}
 	}
 }
@@ -909,10 +962,9 @@ func subset(w *world, drop ...string) []int {
 // came from; a hub holding only the original shows unchecked, never corroborated or uncontradicted; an omitted
 // statement is absent, never reported as non-existent.
 func TestScopedStatus(t *testing.T) {
-	conformance.Partial(t, "C-core-57", "counting unit pending identity decision")
-	conformance.Partial(t, "C-core-58", "counting unit pending identity decision")
+	conformance.Covers(t, "C-core-57", "C-core-58")
 	conformance.Covers(t, "C-core-63")
-	conformance.Partial(t, "C-core-01", "counting unit pending identity decision; the relayer delivery itself needs pull")
+	conformance.Partial(t, "C-core-01", "the relayer delivery itself needs pull")
 	w, x := hotReading(t)
 	hub := subset(w, "C3")
 	hb, _ := w.store(hub, WithScope(ScopeHub)).Observation(x)
