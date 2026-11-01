@@ -800,9 +800,9 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
   not that everything it referenced is valid.
 - **`verify` of an observation** checks its signature and its pins: exit 0 when they hold, exit 3
   when the referent is `unpinned` or its finality rule cannot be evaluated, or, for a method-class observation,
-  the method edition it pins is not held as authorized (whether it declares `system_keys` cannot be read). Corroboration status and capture
-  evidence are disclosures (I6) shown beside it and never change the exit, so no exit rests on a capture
-  level the reader did not verify (C-core-52).
+  the method edition it pins is not held as authorized (whether it declares `system_keys` cannot be read).
+  Corroboration status and capture evidence are disclosures (I6) shown beside it and never change the exit,
+  so no exit rests on a capture level the reader did not verify (C-core-52).
 - **`verify` of a derived artifact needs a comparison.** A derived artifact claims that its workflow on its
   inputs produced its bytes, so exit 0 needs a T0 or T1 comparison (a second run in its group, or the
   reader's own re-run inside `verify`), or, under `protocol` with a declared comparator, byte-identical
@@ -820,12 +820,13 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
   limits partway through (a traversal depth, C-core-131) and a check the gate's policy requires that comes out
   `unchecked`; and 2 as for every command.
 - **Exit 2: the command did not start.** On every command, 2 means the invocation or the reader's own
-  configuration could not be acted on: an unknown option, a malformed argument (an id that is not an id), a
-  policy or configuration file that is present but unreadable or unparseable. Arguments and configuration are
-  validated before any work starts, so exit 2 never accompanies partial results and nothing is committed; the
-  error is still the problem-details object below, with `committed` false. Conditions about a particular
-  artifact or check are never 2, even when they stem from configuration: an optional capability that is
-  simply not configured (no Bitcoin backend, say) is a state token and exits 3. No other condition exits 2,
+  configuration could not be acted on: an unknown option, a malformed argument (an id that is not an id, or
+  an alias that matches no held object or several), a policy or configuration file that is present but
+  unreadable or unparseable. Arguments and configuration are validated before any work starts, so exit 2
+  never accompanies partial results and nothing is committed; the error is still the problem-details object
+  below, with `committed` false. Conditions about a particular artifact or check are never 2, even when they
+  stem from configuration: an optional capability that is simply not configured (no Bitcoin backend, say) is a
+  state token and exits 3. No other condition exits 2,
   so exit 1 stays reserved for a completed check that disagreed. An explicit request for help exits 0.
 - **Explain.** Every status can be expanded to the statements, policy and checks behind it (I14).
 - **Dry runs** state their side effects: "no registry change" differs from "no fetch, no cache, no quarantine".

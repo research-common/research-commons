@@ -216,9 +216,10 @@ user (a pin, a command argument, `explain`) resolves the statement id of any app
 (C-core-78). The edition-id vector is under V6 (§9).
 
 **Display aliases.** A surface may print the first 12 hex characters of an id or of a content digest (after
-the `sha256:` prefix) as a label. An alias is accepted as input only when exactly one held object matches;
-zero matches is `not found` and two or more is an error that lists every candidate full hash and selects
-nothing (C-core-03). Aliases are never written into a statement: every reference field in §5 is a full id or
+the `sha256:` prefix) as a label. An alias is accepted as input only when exactly one held object matches; an
+alias that matches nothing or several held objects is an error before any work (exit 2, claims-model note §13),
+and several matches list every candidate's full hash and select nothing (C-core-03). A full id or digest is
+never an alias: one nobody holds is answered as not held, not refused. Aliases are never written into a statement: every reference field in §5 is a full id or
 digest, and a 12-character value where a full one is required is a malformed statement.
 
 ## 4. Signature scheme
