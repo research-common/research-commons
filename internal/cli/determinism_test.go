@@ -20,8 +20,9 @@ import (
 	"github.com/research-common/research-commons/internal/wire"
 )
 
-// The resolved view of a store, as one value two readers can compare. No command prints a view digest, so the
-// tests define the narrowest one the determinism cases need: for a fixed universe of refs (every blob digest and
+// The resolved view of a store, as one value two readers can compare: the view digest CONFORMANCE.md defines
+// under "How a result is recorded". No command prints one yet, so the tests compute the narrowest one the
+// determinism cases need: for a fixed universe of refs (every blob digest and
 // statement id the statement set names, plus one nobody holds), the exit code and the canonical --json output of
 // verify and explain for each ref, and of list; the digest is sha256 over those lines in order. explain prints
 // the whole show view (showArtifact, showStatement) and verify's causes, so show adds nothing; verify is kept
