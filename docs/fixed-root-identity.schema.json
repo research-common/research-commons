@@ -1,0 +1,2521 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Candidate fixed-root-v1 rc/2 statement syntax (not authority)",
+  "description": "Candidate only. Apply strict Commons JSON, sorted-set/time constraints, cryptographic verification and evidence-relative authority evaluation as specified in DESIGN-notes-fixed-root-identity.md. Drafts contain no signature and confer no authority. No production reader support.",
+  "allOf": [
+    {
+      "$ref": "#/$defs/signed"
+    }
+  ],
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "key": {
+      "type": "string",
+      "pattern": "^(ed25519:[0-9a-f]{64}|0x[0-9a-f]{40})$"
+    },
+    "time": {
+      "type": "string",
+      "$comment": "Canonical UTC time: validated by the existing rctime.ParseUTC; JSON Schema format alone is insufficient."
+    },
+    "subject": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "$ref": "#/$defs/key"
+            }
+          },
+          "required": [
+            "key"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "identity": {
+              "$ref": "#/$defs/id"
+            }
+          },
+          "required": [
+            "identity"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "subjects": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/subject"
+      },
+      "minItems": 1,
+      "maxItems": 256,
+      "uniqueItems": true
+    },
+    "actor": {
+      "type": "object",
+      "properties": {
+        "identity": {
+          "$ref": "#/$defs/id"
+        },
+        "grant": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "identity",
+        "grant"
+      ],
+      "additionalProperties": false
+    },
+    "contentTargets": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "any_content": {
+              "const": true
+            }
+          },
+          "required": [
+            "any_content"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "contents": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/digest"
+              },
+              "minItems": 1,
+              "maxItems": 256,
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "contents"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "statementTargets": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "any_statement": {
+              "const": true
+            }
+          },
+          "required": [
+            "any_statement"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "statements": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "minItems": 1,
+              "maxItems": 256,
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "statements"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "resourceTargets": {
+      "type": "object",
+      "properties": {
+        "resources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "resources"
+      ],
+      "additionalProperties": false
+    },
+    "taskTargets": {
+      "type": "object",
+      "properties": {
+        "tasks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "tasks"
+      ],
+      "additionalProperties": false
+    },
+    "permission": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "enum": [
+                "authored",
+                "observed"
+              ]
+            },
+            "targets": {
+              "$ref": "#/$defs/contentTargets"
+            },
+            "amend": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "targets",
+            "amend"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "enum": [
+                "holds"
+              ]
+            },
+            "targets": {
+              "$ref": "#/$defs/contentTargets"
+            }
+          },
+          "required": [
+            "kind",
+            "targets"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "enum": [
+                "reproduced",
+                "corroborates",
+                "refutes",
+                "retracts"
+              ]
+            },
+            "targets": {
+              "$ref": "#/$defs/statementTargets"
+            }
+          },
+          "required": [
+            "kind",
+            "targets"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "enum": [
+                "edition",
+                "withdraw_approval"
+              ]
+            },
+            "targets": {
+              "$ref": "#/$defs/resourceTargets"
+            }
+          },
+          "required": [
+            "kind",
+            "targets"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "enum": [
+                "intent",
+                "withdraw",
+                "progress",
+                "submit",
+                "decide"
+              ]
+            },
+            "targets": {
+              "$ref": "#/$defs/taskTargets"
+            }
+          },
+          "required": [
+            "kind",
+            "targets"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "enum": [
+                "anchors"
+              ]
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "taskRoles": {
+      "type": "object",
+      "properties": {
+        "beneficiary": {
+          "$ref": "#/$defs/subject"
+        },
+        "eligible_issuers": {
+          "$ref": "#/$defs/subjects"
+        },
+        "any_issuer": {
+          "const": true
+        },
+        "counting_unit": {
+          "enum": [
+            "key",
+            "identity"
+          ]
+        }
+      },
+      "required": [
+        "beneficiary",
+        "counting_unit"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "eligible_issuers"
+          ]
+        },
+        {
+          "required": [
+            "any_issuer"
+          ]
+        }
+      ]
+    },
+    "marker": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "claimMarker": {
+      "type": "object",
+      "properties": {
+        "amends": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "editionMarker": {
+      "type": "object",
+      "properties": {
+        "task_roles": {
+          "$ref": "#/$defs/taskRoles"
+        }
+      },
+      "additionalProperties": false
+    },
+    "intentMarker": {
+      "type": "object",
+      "properties": {
+        "intent": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "intent"
+      ],
+      "additionalProperties": false
+    },
+    "content": {
+      "type": "object",
+      "properties": {
+        "digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "size": {
+          "type": "integer"
+        },
+        "media_type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "digest",
+        "size"
+      ]
+    },
+    "environment": {
+      "type": "object",
+      "properties": {
+        "image_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "platform": {
+          "type": "string"
+        },
+        "harness_commit": {
+          "type": "string",
+          "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "workflow": {
+          "$ref": "#/$defs/digest"
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/digest"
+          }
+        },
+        "environment": {
+          "$ref": "#/$defs/environment"
+        }
+      },
+      "required": [
+        "workflow",
+        "inputs"
+      ]
+    },
+    "window": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "$ref": "#/$defs/time"
+        },
+        "to": {
+          "$ref": "#/$defs/time"
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ]
+    },
+    "editionRef": {
+      "type": "object",
+      "properties": {
+        "resource": {
+          "$ref": "#/$defs/id"
+        },
+        "edition": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "resource",
+        "edition"
+      ]
+    },
+    "rule": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "any_one": {
+              "const": true
+            }
+          },
+          "required": [
+            "any_one"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "k_of_n": {
+              "type": "object",
+              "properties": {
+                "k": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "k"
+              ]
+            }
+          },
+          "required": [
+            "k_of_n"
+          ]
+        }
+      ],
+      "not": {
+        "required": [
+          "any_one",
+          "k_of_n"
+        ]
+      }
+    },
+    "stringMap": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "capture": {
+      "type": "object",
+      "properties": {
+        "at": {
+          "$ref": "#/$defs/time"
+        },
+        "evidence": {
+          "enum": [
+            "self-asserted",
+            "anchored-at-capture",
+            "witnessed",
+            "device-attested"
+          ]
+        },
+        "operator": {
+          "type": "string"
+        },
+        "instrument": {
+          "type": "string"
+        },
+        "witnesses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/key"
+          }
+        },
+        "attestation": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      "required": [
+        "at",
+        "evidence"
+      ]
+    },
+    "finality": {
+      "type": "object",
+      "properties": {
+        "rule": {
+          "type": "string"
+        },
+        "rule_source": {
+          "type": "string"
+        },
+        "state_at_capture": {
+          "type": "object",
+          "properties": {
+            "depth": {
+              "type": "integer"
+            },
+            "run": {
+              "type": "string"
+            },
+            "captured_at": {
+              "$ref": "#/$defs/time"
+            }
+          },
+          "oneOf": [
+            {
+              "required": [
+                "depth"
+              ]
+            },
+            {
+              "required": [
+                "run"
+              ]
+            },
+            {
+              "required": [
+                "captured_at"
+              ]
+            }
+          ]
+        }
+      },
+      "required": [
+        "rule",
+        "state_at_capture"
+      ]
+    },
+    "referent": {
+      "type": "object",
+      "properties": {}
+    },
+    "exactReferent": {
+      "type": "object",
+      "properties": {
+        "chain_id": {
+          "type": "string"
+        },
+        "block_hash": {
+          "$ref": "#/$defs/id"
+        },
+        "depth": {
+          "type": "integer"
+        }
+      }
+    },
+    "sourceReferent": {
+      "type": "object",
+      "properties": {
+        "endpoint": {
+          "type": "string"
+        },
+        "parameters": {
+          "type": "object",
+          "properties": {}
+        },
+        "response_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "requests": {
+          "type": "object",
+          "properties": {
+            "digest": {
+              "$ref": "#/$defs/digest"
+            },
+            "format": {
+              "type": "string"
+            },
+            "count": {
+              "type": "integer"
+            }
+          }
+        }
+      },
+      "not": {
+        "allOf": [
+          {
+            "required": [
+              "requests"
+            ]
+          },
+          {
+            "anyOf": [
+              {
+                "required": [
+                  "endpoint"
+                ]
+              },
+              {
+                "required": [
+                  "parameters"
+                ]
+              },
+              {
+                "required": [
+                  "response_digest"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "phenomenonReferent": {
+      "type": "object",
+      "properties": {
+        "instrument": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string"
+        },
+        "place": {
+          "type": "string"
+        },
+        "at": {
+          "type": "string"
+        },
+        "timescale": {
+          "type": "string"
+        }
+      }
+    },
+    "methodReferent": {
+      "type": "object",
+      "properties": {
+        "method_edition": {
+          "$ref": "#/$defs/id"
+        },
+        "environment": {
+          "$ref": "#/$defs/environment"
+        },
+        "system": {
+          "$ref": "#/$defs/stringMap"
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/digest"
+          }
+        },
+        "window": {
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string"
+            },
+            "to": {
+              "type": "string"
+            }
+          }
+        },
+        "timescale": {
+          "type": "string"
+        }
+      }
+    },
+    "member": {
+      "type": "object",
+      "properties": {
+        "content": {
+          "$ref": "#/$defs/digest"
+        },
+        "resource": {
+          "$ref": "#/$defs/id"
+        },
+        "statement": {
+          "$ref": "#/$defs/id"
+        },
+        "role": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "role"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "content"
+          ]
+        },
+        {
+          "required": [
+            "resource"
+          ]
+        },
+        {
+          "required": [
+            "statement"
+          ]
+        }
+      ]
+    },
+    "contract": {
+      "type": "object",
+      "properties": {
+        "profile": {
+          "type": "string"
+        }
+      },
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "beneficiary"
+            ]
+          },
+          {
+            "required": [
+              "eligible_issuers"
+            ]
+          },
+          {
+            "required": [
+              "any_issuer"
+            ]
+          },
+          {
+            "required": [
+              "counting_unit"
+            ]
+          }
+        ]
+      },
+      "required": [
+        "profile"
+      ]
+    },
+    "contents": {
+      "type": "object",
+      "properties": {
+        "members": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/member"
+          }
+        },
+        "schema": {
+          "$ref": "#/$defs/digest"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "dialect": {
+                "type": "string"
+              },
+              "expr": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "dialect",
+              "expr"
+            ]
+          }
+        },
+        "contract": {
+          "$ref": "#/$defs/contract"
+        },
+        "selection": {
+          "enum": [
+            "curated",
+            "rule-based",
+            "completeness"
+          ]
+        },
+        "frozen_before": {
+          "type": "object",
+          "properties": {
+            "date": {
+              "type": "string"
+            },
+            "height": {
+              "type": "integer"
+            },
+            "run": {
+              "type": "string"
+            }
+          },
+          "oneOf": [
+            {
+              "required": [
+                "date"
+              ]
+            },
+            {
+              "required": [
+                "height"
+              ]
+            },
+            {
+              "required": [
+                "run"
+              ]
+            }
+          ]
+        },
+        "controllers": {
+          "$ref": "#/$defs/subjects"
+        },
+        "rule": {
+          "$ref": "#/$defs/rule"
+        }
+      },
+      "dependentRequired": {
+        "controllers": [
+          "rule"
+        ],
+        "rule": [
+          "controllers"
+        ]
+      }
+    },
+    "authoredBody": {
+      "type": "object",
+      "properties": {
+        "licence": {
+          "type": "string"
+        },
+        "licence_texts": {
+          "$ref": "#/$defs/stringMap"
+        },
+        "attribution": {
+          "type": "string"
+        },
+        "availability": {
+          "type": "object",
+          "properties": {
+            "redistribution": {
+              "enum": [
+                "permitted",
+                "restricted",
+                "withheld"
+              ]
+            },
+            "obtainable": {
+              "type": "boolean"
+            },
+            "withheld_until": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "redistribution",
+            "obtainable"
+          ]
+        },
+        "replication": {
+          "enum": [
+            "bytes",
+            "protocol",
+            "none"
+          ]
+        },
+        "comparator": {
+          "$ref": "#/$defs/digest"
+        },
+        "sampling": {
+          "type": "object",
+          "properties": {
+            "n": {
+              "type": "integer"
+            },
+            "unit": {
+              "type": "string"
+            },
+            "groups": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "n": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "name",
+                  "n"
+                ]
+              }
+            },
+            "window": {
+              "$ref": "#/$defs/window"
+            },
+            "dispersion": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "required": [
+            "n",
+            "unit"
+          ]
+        },
+        "shelf_life_days": {
+          "type": "integer"
+        },
+        "pre_registration": {
+          "enum": [
+            "exploratory"
+          ]
+        },
+        "fulfills": {
+          "$ref": "#/$defs/editionRef"
+        },
+        "intended_for": {
+          "type": "object",
+          "properties": {
+            "resource": {
+              "$ref": "#/$defs/id"
+            },
+            "edition": {
+              "$ref": "#/$defs/id"
+            },
+            "edition_applied": {
+              "$ref": "#/$defs/id"
+            },
+            "outcome": {
+              "enum": [
+                "ok",
+                "unchecked"
+              ]
+            }
+          },
+          "required": [
+            "resource",
+            "edition",
+            "edition_applied",
+            "outcome"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "content": {
+          "$ref": "#/$defs/content"
+        },
+        "type": {
+          "enum": [
+            "dataset",
+            "workflow",
+            "skill",
+            "synthesis",
+            "report",
+            "other"
+          ]
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        },
+        "supersedes": {
+          "$ref": "#/$defs/digest"
+        },
+        "extends": {
+          "$ref": "#/$defs/digest"
+        },
+        "x_identity_v1": {
+          "$ref": "#/$defs/claimMarker"
+        }
+      },
+      "required": [
+        "content",
+        "type",
+        "x_identity_v1"
+      ]
+    },
+    "observedBody": {
+      "type": "object",
+      "properties": {
+        "licence": {
+          "type": "string"
+        },
+        "licence_texts": {
+          "$ref": "#/$defs/stringMap"
+        },
+        "attribution": {
+          "type": "string"
+        },
+        "availability": {
+          "type": "object",
+          "properties": {
+            "redistribution": {
+              "enum": [
+                "permitted",
+                "restricted",
+                "withheld"
+              ]
+            },
+            "obtainable": {
+              "type": "boolean"
+            },
+            "withheld_until": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "redistribution",
+            "obtainable"
+          ]
+        },
+        "replication": {
+          "enum": [
+            "bytes",
+            "protocol",
+            "none"
+          ]
+        },
+        "comparator": {
+          "$ref": "#/$defs/digest"
+        },
+        "sampling": {
+          "type": "object",
+          "properties": {
+            "n": {
+              "type": "integer"
+            },
+            "unit": {
+              "type": "string"
+            },
+            "groups": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "n": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "name",
+                  "n"
+                ]
+              }
+            },
+            "window": {
+              "$ref": "#/$defs/window"
+            },
+            "dispersion": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "required": [
+            "n",
+            "unit"
+          ]
+        },
+        "shelf_life_days": {
+          "type": "integer"
+        },
+        "pre_registration": {
+          "enum": [
+            "exploratory"
+          ]
+        },
+        "fulfills": {
+          "$ref": "#/$defs/editionRef"
+        },
+        "intended_for": {
+          "type": "object",
+          "properties": {
+            "resource": {
+              "$ref": "#/$defs/id"
+            },
+            "edition": {
+              "$ref": "#/$defs/id"
+            },
+            "edition_applied": {
+              "$ref": "#/$defs/id"
+            },
+            "outcome": {
+              "enum": [
+                "ok",
+                "unchecked"
+              ]
+            }
+          },
+          "required": [
+            "resource",
+            "edition",
+            "edition_applied",
+            "outcome"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "content": {
+          "$ref": "#/$defs/content"
+        },
+        "class": {
+          "enum": [
+            "exact-bytes",
+            "source",
+            "phenomenon",
+            "method",
+            "none-yet"
+          ]
+        },
+        "referent": {
+          "$ref": "#/$defs/referent"
+        },
+        "capture": {
+          "$ref": "#/$defs/capture"
+        },
+        "finality": {
+          "$ref": "#/$defs/finality"
+        },
+        "x_identity_v1": {
+          "$ref": "#/$defs/claimMarker"
+        }
+      },
+      "required": [
+        "content",
+        "class",
+        "referent",
+        "capture",
+        "x_identity_v1"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "class": {
+                "const": "exact-bytes"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "referent": {
+                "$ref": "#/$defs/exactReferent"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "class": {
+                "const": "source"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "referent": {
+                "$ref": "#/$defs/sourceReferent"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "class": {
+                "const": "phenomenon"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "referent": {
+                "$ref": "#/$defs/phenomenonReferent"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "class": {
+                "const": "method"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "referent": {
+                "$ref": "#/$defs/methodReferent"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "finality"
+            ]
+          },
+          "then": {
+            "properties": {
+              "class": {
+                "enum": [
+                  "exact-bytes",
+                  "source"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "holdsBody": {
+      "type": "object",
+      "properties": {
+        "content": {
+          "$ref": "#/$defs/content"
+        },
+        "locations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "withdrawn": {
+          "const": true
+        },
+        "x_identity_v1": {
+          "$ref": "#/$defs/marker"
+        }
+      },
+      "required": [
+        "content",
+        "x_identity_v1"
+      ],
+      "not": {
+        "required": [
+          "locations",
+          "withdrawn"
+        ]
+      }
+    },
+    "describesBody": {
+      "type": "object",
+      "properties": {
+        "about": {
+          "type": "object",
+          "properties": {
+            "content": {
+              "$ref": "#/$defs/digest"
+            },
+            "statement": {
+              "$ref": "#/$defs/id"
+            },
+            "resource": {
+              "$ref": "#/$defs/id"
+            }
+          },
+          "oneOf": [
+            {
+              "required": [
+                "content"
+              ]
+            },
+            {
+              "required": [
+                "statement"
+              ]
+            },
+            {
+              "required": [
+                "resource"
+              ]
+            }
+          ]
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "note": {
+          "type": "string"
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "content": {
+                "$ref": "#/$defs/digest"
+              },
+              "statement": {
+                "$ref": "#/$defs/id"
+              },
+              "resource": {
+                "$ref": "#/$defs/id"
+              },
+              "url": {
+                "type": "string"
+              },
+              "rel": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "rel"
+            ],
+            "oneOf": [
+              {
+                "required": [
+                  "content"
+                ]
+              },
+              {
+                "required": [
+                  "statement"
+                ]
+              },
+              {
+                "required": [
+                  "resource"
+                ]
+              },
+              {
+                "required": [
+                  "url"
+                ]
+              }
+            ]
+          }
+        },
+        "x_identity_v1": {
+          "$ref": "#/$defs/marker"
+        }
+      },
+      "required": [
+        "about",
+        "x_identity_v1"
+      ]
+    },
+    "reproducedBody": {
+      "type": "object",
+      "properties": {
+        "of": {
+          "$ref": "#/$defs/id"
+        },
+        "result": {
+          "enum": [
+            "match",
+            "diverged",
+            "not-comparable"
+          ]
+        },
+        "content": {
+          "$ref": "#/$defs/content"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        },
+        "comparator": {
+          "$ref": "#/$defs/digest"
+        },
+        "report": {
+          "$ref": "#/$defs/digest"
+        },
+        "x_identity_v1": {
+          "$ref": "#/$defs/marker"
+        }
+      },
+      "required": [
+        "of",
+        "result",
+        "content",
+        "provenance",
+        "x_identity_v1"
+      ]
+    },
+    "corroboratesBody": {
+      "type": "object",
+      "properties": {
+        "of": {
+          "$ref": "#/$defs/id"
+        },
+        "result": {
+          "$ref": "#/$defs/id"
+        },
+        "verdict": {
+          "enum": [
+            "supports",
+            "contradicts",
+            "inconclusive"
+          ]
+        },
+        "model": {
+          "type": "string"
+        },
+        "cohort": {
+          "type": "object",
+          "properties": {
+            "rule": {
+              "type": "string"
+            },
+            "hand_picked": {
+              "const": true
+            }
+          },
+          "oneOf": [
+            {
+              "required": [
+                "rule"
+              ]
+            },
+            {
+              "required": [
+                "hand_picked"
+              ]
+            }
+          ]
+        },
+        "shares": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cause": {
+          "type": "string"
+        },
+        "x_identity_v1": {
+          "$ref": "#/$defs/marker"
+        }
+      },
+      "required": [
+        "of",
+        "result",
+        "verdict",
+        "model",
+        "cohort",
+        "x_identity_v1"
+      ]
+    },
+    "refutesBody": {
+      "type": "object",
+      "properties": {
+        "of": {
+          "$ref": "#/$defs/id"
+        },
+        "evidence": {
+          "$ref": "#/$defs/digest"
+        },
+        "note": {
+          "type": "string"
+        },
+        "x_identity_v1": {
+          "$ref": "#/$defs/marker"
+        }
+      },
+      "required": [
+        "of",
+        "evidence",
+        "x_identity_v1"
+      ]
+    },
+    "retractsBody": {
+      "type": "object",
+      "properties": {
+        "of": {
+          "$ref": "#/$defs/id"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "x_identity_v1": {
+          "$ref": "#/$defs/marker"
+        }
+      },
+      "required": [
+        "of",
+        "x_identity_v1"
+      ]
+    },
+    "anchorsBody": {
+      "type": "object",
+      "properties": {
+        "covered": {
+          "$ref": "#/$defs/id"
+        },
+        "proof": {
+          "$ref": "#/$defs/digest"
+        },
+        "proof_format": {
+          "type": "string"
+        },
+        "services": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "x_identity_v1": {
+          "$ref": "#/$defs/marker"
+        }
+      },
+      "required": [
+        "covered",
+        "proof",
+        "proof_format",
+        "x_identity_v1"
+      ]
+    },
+    "genesisBody": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "enum": [
+            "collection",
+            "task",
+            "series"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "controllers": {
+          "$ref": "#/$defs/subjects"
+        },
+        "rule": {
+          "$ref": "#/$defs/rule"
+        },
+        "forked_from": {
+          "$ref": "#/$defs/id"
+        },
+        "x_identity_v1": {
+          "$ref": "#/$defs/marker"
+        }
+      },
+      "required": [
+        "type",
+        "name",
+        "controllers",
+        "rule",
+        "x_identity_v1"
+      ]
+    },
+    "editionBody": {
+      "type": "object",
+      "properties": {
+        "resource": {
+          "$ref": "#/$defs/id"
+        },
+        "predecessors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "contents": {
+          "$ref": "#/$defs/contents"
+        },
+        "x_identity_v1": {
+          "$ref": "#/$defs/editionMarker"
+        }
+      },
+      "required": [
+        "resource",
+        "predecessors",
+        "contents",
+        "x_identity_v1"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "x_identity_v1": {
+                "required": [
+                  "task_roles"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "contents": {
+                "required": [
+                  "contract"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "contents": {
+                "required": [
+                  "contract"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "x_identity_v1": {
+                "required": [
+                  "task_roles"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "withdraw_approvalBody": {
+      "type": "object",
+      "properties": {
+        "resource": {
+          "$ref": "#/$defs/id"
+        },
+        "edition": {
+          "$ref": "#/$defs/id"
+        },
+        "x_identity_v1": {
+          "$ref": "#/$defs/marker"
+        }
+      },
+      "required": [
+        "resource",
+        "edition",
+        "x_identity_v1"
+      ]
+    },
+    "intentBody": {
+      "type": "object",
+      "properties": {
+        "task": {
+          "$ref": "#/$defs/id"
+        },
+        "edition": {
+          "$ref": "#/$defs/id"
+        },
+        "x_identity_v1": {
+          "$ref": "#/$defs/marker"
+        }
+      },
+      "required": [
+        "task",
+        "edition",
+        "x_identity_v1"
+      ]
+    },
+    "withdrawBody": {
+      "type": "object",
+      "properties": {
+        "task": {
+          "$ref": "#/$defs/id"
+        },
+        "edition": {
+          "$ref": "#/$defs/id"
+        },
+        "x_identity_v1": {
+          "$ref": "#/$defs/intentMarker"
+        }
+      },
+      "required": [
+        "task",
+        "edition",
+        "x_identity_v1"
+      ]
+    },
+    "progressBody": {
+      "type": "object",
+      "properties": {
+        "task": {
+          "$ref": "#/$defs/id"
+        },
+        "edition": {
+          "$ref": "#/$defs/id"
+        },
+        "note": {
+          "type": "string"
+        },
+        "x_identity_v1": {
+          "$ref": "#/$defs/intentMarker"
+        }
+      },
+      "required": [
+        "task",
+        "edition",
+        "x_identity_v1"
+      ]
+    },
+    "submitBody": {
+      "type": "object",
+      "properties": {
+        "task": {
+          "$ref": "#/$defs/id"
+        },
+        "edition": {
+          "$ref": "#/$defs/id"
+        },
+        "result": {
+          "$ref": "#/$defs/digest"
+        },
+        "salt": {
+          "type": "string"
+        },
+        "self_declared_independence": {
+          "type": "boolean"
+        },
+        "x_identity_v1": {
+          "$ref": "#/$defs/marker"
+        }
+      },
+      "required": [
+        "task",
+        "edition",
+        "result",
+        "x_identity_v1"
+      ]
+    },
+    "decideBody": {
+      "type": "object",
+      "properties": {
+        "task": {
+          "$ref": "#/$defs/id"
+        },
+        "edition": {
+          "$ref": "#/$defs/id"
+        },
+        "submissions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        },
+        "verdict": {
+          "enum": [
+            "accept",
+            "reject"
+          ]
+        },
+        "evaluations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/digest"
+          }
+        },
+        "supersedes": {
+          "$ref": "#/$defs/id"
+        },
+        "x_identity_v1": {
+          "$ref": "#/$defs/marker"
+        }
+      },
+      "required": [
+        "task",
+        "edition",
+        "submissions",
+        "verdict",
+        "x_identity_v1"
+      ]
+    },
+    "identity_inceptionBody": {
+      "type": "object",
+      "properties": {
+        "profile": {
+          "const": "fixed-root-v1"
+        },
+        "x_identity_v1": {
+          "$ref": "#/$defs/marker"
+        }
+      },
+      "required": [
+        "profile",
+        "x_identity_v1"
+      ]
+    },
+    "identity_grantBody": {
+      "type": "object",
+      "properties": {
+        "identity": {
+          "$ref": "#/$defs/id"
+        },
+        "delegate": {
+          "type": "object",
+          "properties": {
+            "key": {
+              "$ref": "#/$defs/key"
+            },
+            "inception": {
+              "$ref": "#/$defs/id"
+            }
+          },
+          "required": [
+            "key",
+            "inception"
+          ],
+          "additionalProperties": false
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/permission"
+          },
+          "minItems": 1,
+          "maxItems": 64,
+          "uniqueItems": true
+        },
+        "x_identity_v1": {
+          "$ref": "#/$defs/marker"
+        }
+      },
+      "required": [
+        "identity",
+        "delegate",
+        "permissions",
+        "x_identity_v1"
+      ]
+    },
+    "identity_cutBody": {
+      "type": "object",
+      "properties": {
+        "identity": {
+          "$ref": "#/$defs/id"
+        },
+        "grant": {
+          "$ref": "#/$defs/id"
+        },
+        "last_good": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "x_identity_v1": {
+          "$ref": "#/$defs/marker"
+        }
+      },
+      "required": [
+        "identity",
+        "grant",
+        "last_good",
+        "reason",
+        "x_identity_v1"
+      ]
+    },
+    "draft": {
+      "type": "object",
+      "properties": {
+        "rc": {
+          "const": "rc/2"
+        },
+        "kind": {
+          "enum": [
+            "anchors",
+            "authored",
+            "corroborates",
+            "decide",
+            "describes",
+            "edition",
+            "genesis",
+            "holds",
+            "identity_cut",
+            "identity_grant",
+            "identity_inception",
+            "intent",
+            "observed",
+            "progress",
+            "refutes",
+            "reproduced",
+            "retracts",
+            "submit",
+            "withdraw",
+            "withdraw_approval"
+          ]
+        },
+        "signer": {
+          "$ref": "#/$defs/key"
+        },
+        "alg": {
+          "enum": [
+            "ed25519",
+            "eip191-secp256k1"
+          ]
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "prev": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "merges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "ts": {
+          "$ref": "#/$defs/time"
+        },
+        "crit": {
+          "const": [
+            "x_identity_v1"
+          ]
+        },
+        "body": {
+          "type": "object",
+          "properties": {}
+        },
+        "x_actor_v1": {
+          "$ref": "#/$defs/actor"
+        }
+      },
+      "required": [
+        "rc",
+        "kind",
+        "signer",
+        "alg",
+        "seq",
+        "prev",
+        "ts",
+        "crit",
+        "body"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "anchors"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "body": {
+                "$ref": "#/$defs/anchorsBody"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "authored"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "body": {
+                "$ref": "#/$defs/authoredBody"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "corroborates"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "body": {
+                "$ref": "#/$defs/corroboratesBody"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "decide"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "body": {
+                "$ref": "#/$defs/decideBody"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "describes"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "body": {
+                "$ref": "#/$defs/describesBody"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "edition"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "body": {
+                "$ref": "#/$defs/editionBody"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "genesis"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "body": {
+                "$ref": "#/$defs/genesisBody"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "holds"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "body": {
+                "$ref": "#/$defs/holdsBody"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "identity_cut"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "body": {
+                "$ref": "#/$defs/identity_cutBody"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "identity_grant"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "body": {
+                "$ref": "#/$defs/identity_grantBody"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "identity_inception"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "body": {
+                "$ref": "#/$defs/identity_inceptionBody"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "intent"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "body": {
+                "$ref": "#/$defs/intentBody"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "observed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "body": {
+                "$ref": "#/$defs/observedBody"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "progress"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "body": {
+                "$ref": "#/$defs/progressBody"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "refutes"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "body": {
+                "$ref": "#/$defs/refutesBody"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "reproduced"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "body": {
+                "$ref": "#/$defs/reproducedBody"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "retracts"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "body": {
+                "$ref": "#/$defs/retractsBody"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "submit"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "body": {
+                "$ref": "#/$defs/submitBody"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "withdraw"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "body": {
+                "$ref": "#/$defs/withdrawBody"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "withdraw_approval"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "body": {
+                "$ref": "#/$defs/withdraw_approvalBody"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "seq": {
+                "const": 0
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "prev": {
+                "type": "null"
+              }
+            },
+            "not": {
+              "required": [
+                "merges"
+              ]
+            }
+          },
+          "else": {
+            "properties": {
+              "prev": {
+                "$ref": "#/$defs/id"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "identity_inception",
+                  "identity_grant",
+                  "identity_cut",
+                  "genesis",
+                  "describes",
+                  "rotate_key",
+                  "revoke_key"
+                ]
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "required": [
+                "x_actor_v1"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "identity_inception"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "seq": {
+                "const": 0
+              },
+              "prev": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "identity_grant",
+                  "identity_cut"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "seq": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "alg": {
+                "const": "ed25519"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "signer": {
+                "pattern": "^ed25519:[0-9a-f]{64}$"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "signer": {
+                "pattern": "^0x[0-9a-f]{40}$"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "authored",
+                  "observed"
+                ]
+              },
+              "body": {
+                "properties": {
+                  "x_identity_v1": {
+                    "required": [
+                      "amends"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "x_actor_v1"
+            ]
+          }
+        }
+      ]
+    },
+    "signed": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/draft"
+        },
+        {
+          "required": [
+            "sig"
+          ],
+          "properties": {
+            "sig": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "alg": {
+                "const": "ed25519"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "sig": {
+                "pattern": "^[0-9a-f]{128}$"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "sig": {
+                "pattern": "^0x[0-9a-f]{130}$"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
