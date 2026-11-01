@@ -292,7 +292,8 @@ observes a partial install because step 3 of a `pull` completes before any proje
 For a hub kept in a version-control repository, a package is the set of files a change adds under
 the data surface: the blobs and statement files between the base revision and the change's head. Statement
 files are the one-statement-per-file form of §1, so a package and a store share one layout and the gate reads
-the change with the same code that reads a store.
+the change with the same code that reads a store. A package's statement files are the canonical stored form; any
+other bytes are refused (intrinsic), never canonicalized on the way in.
 
 ## 5. Caches and indexes
 
