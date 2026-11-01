@@ -797,7 +797,8 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
   `unchecked`, versus run where the pinned environment exists). Exit 0 means the requested operation succeeded,
   not that everything it referenced is valid.
 - **`verify` of an observation** checks its signature and its pins: exit 0 when they hold, exit 3
-  when the referent is `unpinned` or its finality rule cannot be evaluated. Corroboration status and capture
+  when the referent is `unpinned` or its finality rule cannot be evaluated, or, for a method-class observation,
+  the method edition it pins is not held as authorized (whether it declares `system_keys` cannot be read). Corroboration status and capture
   evidence are disclosures (I6) shown beside it and never change the exit, so no exit rests on a capture
   level the reader did not verify (C-core-52).
 - **`verify` of a derived artifact needs a comparison.** A derived artifact claims that its workflow on its

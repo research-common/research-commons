@@ -409,7 +409,8 @@ the field is read only for an `observed` whose `referent.method_edition` names t
 reader holds it as an authorized edition of its resource (claims-model note §8; a pending, contested or
 unauthorized proposal declares nothing). When the reader holds no such edition, it cannot tell whether a
 declaration exists: no key is shown `unpinned` on that account, and comparability with another method-class
-observation is `unchecked`, naming the edition not held, never `comparable`. The declaration that governs an
+observation is `unchecked`, naming the edition not held, never `comparable`; `verify` of the observation exits 3
+(claims-model note §13). The declaration that governs an
 observation is the one in the edition it pins, so a later edition of the same method never changes how an
 earlier observation is read. A declared key absent from the observation's `referent.system` leaves its
 referent `unpinned`, naming `system.<key>` (claims-model note §5.3.1); a present key counts as pinned whatever
