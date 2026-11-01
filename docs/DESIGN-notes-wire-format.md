@@ -3,8 +3,8 @@
 **Status:** proposed · **Companion to:** the claims-model note (§15, "wire format") · **Covers:** canonical
 encoding, the statement envelope, statement identity, the signature scheme, the kind vocabulary's field
 names, extensions, per-key logs, content hashing, and test vectors. Serves conformance cases C-core-02a,
-C-core-03, C-core-04, C-core-08 to C-core-14, C-core-77, C-core-83, C-core-105, C-core-106, C-core-117,
-C-core-127, C-core-127a, C-core-127b, C-core-141, C-core-143, C-core-144, P-02.
+C-core-03, C-core-04, C-core-08 to C-core-14, C-core-32a, C-core-32d, C-core-77, C-core-83, C-core-105,
+C-core-106, C-core-117, C-core-127, C-core-127a, C-core-127b, C-core-141, C-core-143, C-core-144, P-02.
 
 ## 0. Summary
 
@@ -208,12 +208,12 @@ where `body` is the whole `body` object of an `edition` statement (extension fie
 encoding of §2. The payload type is used for nothing else, so an edition id never equals a statement id.
 Approvals of byte-identical bodies are approvals of one edition, whoever signed them (claims-model note §8,
 C-core-82, C-core-83). Every field that names an edition holds its edition id: `edition.predecessors` (or the
-genesis id, for the first edition), `fulfills.edition`, `intended_for.edition` and `edition_applied`, and the
-lifecycle kinds' `edition`. A statement id in one of those fields names no edition (a predecessor that matches
-nothing makes the edition `orphan`, C-core-79), so two bodies can never differ only in how they spell the same
-predecessor. As a lookup convenience, a surface that takes an id from a user (a pin, a command argument,
-`explain`) resolves the statement id of any approval to its edition (C-core-78). The edition-id vector is under
-V6 (§9).
+genesis id, for the first edition), `fulfills.edition`, `intended_for.edition` and `edition_applied`, a method
+referent's `method_edition`, and the lifecycle kinds' `edition`. A statement id in one of those fields names no
+edition (a predecessor that matches nothing makes the edition `orphan`, C-core-79), so two bodies can never
+differ only in how they spell the same predecessor. As a lookup convenience, a surface that takes an id from a
+user (a pin, a command argument, `explain`) resolves the statement id of any approval to its edition
+(C-core-78). The edition-id vector is under V6 (§9).
 
 **Display aliases.** A surface may print the first 12 hex characters of an id or of a content digest (after
 the `sha256:` prefix) as a label. An alias is accepted as input only when exactly one held object matches;
@@ -391,10 +391,28 @@ admitted, and shown `unpinned` (claims-model note §5.3.1). A kind not listed he
 | `retracts` | `of` id R (the signer's own `authored`/`observed`) · `reason` string O |
 | `anchors` | `covered` id R (the covered head: a statement in the signer's own log, reachable from this line's `prev`) · `proof` digest R (the proof bytes, a blob) · `proof_format` string R (a registered proof format; `ots-detached-v1`, the OpenTimestamps detached proof profiled by the Bitcoin-time note, is the only one today; an unknown value leaves the anchor `unsupported`, granting nothing) · `services` list of string O (RFC 3986 URIs of the timestamping services the author submitted to, for OpenTimestamps its calendars; informational, never dereferenced by a reader). What a proof format stamps is the raw 32 bytes of `covered`. A `covered` the reader holds as a line of another key is malformed; a `covered` the reader does not hold bounds nothing until it arrives, and is not refused for being unheld, so delivery order never changes the verdict (claims-model note I14). There is no quality field (a quality is what the reader verified) |
 | `genesis` | `type` `"collection"`/`"task"`/`"series"` R · `name` string R · `controllers` list of key R (set) · `rule` object R (`any_one` true, or `k_of_n` {`k` integer}) · `forked_from` id O |
-| `edition` | `resource` id R · `predecessors` list of id R (set of edition ids, §3; the genesis id for the first edition; several for a merge) · `contents` object R (`members` list of {`content` or `resource` or `statement`, `role` string} O, `schema` digest O, `rules` list of {`dialect` string, `expr` string} O, `contract` object O, `selection` `"curated"`/`"rule-based"`/`"completeness"` O, `frozen_before` object O (exactly one of `date` date, `height` integer, `run` string: the same units as `finality.state_at_capture`, so the declared boundary is compared with the boundary the members' finality rules compute in the same unit, and a declared unit different from the computed one is `not comparable`, never converted), `controllers` and `rule` O for a controller change) |
+| `edition` | `resource` id R · `predecessors` list of id R (set of edition ids, §3; the genesis id for the first edition; several for a merge) · `contents` object R (`members` list of {`content` or `resource` or `statement`, `role` string} O, `schema` digest O, `rules` list of {`dialect` string, `expr` string} O, `contract` object O, `selection` `"curated"`/`"rule-based"`/`"completeness"` O, `frozen_before` object O (exactly one of `date` date, `height` integer, `run` string: the same units as `finality.state_at_capture`, so the declared boundary is compared with the boundary the members' finality rules compute in the same unit, and a declared unit different from the computed one is `not comparable`, never converted), `system_keys` list of string O (a method edition's declaration: the `referent.system` keys an `observed` under it must pin; a set, below), `controllers` and `rule` O for a controller change) |
 | `withdraw_approval` | `resource` id R · `edition` edition id R (§3). Signed by a key that approved that edition's body: it withdraws that key's approval. What a withdrawal changes, and until when, is claims-model note §8. A withdrawal naming a body the signer never approved, or a `resource` that is not the body's, is shown and changes nothing |
 | `intent` · `progress` · `withdraw` · `submit` · `decide` | all: `task` id R · `edition` edition id R. `submit`: `result` digest R, `salt` string O, `self_declared_independence` boolean O. `decide`: `submissions` list of id R, `verdict` `"accept"`/`"reject"` R, `evaluations` list of digest O, `supersedes` id O. `progress`: `note` string O |
 | `rotate_key` · `revoke_key` | `rotate_key`: `successor` key R. `revoke_key`: `reason` string R, a token matching `[a-z][a-z0-9_]{0,63}`; three values are documented, the RFC 5280 §5.3.1 CRL reason codes that apply to a signing key in snake case: `key_compromise`, `superseded`, `cessation_of_operation`. `superseded` and `cessation_of_operation` are **soft**; every other value, `key_compromise`, any undocumented token and a value a later revision adds, is **hard**, so an unknown reason fails closed and never makes the revocation malformed. `last_good` id O (a line in this revocation's history: the last one its signer vouches for; read only for a hard reason). `note` string O. Both kinds are statements by the old key about itself and carry no time: a time a key signs about itself is not evidence. What they do to the key's other lines (the sibling rule, hard and soft, `last_good`, stricter later events) is claims-model note §4.1 |
+
+`edition.contents.system_keys` is a method edition's declaration of the measured-system members an observation
+under it must pin. It is a non-empty set (as `crit` is, §6; sorted by the key order of §1 with no duplicates,
+§1 arrays) of key names of a method-class `referent.system`. That object is flat, with string values, so each
+name is a key, never a path: `machine_ref`, not `system.machine_ref`. A `system_keys` that is not a list of
+strings, is empty, or is unsorted or has duplicates is malformed (intrinsic). A resource has no method type
+(`genesis.type`), so any edition may carry the field, and nothing marks an edition as a method's in advance:
+the field is read only for an `observed` whose `referent.method_edition` names that edition, and only when the
+reader holds it as an authorized edition of its resource (claims-model note §8; a pending, contested or
+unauthorized proposal declares nothing). When the reader holds no such edition, it cannot tell whether a
+declaration exists: no key is shown `unpinned` on that account, and comparability with another method-class
+observation is `unchecked`, naming the edition not held, never `comparable`. The declaration that governs an
+observation is the one in the edition it pins, so a later edition of the same method never changes how an
+earlier observation is read. A declared key absent from the observation's `referent.system` leaves its
+referent `unpinned`, naming `system.<key>` (claims-model note §5.3.1); a present key counts as pinned whatever
+its string value. Two observations under one declaring edition that each pin every declared key are
+comparable; keys outside the declaration are shown, never compared. Without a declaration, two method-class
+observations are comparable only when they pin the same `system` keys (C-core-32).
 
 **Execution objects**. The workflow spec blob and the environment record are canonical JSON
 (§1) with these members; the execution note fixes their meaning.
@@ -931,6 +949,11 @@ as an optional field (a minor change, §6) modelled on RFC 9581 §3.5.4 and FITS
   `proof_format` with its own note and its own quality, never `bitcoin`. Dropped from the first draft: `head_seq`
   (derivable), `quality_claimed` (a claim grants nothing), and the Bitcoin-time draft's `stamped_digest`
   (always the raw bytes of `covered`, so it could only ever disagree).
+- **Method system keys** (2026-10-30, review of #109). `edition.contents.system_keys`: a method edition declares
+  the `referent.system` keys an `observed` under it must pin, read only from an authorized edition the reader
+  holds; empty is malformed (omit the field to declare nothing); an unheld edition leaves comparability
+  `unchecked`. No `method` resource type: `genesis.type` is a closed list, and a new value would be malformed
+  to an older reader (§6) (§5; C-core-32a – 32d).
 
 **Open.**
 

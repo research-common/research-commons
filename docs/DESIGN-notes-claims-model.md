@@ -357,9 +357,11 @@ Rules:
   (image digest, platform, harness commit), the measured system's identity and state (model and provider pin,
   and whatever changes the apparatus under the observer, such as a routing era), the protocol's pinned inputs
   by hash (scenario edition, seed set, configuration), and the window (#65). A method edition declares the
-  members of the measured system an observation under it must pin; a missing declared member is
-  `unpinned`, and without a declaration two method-class observations are comparable only when they pin the
-  same members (C-core-32). A fork
+  members of the measured system an observation under it must pin (`system_keys`, wire-format note §5). The
+  declaration is read from the edition the observation pins, and only once the reader holds it as an
+  authorized edition (§8), so a later edition never re-judges an earlier observation; a missing declared member
+  is `unpinned`. Without a declaration two method-class observations are comparable only when they pin the
+  same members (C-core-32), and while the pinned edition is not held, comparability is `unchecked`. A fork
   or a vanished API does not make an observation false. It is still true of what it pinned. What changes is
   whether the referent is still canonical or still available, and that is shown separately. It never counts
   against the observer. A statement whose referent lacks a field its class requires is still a valid signed
@@ -506,7 +508,7 @@ the source.
 | capture evidence | §5.3.3 level, verified or not |
 | corroboration | §5.3.2 status, scoped |
 | selection | curated · rule-based · completeness claim · undeclared (§6). Missing means undeclared. |
-| referent status | still canonical · `provisional` · `final` · `revised` · `not canonical` · source still available / unknown · `unpinned` (a field its class requires is missing) · `finality unchecked` (a declared rule the reader has no source profile to evaluate) · `pinned` (phenomenon and method classes, whose referent has no re-check) (§5.3.1) |
+| referent status | still canonical · `provisional` · `final` · `revised` · `not canonical` · source still available / unknown · `unpinned` (a field its class requires, or a `system` member its method edition declares, is missing) · `finality unchecked` (a declared rule the reader has no source profile to evaluate) · `pinned` (phenomenon and method classes, whose referent has no re-check) (§5.3.1) |
 
 | pre-registration | `pre-registered <task edition> (<bound quality>)` · `exploratory` · undeclared (#3). Missing means undeclared, not exploratory. |
 | finality | §5.3.1 rule and rule provenance; state at capture |
