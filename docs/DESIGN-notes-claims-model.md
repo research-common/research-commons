@@ -207,7 +207,9 @@ read from the key's own log (wire-format note §7). It is in force once it chain
   counts only where it makes things stricter: a hard reason after a soft one, or an earlier `last_good`.
 - **Rotation retires the old key** the way a `superseded` revocation does: the old key's lines in the
   rotation's history count, and its lines outside it count toward nothing (C-core-127b). The successor starts
-  its own log. Controller roles name keys and do not follow a rotation (§8): a controller that rotates first
+  its own log. A successor named by a rotation inherits no claims: its predecessor's `authored` stay the
+  predecessor's; a reader that wants to follow the successor does so through a reader-policy selection
+  (`explain` names a claimant that is such a successor). Controller roles name keys and do not follow a rotation (§8): a controller that rotates first
   gets an edition naming the successor, under the resource's rule.
 - **Editions that lose their approvals.** An edition whose counted approvals fall below its rule because a key
   event stopped counting an approver's line is shown `contested`, naming the key event, and so is every
