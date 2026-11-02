@@ -442,7 +442,10 @@ each observation in its comparison data (the result's inputs other than the orig
 the original only, because a check against data says nothing about the data (C-core-51).
 
 In `rc/1` the counting unit is the signing key; every count names it, and keys are not people (§9.3). A reader
-policy may choose another unit once a profile defines one.
+policy may choose another unit once a profile defines one. What a reader "trusts" is its reader policy's answer
+for the purpose at hand (`attestation`, `corroboration` or `admission`, `docs/READER-POLICY.md`): a purpose the
+policy does not configure reads `not configured`, never trusted, and the reader keeps its no-policy behaviour
+for it (here: every counted statement is counted).
 
 #### 5.3.3 Capture evidence
 

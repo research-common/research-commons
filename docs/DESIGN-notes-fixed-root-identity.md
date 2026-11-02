@@ -383,6 +383,10 @@ evidence never changes their counting unit.
 
 ## 6. Local reader policy and exact pins
 
+The production reader already loads `reader-policy-v1` with key principals only; its user-facing
+specification is `docs/READER-POLICY.md` (provisional). This section stays the candidate profile's text,
+including what an `{identity: I}` principal would mean once the profile is active.
+
 `fixed-root-identity-policy.schema.json` is a linked **candidate local policy**, not a
 received statement. It requires `version:"reader-policy-v1"`, `selections` and `trust`
 (arrays may be empty, each at most 256 entries). Canonical bytes are at most 65,536.
