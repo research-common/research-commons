@@ -770,7 +770,7 @@ func TestWeakestLinkAndObservations(t *testing.T) {
 // mutate one disclosure at a time across its value set (incl. missing): grade and exit never change, the
 // displayed value does.
 func TestDisclosureNeverGrades(t *testing.T) {
-	conformance.Partial(t, "C-core-65", "licence, availability, replication on the output, sampling, shelf life, pre-registration; capture evidence, corroboration, selection, referent status and finality land with their views")
+	conformance.Covers(t, "C-core-65")
 	values := map[string][]canon.Value{
 		"licence":          {canon.String("CC0-1.0"), canon.String("MIT"), canon.String("LicenseRef-x AND CC-BY-4.0"), canon.String("not spdx")},
 		"availability":     {obj("redistribution", "permitted", "obtainable", true), obj("redistribution", "withheld", "obtainable", false, "withheld_until", "task")},

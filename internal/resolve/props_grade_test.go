@@ -40,9 +40,12 @@ func gradeAndExit(r *Resolver, x string) (string, int) {
 // membership views, which the artifact view's TestDisclosureNeverGrades does not reach: capture evidence,
 // corroboration status, selection, referent status and finality. Fix a T0 chain resting on an observation;
 // mutate one disclosure at a time across its value set (including missing); the grade and exit of the result
-// and of what rests on it never change, and the displayed value does.
+// and of what rests on it never change, and the displayed value does, beside the class/evidence line on the
+// observation view and on the membership view (no grade is shown there). With TestDisclosureNeverGrades (the
+// artifact view) and the CLI's TestDisclosureBesideGradeSurfaces (beside the grade on show, list, verify and
+// explain) this covers the case.
 func TestPropertyDisclosuresNeverGrade(t *testing.T) {
-	conformance.Partial(t, "C-core-65", "capture evidence, corroboration, referent status, finality (observation view) and selection (membership view) beside a T0 chain: grade and exit unchanged, display changed; the artifact disclosures are in TestDisclosureNeverGrades, and `every disclosure is shown beside the grade on each surface` is not checked (the observation and membership views print no grade)")
+	conformance.Covers(t, "C-core-65")
 	base, _ := gradeWorld(t, nil)
 	wantGrade, wantCode := gradeAndExit(base, "FINAL")
 	if !strings.HasPrefix(wantGrade, "T0|T0|0|0") || wantCode != 0 {
@@ -146,8 +149,26 @@ func TestPropertyDisclosuresNeverGrade(t *testing.T) {
 	}
 	_ = obsShow
 	_ = resultRender
+	// beside the class/evidence line: on the observation view the class line, capture evidence, referent status,
+	// finality and corroboration status are rendered together, for every value mutated above
+	for _, kv := range [][]any{nil, {"evidence", "anchored-at-capture"}, {"finality", depthFinality("confirmations ≥ 6", 30)}, {"finality", runFinality("SF")}} {
+		r := build(kv...)
+		for _, p := range r.byKind["observed"] {
+			o, _ := r.Observation(p.St.ID)
+			out := o.Render()
+			for _, want := range []string{"  class " + o.Class + " (asserted by", "; evidence " + o.Capture.Display + "\n", "  referent status: " + o.ReferentStatus + "\n", o.Corroboration.Status()} {
+				if !strings.Contains(out, want) {
+					t.Fatalf("%v: %q not on the observation view beside the class line:\n%s", kv, want, out)
+				}
+			}
+			if o.Finality != nil && !strings.Contains(out, "  finality: rule ") {
+				t.Fatalf("%v: finality not on the observation view:\n%s", kv, out)
+			}
+		}
+	}
 
 	// corroboration status: contradicted, corroborated and unchecked, on the observation the chain rests on
+	corrShown := map[string]bool{}
 	for name, add := range map[string]func(w *world){
 		"unchecked": func(w *world) {},
 		"corroborated": func(w *world) {
@@ -158,18 +179,29 @@ func TestPropertyDisclosuresNeverGrade(t *testing.T) {
 			w.corroborates("C2", "C2", w.ids["O"], w.result("R2", "C2", "v2", "W", "OBS", "b"), "contradicts")
 		},
 	} {
-		r, _ := gradeWorld(t, func(w *world, _ *string) { add(w) })
+		r, w := gradeWorld(t, func(w *world, _ *string) { add(w) })
 		if g, code := gradeAndExit(r, "FINAL"); g != wantGrade || code != wantCode {
 			t.Fatalf("corroboration %s moved the grade or exit: %s", name, g)
 		}
+		o, _ := r.Observation(w.ids["O"])
+		corrShown[o.Corroboration.Status()] = true
+	}
+	if len(corrShown) != 3 {
+		t.Fatalf("corroboration: the displayed status did not change: %v", corrShown)
 	}
 	// the reader's re-check of the referent: every outcome
+	reShown := map[string]bool{}
 	for _, rc := range []ReCheck{{Outcome: ReSame, State: State{HasDepth: true, Depth: 12}}, {Outcome: ReDifferent}, {Outcome: ReNotCanonical}, {Outcome: ReUnavailable}, {Outcome: ReUnchecked}} {
 		r, w := gradeWorld(t, nil)
 		r = New(r.logs, WithTimeVerifier(newFakeBitcoin(100, 101)), WithFinalityRules(settlementRules{}), WithReferentChecker(fakeReferents{w.ids["O"]: rc}))
 		if g, code := gradeAndExit(r, "FINAL"); g != wantGrade || code != wantCode {
 			t.Fatalf("referent re-check %s moved the grade or exit: %s", rc.Outcome, g)
 		}
+		o, _ := r.Observation(w.ids["O"])
+		reShown[o.ReferentStatus] = true
+	}
+	if len(reShown) < 2 {
+		t.Fatalf("referent re-check: the displayed referent status did not change: %v", reShown)
 	}
 	// selection: every declared value and none
 	for _, sel := range []string{"", "curated", "rule-based", "completeness"} {
@@ -182,8 +214,8 @@ func TestPropertyDisclosuresNeverGrade(t *testing.T) {
 		}
 		w.editionWith("E1", "A", g, []string{g}, kv...)
 		mm, _ := w.store(nil).Membership(g, m)
-		if want := map[bool]string{true: "undeclared", false: sel}[sel == ""]; mm.Selection != want {
-			t.Fatalf("selection %q shown as %q", sel, mm.Selection)
+		if want := map[bool]string{true: "undeclared", false: sel}[sel == ""]; mm.Selection != want || !strings.Contains(mm.Render(), "  selection: "+want+"\n") {
+			t.Fatalf("selection %q shown as %q on the membership view:\n%s", sel, mm.Selection, mm.Render())
 		}
 		if a := w.store(nil).Artifact(dig("m")); a.Grade.Why == "" && a.Grade.Tier != "" {
 			t.Fatalf("selection %q reached a grade: %s", sel, a.Grade)

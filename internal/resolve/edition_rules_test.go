@@ -3,6 +3,9 @@ package resolve
 import (
 	"bytes"
 	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -367,11 +370,33 @@ func TestStrictAndLax(t *testing.T) {
 	has(t, ms.Render(), "selection: undeclared")
 }
 
-// TestSelectionDisclosure: C-core-59 (the resource half). Editions declaring curated, rule-based and
-// completeness show those values; one declaring nothing shows `undeclared`; the rule-based one exposes its rules
-// for re-application through the membership evaluation.
+// TestSelectionDisclosure: C-core-59. Editions declaring curated, rule-based and completeness show those values
+// on the membership view (no grade is shown there); one declaring nothing shows `undeclared`; the rule-based one
+// exposes its rules for re-application through the membership evaluation. No agreement model reads selection:
+// outside membership.go no non-test source of this package calls Selection(body) or reads an edition body's
+// `selection` member, so the clause "a model that reads selection must treat undeclared as curated" binds
+// nothing shipped, and a model that starts reading it that way fails here until it carries its own case.
 func TestSelectionDisclosure(t *testing.T) {
-	conformance.Partial(t, "C-core-59", "selection shown on the membership view; beside a grade on every surface, and agreement models treating undeclared as curated, land with corroboration (§5.3.2)")
+	conformance.Covers(t, "C-core-59")
+	readers := map[string]bool{}
+	files, _ := filepath.Glob("*.go")
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// the disclosure is read through Selection(body) or a body read of the "selection" member
+		src := strings.ReplaceAll(string(b), "func Selection(", "")
+		if reSelectionCall.MatchString(src) || strings.Contains(src, `, "selection")`) {
+			readers[f] = true
+		}
+	}
+	if len(readers) != 1 || !readers["membership.go"] {
+		t.Fatalf("the selection disclosure is read outside the membership view by %v: an agreement model that reads selection must treat undeclared as curated (C-core-59); give it its own case", readers)
+	}
 	w := newWorld(t)
 	x := w.authored("Xa", "M", "X", "sampling", sampling(40))
 	for _, sel := range []string{"curated", "rule-based", "completeness", ""} {
@@ -394,6 +419,8 @@ func TestSelectionDisclosure(t *testing.T) {
 		}
 	}
 }
+
+var reSelectionCall = regexp.MustCompile(`(^|[^.\w])Selection\(`)
 
 func keyShort(id string) string { return shortMember(id) }
 
@@ -671,9 +698,11 @@ func TestSetLevelProperty(t *testing.T) {
 // TestRuleLimits: C-core-94. The member schema has a catastrophic backtracking pattern, and a second member's
 // content nests past the parser's depth limit; the evaluator reaches both (its reads are logged). Each
 // evaluation terminates, is `unchecked`, and carries an operational refusal naming the limit and its scope
-// (this rule, this member). The artifacts' views are untouched.
+// (this rule, this member). The artifacts' views are untouched. The step budget binds every dialect (every domain
+// read and Domain.Step charges it); shown here with the reference test dialect. Stage 3 ships no rule dialect,
+// and each shipped dialect carries its own instance of this case.
 func TestRuleLimits(t *testing.T) {
-	conformance.Partial(t, "C-core-94", "the step budget binds a dialect that charges Domain.Step (and every domain read), as the cost model of claims §15 requires of every dialect; this package ships no dialect (the test dialect charges per step) and no member-schema dialect, so a shipped dialect's own charging is pending the rule and schema note")
+	conformance.Covers(t, "C-core-94")
 	w := newWorld(t)
 	slow := w.authored("S", "M", "slow")
 	deep := w.authored("D", "M", "deep")
