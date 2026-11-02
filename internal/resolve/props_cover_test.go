@@ -13,7 +13,7 @@ import (
 func TestPropertyGeneratorReachesViews(t *testing.T) {
 	want := map[string]string{
 		"a fork":                       "FORK at",
-		"a contested/pending edition":  "pending",
+		"a pending edition":            "\n  pending ",
 		"an authorized edition":        "authorized",
 		"a detached edition":           "not counted: detached",
 		"a counted corroboration":      "corroborated 1",

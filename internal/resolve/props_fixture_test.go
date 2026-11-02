@@ -52,7 +52,8 @@ func unheldID(label string) string {
 	return hex.EncodeToString(h[:])
 }
 
-// concretize signs a fixture. The base is always present: a resource G (controllers A, B and C, any one) with an
+// concretize signs a fixture. The base is always present: a resource G (controllers A, B and C, any one; 2-of-3
+// for one seed in four) with an
 // edition E1 whose rules admit statements under two licences, a workflow W by A (replication from the seed), a
 // result blob RES derived under W, a member statement M1 and an exact-bytes observation O1 of blob X.
 func concretize(t *testing.T, f fixture.Fixture) *propWorld {
@@ -60,7 +61,12 @@ func concretize(t *testing.T, f fixture.Fixture) *propWorld {
 	w := newWorld(t)
 	pw := &propWorld{world: w, kinds: map[string]string{}, blobs: []string{"RES", "RES2", "U", "V", "W", "X"}}
 	w.workflow("A", "W", []string{"bytes", "protocol"}[f.Seed%2], "K")
-	pw.g = w.genesis("G", "A", 0, "A", "BB", "C")
+	// one seed in four makes G 2-of-3, so an edition one controller approved alone is pending
+	k := 0
+	if f.Seed%4 == 1 {
+		k = 2
+	}
+	pw.g = w.genesis("G", "A", k, "A", "BB", "C")
 	m1 := w.authored("M1", "A", "M1", "licence", "CC0-1.0")
 	o1 := w.observed("O1", "C", "X", "exact-bytes", chainRef(3), "finality", depthFinality("confirmations ≥ 6", 3))
 	w.result("RES", "A", "RES", "W", "X")
