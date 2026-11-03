@@ -569,7 +569,7 @@ func TestTmpSweep(t *testing.T) {
 	if len(s.Recovered) != 1 || s.Recovered[0].What != "removed temporary" {
 		t.Fatal(s.Recovered)
 	}
-	if fi, err := os.Stat(filepath.Join(root, "retained")); err != nil || !fi.IsDir() {
-		t.Fatal("retained/ not reserved in the layout")
+	if _, err := os.Stat(filepath.Join(root, "retained")); err == nil {
+		t.Fatal("Open created a retained/ area; the layout has none (storage §1)")
 	}
 }

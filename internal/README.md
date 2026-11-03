@@ -16,6 +16,7 @@ go test ./...                                                     # everything
 go test -run TestConformanceCases -v ./internal/conformance       # progress against CONFORMANCE.md
 go test -run '^$' -fuzz FuzzRead -fuzztime 60s ./internal/wire    # one fuzz target (also FuzzParse, FuzzTime)
 CGO_ENABLED=0 go build ./...                                      # static build
+CGO_ENABLED=0 go build -ldflags "-X main.version=0.5.0-alpha.1 -X main.commit=$(git rev-parse HEAD)" ./cmd/commons
 RC_TEST_IMAGE=alpine:latest go test -tags sandbox_oci -run OCI ./internal/run   # the OCI sandbox against a real runtime
 ```
 

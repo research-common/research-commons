@@ -434,14 +434,18 @@ func TestGCKeepsUnreadableReferences(t *testing.T) {
 	if len(plan.Deleted) != 0 || !s.HasBlob(d) || !strings.Contains(plan.Render(), "does not read; kept, never interpreted") {
 		t.Fatal(plan.Render())
 	}
-	// retained/ lines pin too.
+	// there is no retained/ area: a file there pins nothing (the mutation control: the same bytes under
+	// statements/ pinned above), and fsck names the directory without touching it
 	if err := os.Remove(junk); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "retained"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "retained", strings.Repeat("b", 64)), []byte(`{"x":"`+string(d)+`"}`), 0o444); err != nil {
 		t.Fatal(err)
 	}
-	if plan, _ := s.GC(GCConfig{}, true); len(plan.Deleted) != 0 || !strings.Contains(plan.Render(), "retained line") {
+	if plan, _ := s.GC(GCConfig{}, true); len(plan.Deleted) != 1 || strings.Contains(plan.Render(), "retained") {
 		t.Fatal(plan.Render())
 	}
 }

@@ -612,7 +612,6 @@ func TestSetLevelRule(t *testing.T) {
 // delivery order, a fail names every member in conflict and nobody is admitted by order: two candidates with
 // one tuple are never one ok and one fail.
 func TestSetLevelProperty(t *testing.T) {
-	conformance.Partial(t, "P-01", "edition-rule admissions over seeded candidate sets (TestSetLevelProperty); other views as they land")
 	opts := fixture.Default
 	opts.MaxStatements = 7
 	fixture.Check(t, 500, 60, opts, func(f fixture.Fixture) string {
@@ -674,7 +673,7 @@ func TestSetLevelProperty(t *testing.T) {
 // evaluation terminates, is `unchecked`, and carries an operational refusal naming the limit and its scope
 // (this rule, this member). The artifacts' views are untouched.
 func TestRuleLimits(t *testing.T) {
-	conformance.Partial(t, "C-core-94", "the step budget binds a dialect that charges Domain.Step (and every domain read); no member-schema dialect exists, and a dialect that computes without charging steps is bounded by nothing here (spec finding: the rule and schema note must fix a cost model)")
+	conformance.Partial(t, "C-core-94", "the step budget binds a dialect that charges Domain.Step (and every domain read), as the cost model of claims §15 requires of every dialect; this package ships no dialect (the test dialect charges per step) and no member-schema dialect, so a shipped dialect's own charging is pending the rule and schema note")
 	w := newWorld(t)
 	slow := w.authored("S", "M", "slow")
 	deep := w.authored("D", "M", "deep")
@@ -724,7 +723,7 @@ func archive() []ContentUnit {
 // pre-pin check: the draft passes with outcome `unchecked` recorded; re-applied by a reader (hub) it admits
 // nothing.
 func TestUnscannedArchive(t *testing.T) {
-	conformance.Partial(t, "C-core-95", "the rule and pre-pin check at the resolver; the archive scanner is a stand-in ContentReader, and publish (pinning the bytes) is not built")
+	conformance.Partial(t, "C-core-95", "the rule and pre-pin check at the resolver; the archive scanner is a stand-in ContentReader (no archive scanner ships); publish records unchecked for an unscanned unit in internal/cli.TestPublishPrePin")
 	w := newWorld(t)
 	x := w.authored("X", "M", "arch")
 	g := w.genesis("G", "A", 0, "A")
@@ -758,7 +757,7 @@ func TestUnscannedArchive(t *testing.T) {
 // names the edition to fetch; no body is returned, so nothing records `ok`. Control: after fetching it, the
 // check runs and the body records its outcome.
 func TestIntendedForNotHeld(t *testing.T) {
-	conformance.Partial(t, "C-core-95a", "the pre-pin check at the resolver; publish (nothing pinned) is not built")
+	conformance.Covers(t, "C-core-95a") // the resolver half; publish is internal/cli.TestPublishPrePin
 	w := newWorld(t)
 	g := w.genesis("G", "A", 0, "A")
 	e1 := w.editionWith("E1", "A", g, []string{g}, "rules", rules("FORBID secret"))
@@ -784,7 +783,7 @@ func TestIntendedForNotHeld(t *testing.T) {
 // TestIntendedForFail: C-core-96. E2's rule forbids `secret`; the content has it. The check refuses with class
 // reader policy, scope this statement, naming the edition, and returns no body to sign.
 func TestIntendedForFail(t *testing.T) {
-	conformance.Partial(t, "C-core-96", "the refusal at the resolver; publish (nothing pinned or appended) is not built")
+	conformance.Covers(t, "C-core-96") // the resolver half; publish is internal/cli.TestPublishPrePin
 	w := newWorld(t)
 	g := w.genesis("G", "A", 0, "A")
 	e1 := w.editionWith("E1", "A", g, []string{g})
@@ -828,11 +827,11 @@ func TestIntendedForOK(t *testing.T) {
 	}
 }
 
-// TestForgedIntendedFor: C-core-98. A statement records intended_for {R, E2} outcome ok over content E2's rule
+// TestForgedIntendedFor: C-core-98, the resolver half (the hub gate half is hubcheck's TestForgedIntendedForAtHub, which
+// declares the case). A statement records intended_for {R, E2} outcome ok over content E2's rule
 // fails. R's current edition E3 lists it. The reader shows E2: fail and E3: fail side by side as its own
 // computation, the publisher's ok only as its word, and does not endorse the membership.
 func TestForgedIntendedFor(t *testing.T) {
-	conformance.Partial(t, "C-core-98", "the reader's side-by-side computation; push and hub CI reading its base revision are not built")
 	w := newWorld(t)
 	g := w.genesis("G", "A", 0, "A")
 	e1 := w.editionWith("E1", "A", g, []string{g})

@@ -321,14 +321,16 @@ func (r *Resolver) compare(g *Group) {
 		if reproduced > 0 {
 			g.Explain = append(g.Explain, "an output another run also produced is a byte-identical re-derivation (T0); an output no other run produced is diverged")
 		}
+	case g.Mode == "protocol" && g.Comparator == "":
+		// no comparator: no comparison is possible whatever the bytes, so identical bytes are unchecked too
+		// (execution §5.3; claims §13: holding less evidence never passes where holding more would not)
+		set(func(int) Grade { return Grade{Why: UncheckedToken} })
+		g.Token = fmt.Sprintf("derived by %d: unchecked", k)
+		g.Explain = append(g.Explain, "the workflow declares protocol replication and no comparator; no default comparison is made")
 	case g.Mode == "protocol" && len(g.Outputs) == 1:
 		set(func(int) Grade { return Grade{Why: IdenticalProto} })
 		g.Token = fmt.Sprintf("derived by %d: %s", k, IdenticalProto)
 		g.Explain = append(g.Explain, "identical bytes under a protocol workflow are consistent with a re-run and with a copy, and evidence of neither; independence is claims §9.3's question")
-	case g.Mode == "protocol" && g.Comparator == "":
-		set(func(int) Grade { return Grade{Why: UncheckedToken} })
-		g.Token = fmt.Sprintf("derived by %d: unchecked", k)
-		g.Explain = append(g.Explain, "the workflow declares protocol replication and no comparator; no default comparison is made")
 	case g.Mode == "protocol":
 		r.compareProtocol(g)
 	default:
@@ -410,7 +412,7 @@ func (r *Resolver) compareProtocol(g *Group) {
 	if apart+unknown > 0 {
 		lead := "matching runs not all compared with each other"
 		if apart > 0 {
-			lead = "matching runs do not all agree"
+			lead = "not all runs agree"
 		}
 		var parts []string
 		if apart > 0 {

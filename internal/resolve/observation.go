@@ -273,6 +273,33 @@ type Observation struct {
 	// PreRegistration is the `fulfills` / `pre_registration` disclosure (prereg.go, claims §9.4).
 	PreRegistration PreRegistration
 	Explain         []string
+	// finalityUnevaluable: the declared finality rule was read and this reader cannot evaluate it.
+	finalityUnevaluable bool
+}
+
+// VerifyExit is `verify` for an observation (claims §13): it checks the statement's signature and its pins. 0
+// when they hold; 3 when the body was not interpreted, the statement counts toward nothing, the referent is
+// `unpinned`, or its declared finality rule cannot be evaluated by this reader. Corroboration status, the
+// reader's re-check and capture evidence are disclosures shown beside it (I6) and never change the exit, so no
+// exit rests on a capture level the reader did not verify (C-core-52). Why lists each cause.
+func (o *Observation) VerifyExit() (int, []string) {
+	var why []string
+	switch {
+	case !o.BodyUnderstood:
+		why = append(why, "observation: body not interpreted")
+	case !o.Counts:
+		why = append(why, "observation: counts toward nothing")
+	}
+	if len(o.Unpinned) > 0 {
+		why = append(why, "referent: "+RefUnpinned+" ("+strings.Join(o.Unpinned, ", ")+")")
+	}
+	if o.finalityUnevaluable {
+		why = append(why, "referent: "+RefRuleUnchecked+" (rule "+strconv.Quote(o.Finality.Rule)+")")
+	}
+	if len(why) > 0 {
+		return 3, why
+	}
+	return 0, nil
 }
 
 // Comparability is one method-class comparison (C-core-32): the other statement, whether the two pin the same
@@ -511,6 +538,7 @@ func (r *Resolver) referentStatus(o *Observation, st *wire.Statement) {
 		switch {
 		case !known:
 			status = RefRuleUnchecked
+			o.finalityUnevaluable = true
 			o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("at capture: state %s under rule %q, which this reader cannot evaluate (no source profile for it)", f.State, f.Rule))
 		case met:
 			status = RefFinal
@@ -668,7 +696,9 @@ func captureState(st *wire.Statement) State {
 // comparability checks a method-class observation against every other counted method-class observation of the
 // same method edition: two that do not pin the same measured-system members are not comparable, and the
 // display names what is missing (C-core-32). Comparability is a precondition of any statistical agreement
-// model; it never reads as `supports`.
+// model; it never reads as `supports`. This is the claims §5.3.1 rule for a method edition that declares no
+// system members; reading a declaration (a missing declared member is `unpinned`) waits for a wire field that
+// carries it.
 func (r *Resolver) comparability(o *Observation, st *wire.Statement) {
 	ref := object(st.Body, "referent")
 	ed := str(ref, "method_edition")

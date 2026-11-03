@@ -54,7 +54,17 @@ type Outcome struct {
 	Boundary                    string
 	// Cleanup is the post-run check: the container no longer exists and no process remains in its cgroup.
 	Cleanup string
+	// NetworkEnforced is how a granted network was confined (execution §6): EnforcedPerEndpoint when egress was
+	// limited to the spec's declared endpoints, EnforcedAll when the network was opened as a whole. "" when no
+	// network was granted; a runner that leaves it "" for a granted network is recorded as EnforcedAll.
+	NetworkEnforced string
 }
+
+// Network enforcement values of the environment record's `network.enforced` (execution §6).
+const (
+	EnforcedAll         = "all"
+	EnforcedPerEndpoint = "per-endpoint"
+)
 
 // Step is an in-process step for the Fake runner: it reads its inputs from in, writes outputs to out, and
 // reports the resources it would have used, so the fake can trip caps deterministically.

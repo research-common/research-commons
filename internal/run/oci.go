@@ -231,6 +231,8 @@ func (o *OCI) Run(ctx context.Context, j Job) (Outcome, error) {
 	if disk == 0 {
 		disk = 64 << 20
 	}
+	// a granted network opens the runtime's default bridge: everything, not only the declared endpoints, and the
+	// record says so (network.enforced: all, execution §6)
 	network := "none"
 	if j.Network != nil {
 		network = "bridge"
@@ -263,6 +265,9 @@ func (o *OCI) Run(ctx context.Context, j Job) (Outcome, error) {
 		return Outcome{}, err
 	}
 	out := Outcome{ImageReference: j.Spec.Image.Reference, ImageDigest: j.Spec.Image.Digest, Boundary: "sandbox: oci, image " + j.Spec.Image.Digest}
+	if j.Network != nil {
+		out.NetworkEnforced = EnforcedAll
+	}
 	_, out.Platform, _ = o.Image(ctx, *j.Spec.Image)
 	if v, err := o.cli(ctx, "version", "--format", "{{.Server.Version}}"); err == nil {
 		out.Runtime = o.bin() + " " + v

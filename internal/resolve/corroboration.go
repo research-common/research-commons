@@ -36,9 +36,11 @@ import (
 // text reads today, and every status says so. Independence is never inferred: distinct keys prove nothing about
 // it (§5.3.2, §9.3), so it reads `unknown` and declared shared sources are grouped beside the count.
 //
-// Trust: the note computes the status from the corroborations a reader "holds and trusts". With no reader policy
-// every counted statement is counted and the status says trust is not configured; with one (WithPolicy), only
-// evidence from keys it trusts for corroboration of the observation's content is counted (policy.go).
+// Trust: the note computes the status from the corroborations a reader "holds and trusts". Trust is configured
+// per purpose: with no reader policy, or one that names no principal for corroboration, every counted statement
+// is counted and the status says trust is not configured; once the policy (WithPolicy) names any principal for
+// corroboration, only evidence from keys it trusts for corroboration of the observation's content is counted
+// (policy.go).
 
 // Evidence is one input to a corroboration status.
 type Evidence struct {

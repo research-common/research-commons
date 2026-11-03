@@ -35,7 +35,6 @@ const (
 	FsckStray           = "stray file"
 	FsckQuarantined     = "quarantined"
 	FsckMarker          = "layout marker"
-	FsckRetained        = "retained line"
 	FsckUnreadableEntry = "unreadable"
 )
 
@@ -247,7 +246,7 @@ func (s *Store) Fsck(opt FsckOptions) (*FsckReport, error) {
 			add(FsckMissingBlob, string(in.content), fmt.Sprintf("unavailable (not held locally); named by %s statement %s", in.kind, id), false)
 		}
 	}
-	// Referenced = any pin (the gc index): statements of any kind, retained lines, journal.
+	// Referenced = any pin (the gc index): statements of any kind, journal.
 	ri := s.newRefIndex(nil)
 	if err := ri.refresh(); err != nil {
 		return r, err
@@ -342,12 +341,10 @@ func (s *Store) Fsck(opt FsckOptions) (*FsckReport, error) {
 		}
 		add(FsckQuarantined, "quarantine/", fmt.Sprintf("%d item(s) moved aside, never deleted: %s", len(names), strings.Join(names, ", ")), false)
 	}
+	// The layout has no retained/ area (§1: a statement this reader cannot evaluate is stored under its id with
+	// its signer's statements). One left by an earlier version is named, never read or deleted.
 	if rents, err := os.ReadDir(s.dir("retained")); err == nil {
-		for _, e := range rents {
-			if !reHex.MatchString(e.Name()) {
-				add(FsckStray, "retained/"+e.Name(), "not a retained-line name (64 lowercase hex); left alone", false)
-			}
-		}
+		add(FsckStray, "retained/", fmt.Sprintf("not part of the rc-store/1 layout (%d entr(ies)); statements this reader cannot evaluate are stored under statements/; left alone", len(rents)), false)
 	}
 
 	// Projections: drift against a cold rebuild, then optional rebuild.

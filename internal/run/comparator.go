@@ -11,11 +11,12 @@ import (
 // to resolve.WithComparator and every `protocol` comparison the resolver makes runs sandboxed; the resolver
 // caches each pair (claims §5.2), and nothing here is evidence.
 //
-// The comparator ABI is not fixed by the notes (a spec finding of this slice). Provisional: a comparator is a
-// workflow spec with exactly two inputs, named "a" and "b" (the two outputs in digest order, as the resolver
-// asks), no network, and one output named "verdict" whose bytes are exactly `match`, `diverged` or
-// `not comparable` (a trailing newline allowed). Anything else, a failed step or a cap stop is `unchecked`,
-// with the reason.
+// The comparator interface is execution note §5.3: a comparator is a workflow spec with exactly two inputs, named
+// "a" and "b" (the two outputs in digest order, as the resolver asks), no network, and one output named
+// "verdict" whose bytes are exactly `match`, `diverged` or `not comparable` (a trailing newline allowed).
+// Anything else, a failed step or a cap stop is `unchecked`, with the reason. A comparator's own `authored`
+// declares `replication: bytes` (a comparison has one answer per pair, claims §5.2); a comparator that declares
+// anything else, or whose declaration the reader does not hold, is not run, and the comparison is `unchecked`.
 type ComparatorRunner struct {
 	Policy *Policy
 	Runner Runner
@@ -23,6 +24,9 @@ type ComparatorRunner struct {
 	// (admission is per signer or per hash, the same grant structure as workflows, §2.3).
 	Specs   map[string][]byte
 	Signers map[string]string
+	// Replication maps a comparator's digest to the replication mode its `authored` declares, as the reader
+	// resolved it (the selected workflow declaration). Only `bytes` is run.
+	Replication map[string]string
 	// Blobs supplies the comparator's code and the outputs being compared, by digest.
 	Blobs map[string][]byte
 	// Profile is the invoking run's profile ("" = sandbox).
@@ -34,6 +38,13 @@ func (c *ComparatorRunner) Compare(comparator, a, b string) (string, string) {
 	sb, ok := c.Specs[comparator]
 	if !ok {
 		return "unchecked", "comparator " + comparator + " is not held"
+	}
+	switch mode := c.Replication[comparator]; mode {
+	case "bytes":
+	case "":
+		return "unchecked", "comparator " + comparator + " has no replication declaration held; a comparator must declare replication: bytes, and is not run"
+	default:
+		return "unchecked", "comparator " + comparator + " declares replication: " + strings.ToValidUTF8(truncate(mode, 32), "?") + ", not bytes; a comparator must declare replication: bytes, and is not run"
 	}
 	spec, err := ParseSpec(sb)
 	if err != nil {

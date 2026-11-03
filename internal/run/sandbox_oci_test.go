@@ -256,6 +256,9 @@ func TestOCIBoundary(t *testing.T) {
 	if err != nil || !resN.Completed() {
 		t.Fatalf("control: %v %s", err, resN.Token)
 	}
+	if resN.Record.NetworkEnforced != EnforcedAll { // the OCI runner opens the bridge as a whole (§6)
+		t.Fatalf("control: network.enforced %q, want all", resN.Record.NetworkEnforced)
+	}
 	time.Sleep(200 * time.Millisecond)
 	mu.Lock()
 	n = conns
