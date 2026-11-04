@@ -803,8 +803,9 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
   anyone serving the bytes. Superseded snapshots are often the evidence for their own erratum. A hub that
   must stop serving something does so under its own admission policy (I9).
 - **Exit codes.** 0 checked and passed · 1 a completed check disagreed (a `verify` comparison, or a rule the
-  publisher named failing its own bytes at the pre-pin check, or a gate refusing an object, or a fatal `fsck`
-  finding) · 3 could not check (contested, unknown, unchecked, unpinned, unsupported; a derived artifact nobody
+  publisher named failing its own bytes at the pre-pin check, or a writer refusing a request whose check over
+  the statements it holds ran to completion, such as a revocation that would undo itself, or a gate refusing an
+  object, or a fatal `fsck` finding) · 3 could not check (contested, unknown, unchecked, unpinned, unsupported; a derived artifact nobody
   re-derived, `not re-derived`; a re-run stopped by one of the reader's own limits, `timeout` or another
   operational cap, reported with the resources used; and a re-run whose step failed or left a declared output
   missing) · 4 nothing to re-run · 5 environment mismatch: the declared environment differs from, or is not

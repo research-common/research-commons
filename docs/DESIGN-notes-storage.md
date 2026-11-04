@@ -259,8 +259,9 @@ is a **fork point**:
   merge, naming the tip and the event, and points to a hard reason with `last_good`. A soft merge that folds in
   a key event the owner did not write lets that event outrank the revocation, which then sits after it and
   counts toward nothing (C-core-127c). For a hard reason it merges
-  nothing on its own: it lists every tip, marks the ones this machine did not write, and the owner picks
-  which to keep and which line is `last_good`. Folding a thief's tips into the owner's history would make
+  nothing on its own: it lists every tip, marks the ones whose branch carries a key event outside the history
+  being extended (a store keeps no record of which lines it signed, so "this machine did not write" is not
+  decidable), and the owner picks which to keep and which line is `last_good`. Folding a thief's tips into the owner's history would make
   them count. `revoke` offers the three documented reasons with no default, and refuses to run
   non-interactively without `--reason`.
 
