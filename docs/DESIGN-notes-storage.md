@@ -299,6 +299,19 @@ files are the one-statement-per-file form of §1, so a package and a store share
 the change with the same code that reads a store. A package's statement files are the canonical stored form; any
 other bytes are refused (intrinsic), never canonicalized on the way in.
 
+A package may also arrive as an archive of a store tree. An implementation that reads one reads it as the same
+package the unpacked tree is, with the same verdicts: it lists members by name, type and bytes and never
+extracts them (a member name is only a path the gate classifies), so `..`, absolute and backslash names,
+symlinks, hard links, devices and every other non-regular member are refused as unsafe paths, exactly as the
+same entries in a directory, and a member outside the layout is refused as outside the data surface. The
+archive is read under the scan limits of §8 (member count, total bytes, name length, expansion ratio); a limit
+that stops the read, or an archive that does not read to its end, leaves the package unjudged (an operational
+refusal naming the limit, nothing committed): a package read in part is never judged as the whole. An archive
+that reads but is ambiguous, holding one member name twice or bytes after its end other than zero padding, is
+refused whole (intrinsic): two readers could see two packages in it. A top-level `.git` in an archive is
+treated as in a tree (one non-regular entry, refused unless the reader declares the package a checkout).
+Nested archives are member bytes, not descended. This tool reads tar, plain or gzip-compressed.
+
 ## 5. Caches and indexes
 
 ### 5.1 Keys
