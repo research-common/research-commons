@@ -1,6 +1,9 @@
 package cli
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
 	"io/fs"
@@ -193,14 +196,15 @@ func noncanonical(t testing.TB, line []byte) []byte {
 
 // TestDeliveryOrderOneView: C-core-04. One fixed statement set (the sweep fixture: sole, contested, nobody,
 // T0, diverged, protocol-unchecked, not re-derived, unpinned, retracted, hostile text, anchors and an unknown
-// kind) delivered to fresh readers (a) as local package trees and (b) as a hub checkout that grows commit by
-// commit, each in a seeded random order cut into several pulls, every statement delivered at least twice, and
-// on one order every duplicate also in a non-canonical byte form. Every delivery ends at the same view digest
+// kind) delivered to fresh readers (a) as local package trees, (b) as a hub checkout that grows commit by
+// commit, and (c) as tar archives (plain and gzip-compressed, members in the seeded order, with the leading
+// "./" and directory members `tar -C dir .` writes), each in a seeded random order cut into several pulls,
+// every statement delivered at least twice, and on one order every duplicate also in a non-canonical byte form. Every delivery ends at the same view digest
 // as the source store, so every verify exit and every explain output is identical (explain carries no delivery
 // metadata at all). The control: a reader missing one statement has a different view digest, so the digest sees
 // a difference when there is one.
 func TestDeliveryOrderOneView(t *testing.T) {
-	conformance.Partial(t, "C-core-04", "deliveries (a) local package trees and (b) a growing hub checkout pulled with --from-checkout, three seeded orders each, every statement duplicated: one view digest, one verify exit per ref, explain identical; (c) an archive has no ingest path: pull reads a directory only")
+	conformance.Covers(t, "C-core-04")
 	src := fixture(t)
 	blobs, stmts := dataObjects(t, src.root)
 	refs := refUniverse(t, src.root)
@@ -303,7 +307,85 @@ func TestDeliveryOrderOneView(t *testing.T) {
 			}
 			check("hub seed "+strconv.FormatUint(seed, 10), dst.root)
 		})
+
+		// (c) archives: two passes as in (a), each pull one tar archive whose members are in the permutation's
+		// order; odd chunks gzip-compressed; on seed 1 pass 1 the duplicates are non-canonical bytes again
+		t.Run("archive/"+strconv.FormatUint(seed, 10), func(t *testing.T) {
+			dst := newWorld(t)
+			for pass := 0; pass < 2; pass++ {
+				for i, c := range chunks(r, all, 6) {
+					members := [][2]string{{"rc-store", ""}}
+					for _, o := range c {
+						members = append(members, [2]string{o, ""})
+					}
+					if seed == 1 && pass == 1 {
+						for j, o := range c {
+							if strings.HasPrefix(o, "statements/") {
+								members[j+1][1] = string(noncanonical(t, mustRead(t, filepath.Join(src.root, o))))
+							}
+						}
+					}
+					a := tarPackage(t, src.root, members, i%2 == 1)
+					x := dst.run("pull", a, "--json")
+					if seed == 1 && pass == 1 {
+						if x.code == ExitDidNotStart || x.code == ExitCouldNot {
+							t.Fatalf("pass %d archive %d (non-canonical duplicates): exit %d\n%s", pass, i, x.code, x.stdout)
+						}
+						continue
+					}
+					if x.code != 0 || !strings.Contains(x.stdout, `"package_format":"tar`) {
+						t.Fatalf("pass %d archive %d: exit %d\n%s", pass, i, x.code, x.stdout)
+					}
+				}
+			}
+			check("archive seed "+strconv.FormatUint(seed, 10), dst.root)
+		})
 	}
+}
+
+// tarPackage writes a tar archive of a package to a temporary file: the members in the given order, each named
+// "./<path>" after the directory members of its path (what `tar -C dir .` writes), its bytes the source store's
+// file unless the pair carries replacement bytes; gzip-compressed when gz.
+func tarPackage(t testing.TB, src string, members [][2]string, gz bool) string {
+	t.Helper()
+	var b bytes.Buffer
+	tw := tar.NewWriter(&b)
+	dirs := map[string]bool{}
+	tw.WriteHeader(&tar.Header{Name: "./", Typeflag: tar.TypeDir, Mode: 0o755})
+	for _, m := range members {
+		segs := strings.Split(m[0], "/")
+		for k := 1; k < len(segs); k++ {
+			d := strings.Join(segs[:k], "/") + "/"
+			if !dirs[d] {
+				dirs[d] = true
+				tw.WriteHeader(&tar.Header{Name: "./" + d, Typeflag: tar.TypeDir, Mode: 0o755})
+			}
+		}
+		data := []byte(m[1])
+		if m[1] == "" {
+			data = mustRead(t, filepath.Join(src, m[0]))
+		}
+		if err := tw.WriteHeader(&tar.Header{Name: "./" + m[0], Typeflag: tar.TypeReg, Mode: 0o644, Size: int64(len(data))}); err != nil {
+			t.Fatal(err)
+		}
+		tw.Write(data)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	out, name := b.Bytes(), "pkg.tar"
+	if gz {
+		var z bytes.Buffer
+		zw := gzip.NewWriter(&z)
+		zw.Write(out)
+		zw.Close()
+		out, name = z.Bytes(), "pkg.tar.gz"
+	}
+	p := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(p, out, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return p
 }
 
 // TestRelayersConverge: C-core-02. Two readers behind different relayers: relayer X withholds one seeded subset
