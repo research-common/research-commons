@@ -1,6 +1,6 @@
 # Releasing
 
-This is a private-alpha tool, currently `<1.0.0`. SemVer 2.0.0 §4 licenses `0.y.z` ("initial
+This is an alpha tool, currently `<1.0.0`. SemVer 2.0.0 §4 licenses `0.y.z` ("initial
 development") to change anything at any release with no MAJOR bump; this project layers a small
 set of local conventions on top of that permissive baseline so PATCH vs. MINOR is predictable.
 
