@@ -2,6 +2,7 @@ package identitymodel
 
 import (
 	"fmt"
+	"github.com/research-common/research-commons/internal/conformance"
 	"math/rand"
 	"reflect"
 	"slices"
@@ -48,6 +49,7 @@ func generatedDAG(seed int64) ([]Fact, []ID, map[ID]map[ID]bool) {
 }
 
 func TestSeededCutsMatchIndependentSetOracleAndNeverWiden(t *testing.T) {
+	conformance.Partial(t, "C-id-12", "seeded model property over facts, not signed bytes; the profile is not active: no dual-major reader or consumer reads this answer")
 	for seed := int64(1); seed <= 60; seed++ {
 		t.Run(fmt.Sprintf("seed-%d", seed), func(t *testing.T) {
 			fs, candidates, closures := generatedDAG(seed)
@@ -150,6 +152,7 @@ func TestSeededScopeNarrowing(t *testing.T) {
 }
 
 func TestSeededForeignIdentityAndUnprovenNoiseNoninterference(t *testing.T) {
+	conformance.Partial(t, "C-id-15", "seeded model property; consumer noninterference is not built")
 	for seed := int64(201); seed <= 220; seed++ {
 		fs, candidates, _ := generatedDAG(seed)
 		base := snapshot(t, fs)

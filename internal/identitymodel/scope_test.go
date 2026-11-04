@@ -1,6 +1,10 @@
 package identitymodel
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/research-common/research-commons/internal/conformance"
+)
 
 func TestClosedScopeRegistry(t *testing.T) {
 	// This expected registry is intentionally explicit, not derived from targetType.
@@ -82,6 +86,7 @@ func TestScopeIsExplicitAndFailClosed(t *testing.T) {
 }
 
 func TestAmendPermissionIsExplicitAndIdentityWideWithinContentScope(t *testing.T) {
+	conformance.Partial(t, "C-id-45", "grant scope at the model; cross-key amendment of the principal's claims needs the claim consumer")
 	for _, kind := range []Kind{Authored, Observed} {
 		fs := fixture()
 		mutate(fs, "G", func(f *Fact) { f.Grant.Permissions[0].Kind = kind })
@@ -97,6 +102,7 @@ func TestAmendPermissionIsExplicitAndIdentityWideWithinContentScope(t *testing.T
 }
 
 func TestGrantEligibilityDoesNotPretendToImplementRoles(t *testing.T) {
+	conformance.Partial(t, "C-id-42", "the model shows a decide grant confers no role; beneficiary enforcement needs the task consumer and a contract profile")
 	// No resource controller or task beneficiary is represented in these facts.
 	// Eligibility says only that the named operation/target is in the grant;
 	// consuming engines must still enforce their roles and evidence rules.

@@ -2,6 +2,7 @@ package identitymodel
 
 import (
 	"fmt"
+	"github.com/research-common/research-commons/internal/conformance"
 	"reflect"
 	"slices"
 	"sync"
@@ -204,6 +205,7 @@ func TestDenialDoesNotHideUnknown(t *testing.T) {
 }
 
 func TestAuthenticatedIssuerBoundaryAndNoninterference(t *testing.T) {
+	conformance.Partial(t, "C-id-44", "outsider half at the model (an unauthenticated header changes nothing); an authorized amendment naming a missing target needs the claim consumer")
 	base := snapshot(t, fixture()).Evaluate("A")
 	variants := map[string]Fact{}
 	c := cut("forged", "absent")
@@ -271,6 +273,7 @@ func TestRootTerminalEventsAreLineageScoped(t *testing.T) {
 }
 
 func TestRootForkGrantsCoexistAndMergesNeverUncut(t *testing.T) {
+	conformance.Partial(t, "C-id-16", "model facts only, not signed bytes; the profile is not active: no dual-major reader or consumer reads this answer")
 	fs := fixture()
 	g2 := copyFact(fs[2])
 	g2.ID = "G2"
@@ -331,6 +334,7 @@ func TestNoAttributionToBareStatementsOrFallback(t *testing.T) {
 }
 
 func TestSameWorkerDifferentIdentitiesDoNotInterfere(t *testing.T) {
+	conformance.Partial(t, "C-id-06", "model facts only, not signed bytes; the profile is not active: no dual-major reader or consumer reads this answer")
 	fs := fixture()
 	j := line("J", "JR", 0, "", IdentityInception)
 	j.Inception = &Inception{Profile: FixedRoot}
