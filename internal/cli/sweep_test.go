@@ -103,6 +103,12 @@ func (w *world) badInvocations(c *Command) [][]string {
 	case "gc":
 		return [][]string{{"--grace", "soon"}, {"--grace", "-1h"}, {"--release", "not-a-digest"}, {"--release", dig("sole"), "--apply"},
 			{"--release", dig("sole"), "--grace", "1h"}, {"--key", "/nonexistent"}, {"--release", dig("sole"), "--key", "/nonexistent"}}
+	case "revoke":
+		// no reason and no terminal; a reason not offered; a soft reason with hard-only options; a hard reason
+		// without --last-good outside a dry run (all before any key is read)
+		id := strings.Repeat("ab", 32)
+		return [][]string{{}, {"--reason", "unspecified"}, {"--reason", "superseded", "--last-good", id},
+			{"--reason", "superseded", "--merge", id}, {"--reason", "key_compromise"}, {"--reason", "key_compromise", "--last-good", "x"}}
 	case "fsck":
 		return [][]string{{"--rebuild", "no-such-projection"}, {"--rebuild", ""}}
 	case "status":

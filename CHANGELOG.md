@@ -49,6 +49,13 @@ unchanged on this branch.
   comparator the reader runs, or `unchecked`. The chain grade is the weakest derivation step; observations and
   constructions without provenance are summarised beside it. Key events reach authorship as they reach
   editions (the sibling rule, hard revocations).
+- **`commons revoke`** signs a `revoke_key` whose history is built by reason (storage note §4.2). The three
+  documented reasons are offered with no default; without `--reason` it asks on a terminal and refuses
+  otherwise. A soft reason merges every held tip of the key's log, and refuses (exit 1, nothing signed) when a
+  tip's branch carries a `rotate_key` or `revoke_key` outside the line extended, since merging it would let that
+  event outrank the revocation. `key_compromise` merges only the lines named with `--merge` and needs
+  `--last-good <id>` or `--last-good none`. Every tip is listed with what happens to it, and the lines that stop
+  counting are named. `--dry-run`, `--prev`, `--ts` and the key options are publish's.
 - **`holds.withdrawn`** is checked (`true` only; malformed beside `locations`), and an `anchors` whose `covered`
   names another key's line is refused in the signer's log (an anchor bounds only its signer's log).
 - **Completeness claims can be checked.** An edition declaring `selection` `completeness` now names its scope,
