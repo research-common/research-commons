@@ -373,8 +373,8 @@ func TestStrictAndLax(t *testing.T) {
 // TestSelectionDisclosure: C-core-59. Editions declaring curated, rule-based and completeness show those values
 // on the membership view (no grade is shown there); one declaring nothing shows `undeclared`; the rule-based one
 // exposes its rules for re-application through the membership evaluation. No agreement model reads selection:
-// outside membership.go no non-test source of this package calls Selection(body) or reads an edition body's
-// `selection` member, so the clause "a model that reads selection must treat undeclared as curated" binds
+// outside membership.go (and completeness.go, which reads it only to find the claim it checks, C-core-60) no
+// non-test source of this package calls Selection(body) or reads an edition body's `selection` member, so the clause "a model that reads selection must treat undeclared as curated" binds
 // nothing shipped, and a model that starts reading it that way fails here until it carries its own case.
 func TestSelectionDisclosure(t *testing.T) {
 	conformance.Covers(t, "C-core-59")
@@ -394,6 +394,8 @@ func TestSelectionDisclosure(t *testing.T) {
 			readers[f] = true
 		}
 	}
+	// completeness.go reads it only to find a completeness claim to check (C-core-60), never to weigh agreement
+	delete(readers, "completeness.go")
 	if len(readers) != 1 || !readers["membership.go"] {
 		t.Fatalf("the selection disclosure is read outside the membership view by %v: an agreement model that reads selection must treat undeclared as curated (C-core-59); give it its own case", readers)
 	}

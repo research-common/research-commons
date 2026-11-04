@@ -40,6 +40,9 @@ func (pw *propWorld) surfaces(r *Resolver) map[string]string {
 		if s, ok := r.Series(pw.g, ""); ok {
 			out["series"] = s.Render()
 		}
+		if c, ok := r.Completeness(pw.g, ""); ok {
+			out["completeness"] = c.Render()
+		}
 	}
 	return out
 }
