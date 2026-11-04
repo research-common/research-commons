@@ -254,7 +254,11 @@ is a **fork point**:
   owner does not recognise is not merged: the answer to it is a `revoke_key`, which cuts every line outside
   its own history whatever its reason (claims-model note §4.1). The tool's `revoke` builds that history by
   reason. For a soft reason (`superseded`, `cessation_of_operation`) the owner is retiring a key it still
-  controls, so `revoke` merges every tip it holds and nothing is cut by accident. For a hard reason it merges
+  controls, so `revoke` merges every tip it holds and nothing is cut by accident, except a tip whose branch
+  carries a `rotate_key` or `revoke_key` outside the history the owner chose to extend: that one it refuses to
+  merge, naming the tip and the event, and points to a hard reason with `last_good`. A soft merge that folds in
+  a key event the owner did not write lets that event outrank the revocation, which then sits after it and
+  counts toward nothing (C-core-127c). For a hard reason it merges
   nothing on its own: it lists every tip, marks the ones this machine did not write, and the owner picks
   which to keep and which line is `last_good`. Folding a thief's tips into the owner's history would make
   them count. `revoke` offers the three documented reasons with no default, and refuses to run
@@ -292,7 +296,8 @@ observes a partial install because step 3 of a `pull` completes before any proje
 For a hub kept in a version-control repository, a package is the set of files a change adds under
 the data surface: the blobs and statement files between the base revision and the change's head. Statement
 files are the one-statement-per-file form of §1, so a package and a store share one layout and the gate reads
-the change with the same code that reads a store.
+the change with the same code that reads a store. A package's statement files are the canonical stored form; any
+other bytes are refused (intrinsic), never canonicalized on the way in.
 
 ## 5. Caches and indexes
 

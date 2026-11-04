@@ -216,9 +216,10 @@ user (a pin, a command argument, `explain`) resolves the statement id of any app
 (C-core-78). The edition-id vector is under V6 (§9).
 
 **Display aliases.** A surface may print the first 12 hex characters of an id or of a content digest (after
-the `sha256:` prefix) as a label. An alias is accepted as input only when exactly one held object matches;
-zero matches is `not found` and two or more is an error that lists every candidate full hash and selects
-nothing (C-core-03). Aliases are never written into a statement: every reference field in §5 is a full id or
+the `sha256:` prefix) as a label. An alias is accepted as input only when exactly one held object matches; an
+alias that matches nothing or several held objects is an error before any work (exit 2, claims-model note §13),
+and several matches list every candidate's full hash and select nothing (C-core-03). A full id or digest is
+never an alias: one nobody holds is answered as not held, not refused. Aliases are never written into a statement: every reference field in §5 is a full id or
 digest, and a 12-character value where a full one is required is a malformed statement.
 
 ## 4. Signature scheme
@@ -250,6 +251,9 @@ public-key validation of SP 800-186 App. D.1.3.2 applied to both points):
 4. The equation `[S]B = R + [k]A` holds, with `k` = SHA-512(`R ‖ A ‖ M`) read little-endian.
 
 Step 2 uses RFC 8032 §5.1.3 decoding as written: an `x` of zero with the sign bit set is not a valid encoding.
+Steps 2 and 3 run **per point**: both on `A`, then both on `R`. A refusal names the first step that failed in
+that order, so a public key outside the subgroup is refused at step 3 even when `R` is not a valid encoding
+(NE9, NE10). The verdict is the same in any order; only the label depends on it.
 Steps 1–3 are cheap checks a reader runs before any stock verifier; step 4 is then the same in every library,
 because a prime-order `A` and `R` make the cofactored and cofactorless equations agree. Under this rule all
 twelve speccheck cases are refused (OpenSSL alone accepts five of them), and honest signatures from any RFC
@@ -406,7 +410,8 @@ the field is read only for an `observed` whose `referent.method_edition` names t
 reader holds it as an authorized edition of its resource (claims-model note §8; a pending, contested or
 unauthorized proposal declares nothing). When the reader holds no such edition, it cannot tell whether a
 declaration exists: no key is shown `unpinned` on that account, and comparability with another method-class
-observation is `unchecked`, naming the edition not held, never `comparable`. The declaration that governs an
+observation is `unchecked`, naming the edition not held, never `comparable`; `verify` of the observation exits 3
+(claims-model note §13). The declaration that governs an
 observation is the one in the edition it pins, so a later edition of the same method never changes how an
 earlier observation is read. A declared key absent from the observation's `referent.system` leaves its
 referent `unpinned`, naming `system.<key>` (claims-model note §5.3.1); a present key counts as pinned whatever
@@ -868,7 +873,7 @@ signature.
 | N11 code-point key order | signed string sha256 `5322d633d95e186a2cadee9e25dce8eabc6131a63daf5c69ae17fda6b606dfcd` with the `sig` given | intrinsic: bad signature (the reader's JCS form of the envelope is V10's string, which this signature does not cover) |
 | N12 leap second outside UTC | signed string sha256 `d82077cc9db761ea0faf3f6b323e42de1c17bf4f4305eabbc122b51663eac510` with the `sig` given | intrinsic: malformed statement (second 60 outside UTC) |
 | N13 Z on a TAI time | signed string sha256 `7afd098707189e04fd5f83a481d866431c4681a1799a079fec52f015fecca675` with the `sig` given | intrinsic: malformed statement (Z asserts UTC; the referent names TAI) |
-| NE1–NE12 Ed25519 edge cases | the twelve `ed25519-speccheck` cases (small-order and mixed-order points, `S ≥ L`, non-canonical encodings), key, message and signature in the vectors file | intrinsic: bad signature; each refused by step 1 or 3 of the pinned rule (§4), as the file records |
+| NE1–NE12 Ed25519 edge cases | the twelve `ed25519-speccheck` cases (small-order and mixed-order points, `S ≥ L`, non-canonical encodings), key, message and signature in the vectors file | intrinsic: bad signature; each refused by step 1, 2 or 3 of the pinned rule (§4, steps 2–3 per point), as the file records |
 | NE13 alg / signer mismatch | E1 with `alg` `eip191-secp256k1`, signed by the Ed25519 key over that string; signed string sha256 `3f3015a8d6f763f449d9b7f306acff3a8bd5b3bfc610645b55577b8d6f98a5dc` | intrinsic: malformed statement (`alg` and `signer` disagree) |
 
 Empty content, for §8: `sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`, size 0.
