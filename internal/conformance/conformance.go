@@ -37,12 +37,12 @@ func Partial(t testing.TB, id, remaining string) {
 	t.Logf("conformance (partial): %s; remaining: %s", id, remaining)
 }
 
-// caseRow matches a table row that defines a case: "| C-core-12 | ..." or "| P-03 | ...".
-var caseRow = regexp.MustCompile(`(?m)^\| ((?:C-(?:core|exec|exch|btc)-[0-9]+[a-z]?)|(?:P-[0-9]+)) \|`)
+// caseRow matches a table row that defines a case: "| C-core-12 | ...", "| C-id-07 | ..." or "| P-03 | ...".
+var caseRow = regexp.MustCompile(`(?m)^\| ((?:C-(?:core|exec|exch|btc|id)-[0-9]+[a-z]?)|(?:P-[0-9]+)) \|`)
 
 // ProfileNotes are the design notes, besides CONFORMANCE.md, whose tables define conformance cases: a profile's
 // supplementary regressions stay in its own note. Paths are relative to the repository root.
-var ProfileNotes = []string{"docs/DESIGN-notes-bitcoin-time.md"}
+var ProfileNotes = []string{"docs/DESIGN-notes-bitcoin-time.md", "docs/DESIGN-notes-fixed-root-identity.md"}
 
 // Doc is one document the case ids are read from.
 type Doc struct {
@@ -93,7 +93,8 @@ func LoadCaseIDs(root string) ([]string, map[string]string, error) {
 	return CaseIDsAcross(docs...)
 }
 
-// Profile returns the scope a case belongs to: core, exec, exch, btc or property.
+// Profile returns the scope a case belongs to: core, exec, exch, btc, id (the candidate fixed-root identity
+// profile, not active) or property.
 func Profile(id string) string {
 	if id[0] == 'P' {
 		return "property"

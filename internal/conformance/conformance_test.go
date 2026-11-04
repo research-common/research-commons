@@ -146,3 +146,18 @@ func TestVectorsLoad(t *testing.T) {
 			len(v.Positive), len(v.Negative), len(v.EdPositive), len(v.EdNegative))
 	}
 }
+
+// The row pattern accepts the identity profile's C-id-N ids and nothing that merely looks like them; Profile
+// files them under "id", separate from the active profiles.
+func TestCaseRowIdentityProfile(t *testing.T) {
+	doc := []byte("| C-id-07 | a |\n| C-id-12a | b |\n| ID-07 | handle, not a case |\n| C-ident-1 | no |\n| C-id- | no |\n| `C-id-09` | restated |\n")
+	ids, err := CaseIDs(doc)
+	if err != nil || len(ids) != 2 || ids[0] != "C-id-07" || ids[1] != "C-id-12a" {
+		t.Fatalf("C-id rows: %v %v", ids, err)
+	}
+	for id, want := range map[string]string{"C-id-07": "id", "C-btc-07": "btc", "C-core-01": "core", "P-03": "property"} {
+		if got := Profile(id); got != want {
+			t.Errorf("Profile(%q) = %q, want %q", id, got, want)
+		}
+	}
+}
