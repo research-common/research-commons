@@ -130,7 +130,8 @@ type FetchOptions struct {
 	Locations []string
 	// Size is the expected size when no holder declares one; 0 means unknown.
 	Size int64
-	// MaxBytes bounds a fetch with no declared size; 0 means DefaultMaxFetchBytes.
+	// MaxBytes bounds a fetch with no declared size, and refuses (before dialling) a location whose declared size
+	// exceeds it; 0 means DefaultMaxFetchBytes.
 	MaxBytes int64
 	// Force fetches even when an intact local copy exists.
 	Force bool
@@ -260,6 +261,15 @@ func (s *Store) Fetch(d Digest, tr Transport, opt FetchOptions) (*FetchResult, e
 	}
 	for _, l := range locs {
 		a := Attempt{Location: l.url, Holder: l.holder}
+		if l.size > max {
+			// a declared size past the reader's bound is refused before anything is dialled: the limit is the
+			// reader's, so the class is operational and raising the named limit is the next step
+			a.State = StateTooLarge
+			a.Err = &refusal.Refusal{Class: refusal.Operational, Reason: reasonFetchLimit,
+				Detail: fmt.Sprintf("fetch of %s from %s: the declared size of %d bytes exceeds the fetch limit max_fetch_bytes=%d; nothing fetched", d, l.url, l.size, max)}
+			res.Attempts = append(res.Attempts, a)
+			continue
+		}
 		rc, err := tr.Fetch(ctx, l.url)
 		if err != nil {
 			a.State, a.Err = "unavailable (holder's word: "+l.url+")", err

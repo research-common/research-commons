@@ -351,6 +351,31 @@ func TestFetchSizeDeclared(t *testing.T) {
 	}
 }
 
+// TestFetchDeclaredOverLimit: a holder's declared size above the reader's fetch limit is refused before
+// anything is dialled (operational, the limit named), and the next location is still tried. Without the check a
+// declared size would replace the limit as the stream's bound, so a holder could declare its way past it.
+func TestFetchDeclaredOverLimit(t *testing.T) {
+	data := []byte("0123456789")
+	d := digestOf(data)
+	big, small := "https://big.example/x", "https://small.example/x"
+	s := open(t, t.TempDir(), Options{NoSync: true})
+	ct := &countingTransport{inner: MapTransport{big: data, small: data}}
+	res, err := s.Fetch(d, ct, FetchOptions{Locations: []string{big}, Size: 11, MaxBytes: 10})
+	var ref *refusal.Refusal
+	if !errors.As(err, &ref) || ref.Class != refusal.Operational || ref.Reason != refusal.SizeLimit ||
+		!strings.Contains(ref.Detail, "max_fetch_bytes=10") || res.Attempts[0].State != StateTooLarge {
+		t.Fatal(res, err)
+	}
+	if len(ct.asked) != 0 || s.HasBlob(d) {
+		t.Fatalf("dialled %v or installed past the limit", ct.asked)
+	}
+	// control: at the limit the same bytes are fetched
+	res, err = s.Fetch(d, ct, FetchOptions{Locations: []string{small}, Size: 10, MaxBytes: 10})
+	if err != nil || res.State != StateFetched || len(ct.asked) != 1 {
+		t.Fatal(res, err, ct.asked)
+	}
+}
+
 // failingReader errors midway: a transfer that dies.
 type failingTransport struct{ data []byte }
 
