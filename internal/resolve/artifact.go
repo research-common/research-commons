@@ -194,6 +194,13 @@ type Artifact struct {
 	Explain   []string
 	// PreReg is the pre-registration disclosure (prereg.go); nil when its fields have no default.
 	PreReg *PreRegistration
+	// Availability and ShelfLife are those disclosures' structured readings (disclosure.go); nil when the field
+	// has no default value.
+	Availability *Availability
+	ShelfLife    *ShelfLife
+	// Inputs is the scoped summary of the disclosures of the inputs of the derivation the grade comes from, with
+	// the declared sampling n beside the computed one (disclosure.go); nil without a derivation group.
+	Inputs *InputSummary
 }
 
 // Artifact resolves the view of the blob with content digest d ("sha256:" + hex).
@@ -204,6 +211,7 @@ func (r *Resolver) Artifact(d string) *Artifact {
 func (r *Resolver) artifact(d string, visiting map[string]bool) *Artifact {
 	a := r.authorship(d)
 	r.grade(a, visiting)
+	a.Inputs = r.inputSummary(a)
 	return a
 }
 
@@ -265,6 +273,7 @@ func (r *Resolver) authorship(d string) *Artifact {
 	a.Explain = append(a.Explain, forked(a)...)
 	a.Holders = r.holders(d)
 	a.Held = r.held(a)
+	a.Availability, a.ShelfLife = r.availability(a), r.shelfLife(a)
 	return a
 }
 
@@ -584,6 +593,11 @@ func (a *Artifact) Render() string {
 	for _, s := range a.RestsOn {
 		fmt.Fprintf(&b, "  rests on %s\n", s)
 	}
+	if a.Inputs != nil {
+		for _, l := range a.Inputs.Lines() {
+			fmt.Fprintf(&b, "  inputs %s\n", l)
+		}
+	}
 	for _, u := range a.Units {
 		role := "claimant"
 		switch {
@@ -626,6 +640,10 @@ func (a *Artifact) Render() string {
 			}
 			fmt.Fprintf(&b, "  %s: %s\n", f.Name, absentToken(f.Name))
 		case FieldDefault:
+			if d, ok := a.renderDisclosure(f.Name); ok {
+				fmt.Fprintf(&b, "  %s: %s (%s)\n", f.Name, d, sources(f.From))
+				break
+			}
 			fmt.Fprintf(&b, "  %s: %s (%s)\n", f.Name, f.From[0].Value, sources(f.From))
 		default:
 			fmt.Fprintf(&b, "  %s: %s\n", f.Name, f.State)

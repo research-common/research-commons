@@ -2,6 +2,7 @@ package cli
 
 import (
 	"slices"
+	"time"
 
 	"github.com/research-common/research-commons/internal/btctime"
 	"github.com/research-common/research-commons/internal/canon"
@@ -21,6 +22,7 @@ func init() {
 	Register(&Command{Name: "verify", Summary: "check a blob or a statement from the statements held; exit per the exit table", Args: ref, Store: true, ReaderPolicy: true,
 		Flags:   rerunFlags,
 		Prepare: prepareRerun,
+		Before:  rerunBefore,
 		Help:    "Statement-only by default: verify reads the statements this store holds and runs nothing. With --rerun (a blob only) and --exec-policy <file>, the reader re-runs the derivation under its own execution policy and the re-run's token replaces the derivation cause; without a policy the re-run is unchecked and nothing runs. Exit 0 checked and passed, 1 a completed comparison disagreed, 3 could not check, 4 nothing to re-run, 5 environment mismatch.",
 		Run:     verifyCmd})
 	Register(&Command{Name: "explain", Summary: "the statements, policy, evaluator and time context behind every token shown", Args: ref, Store: true, ReaderPolicy: true,
@@ -224,12 +226,7 @@ func explainCmd(c *Ctx) (*Obj, int, error) {
 	if isDigest(ref) {
 		a := v.r.Artifact(ref)
 		o = v.showArtifact(ref)
-		inputs = artifactInputs(a)
-		for _, u := range a.Units {
-			if u.Bound.Anchor != "" {
-				inputs = append(inputs, u.Bound.Anchor)
-			}
-		}
+		inputs = v.answerInputs(a)
 		code, causes := v.verifyArtifact(ref)
 		o.set("verify", newObj().set("causes", causes).set("exit", intV(int64(code))))
 		o.set("reasoning", texts(a.Explain...))
@@ -243,6 +240,11 @@ func explainCmd(c *Ctx) (*Obj, int, error) {
 				inputs = append(inputs, st.Prev)
 			}
 			inputs = append(inputs, st.Merges...)
+			// showStatement prints the blob an authored names (its authorship and grade): the statements behind
+			// those tokens are inputs of this answer too (I14), or a rival claim would change it unlisted
+			if d := contentOf(st); d != "" && st.Kind == "authored" {
+				inputs = append(inputs, v.answerInputs(v.r.Artifact(d))...)
+			}
 		}
 	}
 	slices.Sort(inputs)
@@ -262,13 +264,38 @@ func explainCmd(c *Ctx) (*Obj, int, error) {
 	o.set("policy", newObj().set("source", textV(c.Policy.Source)).set("digest", refV(c.Policy.Digest)).
 		set("time_policy_fingerprint", refV(v.timeV.Policy.Fingerprint())).set("reader_policy", c.Policy.readerObj()))
 	o.set("evaluator", evaluatorObj(c.Env.Build))
-	o.set("time_context", textV("none: this answer does not depend on the reader's clock (no shelf life, finality or freshness is evaluated, and no chain backend is configured)"))
+	tc := "none: this answer does not depend on the reader's clock (no shelf life, finality or freshness is evaluated, and no chain backend is configured)"
+	if isDigest(ref) {
+		if s := v.r.Artifact(ref).ShelfLife; s != nil && s.UsedReadTime {
+			tc = "read time " + v.r.ReadTime().Format(time.RFC3339) + ": the shelf-life age is counted to it from the verified bound of anchor " + s.Since.Anchor
+		}
+	}
+	o.set("time_context", textV(tc))
 	return v.scoped(o), ExitOK, nil
 }
 
 func evaluatorObj(b Build) *Obj {
 	vo := versionObj(b)
 	return newObj().set("tool", vo.get("version")).set("commit", vo.get("commit")).set("time_verifier", textV(btctime.VerifierVersion))
+}
+
+// answerInputs is every statement an artifact answer read: the artifact's own (artifactInputs), the anchors
+// behind each claimant's bound, and for each derivation group the counted authored statements of its workflow,
+// which declare the replication mode and comparator the group is graded under (a workflow claim arriving or
+// leaving changes the grade, so it is an input, I14).
+func (v *view) answerInputs(a *resolve.Artifact) []string {
+	ids := artifactInputs(a)
+	for _, u := range a.Units {
+		if u.Bound.Anchor != "" {
+			ids = append(ids, u.Bound.Anchor)
+		}
+	}
+	for _, g := range a.Groups {
+		for _, cl := range v.r.Artifact(g.Provenance.Workflow).Claims {
+			ids = append(ids, cl.Statements...)
+		}
+	}
+	return ids
 }
 
 // artifactInputs is every statement the artifact view read: claims (current and amended), statements not

@@ -35,6 +35,10 @@ type Bound struct {
 	// Network and Height place a Bitcoin bound (the height of the block that commits to the proof).
 	Network string
 	Height  int64
+	// Time is the committing block's header time (Unix seconds; miner-reported, bitcoin-time note §8): set by a
+	// verifier for a verified bound, 0 otherwise. It is for display and for the shelf-life age only, never an
+	// ordering key.
+	Time int64
 	// Why says why a bound is not of a verified quality ("not verified by this reader: ...").
 	Why string
 	// Margin is the reader's priority margin (bitcoin-time note §7, §8.3) that the verifier applies: a verified

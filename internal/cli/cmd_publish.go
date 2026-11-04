@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"slices"
@@ -149,7 +150,7 @@ func init() {
 	}
 	Register(&Command{Name: "publish", Summary: "sign and commit a statement (authored with its bytes, holds, describes, retracts, or a draft)",
 		Store: true, Writes: true, Flags: flags, Prepare: preparePublish, Run: publishCmd,
-		Help: "Signs with --key (or $" + KeyEnv + ") and commits through the store's journal: the blob and its statements land together or not at all. A draft is never stored unsigned. Your log's next seq and prev come from the statements this store holds; a FORK in your log is refused until you name --prev. --intended-for runs the named edition's rules first and refuses on fail."})
+		Help: "Signs with --key (or $" + KeyEnv + ") and commits through the store's journal: the blob and its statements land together or not at all. A draft is never stored unsigned. Your log's next seq and prev come from the statements this store holds; a FORK in your log is refused until you name --prev. --intended-for runs the named edition's rules first and refuses on fail. With availability withheld and content under "+strconv.Itoa(WithheldWarnBelow)+" bytes it warns that short content may be enumerable against its hash (a heuristic; include a nonce) and proceeds; the warning is not recorded."})
 	tflags := append(slices.Clone(writerFlags),
 		Flag{Name: "name", Value: "text", Help: "a new task's name"},
 		Flag{Name: "task", Value: "id", Help: "an existing task (its genesis id): publish a new edition after its current one", Check: checkIDFlag},
@@ -628,6 +629,9 @@ func publishCmd(c *Ctx) (*Obj, int, error) {
 		}
 		out.set("intended_for", pin)
 	}
+	if w := withheldWarning(body); w != "" {
+		out.set("warnings", texts(w))
+	}
 	drafts := []wire.Draft{{Kind: p.kind, Body: body}}
 	if p.holds {
 		hb := &canon.Object{Keys: []string{"content"}, Members: map[string]canon.Value{"content": body.Members["content"]}}
@@ -646,6 +650,37 @@ func publishCmd(c *Ctx) (*Obj, int, error) {
 	}
 	// the pre-pin state was resolved from the statements this store holds: the output carries the view's scope
 	return v.scopedResult(commitUnit(c, out, "publish", sts, blobs, p.content, h))
+}
+
+// WithheldWarnBelow is the content size, in bytes, under which publishing with availability withheld warns
+// (claims-model note §7, "availability can be withheld"). A commitment to low-entropy content is enumerable
+// against its hash; the tool cannot measure entropy, so size stands in for it. This is a heuristic, documented as
+// one (I11): 64 bytes leaves room for a 128-bit nonce in hex (32 bytes) beside a short payload, and anything
+// shorter is small enough that a guessable payload with no nonce is the likely case. Content at or above it can
+// still be low-entropy. The warning is printed only: it is never recorded in the statement and moves no status.
+const WithheldWarnBelow = 64
+
+// withheldWarning is the warning for an authored or observed body whose availability is withheld and whose
+// content is shorter than WithheldWarnBelow; "" otherwise.
+func withheldWarning(body *canon.Object) string {
+	av, ok := body.Get("availability")
+	ao, _ := av.(*canon.Object)
+	if !ok || ao == nil || ao.Members["redistribution"] != canon.String("withheld") {
+		return ""
+	}
+	cv, _ := body.Get("content")
+	co, _ := cv.(*canon.Object)
+	if co == nil {
+		return ""
+	}
+	size, ok := co.Members["size"].(canon.Int)
+	if !ok || size >= WithheldWarnBelow {
+		return ""
+	}
+	return fmt.Sprintf("availability withheld for content of %d bytes, under the warning threshold of %d bytes: short content may be "+
+		"enumerable against its hash (a seed, a one-line rule), so the commitment may not stay withheld; include a random nonce "+
+		"in the content. The threshold is a heuristic (size stands in for entropy); this warning is not recorded and changes nothing",
+		size, WithheldWarnBelow)
 }
 
 // scopedResult adds the view's scope footer to a command result that printed a status resolved from the

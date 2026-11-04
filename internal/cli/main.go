@@ -260,6 +260,9 @@ func dispatch(argv []string, env *Env) (*Obj, int, error) {
 			}
 		}
 		ctx.Root, ctx.Policy = root, pol
+		if prob := resolveAliases(cmd, ctx); prob != nil {
+			return nil, 0, prob
+		}
 		if cmd.Before != nil {
 			if prob := cmd.Before(ctx); prob != nil {
 				return nil, 0, prob
@@ -303,7 +306,9 @@ func bindArgs(cmd *Command, pos []string, into map[string]string) *Problem {
 		want := ""
 		switch a.Shape {
 		case ShapeRef:
-			ok, want = isDigest(v) || isID(v), "a content digest (sha256: + 64 lowercase hex) or a statement id (64 lowercase hex)"
+			// a display alias has the shape of a ref too; it is resolved against the store once the store is known
+			// (resolveAliases), before any work starts
+			ok, want = isDigest(v) || isID(v) || store.IsAlias(v), "a content digest (sha256: + 64 lowercase hex), a statement id (64 lowercase hex), or a display alias of either (12 lowercase hex, optionally after sha256:)"
 		case ShapeDigest:
 			ok, want = isDigest(v), "a content digest (sha256: + 64 lowercase hex)"
 		case ShapeID:
@@ -314,6 +319,41 @@ func bindArgs(cmd *Command, pos []string, into map[string]string) *Problem {
 				"the argument must be "+want+"; nothing was done", "argument "+a.Name, "give the full digest or id", v)
 		}
 		into[a.Name] = v
+	}
+	return nil
+}
+
+// resolveAliases replaces each display-alias argument with the one full digest or id it names (wire-format
+// note §3, "Display aliases"; claims-model I1). An alias is accepted only when exactly one held object matches:
+// none is `alias-not-found` and two or more is `ambiguous-alias`, an error listing every candidate's full hash
+// and selecting nothing (C-core-03). Both exit 2: the argument names nothing the command can act on, and only
+// file names have been read, so no work has started and nothing is committed. A full digest or id is never
+// looked up here: it is answered about whether or not anything is held under it.
+func resolveAliases(cmd *Command, c *Ctx) *Problem {
+	for _, a := range cmd.Args {
+		v, ok := c.Args[a.Name]
+		if !ok || a.Shape != ShapeRef || !store.IsAlias(v) {
+			continue
+		}
+		cands, err := store.AliasCandidates(c.Root, v)
+		if err != nil {
+			p := usage("alias-unreadable", "the store could not be searched for the alias", "the alias was not resolved; nothing was done",
+				"argument "+a.Name, "give the full digest or id", err.Error())
+			p.Class = refusal.Operational
+			return p
+		}
+		switch len(cands) {
+		case 1:
+			c.Args[a.Name] = cands[0]
+		case 0:
+			return usage("alias-not-found", "no held object matches the alias",
+				"no blob or statement held in this store has a full hash starting with the alias; nothing was done",
+				"argument "+a.Name, "give the full digest or id (a digest no held blob has is still answered in full)", v)
+		default:
+			return usage("ambiguous-alias", "the alias matches more than one held object",
+				"candidates: "+strings.Join(cands, ", ")+"; none was selected and nothing was done",
+				"argument "+a.Name, "give the full digest or id of the one you mean", v)
+		}
 	}
 	return nil
 }

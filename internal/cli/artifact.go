@@ -3,6 +3,7 @@ package cli
 import (
 	"io"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/research-common/research-commons/internal/canon"
@@ -27,6 +28,10 @@ func (v *view) artifactCore(a *resolve.Artifact) *Obj {
 		o.set("step", tokV(tok(a.Step.Token())))
 	}
 	o.set("disclosures", disclosures(a))
+	if a.Inputs != nil {
+		// the derived result's scoped summary over its inputs, declared beside computed (claims-model note §7)
+		o.set("inputs_summary", texts(a.Inputs.Lines()...))
+	}
 	return o
 }
 
@@ -62,9 +67,55 @@ func disclosures(a *resolve.Artifact) *Obj {
 		} else if f.State == resolve.FieldContested || f.State == resolve.FieldNoDefault {
 			d.set("values", sources(append(slices.Clone(f.From), f.Rivals...)))
 		}
+		switch {
+		case name == "availability" && a.Availability != nil:
+			availabilityObj(d, a.Availability)
+		case name == "shelf_life_days" && a.ShelfLife != nil:
+			shelfLifeObj(d, a.ShelfLife)
+		}
 		o.set(name, d)
 	}
 	return o
+}
+
+// availabilityObj adds the reader's reading of a declared availability: redistribution and obtainability as two
+// members, never one (claims-model note §7, C-core-68), and for a withheld artifact whether it was revealed.
+func availabilityObj(d *Obj, av *resolve.Availability) {
+	d.set("redistribution", textV(av.Redistribution)).set("obtainable_declared", boolV(av.Obtainable))
+	if av.WithheldUntil != "" {
+		d.set("withheld_until", peerV(av.WithheldUntil))
+	}
+	if av.Redistribution != "withheld" {
+		return
+	}
+	switch {
+	case av.Revealed:
+		d.set("reveal", textV("revealed: a holds is published and the bytes are held here, verified by full hash"))
+	case len(av.Holders) > 0:
+		d.set("reveal", textV("a holds is published (holder's word); not revealed until the bytes are fetched and verified"))
+	case av.Held:
+		d.set("reveal", textV("not revealed: the bytes are held here but no holds is published"))
+	default:
+		d.set("reveal", textV("not revealed: no holds held"))
+	}
+}
+
+// shelfLifeObj adds the declared validity beside the age at read time (claims-model note §7, C-core-74). The age
+// is counted from a verified bound only; without one it is unknown, never computed from a self-declared time.
+func shelfLifeObj(d *Obj, s *resolve.ShelfLife) {
+	d.set("declared_days", intV(s.Days))
+	switch {
+	case s.Aged:
+		verdict := "within declared validity"
+		if s.Age > s.Days {
+			verdict = "past declared validity"
+		}
+		d.set("age", textV(strconv.FormatInt(s.Age, 10)+" days, "+verdict)).set("age_from", refV(s.Since.Anchor))
+	case s.Since.Quality == resolve.Bitcoin:
+		d.set("age", textV("not computed (no read time)"))
+	default:
+		d.set("age", textV("unknown (no verified time; a self-declared time is not turned into an age)"))
+	}
 }
 
 func sources(ss []resolve.Source) listV {
@@ -173,8 +224,16 @@ func (v *view) groups(a *resolve.Artifact) listV {
 	for _, g := range a.Groups {
 		e := newObj().set("workflow", refV(g.Provenance.Workflow)).set("inputs", refs(g.Provenance.Inputs...)).
 			set("replication", textV(g.Mode))
+		if g.ModeFrom != "" {
+			e.set("replication_from", textV(g.ModeFrom))
+		}
 		if g.Comparator != "" {
 			e.set("comparator", refV(g.Comparator))
+		}
+		// the group's own reasoning (why it is unchecked, diverged, re-derived by its author only): the resolver's
+		// words, so a display that grades the group also says why (C-core-18a: "the workflow declares no comparator")
+		if len(g.Explain) > 0 {
+			e.set("explain", texts(g.Explain...))
 		}
 		e.set("derivers", refs(g.Derivers...))
 		runs := listV{}

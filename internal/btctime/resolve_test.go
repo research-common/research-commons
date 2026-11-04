@@ -119,11 +119,12 @@ func TestDerivationGroupWithRealProofs(t *testing.T) {
 	})
 }
 
-// TestReorg: C-btc-24 (without the receipt cache). A tip extension keeps the verdict; a reorg that orphans the
-// attested block removes live quality at once (orphaned, local, no priority); a reorg back restores it. Nothing is
-// grandfathered: every verdict is re-derived from the current snapshot.
+// TestReorg: C-btc-24 (cold reads, through the resolver). A tip extension keeps the verdict; a reorg that orphans
+// the attested block removes live quality at once (orphaned, local, no priority); a reorg back restores it. The
+// receipt half (re-check only on a tip extension, a cached branch never surviving, deep rollback) is
+// TestReceiptReorg.
 func TestReorg(t *testing.T) {
-	conformance.Partial(t, "C-btc-24", "verdicts re-derived per snapshot, so nothing survives a reorg; the receipt cache of note §9 (re-check only on a tip extension, a cached branch never surviving) is not built")
+	conformance.Partial(t, "C-btc-24", "cold reads through the resolver; the receipt-store half is TestReceiptReorg")
 	w := newWorld(t)
 	w.authored("A1", "A", "X", "licence", "CC0-1.0")
 	w.anchorAt("AA", "A", 10)
@@ -163,9 +164,10 @@ func TestReorg(t *testing.T) {
 
 // TestReceiptShapedInputGrantsNothing: C-btc-20 (statement half). A received statement carrying receipt-shaped
 // fields (verified: true, quality: bitcoin, a block height) grants nothing; a statement of an unknown "receipt"
-// kind is not an anchor. Bounds come from this reader's own evaluation only.
+// kind is not an anchor. Bounds come from this reader's own evaluation only. The file half is
+// TestReceiptShapedFileIsInert.
 func TestReceiptShapedInputGrantsNothing(t *testing.T) {
-	conformance.Partial(t, "C-btc-20", "received statements shaped like receipts grant nothing; a receipt-shaped file in the receipt store needs the store (note §9), not built")
+	conformance.Partial(t, "C-btc-20", "statement half; the file half (data surface and receipt store) is TestReceiptShapedFileIsInert")
 	w := newWorld(t)
 	w.authored("A1", "A", "X")
 	w.sign("AR", "A", "receipt", obj("covered", w.head["A"], "quality", "bitcoin", "verified", true, "block_height", 3))

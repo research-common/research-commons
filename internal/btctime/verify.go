@@ -148,21 +148,49 @@ type Verifier struct {
 	Blobs       BlobSource
 	// Now is the reader's clock (freshness, §7).
 	Now func() time.Time
+	// Receipts, when set, is the receipt store of §9: a cache that may stand in for re-parsing a proof, never
+	// evidence. Nil reads every proof cold, with the same answers.
+	Receipts *Receipts
 }
 
 // Evaluate runs §4's binding checks 3–7 and §5's attestation selection on one anchors statement, then applies the
 // policy in the current view. Checks 1 and 2 (the statement verifies, is chained in its signer's log, and its
 // covered head is in its own prefix) are the log's and the resolver's, which call a TimeVerifier only for an
 // anchors statement that passed them.
+//
+// With a receipt store (Receipts set), a stored receipt may stand in for re-parsing the proof, after every check of
+// §9.3; the answer is the one a cold evaluation gives (receipt.go).
 func (v *Verifier) Evaluate(a *wire.Statement) Evidence {
-	e := Evidence{Quality: QualityLocal, Signer: a.Signer, Anchor: a.ID, Covered: str(a.Body, "covered"), Proof: str(a.Body, "proof"),
+	if v.Receipts != nil {
+		return v.Receipts.evaluate(v, a)
+	}
+	e, held, done := v.anchorChecks(a)
+	if done {
+		return e
+	}
+	e, _ = v.proofBound(e, held.bytes, held.covered)
+	return e
+}
+
+// heldProof is the proof as read for one evaluation: the bytes read once, their digest, and the stamped digest.
+type heldProof struct {
+	bytes   []byte
+	digest  string
+	covered []byte
+}
+
+// anchorChecks runs §4 checks 3–5 on an anchors statement and reads the proof blob once. done reports that e is
+// the final evidence (a check failed); otherwise held carries the bytes every later step uses, hashed and parsed
+// as the same bytes (§9.2).
+func (v *Verifier) anchorChecks(a *wire.Statement) (e Evidence, held heldProof, done bool) {
+	e = Evidence{Quality: QualityLocal, Signer: a.Signer, Anchor: a.ID, Covered: str(a.Body, "covered"), Proof: str(a.Body, "proof"),
 		PolicyFingerprint: v.Policy.Fingerprint(), VerifierVersion: VerifierVersion}
 	if v.Now != nil {
 		e.VerifiedAt = v.Now()
 	}
-	fail := func(s State, why string, a ...any) Evidence {
+	fail := func(s State, why string, a ...any) (Evidence, heldProof, bool) {
 		e.State, e.Why = s, fmt.Sprintf(why, a...)
-		return e
+		return e, heldProof{}, true
 	}
 	if a.Kind != "anchors" {
 		return fail(StateInvalidAnchor, "statement kind %q is not anchors", a.Kind)
@@ -200,10 +228,12 @@ func (v *Verifier) Evaluate(a *wire.Statement) Evidence {
 		e.Refusal = &refusal.Refusal{Class: refusal.Operational, Reason: refusal.SizeLimit, Detail: fmt.Sprintf("proof blob over %d bytes; scope this anchor", lim.ProofBytes)}
 		return fail(StateRefused, "%s", e.Refusal)
 	}
-	if h := sha256.Sum256(b); "sha256:"+hex.EncodeToString(h[:]) != e.Proof {
+	h := sha256.Sum256(b)
+	d := "sha256:" + hex.EncodeToString(h[:])
+	if d != e.Proof {
 		return fail(StateMissingProof, "held bytes for proof blob %s do not hash to it", e.Proof)
 	}
-	return v.proof(e, b, covered)
+	return e, heldProof{bytes: b, digest: d, covered: covered}, false
 }
 
 // EvaluateProof runs §4 checks 6 and 7, §5 and §7 on proof bytes the caller already holds against a stamped digest
@@ -214,13 +244,28 @@ func (v *Verifier) EvaluateProof(proof, stamped []byte) Evidence {
 	if v.Now != nil {
 		e.VerifiedAt = v.Now()
 	}
-	return v.proof(e, proof, stamped)
+	e, _ = v.proofBound(e, proof, stamped)
+	return e
 }
 
-func (v *Verifier) proof(e Evidence, b, covered []byte) Evidence {
-	fail := func(s State, why string, a ...any) Evidence {
+// binding is the immutable part of a verdict (§9.3): the attestation this proof's bytes select on the accepted
+// chain, the header it binds to, and the disclosures made up to that point. It depends on the proof bytes, the
+// stamped digest and the header bytes only; whether the block is still active and deep enough is not part of it.
+type binding struct {
+	height int64
+	header Header
+	// digest is the proof's calculated digest at the selected attestation: the header's Merkle root.
+	digest []byte
+	// notes are the evidence notes as they stand when the header is selected (parse and selection disclosures).
+	notes []string
+}
+
+// proofBound runs §4 checks 6 and 7, §5 and §7 on proof bytes. It returns the binding when an attestation was
+// selected on the accepted chain (whatever the confirmations and freshness then made of it), else nil.
+func (v *Verifier) proofBound(e Evidence, b, covered []byte) (Evidence, *binding) {
+	fail := func(s State, why string, a ...any) (Evidence, *binding) {
 		e.State, e.Why = s, fmt.Sprintf(why, a...)
-		return e
+		return e, nil
 	}
 	lim := v.Policy.Limits
 	if lim == (Limits{}) {
@@ -254,11 +299,12 @@ func (v *Verifier) proof(e Evidence, b, covered []byte) Evidence {
 	return v.chain(e, p)
 }
 
-// chain applies §5 (attestation selection) and §7 (policy) against the view.
-func (v *Verifier) chain(e Evidence, p *Proof) Evidence {
-	fail := func(s State, why string, a ...any) Evidence {
+// ready fills the view's fields into e and checks that the view can carry evidence at all: a backend is
+// configured, its network and genesis are the policy's, its tip clears the chainwork floor (§7, §9.3 check 3).
+func (v *Verifier) ready(e Evidence) (Evidence, bool) {
+	fail := func(s State, why string, a ...any) (Evidence, bool) {
 		e.State, e.Why = s, fmt.Sprintf(why, a...)
-		return e
+		return e, false
 	}
 	view := v.View
 	if view == nil {
@@ -275,10 +321,25 @@ func (v *Verifier) chain(e Evidence, p *Proof) Evidence {
 	if f := v.Policy.ChainworkFloor; f != nil && view.TipWork.Cmp(f) < 0 {
 		return fail(StateUnavailable, "chain view not ready: tip chainwork below the local floor")
 	}
+	return e, true
+}
+
+// chain applies §5 (attestation selection) and §7 (policy) against the view.
+func (v *Verifier) chain(e Evidence, p *Proof) (Evidence, *binding) {
+	fail := func(s State, why string, a ...any) (Evidence, *binding) {
+		e.State, e.Why = s, fmt.Sprintf(why, a...)
+		return e, nil
+	}
+	e, ok := v.ready(e)
+	if !ok {
+		return e, nil
+	}
+	view := v.View
 	// §5: every candidate is kept; the lowest eligible height on the accepted chain is selected, never the lowest
 	// nTime. A bad or unknown candidate does not invalidate a distinct good one.
 	var best *Header
 	var bestHeight int64
+	var bestDigest []byte
 	var unknown, mismatch, orphan []string
 	for _, at := range p.Bitcoin {
 		if !at.HeightOK || at.Height < view.Base || at.Height > view.TipHeight {
@@ -300,7 +361,7 @@ func (v *Verifier) chain(e Evidence, p *Proof) Evidence {
 		}
 		if best == nil || at.Height < bestHeight {
 			hh := h
-			best, bestHeight = &hh, at.Height
+			best, bestHeight, bestDigest = &hh, at.Height, at.Digest
 		}
 	}
 	if best == nil {
@@ -320,8 +381,20 @@ func (v *Verifier) chain(e Evidence, p *Proof) Evidence {
 			e.Notes = append(e.Notes, "earlier attestation at "+u+" not evaluable")
 		}
 	}
-	e.BlockHeight, e.BlockHash, e.HeaderTime = bestHeight, best.Hash.String(), best.Time
-	e.Confirmations = view.TipHeight - bestHeight + 1
+	bd := &binding{height: bestHeight, header: *best, digest: append([]byte(nil), bestDigest...), notes: append([]string(nil), e.Notes...)}
+	return v.eligible(e, bd), bd
+}
+
+// eligible applies the mutable half of a verdict to a binding (§9.3 checks 3 and 4): confirmations in the current
+// view and its freshness (§7, §9.4). The caller has established that the bound header is on the accepted chain.
+func (v *Verifier) eligible(e Evidence, bd *binding) Evidence {
+	fail := func(s State, why string, a ...any) Evidence {
+		e.State, e.Why = s, fmt.Sprintf(why, a...)
+		return e
+	}
+	view := v.View
+	e.BlockHeight, e.BlockHash, e.HeaderTime = bd.height, bd.header.Hash.String(), bd.header.Time
+	e.Confirmations = view.TipHeight - bd.height + 1
 	if e.Confirmations < v.Policy.MinConfirmations {
 		return fail(StateInsufficient, "%d confirmations, policy requires %d", e.Confirmations, v.Policy.MinConfirmations)
 	}

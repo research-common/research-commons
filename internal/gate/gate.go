@@ -740,6 +740,9 @@ func placeLabels(r *Result, v keylog.View) {
 	case wire.UnknownKind:
 		r.label(LabelUnknownKind, st.Why)
 	}
+	// Schema-level pins only: a method edition's system_keys declaration (a missing declared key is unpinned too)
+	// is read by the resolver from the authorized edition the observation pins. The gate resolves no editions,
+	// and that unpinned is the reader's computation over what it holds, not an intrinsic property of the line.
 	if len(st.Unpinned) > 0 {
 		r.label(LabelUnpinned, strings.Join(st.Unpinned, ","))
 	}

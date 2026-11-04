@@ -222,6 +222,38 @@ func TestSchemaRules(t *testing.T) {
 	}
 }
 
+// TestSchemaSystemKeys: C-core-32a. edition.contents.system_keys is a non-empty sorted, duplicate-free set of
+// strings (wire §5, §1 arrays). Each bad variant is refused as an intrinsic malformed statement whose detail
+// names body.contents.system_keys, so the mutation reached this check and not an earlier one; the sorted control
+// and the dotted key name (well-formed, it simply matches no flat referent.system key) are admitted.
+func TestSchemaSystemKeys(t *testing.T) {
+	conformance.Covers(t, "C-core-32a")
+	ed := func(v canon.Value) *canon.Object {
+		return setField(minimal("edition"), "contents", body("system_keys", v))
+	}
+	for _, c := range []struct {
+		name string
+		v    canon.Value
+	}{
+		{"unsorted", arr(s("routing_era"), s("model"))},
+		{"duplicate", arr(s("model"), s("model"))},
+		{"empty", arr()},
+		{"not a string", arr(s("model"), canon.Int(3))},
+		{"not a list", s("model")},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := readBody(t, "edition", ed(c.v))
+			refused(t, err, refusal.Intrinsic, refusal.MalformedStatement, "body.contents.system_keys")
+		})
+	}
+	for _, v := range []canon.Array{arr(s("model"), s("routing_era")), arr(s("system.model"))} {
+		st, err := readBody(t, "edition", ed(v))
+		if err != nil || st.Status != Valid {
+			t.Fatalf("%v: got %v, want admitted", v, err)
+		}
+	}
+}
+
 // TestSchemaOneClass: an observed asserting two classes is malformed, and the refusal says what to do.
 func TestSchemaOneClass(t *testing.T) {
 	conformance.Partial(t, "C-core-35", "Read refuses (intrinsic, malformed, this statement only, says to publish separate blobs); publish pinning and appending nothing needs publish")

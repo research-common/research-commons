@@ -254,7 +254,7 @@ func (r *Resolver) corroborate(o *Observation, st *wire.Statement, full bool) *C
 		case c.Unchecked:
 			e.Cause = "not applied: " + c.Why
 		case o.Class == "method" && r.incomparableInput(o, e.Result):
-			e.Cause = "comparability unchecked: its comparison data includes a method-class observation that does not pin the same clause members"
+			e.Cause = "comparability unchecked: its comparison data includes a method-class observation not shown comparable with this one (see comparability)"
 		default:
 			e.Counted = e.Verdict != "inconclusive"
 		}
@@ -437,7 +437,8 @@ func (r *Resolver) comparisonData(result, observed string) []string {
 }
 
 // incomparableInput reports whether a method-class corroboration's comparison data includes a method-class
-// observation of the same method edition that does not pin the same measured-system members (C-core-32).
+// observation of the same method edition that is not comparable with this one (C-core-32): it does not pin the
+// same measured-system members, lacks a declared one, or the method edition's declaration cannot be read.
 func (r *Resolver) incomparableInput(o *Observation, result string) bool {
 	for _, in := range r.comparisonData(result, o.Digest) {
 		for _, q := range r.observedOf(in, true) {

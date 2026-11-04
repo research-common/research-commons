@@ -17,6 +17,7 @@ package resolve
 import (
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/research-common/research-commons/internal/keylog"
 	"github.com/research-common/research-commons/internal/policy"
@@ -74,6 +75,13 @@ type Resolver struct {
 	policy *policy.Policy
 	// exch is the reader's configuration for the research exchange (task.go, contract.go).
 	exch *exchConfig
+	// readTime is the reader's evaluation time for time-dependent answers (shelf-life age); nil when none is
+	// given (disclosure.go). The resolver never reads a clock of its own (I14).
+	readTime *time.Time
+	// sysMu guards the method-edition declaration cache (systemkeys.go), filled lazily from the snapshot.
+	sysMu      sync.Mutex
+	sysDecl    map[string]methodDecl
+	edResource map[string]string
 }
 
 // New indexes every placed line of every log in s. With no options the reader verifies no proof format and

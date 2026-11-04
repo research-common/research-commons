@@ -312,22 +312,32 @@ func (o *Observation) VerifyExit() (int, []string) {
 }
 
 // Comparability is one method-class comparison (C-core-32): the other statement, whether the two pin the same
-// clause members, and what each lacks.
+// clause members, and what each lacks. Under a method edition that declares system_keys (C-core-32b), a declared
+// key either lacks is in Unpinned, and MissingHere/MissingThere list keys outside the declaration, shown and
+// never compared, so they do not make the pair incomparable.
 type Comparability struct {
 	With, WithSigner string // the other statement's full id and signer
 	Comparable       bool
 	MissingHere      []string // members the other pins and this observation does not ("system.<k>")
 	MissingThere     []string // members this observation pins and the other does not
-	Unpinned         []string // unpinned fields of either statement
+	Unpinned         []string // unpinned fields of either statement (a missing declared key included)
+	// EditionUnread is "" when the reader read the pinned method edition's declaration (it holds the edition as
+	// authorized); otherwise why it could not: "not held" or the edition's state ("pending", …). While it is
+	// set the pair is never comparable (C-core-32d): a declaration the reader cannot read might name a key both
+	// omit. None of the other fields can carry this: it is about the reader's holdings, not either statement.
+	EditionUnread string
 }
 
 // String renders one comparison for display; it is never read back.
 func (c Comparability) String() string {
 	line := fmt.Sprintf("vs %s by %s: ", keylog.Short(c.With), shortKey(c.WithSigner))
-	if c.Comparable {
+	if c.Comparable && len(c.MissingHere)+len(c.MissingThere) == 0 {
 		return line + "same pinned clause members (comparable; agreement needs a declared model)"
 	}
 	var parts []string
+	if c.EditionUnread != "" {
+		parts = append(parts, "method edition "+c.EditionUnread+": its system_keys declaration cannot be read")
+	}
 	if len(c.MissingHere) > 0 {
 		parts = append(parts, "this observation does not pin "+strings.Join(c.MissingHere, ", "))
 	}
@@ -336,6 +346,11 @@ func (c Comparability) String() string {
 	}
 	if len(c.Unpinned) > 0 {
 		parts = append(parts, "unpinned "+strings.Join(c.Unpinned, ", "))
+	}
+	if c.Comparable {
+		// only under a declaring edition: the declared keys are pinned on both; the rest is information
+		return line + "every declared system key pinned on both (comparable; agreement needs a declared model); keys outside the declaration shown, never compared: " +
+			strings.Join(parts, "; ")
 	}
 	return line + "comparability unchecked (" + strings.Join(parts, "; ") + ")"
 }
@@ -391,6 +406,15 @@ func (r *Resolver) observationBase(p *Placed) *Observation {
 		return o
 	}
 	o.Class, o.Unpinned = str(st.Body, "class"), st.Unpinned
+	if o.Class == "method" {
+		// a declared system key the referent lacks is unpinned too (systemkeys.go); a fresh slice, never the
+		// statement's own
+		d, unpinned, missing := r.methodPins(st)
+		o.Unpinned = unpinned
+		if d.Edition != "" {
+			o.ReferentHistory = append(o.ReferentHistory, d.history(missing))
+		}
+	}
 	return o
 }
 
@@ -526,7 +550,7 @@ func (r *Resolver) referentStatus(o *Observation, st *wire.Statement) {
 	if len(o.Unpinned) > 0 {
 		o.ReferentStatus = RefUnpinned
 		o.ReferentHistory = append(o.ReferentHistory, "the referent lacks "+strings.Join(o.Unpinned, ", ")+
-			", which its class requires: admitted, no class-specific agreement model applied (claims §5.3.1)")
+			", which its class (or, for a system key, its method edition) requires: admitted, no class-specific agreement model applied (claims §5.3.1)")
 		o.ReCheck = ReCheck{Outcome: ReUnchecked, Why: "referent unpinned"}
 		return
 	}
@@ -712,14 +736,17 @@ func captureState(st *wire.Statement) State {
 }
 
 // comparability checks a method-class observation against every other counted method-class observation of the
-// same method edition: two that do not pin the same measured-system members are not comparable, and the
-// display names what is missing (C-core-32). Comparability is a precondition of any statistical agreement
-// model; it never reads as `supports`. This is the claims §5.3.1 rule for a method edition that declares no
-// system members; reading a declaration (a missing declared member is `unpinned`) waits for a wire field that
-// carries it.
+// same method edition (C-core-32). Comparability is a precondition of any statistical agreement model; it never
+// reads as `supports`. Which rule applies depends on the pinned edition (systemkeys.go, claims §5.3.1):
+//   - held and authorized, declaring system_keys: comparable when neither lacks a declared key (a lacking one is
+//     unpinned); keys outside the declaration are shown and never compared (C-core-32b);
+//   - held and authorized, declaring none: comparable only when both pin the same system keys, and the display
+//     names what is missing (the fallback, C-core-32);
+//   - not held, or not authorized: unchecked, naming the edition's state, never comparable (C-core-32d).
 func (r *Resolver) comparability(o *Observation, st *wire.Statement) {
 	ref := object(st.Body, "referent")
 	ed := str(ref, "method_edition")
+	d := r.methodDecl(ed)
 	mine := memberKeys(object(ref, "system"))
 	for _, q := range r.byKind["observed"] {
 		if !q.Counts() || q.St.ID == st.ID || str(q.St.Body, "class") != "method" {
@@ -729,23 +756,39 @@ func (r *Resolver) comparability(o *Observation, st *wire.Statement) {
 		if str(qr, "method_edition") != ed {
 			continue
 		}
-		theirs := memberKeys(object(qr, "system"))
-		var missingHere, missingThere []string
-		for _, k := range theirs {
-			if !slices.Contains(mine, k) {
-				missingHere = append(missingHere, "system."+k)
+		_, qUnpinned, _ := r.methodPins(q.St)
+		c := Comparability{With: q.St.ID, WithSigner: q.St.Signer, EditionUnread: d.Unread}
+		if len(o.Unpinned)+len(qUnpinned) > 0 {
+			c.Unpinned = append(slices.Clone(o.Unpinned), qUnpinned...)
+			if d.Keys != nil {
+				// a declared key both lack is one fact, named once
+				slices.Sort(c.Unpinned)
+				c.Unpinned = slices.Compact(c.Unpinned)
 			}
 		}
-		for _, k := range mine {
-			if !slices.Contains(theirs, k) {
-				missingThere = append(missingThere, "system."+k)
+		if d.read() {
+			// under a declaration, a declared key one side lacks is already in Unpinned; Missing* list only the
+			// keys outside it, shown and never compared
+			theirs := memberKeys(object(qr, "system"))
+			for _, k := range theirs {
+				if !slices.Contains(mine, k) && !slices.Contains(d.Keys, k) {
+					c.MissingHere = append(c.MissingHere, "system."+k)
+				}
+			}
+			for _, k := range mine {
+				if !slices.Contains(theirs, k) && !slices.Contains(d.Keys, k) {
+					c.MissingThere = append(c.MissingThere, "system."+k)
+				}
 			}
 		}
-		c := Comparability{With: q.St.ID, WithSigner: q.St.Signer, MissingHere: missingHere, MissingThere: missingThere}
-		if len(o.Unpinned)+len(q.St.Unpinned) > 0 {
-			c.Unpinned = append(append([]string{}, o.Unpinned...), q.St.Unpinned...)
+		switch {
+		case !d.read():
+			c.Comparable = false
+		case d.Keys != nil:
+			c.Comparable = len(c.Unpinned) == 0
+		default:
+			c.Comparable = len(c.MissingHere)+len(c.MissingThere)+len(c.Unpinned) == 0
 		}
-		c.Comparable = len(missingHere)+len(missingThere)+len(c.Unpinned) == 0
 		o.Comparability = append(o.Comparability, c)
 	}
 	slices.SortFunc(o.Comparability, func(a, b Comparability) int { return strings.Compare(a.With, b.With) })
