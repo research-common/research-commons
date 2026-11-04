@@ -150,7 +150,7 @@ func init() {
 	}
 	Register(&Command{Name: "publish", Summary: "sign and commit a statement (authored with its bytes, holds, describes, retracts, or a draft)",
 		Store: true, Writes: true, Flags: flags, Prepare: preparePublish, Run: publishCmd,
-		Help: "Signs with --key (or $" + KeyEnv + ") and commits through the store's journal: the blob and its statements land together or not at all. A draft is never stored unsigned. Your log's next seq and prev come from the statements this store holds; a FORK in your log is refused until you name --prev. --intended-for runs the named edition's rules first and refuses on fail. With availability withheld and content under "+strconv.Itoa(WithheldWarnBelow)+" bytes it warns that short content may be enumerable against its hash (a heuristic; include a nonce) and proceeds; the warning is not recorded."})
+		Help: "Signs with --key (or $" + KeyEnv + ") and commits through the store's journal: the blob and its statements land together or not at all. A draft is never stored unsigned. Your log's next seq and prev come from the statements this store holds; a FORK in your log is refused until you name --prev. --intended-for runs the named edition's rules first and refuses on fail. With availability withheld and content under " + strconv.Itoa(WithheldWarnBelow) + " bytes it warns that short content may be enumerable against its hash (a heuristic; include a nonce) and proceeds; the warning is not recorded."})
 	tflags := append(slices.Clone(writerFlags),
 		Flag{Name: "name", Value: "text", Help: "a new task's name"},
 		Flag{Name: "task", Value: "id", Help: "an existing task (its genesis id): publish a new edition after its current one", Check: checkIDFlag},

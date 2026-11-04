@@ -254,7 +254,7 @@ func trashBlobs(t *testing.T, pkg string) {
 // statement is the same either way (the warning is never recorded): the body of (a) carries no member the
 // body of a withheld publish at the threshold lacks, and verify exits 0 for both.
 func TestWithheldShortWarning(t *testing.T) {
-	conformance.Partial(t, "C-core-76a", "warning below the threshold, none at it or when not withheld, nothing recorded, verify unchanged; the threshold (64 bytes) is a proposed value awaiting a decision, documented in the claims-model note as a heuristic")
+	conformance.Covers(t, "C-core-76a")
 	withheld := `{"obtainable":false,"redistribution":"withheld","withheld_until":"after the season"}`
 	cases := []struct {
 		name, data, av string
@@ -361,5 +361,79 @@ func TestInputsSummarySurfaces(t *testing.T) {
 	}
 	if _, ok := jsonOf(t, w.run("show", dig("in0"), "--json")).Members["inputs_summary"]; ok {
 		t.Fatal("a blob with no derivation prints an inputs summary")
+	}
+}
+
+// TestDisclosureBesideGradeSurfaces: C-core-65 at the CLI. One T0 artifact; each artifact disclosure is mutated
+// alone across values including missing. On show, list, verify and explain the grade and the exit are the same
+// as the unmutated control, the disclosure is a member beside the grade, and its displayed value changes. The
+// observation and membership disclosures (no grade is shown there) are the resolver's
+// (resolve.TestPropertyDisclosuresNeverGrade).
+func TestDisclosureBesideGradeSurfaces(t *testing.T) {
+	conformance.Covers(t, "C-core-65")
+	values := map[string][]any{
+		"licence":          {"CC0-1.0", "MIT", "not spdx"},
+		"availability":     {obj("redistribution", "permitted", "obtainable", true), obj("redistribution", "restricted", "obtainable", false)},
+		"sampling":         {obj("n", 30, "unit", "runs")},
+		"shelf_life_days":  {0, 365},
+		"pre_registration": {"exploratory"},
+	}
+	type answer struct {
+		grade string
+		codes [4]int
+	}
+	read := func(field string, v any) (answer, []string) {
+		w := newWorld(t)
+		w.blob("x", []byte("x"))
+		w.workflow("K1", "wfB", "bytes", "")
+		var kv []any
+		if v != nil {
+			kv = []any{field, v}
+		}
+		w.authored("A1", "K1", "x", append([]any{"prov", []string{"wfB", "in"}}, kv...)...)
+		w.authored("A2", "K2", "x", append([]any{"prov", []string{"wfB", "in"}}, kv...)...)
+		d := dig("x")
+		var ans answer
+		var shown []string
+		var list *canon.Object
+		for _, b := range jsonOf(t, w.run("list", "--json")).Members["blobs"].(canon.Array) {
+			if o := b.(*canon.Object); o.Members["digest"] == canon.String(d) {
+				list = o
+			}
+		}
+		runs := []result{w.run("list", "--json"), w.run("show", d, "--json"), w.run("verify", d, "--json"), w.run("explain", d, "--json")}
+		for i, src := range []*canon.Object{list, jsonOf(t, runs[1]), jsonOf(t, runs[2]), jsonOf(t, runs[3])} {
+			ans.codes[i] = runs[i].code
+			g := string(canon.Encode(src.Members["grade"]))
+			if i == 0 {
+				ans.grade = g
+			} else if g != ans.grade {
+				t.Fatalf("%s=%v: surfaces disagree on the grade: %s vs %s", field, v, ans.grade, g)
+			}
+			shown = append(shown, string(canon.Encode(disclosureOf(t, src, field))))
+		}
+		return ans, shown
+	}
+	control, _ := read("licence", nil)
+	if control.grade != `"T0"` || control.codes != [4]int{} {
+		t.Fatalf("control is not a T0 artifact read with exit 0: %+v", control)
+	}
+	for _, field := range []string{"availability", "licence", "pre_registration", "sampling", "shelf_life_days"} {
+		seen := map[string]bool{}
+		for _, v := range append([]any{nil}, values[field]...) {
+			ans, shown := read(field, v)
+			if ans != control {
+				t.Fatalf("%s=%v moved the grade or an exit: %+v (control %+v)", field, v, ans, control)
+			}
+			for _, s := range shown[1:] {
+				if s != shown[0] {
+					t.Fatalf("%s=%v: surfaces show different values: %v", field, v, shown)
+				}
+			}
+			seen[shown[0]] = true
+		}
+		if len(seen) != len(values[field])+1 {
+			t.Fatalf("%s: the displayed value did not change with every mutation: %v", field, seen)
+		}
 	}
 }

@@ -31,9 +31,9 @@ import (
 //     `contradicts` at one state or both past it;
 //   - the reader's own re-check of the referent (ReferentChecker).
 //
-// Counting is behind Counter. Which unit corroboration counts (signing keys, identities, operators,
-// environments) is not decided yet; the only implementation counts distinct signing keys, as the merged note's
-// text reads today, and every status says so. Independence is never inferred: distinct keys prove nothing about
+// Counting is behind Counter. In rc/1 the counting unit is the signing key (§5.3.2): the only implementation
+// counts distinct signing keys, and every status names the unit. Keys are not people (§9.3); a reader policy may
+// choose another unit once a profile defines one. Independence is never inferred: distinct keys prove nothing about
 // it (§5.3.2, §9.3), so it reads `unknown` and declared shared sources are grouped beside the count.
 //
 // Trust: the note computes the status from the corroborations a reader "holds and trusts". Trust is configured
@@ -75,13 +75,12 @@ type Counter interface {
 }
 
 // KeyCounter counts distinct signing keys, plus one for the reader's own computation; evidence signed by the
-// observer's own key is left out (a re-read by the observer is its own word again). This is the merged note's
-// current text ("distinct keys", §9.3), and it is labelled wherever a count is shown: the counting unit is
-// pending a decision on identity.
+// observer's own key is left out (a re-read by the observer is its own word again). The signing key is the rc/1
+// counting unit (§5.3.2), and it is labelled wherever a count is shown.
 type KeyCounter struct{}
 
 // UnitKeys is KeyCounter's label.
-const UnitKeys = "distinct signing keys (counting unit pending identity decision)"
+const UnitKeys = "distinct signing keys (not people; independence unknown)"
 
 // Count implements Counter.
 func (KeyCounter) Count(observer string, ev []Evidence) (int, string, []string) {
@@ -664,8 +663,8 @@ type Reputation struct {
 	Unit                                  string
 }
 
-// Reputation computes observer's record under rule. The observer is one signing key; whether a record should
-// span the keys of one participant is the identity decision still open.
+// Reputation computes observer's record under rule. The observer is one signing key: a record is per key, the
+// rc/1 counting unit (§5.4), and a participant's other keys have records of their own.
 func (r *Resolver) Reputation(observer string, rule ReputationRule) (*Reputation, error) {
 	from, err := rctime.ParseUTC(rule.From)
 	if err != nil {
@@ -676,7 +675,7 @@ func (r *Resolver) Reputation(observer string, rule ReputationRule) (*Reputation
 		return nil, err
 	}
 	rep := &Reputation{Observer: observer, Rule: rule.Name, Admits: rule.Describe, Window: "[" + rule.From + ", " + rule.To + ")",
-		Unit: "one signing key per observer (counting unit pending identity decision)"}
+		Unit: "one signing key per observer (not people; independence unknown)"}
 	for _, p := range r.byKind["observed"] {
 		if p.St.Signer != observer || !p.Counts() {
 			continue

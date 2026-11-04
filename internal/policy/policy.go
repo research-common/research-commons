@@ -1,5 +1,5 @@
-// Package policy is the reader's local policy, `reader-policy-v1` (fixed-root identity note §6 and its linked
-// schema `docs/fixed-root-identity-policy.schema.json`).
+// Package policy is the reader's local policy, `reader-policy-v1` (docs/READER-POLICY.md, provisional; the
+// candidate identity note §6 and its linked schema `docs/fixed-root-identity-policy.schema.json`).
 //
 // A policy is a local file the reader writes. Received objects never install or modify it (claims-model I9,
 // "data never carries control"). It holds two separate things, never merged into one:

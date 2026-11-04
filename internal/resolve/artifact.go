@@ -271,6 +271,7 @@ func (r *Resolver) authorship(d string) *Artifact {
 	r.selectDefaults(a) // the reader's authorship-declaration selection, if any (policy.go)
 	a.PreReg = r.artifactPreReg(a)
 	a.Explain = append(a.Explain, forked(a)...)
+	a.Explain = append(a.Explain, r.successorHints(a)...)
 	a.Holders = r.holders(d)
 	a.Held = r.held(a)
 	a.Availability, a.ShelfLife = r.availability(a), r.shelfLife(a)
@@ -389,6 +390,44 @@ func forked(a *Artifact) []string {
 			out = append(out, fmt.Sprintf("%s holds %d current authored on this blob on separate branches of its log (%s): every branch counts, and nothing is frozen at the fork; "+
 				"a field or provenance they disagree on stays contested until one authored whose history holds both branches amends them (a merge that is not an authored amends nothing)",
 				shortKey(k), len(ids), shorts(ids)))
+		}
+	}
+	return out
+}
+
+// successorHints names every later or contesting claimant whose key is the successor named by another
+// claimant's rotation that counts (claims §4.1, keylog.Successions with the rotation line's Counts). Display
+// only: a successor inherits no claims, so the hint changes no state, default, grade or exit; it tells the
+// reader that following the successor is its own choice, made by a reader-policy selection.
+func (r *Resolver) successorHints(a *Artifact) []string {
+	var contesting []*Unit
+	switch a.State {
+	case Priority:
+		contesting = a.Later
+	case ContestedAuthorship:
+		contesting = a.Units
+	default:
+		return nil
+	}
+	claimant := map[string]bool{}
+	for _, c := range a.Claims {
+		claimant[c.Signer] = true
+	}
+	var out []string
+	for _, s := range r.logs.Successions() {
+		if !claimant[s.From] || s.From == s.To {
+			continue
+		}
+		if p, ok := r.byID[s.Event]; !ok || !p.Counts() {
+			continue // a rotation that counts toward nothing names no successor worth a hint
+		}
+		for _, u := range contesting {
+			if !slices.ContainsFunc(u.Claims, func(c *Claim) bool { return c.Signer == s.To }) {
+				continue
+			}
+			out = append(out, fmt.Sprintf("claimant %s is the successor named by claimant %s's rotate_key %s: a successor inherits no claims (claims §4.1), so this changes nothing above; a reader may follow it by a reader-policy selection (authorship-declaration)",
+				shortKey(s.To), shortKey(s.From), keylog.Short(s.Event)))
+			break
 		}
 	}
 	return out

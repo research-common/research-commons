@@ -23,7 +23,7 @@ import (
 //     defaults; present and unreadable, unparseable, or carrying a field or limit name the schema does not
 //     define is exit 2 before any work (claims-model note §13, C-core-133a). Its digest is the sha256 of the
 //     file's bytes (of the canonical defaults when absent).
-//   - the reader policy (`reader-policy-v1`, fixed-root identity note §6), parsed by policy.Parse. It is read
+//   - the reader policy (`reader-policy-v1`, docs/READER-POLICY.md), parsed by policy.Parse. It is read
 //     only from a file the invocation names: `--policy <file>`, else $COMMONS_POLICY. Nothing is read
 //     implicitly (no file in the home directory, none in the store). Commands that take it declare
 //     ReaderPolicy; `hub check` does not (hub template H-13: signer trust is not an input to the check).
@@ -134,7 +134,7 @@ func (p *Policy) readerObj() *Obj {
 
 // readerPolicyFlag is the flag every ReaderPolicy command declares.
 var readerPolicyFlag = Flag{Name: "policy", Value: "file",
-	Help: "the reader policy (reader-policy-v1) to answer under (default: $" + PolicyEnv + "; none when neither is set; nothing is read implicitly)"}
+	Help: "the reader policy (reader-policy-v1) to answer under (default: $" + PolicyEnv + "; none when neither is set; nothing is read implicitly; format: docs/READER-POLICY.md)"}
 
 func digestOf(b []byte) string {
 	h := sha256.Sum256(b)

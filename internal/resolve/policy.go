@@ -11,7 +11,7 @@ import (
 	"github.com/research-common/research-commons/internal/wire"
 )
 
-// The reader's local policy (fixed-root identity note §6, `reader-policy-v1`; package policy parses it).
+// The reader's local policy (`reader-policy-v1`, docs/READER-POLICY.md; package policy parses it).
 //
 // With no policy (the default) every answer is exactly what it is without this file. With one:
 //
