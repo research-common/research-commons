@@ -95,7 +95,7 @@ the key named, and a reader state digest unchanged before and after.
 ### 1.1 Time values
 
 Every field this note types as `ts` is one string in one profile. That covers the envelope `ts`, `capture.at`,
-the referent `at`, the window bounds `from` and `to`, and `finality.state_at_capture.captured_at`. A field typed `date` (for example `frozen_before`) is an RFC 3339 `full-date`.
+the referent `at`, the window bounds `from` and `to` (including a completeness window's), and `finality.state_at_capture.captured_at`. A field typed `date` (for example `frozen_before`) is an RFC 3339 `full-date`.
 
 | Rule | Obligation | On violation |
 |---|---|---|
@@ -395,7 +395,7 @@ admitted, and shown `unpinned` (claims-model note §5.3.1). A kind not listed he
 | `retracts` | `of` id R (the signer's own `authored`/`observed`) · `reason` string O |
 | `anchors` | `covered` id R (the covered head: a statement in the signer's own log, reachable from this line's `prev`) · `proof` digest R (the proof bytes, a blob) · `proof_format` string R (a registered proof format; `ots-detached-v1`, the OpenTimestamps detached proof profiled by the Bitcoin-time note, is the only one today; an unknown value leaves the anchor `unsupported`, granting nothing) · `services` list of string O (RFC 3986 URIs of the timestamping services the author submitted to, for OpenTimestamps its calendars; informational, never dereferenced by a reader). What a proof format stamps is the raw 32 bytes of `covered`. A `covered` the reader holds as a line of another key is malformed; a `covered` the reader does not hold bounds nothing until it arrives, and is not refused for being unheld, so delivery order never changes the verdict (claims-model note I14). There is no quality field (a quality is what the reader verified) |
 | `genesis` | `type` `"collection"`/`"task"`/`"series"` R · `name` string R · `controllers` list of key R (set) · `rule` object R (`any_one` true, or `k_of_n` {`k` integer}) · `forked_from` id O |
-| `edition` | `resource` id R · `predecessors` list of id R (set of edition ids, §3; the genesis id for the first edition; several for a merge) · `contents` object R (`members` list of {`content` or `resource` or `statement`, `role` string} O, `schema` digest O, `rules` list of {`dialect` string, `expr` string} O, `contract` object O, `selection` `"curated"`/`"rule-based"`/`"completeness"` O, `frozen_before` object O (exactly one of `date` date, `height` integer, `run` string: the same units as `finality.state_at_capture`, so the declared boundary is compared with the boundary the members' finality rules compute in the same unit, and a declared unit different from the computed one is `not comparable`, never converted), `system_keys` list of string O (a method edition's declaration: the `referent.system` keys an `observed` under it must pin; a set, below), `controllers` and `rule` O for a controller change) |
+| `edition` | `resource` id R · `predecessors` list of id R (set of edition ids, §3; the genesis id for the first edition; several for a merge) · `contents` object R (`members` list of {`content` or `resource` or `statement`, `role` string} O, `schema` digest O, `rules` list of {`dialect` string, `expr` string} O, `contract` object O, `selection` `"curated"`/`"rule-based"`/`"completeness"` O, `completeness` object O (`class` one of `source`/`phenomenon`/`method` R, `source` string R, `window` R (the shared object), `timescale` string O (§1.1); present only beside `selection` `"completeness"`, below), `frozen_before` object O (exactly one of `date` date, `height` integer, `run` string: the same units as `finality.state_at_capture`, so the declared boundary is compared with the boundary the members' finality rules compute in the same unit, and a declared unit different from the computed one is `not comparable`, never converted), `system_keys` list of string O (a method edition's declaration: the `referent.system` keys an `observed` under it must pin; a set, below), `controllers` and `rule` O for a controller change) |
 | `withdraw_approval` | `resource` id R · `edition` edition id R (§3). Signed by a key that approved that edition's body: it withdraws that key's approval. What a withdrawal changes, and until when, is claims-model note §8. A withdrawal naming a body the signer never approved, or a `resource` that is not the body's, is shown and changes nothing |
 | `intent` · `progress` · `withdraw` · `submit` · `decide` | all: `task` id R · `edition` edition id R. `submit`: `result` digest R, `salt` string O, `self_declared_independence` boolean O. `decide`: `submissions` list of id R, `verdict` `"accept"`/`"reject"` R, `evaluations` list of digest O, `supersedes` id O. `progress`: `note` string O |
 | `rotate_key` · `revoke_key` | `rotate_key`: `successor` key R. `revoke_key`: `reason` string R, a token matching `[a-z][a-z0-9_]{0,63}`; three values are documented, the RFC 5280 §5.3.1 CRL reason codes that apply to a signing key in snake case: `key_compromise`, `superseded`, `cessation_of_operation`. `superseded` and `cessation_of_operation` are **soft**; every other value, `key_compromise`, any undocumented token and a value a later revision adds, is **hard**, so an unknown reason fails closed and never makes the revocation malformed. `last_good` id O (a line in this revocation's history: the last one its signer vouches for; read only for a hard reason). `note` string O. Both kinds are statements by the old key about itself and carry no time: a time a key signs about itself is not evidence. What they do to the key's other lines (the sibling rule, hard and soft, `last_good`, stricter later events) is claims-model note §4.1 |
@@ -418,6 +418,21 @@ referent `unpinned`, naming `system.<key>` (claims-model note §5.3.1); a presen
 its string value. Two observations under one declaring edition that each pin every declared key are
 comparable; keys outside the declaration are shown, never compared. Without a declaration, two method-class
 observations are comparable only when they pin the same `system` keys (C-core-32).
+
+`edition.contents.completeness` is the scope of a completeness claim (claims-model note §6 (3)): `class`
+names the observation class, and `source` the value of that class's identifying referent field, compared as
+a string: `endpoint` (source, one request; a batch referent names no endpoint, so its source cannot be
+read), `instrument` (phenomenon), `method_edition` (method). The field is present only when `selection` is
+`"completeness"`; any other `selection`, or none, beside it is malformed (intrinsic). The window is a time
+window, the shared `window` object, half-open, chosen by the rule that fixes `frozen_before`'s unit: a
+declared boundary is stated in the unit the members' own records give, and compared there, never converted.
+A reading's position is a time in every record that gives one (a method referent's window, a phenomenon
+referent's `at`, a source finality state's `captured_at`), and the core orders no other unit: an exact-bytes
+referent pins a block hash, not a height, and run labels carry no order. So `exact-bytes` is not a class a
+completeness claim can name until a height window and a way to place a block hash at a height exist; that
+would be a new optional alternative (a minor change, §6). The window bounds are UTC unless `timescale` names
+another scale (§1.1); a reading whose position is recorded in a different scale is not comparable with the
+window.
 
 **Execution objects**. The workflow spec blob and the environment record are canonical JSON
 (§1) with these members; the execution note fixes their meaning.
