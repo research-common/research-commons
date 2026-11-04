@@ -445,7 +445,7 @@ the original only, because a check against data says nothing about the data (C-c
 
 In `rc/1` the counting unit is the signing key; every count names it, and keys are not people (§9.3). A reader
 policy may choose another unit once a profile defines one. What a reader "trusts" is its reader policy's answer
-for the purpose at hand (`attestation`, `corroboration` or `admission`, `docs/READER-POLICY.md`): a purpose the
+for the purpose at hand (`attestation`, `corroboration` or `admission`; on the next-format line, `docs/READER-POLICY.md`): a purpose the
 policy does not configure reads `not configured`, never trusted, and the reader keeps its no-policy behaviour
 for it (here: every counted statement is counted).
 
