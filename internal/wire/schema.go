@@ -344,6 +344,10 @@ var kinds = map[string][]field{
 		opt("rules", list(object(req("dialect", text()), req("expr", text())))),
 		opt("contract", anyObject()),
 		opt("selection", enum("curated", "rule-based", "completeness")),
+		// completeness: the scope of a completeness claim, present only beside selection "completeness"
+		// (completenessBeside). The window is in the referent timescale it names, UTC when none (§1.1).
+		opt("completeness", object(req("class", enum("source", "phenomenon", "method")),
+			req("source", text()), req("window", windowObj), opt("timescale", text()))),
 		opt("frozen_before", exactlyOne([]field{opt("date", date()), opt("height", integer()), opt("run", text())})),
 		// system_keys: a method edition's declaration of the referent.system keys an observed under it must
 		// pin. A non-empty set (omit the field to declare nothing); flat key names, so "system.model" is
@@ -404,6 +408,9 @@ func bodySchema(kind string, body *canon.Object) (bool, *schemaCtx, error) {
 	if kind == "genesis" {
 		return true, ctx, satisfiable(body, "body")
 	}
+	if kind == "edition" {
+		return true, ctx, completenessBeside(body)
+	}
 	if kind == "holds" {
 		_, w := body.Get("withdrawn")
 		if _, l := body.Get("locations"); w && l {
@@ -450,6 +457,19 @@ func satisfiable(body *canon.Object, p string) error {
 		if k < 1 || k > int64(len(ctrl)) {
 			return bad(p+".rule.k_of_n.k", "is "+strconv.FormatInt(k, 10)+" with "+itoa(len(ctrl))+" controllers: no set of controllers satisfies it")
 		}
+	}
+	return nil
+}
+
+// completenessBeside refuses a completeness scope beside any selection but "completeness" (wire §5): a scope
+// on a curated or rule-based edition would be a claim its own selection does not make.
+func completenessBeside(body *canon.Object) error {
+	cv := body.Members["contents"].(*canon.Object)
+	if _, ok := cv.Get("completeness"); !ok {
+		return nil
+	}
+	if s, _ := cv.Members["selection"].(canon.String); s != "completeness" {
+		return bad("body.contents.completeness", `is present without selection "completeness"`)
 	}
 	return nil
 }
