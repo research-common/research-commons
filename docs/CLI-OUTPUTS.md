@@ -20,7 +20,7 @@ Errors are RFC 9457 problem-details objects (`type`, `title`, `detail`, `class`,
 
 ## State tokens
 
-JSON members carrying tokens: `authorship`, `role`, `state`, `grade`, `step`, `quality`, `time_state`, `status`, `line`, `counted`, `labels`, `bytes`, `causes`, `store_state`, `what`, `verdict`, `class`.
+JSON members carrying tokens: `authorship`, `role`, `state`, `grade`, `step`, `quality`, `time_state`, `status`, `line`, `counted`, `labels`, `bytes`, `causes`, `store_state`, `what`, `verdict`, `class`, `status_scope`.
 
 | token | kind | meaning |
 |---|---|---|
@@ -29,6 +29,8 @@ JSON members carrying tokens: `authorship`, `role`, `state`, `grade`, `step`, `q
 | `derived` | authorship | one derivation group of two or more keys; priority is not computed within it |
 | `default author` | authorship | several claimant units; one is strictly earliest at a quality this reader verified |
 | `contested` | authorship | several claimants (or several values of one field) and none is the default; every claimant is listed |
+| `within statements you hold` | scope | every status of the view is computed from the statements this reader holds; nothing is claimed about statements it never received |
+| `within this hub` | scope | every status of the view is computed from one hub's own holdings only |
 | `author` | role | the only claimant unit |
 | `derivers` | role | the keys of the one derivation group |
 | `later claimant` | role | a claimant after the default author; never shown as proven later |
@@ -78,7 +80,18 @@ JSON members carrying tokens: `authorship`, `role`, `state`, `grade`, `step`, `q
 | `retracted` | label | the author signed a retraction; display only, the bytes may still be served |
 | `held here` | bytes | this store holds the blob's bytes and they hash correctly when read |
 | `not held here` | bytes | this store does not hold the blob's bytes |
-| `unpinned` | verify | a derivation names an input it did not pin; nothing to re-run |
+| `unpinned` | verify | a pin the statement needs is missing: a derivation input it did not pin (nothing to re-run), or a referent field an observation's class requires (no class agreement model applied) |
+| `final` | referent | the reader's own re-check found the referent at a state that meets the declared finality rule |
+| `final (as captured, not re-checked)` | referent | the observer's asserted state at capture meets the rule and no re-check of this reader confirmed it; never shown as final (I4) |
+| `provisional` | referent | the finality rule is not met at the state shown (the state at capture, or this reader's re-check), with the state at which it would be |
+| `revised` | referent | a later capture of the same referent holds different bytes before finality; the observation stays true of what it pinned |
+| `not canonical` | referent | this reader's re-check found the referent replaced (a deep reorg, a dispute run); nothing counts against the observer |
+| `still canonical` | referent | this reader's re-check found the pinned referent unchanged (no finality rule declared) |
+| `source still available` | referent | this reader's re-check of a source referent returned it (no finality rule declared) |
+| `source unavailable` | referent | this reader's re-check could not reach the source; existing corroborations stand |
+| `unknown (not re-checked by this reader)` | referent | no finality rule declared and no re-check of this reader decided anything |
+| `pinned` | referent | a phenomenon or method referent: its fields are pinned and it has no re-check |
+| `no referent (class none-yet)` | referent | the observation's class names no referent yet |
 | `finality unchecked` | verify | the observation's declared finality rule cannot be evaluated by this reader |
 | `body not interpreted` | verify | the observation's body was kept opaque (an unsupported or critical member); nothing read from it |
 | `counts toward nothing` | verify | the statement is not placed in its signer's log (a fork branch left out, a revoked key); it is shown, never counted |

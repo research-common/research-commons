@@ -268,9 +268,9 @@ func TestEd25519TwoImplementations(t *testing.T) {
 			accepted++
 		}
 	}
-	// Finding PROPS-F1 (label only): NE9 and NE10 have a public key that fails step 3 and an R that fails step 2.
-	// The note lists step 2 for both points before step 3, so a phased reader labels them step 2; the vectors
-	// file (and internal/sig) say step 3. Every verdict is the same.
+	// PROPS-F1 (label only): NE9 and NE10 have a public key that fails step 3 and an R that fails step 2. The
+	// note runs steps 2 and 3 per point (A, then R), so they are labelled step 3, as the vectors file and
+	// internal/sig say; a phased reader (step 2 on both points first) would say step 2. Every verdict is the same.
 	if got := strings.Join(relabelled, "; "); got != "NE9: per-point step 3, phased step 2; NE10: per-point step 3, phased step 2" {
 		t.Errorf("step labels that depend on the order of steps 2 and 3: %q", got)
 	}

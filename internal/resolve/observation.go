@@ -38,13 +38,17 @@ var referentOrder = map[string][]string{
 	"method":      {"method_edition", "environment", "system", "inputs", "window", "timescale"},
 }
 
-// Referent statuses (claims §5.3.1, §7 table). Provisional is rendered with its states.
+// Referent statuses (claims §5.3.1, §7 table). Provisional is rendered with its states. Final is the reader's
+// computation: `final` when the reader's own re-check found the referent at a state that meets the rule, and
+// `final (as captured, not re-checked)` when only the observer's asserted state at capture meets it (I4: an
+// asserted state is shown beside a re-check, never in place of one).
 const (
 	RefUnpinned      = "unpinned"
 	RefNotCanonical  = "not canonical"
 	RefUnavailable   = "source unavailable"
 	RefRevised       = "revised"
 	RefFinal         = "final"
+	RefFinalCaptured = "final (as captured, not re-checked)"
 	RefProvisional   = "provisional"
 	RefCanonical     = "still canonical"
 	RefAvailable     = "source still available"
@@ -211,6 +215,11 @@ func WithBlobIndex(b BlobIndex) Option { return func(r *Resolver) { r.obs.blobs 
 // WithScope sets the scope every status is printed with (§6 (1), I4). The default is ScopeHeld; a hub surface
 // that resolves only its own holdings passes ScopeHub. A scope never widens what the statements support.
 func WithScope(s string) Option { return func(r *Resolver) { r.obs.scope = s } }
+
+// Scope is the scope this resolver's statuses are printed with: a surface that prints a view's statuses
+// without the scope beside each (authorship, a resource's current edition, a membership, a verify exit) prints
+// it once for the view (§6 (1)).
+func (r *Resolver) Scope() string { return r.obs.scope }
 
 // Scopes.
 const (
@@ -541,8 +550,9 @@ func (r *Resolver) referentStatus(o *Observation, st *wire.Statement) {
 			o.finalityUnevaluable = true
 			o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("at capture: state %s under rule %q, which this reader cannot evaluate (no source profile for it)", f.State, f.Rule))
 		case met:
-			status = RefFinal
-			o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("at capture: state %s meets rule %q: final", f.State, f.Rule))
+			// the observer's asserted state is the only evidence so far: final as captured, until a re-check
+			status = RefFinalCaptured
+			o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("at capture: state %s meets rule %q: %s (the observer's asserted state)", f.State, f.Rule, RefFinalCaptured))
 		default:
 			status = fmt.Sprintf("%s (%s; final at %s)", RefProvisional, f.State, final)
 			o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("at capture: state %s, rule %q unmet: %s", f.State, f.Rule, status))
@@ -561,9 +571,17 @@ func (r *Resolver) referentStatus(o *Observation, st *wire.Statement) {
 		o.ReferentHistory = append(o.ReferentHistory, "reader re-check: source unavailable ("+rc.Why+"); existing corroborations stand")
 	case ReSame:
 		if f != nil {
-			if met, _, known := r.obs.finality.Evaluate(f.Rule, rc.State); known && met && status != RefRevised {
+			met, final, known := r.obs.finality.Evaluate(f.Rule, rc.State)
+			if known && met && status != RefRevised {
 				status = RefFinal
 				o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("reader re-check: state %s, identical bytes: final (asserted state %s shown beside it)", rc.State, f.State))
+				break
+			}
+			if known && status == RefFinalCaptured {
+				// the reader's own re-check puts the referent below the rule: its evidence, not the observer's
+				// asserted state, is the status (I4)
+				status = fmt.Sprintf("%s (%s; final at %s)", RefProvisional, rc.State, final)
+				o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("reader re-check: state %s, identical bytes: %s (asserted state %s shown beside it)", rc.State, status, f.State))
 				break
 			}
 			o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("reader re-check: state %s, identical bytes", rc.State))

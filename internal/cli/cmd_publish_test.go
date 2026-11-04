@@ -128,6 +128,9 @@ func TestPublishAuthored(t *testing.T) {
 	if o.Members["committed"] != canon.Bool(true) {
 		t.Fatal("not committed")
 	}
+	if _, ok := o.Members["status_scope"]; ok {
+		t.Fatal("a publish that resolved no status prints a scope")
+	}
 	sts := statementsOf(o)
 	if len(sts) != 2 || sts[0].Members["kind"] != canon.String("authored") || sts[1].Members["kind"] != canon.String("holds") ||
 		sts[0].Members["seq"] != canon.Int(0) || sts[1].Members["seq"] != canon.Int(1) || sts[1].Members["prev"] != sts[0].Members["statement"] {
@@ -291,6 +294,10 @@ func TestPublishPrePin(t *testing.T) {
 	if r.code != 0 || !strings.Contains(r.stdout, `"intended_for":{"edition":"`+e) || !strings.Contains(r.stdout, `"state":"ok"`) {
 		t.Fatalf("control: %d %s", r.code, r.stdout)
 	}
+	// the pre-pin state was resolved from the statements held: the output carries the view's scope (PROPS-F5)
+	if outObj(t, r).Members["status_scope"] != canon.String(resolve.ScopeHeld) {
+		t.Fatalf("pre-pin state without the scope footer: %s", r.stdout)
+	}
 	id := idsOf(outObj(t, r))[0]
 	if !strings.Contains(p.run("show", id, "--json").stdout, `"outcome":"ok"`) {
 		t.Fatal("the statement does not record outcome ok")
@@ -404,6 +411,9 @@ func TestPublishTask(t *testing.T) {
 	}
 	o := outObj(t, r)
 	task := string(o.Members["task"].(canon.String))
+	if o.Members["status_scope"] != canon.String(resolve.ScopeHeld) {
+		t.Fatalf("readiness without the scope footer: %s", r.stdout)
+	}
 	if len(statementsOf(o)) != 2 {
 		t.Fatal("genesis + first edition are one unit")
 	}

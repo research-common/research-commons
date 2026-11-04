@@ -62,7 +62,7 @@ func (pw *propWorld) scopeProblem(r *Resolver, scope string) string {
 }
 
 func TestPropertyWithheldStatementsScopeTheStatus(t *testing.T) {
-	conformance.Partial(t, "P-12", "corroboration status and every surface's wording over generated worlds, each retraction, contradiction, refutation and edition withheld in turn (and a statement withheld mid-log, which also detaches its signer's later lines); resource `current` and the authorship line carry no scope token (spec finding PROPS-F5), so P-12 is covered for corroboration status only")
+	conformance.Partial(t, "P-12", "corroboration status and every surface's wording over generated worlds, each retraction, contradiction, refutation and edition withheld in turn (and a statement withheld mid-log, which also detaches its signer's later lines); resource `current` and the authorship line are scoped by the CLI's one footer per view (PROPS-F5, internal/cli.TestStatusScopeFooter), not in the resolver's renderings, and no CLI command prints a resource or membership view yet")
 	fixture.Check(t, propBaseSeed+7000, 40, fixture.Extended, func(f fixture.Fixture) string {
 		pw := concretize(t, f)
 		type variant struct {
@@ -185,9 +185,18 @@ func TestWithheldStatementsAreAbsentNotNonexistent(t *testing.T) {
 		t.Fatalf("delivered: current %s", now.Render())
 	}
 
-	t.Run("finding PROPS-F5: resource and authorship lines are unscoped", func(t *testing.T) {
-		if !strings.Contains(old.Render(), "within statements you hold") {
-			t.Skip("finding PROPS-F5: `current: <edition>` and `sole author` are printed with no scope token; the corroboration status is the only status that carries one")
+	// PROPS-F5 (decided): `current: <edition>`, `sole author`, `member (endorsed)` and a verify exit stay bare in
+	// the views' renderings; the CLI prints the view's scope once, as a footer (internal/cli.TestStatusScopeFooter).
+	// The resolver's half is the seam the footer reads: its scope, never wider than the holdings it resolved.
+	t.Run("PROPS-F5: the scope the CLI footer prints is the resolver's", func(t *testing.T) {
+		if got := w.store(nil).Scope(); got != ScopeHeld {
+			t.Fatalf("default scope %q, want %q", got, ScopeHeld)
+		}
+		if got := w.store(nil, WithScope(ScopeHub)).Scope(); got != ScopeHub {
+			t.Fatalf("hub scope %q, want %q", got, ScopeHub)
+		}
+		if strings.Contains(old.Render(), ScopeHeld) {
+			t.Fatalf("the resource rendering carries the scope itself; the footer is the CLI's (decided):\n%s", old.Render())
 		}
 	})
 }

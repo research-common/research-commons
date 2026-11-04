@@ -641,7 +641,20 @@ func publishCmd(c *Ctx) (*Obj, int, error) {
 	if digest != "" && (p.content != "" || c.Store.HasBlob(store.Digest(digest))) {
 		blobs = append(blobs, store.Digest(digest))
 	}
-	return commitUnit(c, out, "publish", sts, blobs, p.content, h)
+	if p.resource == "" {
+		return commitUnit(c, out, "publish", sts, blobs, p.content, h)
+	}
+	// the pre-pin state was resolved from the statements this store holds: the output carries the view's scope
+	return v.scopedResult(commitUnit(c, out, "publish", sts, blobs, p.content, h))
+}
+
+// scopedResult adds the view's scope footer to a command result that printed a status resolved from the
+// statements held (a pre-pin state, a task edition's readiness).
+func (v *view) scopedResult(o *Obj, code int, err error) (*Obj, int, error) {
+	if err != nil || o == nil {
+		return o, code, err
+	}
+	return v.scoped(o), code, nil
 }
 
 func prepinRefused(err error, p *pubPrep) *Problem {
@@ -806,7 +819,7 @@ func publishTaskCmd(c *Ctx) (*Obj, int, error) {
 			Next: "publish with a controller's key", Peer: why, Exit: ExitCouldNot}
 	}
 	out.set("readiness", rd)
-	return commitUnit(c, out, "publish", sts, nil, "", h)
+	return v.scopedResult(commitUnit(c, out, "publish", sts, nil, "", h))
 }
 
 // readinessWith resolves the task with the new lines added and reports the new edition's readiness: how it will

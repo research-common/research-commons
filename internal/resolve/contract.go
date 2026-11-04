@@ -2,10 +2,12 @@ package resolve
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/research-common/research-commons/internal/canon"
+	"github.com/research-common/research-commons/internal/rctime"
 )
 
 // Task contracts (claims-model note §9.1, §9.3; wire-format note §5 `contents.contract`).
@@ -207,16 +209,17 @@ const ProvisionalProfile = "provisional-task-contract-0"
 // contract whose `profile` is ProvisionalProfile, and reads:
 //
 //	beneficiary       key R
-//	eligible_issuers  list of key  } exactly one
+//	eligible_issuers  set of key   } exactly one (non-empty, sorted, duplicate-free)
 //	any_issuer        true         }
 //	counting_unit     "key" | "identity" O (absent: rc/1 default, key)
 //	coordinator       key O
-//	deadline          string O (a time value, as written)
-//	rubric            list of {id string R, text string O} O
+//	deadline          ts O (a UTC time value, wire §1.1; shape checked, kept as written, never evaluated)
+//	rubric            list of {id string R, text string O} O (ids unique)
 //	quorum            {k integer >=1 R, independence "not-required"|"required"|"self-declared-accepted" R,
 //	                   grouping {rule "all-pairs"} | {rule "reference", reference key} O,
 //	                   comparator digest O, estimand string O, test digest O} O
-//	sampling          {n integer R, unit string R, groups list of {name string, n integer} O} O
+//	                  (at most one of comparator and test; grouping only beside one of them)
+//	sampling          {n integer R, unit string R, groups list of {name string R, n integer R} O (names unique)} O
 //
 // Any malformed or unknown field makes the whole contract unread (never a partial reading).
 type ProvisionalContract struct{}
@@ -235,11 +238,17 @@ func (ProvisionalContract) Read(c *canon.Object) (*Terms, string, bool) {
 			return nil, "contract field " + k + " not in the provisional reading", false
 		}
 	}
-	t := &Terms{Profile: ProvisionalProfile, Provisional: true, Beneficiary: str(c, "beneficiary"), CountingUnit: str(c, "counting_unit"),
-		Coordinator: str(c, "coordinator"), Deadline: str(c, "deadline")}
 	bad := func(f string) (*Terms, string, bool) { return nil, "contract field " + f + " malformed", false }
-	if t.Beneficiary == "" {
+	t := &Terms{Profile: ProvisionalProfile, Provisional: true}
+	var ok bool
+	if t.Beneficiary, ok = keyMember(c, "beneficiary", true); !ok {
 		return bad("beneficiary")
+	}
+	if t.Coordinator, ok = keyMember(c, "coordinator", false); !ok {
+		return bad("coordinator")
+	}
+	if t.CountingUnit, ok = optString(c, "counting_unit"); !ok {
+		return bad("counting_unit")
 	}
 	_, hasList := c.Get("eligible_issuers")
 	av, hasAny := c.Get("any_issuer")
@@ -253,10 +262,28 @@ func (ProvisionalContract) Read(c *canon.Object) (*Terms, string, bool) {
 		t.AnyIssuer = true
 	default:
 		l, ok := strings_(c, "eligible_issuers")
-		if !ok || len(l) == 0 {
+		if !ok || len(l) == 0 || slices.ContainsFunc(l, func(k string) bool { return !reKeyForm.MatchString(k) }) {
 			return bad("eligible_issuers")
 		}
+		// a set, as controllers are (wire §1 "arrays"): sorted by the key order, no duplicates
+		for i := 1; i < len(l); i++ {
+			if canon.CompareKeys(l[i-1], l[i]) >= 0 {
+				return bad("eligible_issuers")
+			}
+		}
 		t.EligibleIssuers = l
+	}
+	// The deadline is a time value (wire §1.1), checked for shape only: it is displayed as a term and never
+	// evaluated here.
+	if v, ok := c.Get("deadline"); ok {
+		d, ok := v.(canon.String)
+		if !ok {
+			return bad("deadline")
+		}
+		if _, err := rctime.ParseUTC(string(d)); err != nil {
+			return bad("deadline")
+		}
+		t.Deadline = string(d)
 	}
 	if t.CountingUnit != "" && t.CountingUnit != CountKey && t.CountingUnit != CountIdentity {
 		return bad("counting_unit")
@@ -268,10 +295,23 @@ func (ProvisionalContract) Read(c *canon.Object) (*Terms, string, bool) {
 		}
 		for _, x := range a {
 			o, ok := x.(*canon.Object)
-			if !ok || str(o, "id") == "" {
+			if !ok {
 				return bad("rubric")
 			}
-			t.Rubric = append(t.Rubric, Criterion{ID: str(o, "id"), Text: str(o, "text")})
+			id, ok := stringMember(o, "id")
+			if !ok || id == "" {
+				return bad("rubric.id")
+			}
+			if slices.ContainsFunc(t.Rubric, func(c Criterion) bool { return c.ID == id }) {
+				return bad("rubric.id")
+			}
+			text := ""
+			if _, has := o.Get("text"); has {
+				if text, ok = stringMember(o, "text"); !ok {
+					return bad("rubric.text")
+				}
+			}
+			t.Rubric = append(t.Rubric, Criterion{ID: id, Text: text})
 		}
 	}
 	if v, ok := c.Get("quorum"); ok {
@@ -279,30 +319,135 @@ func (ProvisionalContract) Read(c *canon.Object) (*Terms, string, bool) {
 		if !ok {
 			return bad("quorum")
 		}
-		q := &Quorum{K: intOf(o, "k"), Independence: str(o, "independence"), Comparator: str(o, "comparator"), Estimand: str(o, "estimand"), Test: str(o, "test")}
-		if q.K < 1 || !slices.Contains([]string{IndependenceNotRequired, IndependenceRequired, IndependenceSelfDeclared}, q.Independence) {
-			return bad("quorum")
+		q := &Quorum{}
+		k, ok := o.Get("k")
+		if n, isInt := k.(canon.Int); !ok || !isInt || n < 1 {
+			return bad("quorum.k")
 		}
-		if g := object(o, "grouping"); g != nil {
-			q.Grouping, q.Reference = str(g, "rule"), str(g, "reference")
-			if (q.Grouping != GroupAllPairs && q.Grouping != GroupReference) || (q.Grouping == GroupReference) != (q.Reference != "") {
+		q.K = intOf(o, "k")
+		if q.Independence, ok = optString(o, "independence"); !ok ||
+			!slices.Contains([]string{IndependenceNotRequired, IndependenceRequired, IndependenceSelfDeclared}, q.Independence) {
+			return bad("quorum.independence")
+		}
+		if q.Comparator, ok = digestMember(o, "comparator"); !ok {
+			return bad("quorum.comparator")
+		}
+		if q.Test, ok = digestMember(o, "test"); !ok {
+			return bad("quorum.test")
+		}
+		if q.Estimand, ok = optString(o, "estimand"); !ok {
+			return bad("quorum.estimand")
+		}
+		// A pinned test is the comparator; the reading never picks one of two silently.
+		if q.Comparator != "" && q.Test != "" {
+			return bad("quorum.test")
+		}
+		g, present, ok := memberObject(o, "grouping")
+		if !ok {
+			return bad("quorum.grouping")
+		}
+		if present {
+			if q.Comparator == "" && q.Test == "" {
+				return bad("quorum.grouping")
+			}
+			var okRule, okRef bool
+			q.Grouping, okRule = optString(g, "rule")
+			q.Reference, okRef = keyMember(g, "reference", false)
+			if !okRule || !okRef || (q.Grouping != GroupAllPairs && q.Grouping != GroupReference) || (q.Grouping == GroupReference) != (q.Reference != "") {
 				return bad("quorum.grouping")
 			}
 		}
 		t.Quorum = q
 	}
-	if o := object(c, "sampling"); o != nil {
+	o, present, ok := memberObject(c, "sampling")
+	if !ok {
+		return bad("sampling")
+	}
+	if present {
 		s := &DeclaredSampling{N: intOf(o, "n"), Unit: str(o, "unit")}
+		if nv, _ := o.Get("n"); !isInt(nv) {
+			return bad("sampling.n")
+		}
+		if _, ok := stringMember(o, "unit"); !ok {
+			return bad("sampling.unit")
+		}
 		if v, ok := o.Get("groups"); ok {
-			a, _ := v.(canon.Array)
+			a, ok := v.(canon.Array)
+			if !ok {
+				return bad("sampling.groups")
+			}
 			for _, x := range a {
-				g, _ := x.(*canon.Object)
-				s.Groups = append(s.Groups, SamplingGroup{Name: str(g, "name"), N: intOf(g, "n")})
+				g, ok := x.(*canon.Object)
+				if !ok {
+					return bad("sampling.groups")
+				}
+				name, ok := stringMember(g, "name")
+				if !ok || slices.ContainsFunc(s.Groups, func(h SamplingGroup) bool { return h.Name == name }) {
+					return bad("sampling.groups.name")
+				}
+				nv, _ := g.Get("n")
+				n, ok := nv.(canon.Int)
+				if !ok {
+					return bad("sampling.groups.n")
+				}
+				s.Groups = append(s.Groups, SamplingGroup{Name: name, N: int(n)})
 			}
 		}
 		t.Sampling = s
 	}
 	return t, "", true
+}
+
+// memberObject reads member k of o strictly: present is false when the member is absent; ok is false when it
+// is present and not an object (a present member of the wrong type is malformed, never absent).
+func memberObject(o *canon.Object, k string) (x *canon.Object, present, ok bool) {
+	v, present := o.Get(k)
+	if !present {
+		return nil, false, true
+	}
+	x, ok = v.(*canon.Object)
+	return x, true, ok
+}
+
+// optString reads an optional string member: "" and ok when absent; ok is false when present and not a string.
+func optString(o *canon.Object, k string) (string, bool) {
+	if _, present := o.Get(k); !present {
+		return "", true
+	}
+	return stringMember(o, k)
+}
+
+// reKeyForm is the key shape of wire §5 (`key`): ed25519: + 64 lowercase hex, or 0x + 40 lowercase hex.
+var reKeyForm = regexp.MustCompile(`^(0x[0-9a-f]{40}|ed25519:[0-9a-f]{64})$`)
+
+// keyMember reads a key member; absent is ok unless required. A present non-key is malformed.
+func keyMember(o *canon.Object, k string, required bool) (string, bool) {
+	if _, present := o.Get(k); !present {
+		return "", !required
+	}
+	s, ok := stringMember(o, k)
+	return s, ok && reKeyForm.MatchString(s)
+}
+
+// digestMember reads an optional digest member (wire §5 `digest`). A present non-digest is malformed.
+func digestMember(o *canon.Object, k string) (string, bool) {
+	if _, present := o.Get(k); !present {
+		return "", true
+	}
+	s, ok := stringMember(o, k)
+	return s, ok && reDigestForm.MatchString(s)
+}
+
+func isInt(v canon.Value) bool { _, ok := v.(canon.Int); return ok }
+
+// stringMember reads member k of o as a string; ok is false when it is absent or not a string.
+func stringMember(o *canon.Object, k string) (string, bool) {
+	v, ok := o.Get(k)
+	if !ok {
+		return "", false
+	}
+	s, ok := v.(canon.String)
+	return string(s), ok
 }
 
 func intOf(o *canon.Object, k string) int {
