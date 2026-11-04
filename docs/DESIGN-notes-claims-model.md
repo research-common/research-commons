@@ -207,7 +207,9 @@ read from the key's own log (wire-format note §7). It is in force once it chain
   counts only where it makes things stricter: a hard reason after a soft one, or an earlier `last_good`.
 - **Rotation retires the old key** the way a `superseded` revocation does: the old key's lines in the
   rotation's history count, and its lines outside it count toward nothing (C-core-127b). The successor starts
-  its own log. Controller roles name keys and do not follow a rotation (§8): a controller that rotates first
+  its own log. A successor named by a rotation inherits no claims: its predecessor's `authored` stay the
+  predecessor's; a reader that wants to follow the successor does so through a reader-policy selection
+  (`explain` names a claimant that is such a successor). Controller roles name keys and do not follow a rotation (§8): a controller that rotates first
   gets an edition naming the successor, under the resource's rule.
 - **Editions that lose their approvals.** An edition whose counted approvals fall below its rule because a key
   event stopped counting an approver's line is shown `contested`, naming the key event, and so is every
@@ -385,7 +387,9 @@ Rules:
   What the rule buys:
   - *Referent status by rule.* `provisional (SF; final at RF)` while unmet, `final` once met, `revised` when
     the bytes changed before finality, `not canonical` when they changed after it (a deep reorg, a dispute
-    run). The earlier observation stays true of what it pinned in every case. "Changed" compares captures by
+    run). `final` needs the reader's own re-check at a state that meets the rule; when only the observer's
+    asserted `state_at_capture` meets it, the status is `final (as captured, not re-checked)` (I4). The
+    earlier observation stays true of what it pinned in every case. "Changed" compares captures by
     their state in the rule's order, never by `capture.at`, which is the observer's word: a capture at a
     later state with different bytes is a revision, and two captures at the same state with different bytes
     contradict each other (C-core-40). States that the rule cannot order are not comparable.
@@ -439,6 +443,12 @@ the tool does not decide which side is wrong. A counted `contradicts` counts aga
 each observation in its comparison data (the result's inputs other than the original); a `supports` counts for
 the original only, because a check against data says nothing about the data (C-core-51).
 
+In `rc/1` the counting unit is the signing key; every count names it, and keys are not people (§9.3). A reader
+policy may choose another unit once a profile defines one. What a reader "trusts" is its reader policy's answer
+for the purpose at hand (`attestation`, `corroboration` or `admission`; on the next-format line, `docs/READER-POLICY.md`): a purpose the
+policy does not configure reads `not configured`, never trusted, and the reader keeps its no-policy behaviour
+for it (here: every counted statement is counted).
+
 #### 5.3.3 Capture evidence
 
 No mechanism proves that an observer saw what they claim. Each level of capture evidence changes *whose word*
@@ -460,8 +470,9 @@ stand for one person.
 
 Reputation is a projection a reader chooses: for example, an observer's corroboration record against sources
 unrelated to it, over a window, under rules the reader picks. The tool computes projections on demand and ships
-none as defaults. A well-corroborated track record legitimately earns weight for the reading nobody else could
-have taken. That is the honest place for "trust this observer" to come from.
+none as defaults. A reputation record is per signing key, the counting unit of §5.3.2. A well-corroborated
+track record legitimately earns weight for the reading nobody else could have taken. That is the honest place
+for "trust this observer" to come from.
 
 ## 6. Curation and hubs
 
@@ -512,11 +523,11 @@ the source.
 | availability | redistribution permission and byte obtainability, separately |
 | replication | `bytes` (public deterministic source named) · `protocol` (re-measurable, never the same bytes; method named) · `none` · undeclared (#1, #7) |
 | sampling | n with its unit, per-group n where the design has arms, dispersion, window (#2) |
-| shelf life | publisher-declared validity; age shown at read time (#4) |
+| shelf life | publisher-declared validity; age shown at read time (#4). The age is counted from a verified bound (§10: the header time of the verified anchor's block, labelled miner-reported) to the reader's evaluation time, which is part of the answer's time context (I14); with no verified anchor, only a local or self-declared time, the age reads `unknown`, never a number. The age is display only, never an ordering key. |
 | capture evidence | §5.3.3 level, verified or not |
 | corroboration | §5.3.2 status, scoped |
 | selection | curated · rule-based · completeness claim · undeclared (§6). Missing means undeclared. |
-| referent status | still canonical · `provisional` · `final` · `revised` · `not canonical` · source still available / unknown · `unpinned` (a field its class requires, or a `system` member its method edition declares, is missing) · `finality unchecked` (a declared rule the reader has no source profile to evaluate) · `pinned` (phenomenon and method classes, whose referent has no re-check) (§5.3.1) |
+| referent status | still canonical · `provisional` · `final` · `final (as captured, not re-checked)` (the observer's asserted state meets the rule; no re-check yet) · `revised` · `not canonical` · source still available / unknown · `unpinned` (a field its class requires, or a `system` member its method edition declares, is missing) · `finality unchecked` (a declared rule the reader has no source profile to evaluate) · `pinned` (phenomenon and method classes, whose referent has no re-check) (§5.3.1) |
 
 | pre-registration | `pre-registered <task edition> (<bound quality>)` · `exploratory` · undeclared (#3). Missing means undeclared, not exploratory. |
 | finality | §5.3.1 rule and rule provenance; state at capture |
@@ -526,9 +537,11 @@ the tool never assumes one silently.
 
 **Declared beside computed.** Where a declaration can be checked against the statements a reader holds, the
 tool shows both and flags disagreement; it never substitutes one for the other. A synthesis author's declared
-sampling n beside the n computed from its inputs (with denominators); a contract's declared n beside the
-delivered sampling disclosure (§9.4); a series' declared `frozen_before` beside its members' finality (§8); an
-asserted finality state beside a re-check. A derived result carries each disclosure as a scoped summary
+sampling n beside the n computed from its inputs (the sum of the direct inputs' declared n when they share one
+unit, with the denominator: k of the N direct inputs declare one, `computed from k of N inputs`; across units it
+is not computed, and the reason is shown); a contract's declared n beside the delivered sampling disclosure
+(§9.4); a series' declared `frozen_before` beside its members' finality (§8); an asserted finality state beside
+a re-check. A derived result carries each disclosure as a scoped summary
 ("rests on 3 observations: 2 final, 1 provisional; 1 contradicted within statements you hold"), computed as
 the weakest replication, the shortest shelf life, the per-input n, and the count of final captures, with
 `explain` (§13) for the detail.
@@ -541,6 +554,12 @@ a commitment proves possession by T, not independence (§9.3), and a commitment 
 seed, a one-line rule) is enumerable against its hash, so the author should include a nonce. The tool cannot
 tell low-entropy content from high, so this is guidance, not a check: `publish` with `withheld` warns when
 the content is shorter than a documented threshold and proceeds (a heuristic, documented as one, I11).
+The threshold is 64 bytes: room for a 128-bit nonce written as hex (32 bytes) beside a short
+payload. Size stands in for entropy and is a poor proxy in both directions (a 10 KB file of one repeated
+guessable value is enumerable; 16 random bytes are not), so the warning names the threshold and the risk and
+is never recorded in the statement. A withheld artifact reads `revealed` only once a `holds` exists **and**
+the reader holds the bytes re-hashed to the statement's digest; a `holds` alone is its signer's word, and the
+author's own copy with no `holds` is not a reveal.
 
 ## 8. Resources: collections, tasks, series
 
@@ -780,9 +799,10 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
   `unchecked`, versus run where the pinned environment exists). Exit 0 means the requested operation succeeded,
   not that everything it referenced is valid.
 - **`verify` of an observation** checks its signature and its pins: exit 0 when they hold, exit 3
-  when the referent is `unpinned` or its finality rule cannot be evaluated. Corroboration status and capture
-  evidence are disclosures (I6) shown beside it and never change the exit, so no exit rests on a capture
-  level the reader did not verify (C-core-52).
+  when the referent is `unpinned` or its finality rule cannot be evaluated, or, for a method-class observation,
+  the method edition it pins is not held as authorized (whether it declares `system_keys` cannot be read).
+  Corroboration status and capture evidence are disclosures (I6) shown beside it and never change the exit,
+  so no exit rests on a capture level the reader did not verify (C-core-52).
 - **`verify` of a derived artifact needs a comparison.** A derived artifact claims that its workflow on its
   inputs produced its bytes, so exit 0 needs a T0 or T1 comparison (a second run in its group, or the
   reader's own re-run inside `verify`), or, under `protocol` with a declared comparator, byte-identical
@@ -800,12 +820,13 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
   limits partway through (a traversal depth, C-core-131) and a check the gate's policy requires that comes out
   `unchecked`; and 2 as for every command.
 - **Exit 2: the command did not start.** On every command, 2 means the invocation or the reader's own
-  configuration could not be acted on: an unknown option, a malformed argument (an id that is not an id), a
-  policy or configuration file that is present but unreadable or unparseable. Arguments and configuration are
-  validated before any work starts, so exit 2 never accompanies partial results and nothing is committed; the
-  error is still the problem-details object below, with `committed` false. Conditions about a particular
-  artifact or check are never 2, even when they stem from configuration: an optional capability that is
-  simply not configured (no Bitcoin backend, say) is a state token and exits 3. No other condition exits 2,
+  configuration could not be acted on: an unknown option, a malformed argument (an id that is not an id, or
+  an alias that matches no held object or several), a policy or configuration file that is present but
+  unreadable or unparseable. Arguments and configuration are validated before any work starts, so exit 2
+  never accompanies partial results and nothing is committed; the error is still the problem-details object
+  below, with `committed` false. Conditions about a particular artifact or check are never 2, even when they
+  stem from configuration: an optional capability that is simply not configured (no Bitcoin backend, say) is a
+  state token and exits 3. No other condition exits 2,
   so exit 1 stays reserved for a completed check that disagreed. An explicit request for help exits 0.
 - **Explain.** Every status can be expanded to the statements, policy and checks behind it (I14).
 - **Dry runs** state their side effects: "no registry change" differs from "no fetch, no cache, no quarantine".

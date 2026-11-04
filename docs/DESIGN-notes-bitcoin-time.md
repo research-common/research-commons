@@ -371,7 +371,9 @@ Receipts, policy and the optional header database live in receiver-local state *
 surface**: for a git-backed hub, under the git directory resolved through Git (linked worktrees work); for any
 other root, under an explicitly configured state directory. Without one, the state is `backend-unconfigured`
 and every bound stays `local` (C-btc-06). Receipts are never written into blobs or statements, never pulled
-or pushed, and a received file shaped like a receipt is inert.
+or pushed, and a received file shaped like a receipt is inert. Receipts are authenticated with a secret local to
+the state directory and never transported; a receipt that fails it (copied from another reader or written by
+anything else) is inert. The secret signs nothing anyone else reads.
 
 Files are permission-restricted; writes are transactional or atomic-replace with locking. Verifying requires
 no signing key: a reader with no key of its own verifies proofs.
@@ -380,7 +382,8 @@ no signing key: a reader with no key of its own verifies proofs.
 
 Hub instance · `anchors` statement id and signer · covered head · proof blob hash · stamped digest · network
 and genesis · block height, display hash and raw-header digest · provider and bootstrap identity · validation
-mode · verifier version · policy fingerprint · chain snapshot at verification · diagnostics.
+mode · verifier version · policy fingerprint · chain snapshot at verification · diagnostics. The hub instance
+is the resolved git common directory for a git-backed hub, else the configured root.
 
 All fingerprints are content hashes (I14, C-core-129). Proof bytes are read once and the same bytes are used
 for parsing and hashing, so modification during verification cannot yield a receipt for other bytes.
@@ -393,12 +396,16 @@ A stored `verified` row is not authority. Before a read emits `bitcoin`, the rea
 2. verifier, provider and policy fingerprints are compatible;
 3. the chain view is ready and fresh under policy;
 4. the recorded block hash is still active at its height with sufficient confirmations;
-5. no outstanding chain-epoch invalidation.
+5. the chain has only been extended since verification: the tip recorded in the receipt is still on the
+   accepted chain (any reorganisation, rollback or unresolved tie above it re-selects the attestation by local
+   re-evaluation).
 
 The immutable proof-to-header binding is cached separately from mutable active-chain eligibility, so a tip
 extension re-checks only 3–5, while a reorg can never let a cached branch survive. An orphaned block loses
 live quality immediately; if the proof holds another active attestation, it is selected only after local
-re-evaluation. A corrupt, copied, foreign-hub or unknown-version cache is downgraded, never trusted.
+re-evaluation. A corrupt, copied, foreign-hub or unknown-version cache is downgraded, never trusted. Only a
+verification that selected an attestation on the accepted chain writes a receipt: every other state (pending,
+orphaned, an invalid proof) is evaluated cold on each read.
 
 ### 9.4 Offline behaviour
 
