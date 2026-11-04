@@ -43,8 +43,10 @@ type Env struct {
 // Ctx is one invocation as a command's Run sees it: arguments and flags already validated, the store (when
 // the command reads one) discovered, checked and open.
 type Ctx struct {
-	Cmd    *Command
-	Args   map[string]string
+	Cmd  *Command
+	Args map[string]string
+	// Many holds every value of a variadic argument, in order (Args holds the first).
+	Many   map[string][]string
 	Flags  map[string]string // present flags; a boolean flag maps to ""
 	JSON   bool
 	Root   string
@@ -239,10 +241,10 @@ func dispatch(argv []string, env *Env) (*Obj, int, error) {
 	if _, ok := p.flags["version"]; ok {
 		return versionObj(env.Build), ExitOK, nil
 	}
-	ctx := &Ctx{Cmd: cmd, Args: map[string]string{}, Flags: p.flags, Env: env}
+	ctx := &Ctx{Cmd: cmd, Args: map[string]string{}, Many: map[string][]string{}, Flags: p.flags, Env: env}
 	_, ctx.JSON = p.flags["json"]
 	pos := p.words[n:]
-	if prob := bindArgs(cmd, pos, ctx.Args); prob != nil {
+	if prob := bindArgs(cmd, pos, ctx.Args, ctx.Many); prob != nil {
 		return nil, 0, prob
 	}
 	if cmd.Prepare != nil {
@@ -293,8 +295,9 @@ func dispatch(argv []string, env *Env) (*Obj, int, error) {
 	return cmd.Run(ctx)
 }
 
-func bindArgs(cmd *Command, pos []string, into map[string]string) *Problem {
-	if len(pos) > len(cmd.Args) {
+func bindArgs(cmd *Command, pos []string, into map[string]string, many map[string][]string) *Problem {
+	variadic := len(cmd.Args) > 0 && cmd.Args[len(cmd.Args)-1].Variadic
+	if len(pos) > len(cmd.Args) && !variadic {
 		return usage("unexpected-argument", "too many arguments", "nothing was done", "invocation",
 			"see commons help "+cmd.Name, pos[len(cmd.Args)])
 	}
@@ -306,24 +309,40 @@ func bindArgs(cmd *Command, pos []string, into map[string]string) *Problem {
 			return usage("missing-argument", "a required argument is missing", "nothing was done",
 				"argument "+a.Name, "see commons help "+cmd.Name, "")
 		}
-		v := pos[i]
-		ok := true
-		want := ""
-		switch a.Shape {
-		case ShapeRef:
-			// a display alias has the shape of a ref too; it is resolved against the store once the store is known
-			// (resolveAliases), before any work starts
-			ok, want = isDigest(v) || isID(v) || store.IsAlias(v), "a content digest (sha256: + 64 lowercase hex), a statement id (64 lowercase hex), or a display alias of either (12 lowercase hex, optionally after sha256:)"
-		case ShapeDigest:
-			ok, want = isDigest(v), "a content digest (sha256: + 64 lowercase hex)"
-		case ShapeID:
-			ok, want = isID(v), "a statement id (64 lowercase hex)"
+		vals := pos[i : i+1]
+		if a.Variadic {
+			vals = pos[i:]
 		}
-		if !ok {
-			return usage("malformed-argument", "an argument has the wrong shape",
-				"the argument must be "+want+"; nothing was done", "argument "+a.Name, "give the full digest or id", v)
+		for _, v := range vals {
+			if prob := checkShape(a, v); prob != nil {
+				return prob
+			}
 		}
-		into[a.Name] = v
+		into[a.Name] = vals[0]
+		if a.Variadic {
+			many[a.Name] = slices.Clone(vals)
+		}
+	}
+	return nil
+}
+
+// checkShape checks one positional value against its argument's shape.
+func checkShape(a Arg, v string) *Problem {
+	ok := true
+	want := ""
+	switch a.Shape {
+	case ShapeRef:
+		// a display alias has the shape of a ref too; it is resolved against the store once the store is known
+		// (resolveAliases), before any work starts
+		ok, want = isDigest(v) || isID(v) || store.IsAlias(v), "a content digest (sha256: + 64 lowercase hex), a statement id (64 lowercase hex), or a display alias of either (12 lowercase hex, optionally after sha256:)"
+	case ShapeDigest:
+		ok, want = isDigest(v), "a content digest (sha256: + 64 lowercase hex)"
+	case ShapeID:
+		ok, want = isID(v), "a statement id (64 lowercase hex)"
+	}
+	if !ok {
+		return usage("malformed-argument", "an argument has the wrong shape",
+			"the argument must be "+want+"; nothing was done", "argument "+a.Name, "give the full digest or id", v)
 	}
 	return nil
 }
@@ -336,31 +355,56 @@ func bindArgs(cmd *Command, pos []string, into map[string]string) *Problem {
 // looked up here: it is answered about whether or not anything is held under it.
 func resolveAliases(cmd *Command, c *Ctx) *Problem {
 	for _, a := range cmd.Args {
+		if a.Variadic && a.Shape == ShapeRef {
+			vals := c.Many[a.Name]
+			for i, v := range vals {
+				if !store.IsAlias(v) {
+					continue
+				}
+				full, prob := resolveAlias(c, a, v)
+				if prob != nil {
+					return prob
+				}
+				vals[i] = full
+			}
+			if len(vals) > 0 {
+				c.Args[a.Name] = vals[0]
+			}
+			continue
+		}
 		v, ok := c.Args[a.Name]
 		if !ok || a.Shape != ShapeRef || !store.IsAlias(v) {
 			continue
 		}
-		cands, err := store.AliasCandidates(c.Root, v)
-		if err != nil {
-			p := usage("alias-unreadable", "the store could not be searched for the alias", "the alias was not resolved; nothing was done",
-				"argument "+a.Name, "give the full digest or id", err.Error())
-			p.Class = refusal.Operational
-			return p
+		full, prob := resolveAlias(c, a, v)
+		if prob != nil {
+			return prob
 		}
-		switch len(cands) {
-		case 1:
-			c.Args[a.Name] = cands[0]
-		case 0:
-			return usage("alias-not-found", "no held object matches the alias",
-				"no blob or statement held in this store has a full hash starting with the alias; nothing was done",
-				"argument "+a.Name, "give the full digest or id (a digest no held blob has is still answered in full)", v)
-		default:
-			return usage("ambiguous-alias", "the alias matches more than one held object",
-				"candidates: "+strings.Join(cands, ", ")+"; none was selected and nothing was done",
-				"argument "+a.Name, "give the full digest or id of the one you mean", v)
-		}
+		c.Args[a.Name] = full
 	}
 	return nil
+}
+
+// resolveAlias is one alias of resolveAliases: the one full hash it names, or the problem.
+func resolveAlias(c *Ctx, a Arg, v string) (string, *Problem) {
+	cands, err := store.AliasCandidates(c.Root, v)
+	if err != nil {
+		p := usage("alias-unreadable", "the store could not be searched for the alias", "the alias was not resolved; nothing was done",
+			"argument "+a.Name, "give the full digest or id", err.Error())
+		p.Class = refusal.Operational
+		return "", p
+	}
+	switch len(cands) {
+	case 1:
+		return cands[0], nil
+	case 0:
+		return "", usage("alias-not-found", "no held object matches the alias",
+			"no blob or statement held in this store has a full hash starting with the alias; nothing was done",
+			"argument "+a.Name, "give the full digest or id (a digest no held blob has is still answered in full)", v)
+	}
+	return "", usage("ambiguous-alias", "the alias matches more than one held object",
+		"candidates: "+strings.Join(cands, ", ")+"; none was selected and nothing was done",
+		"argument "+a.Name, "give the full digest or id of the one you mean", v)
 }
 
 // discover finds the store: --store, else $COMMONS_STORE, else the nearest ancestor of the working directory
