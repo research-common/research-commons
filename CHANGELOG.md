@@ -9,8 +9,10 @@ manifest/ledger format version — `commons --version` prints both).
 
 ## [Unreleased]
 
-Work toward `0.5.0-alpha.1`, the first release of the next format. Not wired to a command yet; the alpha CLI is
-unchanged on this branch.
+Work toward `0.5.0-alpha.1`, the first release of the next format. The Go implementation is wired to a command,
+`cmd/commons` (`init`, `key new`/`key show`, `publish`, `publish task`, `pull`, `show`, `verify`, `explain`, `list`,
+`status`, `fsck`, `gc`, `hub check`; `commons help` lists them). The alpha CLI under `bin/` and `lib/` is unchanged
+on this branch.
 
 ### Added
 - **Go implementation, wire layer** (`internal/`, see `internal/README.md`): strict JSON reader and RFC 8785
