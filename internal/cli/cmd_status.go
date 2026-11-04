@@ -95,15 +95,16 @@ func limitsTable(p *Policy) listV {
 		unit string
 		what string
 	}{
-		{store.LimitMemberBytes, sl.MemberBytes, "bytes", "one archive member read by a scan"},
-		{store.LimitTotalBytes, sl.TotalBytes, "bytes", "all members read in one scan"},
-		{store.LimitMembers, int64(sl.Members), "count", "members listed in one archive"},
-		{store.LimitDepth, int64(sl.Depth), "levels", "archive nesting examined"},
+		{store.LimitMemberBytes, sl.MemberBytes, "bytes", "one archive member read by a content scan (a pulled archive's members are bounded by blob_bytes, as a tree's files are)"},
+		{store.LimitTotalBytes, sl.TotalBytes, "bytes", "all members read in one scan, or in one pulled archive"},
+		{store.LimitMembers, int64(sl.Members), "count", "members listed in one archive (a scanned or a pulled one)"},
+		{store.LimitDepth, int64(sl.Depth), "levels", "archive nesting examined by a content scan (a pull never descends a nested archive)"},
 		{store.LimitPathBytes, int64(sl.PathBytes), "bytes", "one member name"},
 		{store.LimitRatio, sl.ExpansionRatio, "ratio", "uncompressed bytes per compressed byte"},
 	} {
 		l = append(l, row("scan."+r.n, r.v, r.unit, "tool default", r.what))
 	}
+	l = append(l, row("archive_bytes", store.MaxArchiveFileBytes(sl), "bytes", "tool default", "one pulled archive file: scan.total_bytes plus per-member overhead for scan.members"))
 	l = append(l,
 		row("fetch_bytes", store.DefaultMaxFetchBytes, "bytes", "tool default", "a fetch with no declared size"),
 		row("gc_grace", int64(store.DefaultGrace.Seconds()), "seconds", "tool default", "how long an unreferenced blob is kept after install or reuse (gc --grace overrides for one run)"),
