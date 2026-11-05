@@ -195,6 +195,8 @@ read from the key's own log (wire-format note §7). It is in force once it chain
   are still kept, shown and attributed to the key (I3); they grant no priority, approval, quorum or settlement.
   A revocation forked low therefore cuts every line of the key above its fork point. That is deliberate: the holder of a
   stolen key and its owner sign alike, so the rule lets either one shrink what counts and neither one widen it.
+  It cuts both ways: a key event the thief signs below the owner's latest line cuts that line, and a later hard
+  revocation by the owner cannot restore it; only lines below the fork point count (C-core-127c).
 - **Hard and soft.** `superseded` and `cessation_of_operation` are soft: the key retired, and its history
   counts. Every other reason is hard, including `key_compromise`, an undocumented token and a value a later
   revision adds (C-core-143c). Under a hard reason only the lines in the history of `last_good` (that line
