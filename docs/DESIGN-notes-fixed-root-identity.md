@@ -3,7 +3,8 @@
 **Status: review candidate; not enabled in the production reader or writer.**
 This document selects one wire proposal, `fixed-root-v1` on **`rc/2`**, rather than
 changing `rc/1` fields through a critical-extension handler. It does not change
-`wire.Major`, the current release version, old design notes, or any conformance claim.
+`wire.Major`, the current release version, old design notes, or any existing conformance
+case; its own cases (§10) form a separate profile table.
 The validation harness is test-only. It checks syntax and selected cryptographic and
 compatibility properties, **not end-to-end identity authority**.
 
@@ -263,6 +264,8 @@ and descendants after it are excluded. A later wider cut or root merge never reo
 A new grant G2 cannot relabel bytes signed under G1. All conflicts and uncertainties
 remain in the explanation. Cut monotonicity holds only while grants/root state and
 other evidence are fixed; it is not a global theorem about adding arbitrary evidence.
+A cut applies wherever it sits on I's root lineage; it need not descend from the grant
+it names (this is what lets a cut clear a root fork).
 
 ### 4.1 Deliberate worker self-revocation exception
 
@@ -525,9 +528,11 @@ Files in this candidate:
   labels, not actual referents; example signer strings are not proven public keys.
   `accept:true` means syntax/local constraints only, **never valid signed wire or
   eligible authority**. The task contract example is explicitly unimplemented.
-* `fixed-root-identity.coverage.json`: all 45 provisional scenario handles, vector/test
-  links and exact remaining model/integration obligations. A linked shape check does
-  not mean the scenario is covered. These are not C-core claims or registered ids.
+* `fixed-root-identity.coverage.json`: the 45 scenario handles (ID-01 … ID-45), each with
+  its registered case id (§10), vector/test links and the exact remaining model/integration
+  obligations. A linked shape check does not mean the scenario is covered. The handles are
+  registered conformance cases `C-id-01` … `C-id-45` (§10); the file's per-case status is
+  checked against the harness by a test, so it cannot drift.
 * `internal/wire/fixed_root_identity_profile_test.go`: isolated candidate validation,
   restricted local JSON Schema interpreter and real synthetic Ed25519/EIP-191 tests.
   It reuses the existing JCS, PAE, signature verifier, time and base-schema functions.
@@ -573,3 +578,61 @@ transport/explanations and snapshot digest; deterministic evaluation caps; diffe
 and full end-to-end signed authority tests; detached signing packages/connectors and
 custody/hardware usability drills. No writer enablement, release, deployment, live keys
 or devices are implied by these artifacts.
+
+## 10. Conformance cases
+
+The 45 scenario handles of §9 are registered conformance cases, one to one: handle `ID-NN` is case `C-id-NN`.
+The conformance harness reads them from this table, like the bitcoin-time profile's supplementary cases. They are
+cases **of this candidate profile**: while the profile is not active (no writer, no resolver consumer, `wire.Major`
+1) a case can be checked only at the layers that exist (the rc/2 reader, the admission adapter and the reference
+model), so most are partial. A case is covered only when its whole required outcome is checked by a signed,
+end-to-end test that does not depend on a consumer that does not exist yet. A schema vector is a shape check, not
+a scenario.
+
+| Id | Profile | Scenario | Required outcome |
+|---|---|---|---|
+| C-id-01 | §2.1, §2.4 (handle ID-01) | Ordinary bare-key corpus | A corpus of rc/1 bare-key statements only reads identically with and without the dual-major reader: same ids, statuses and every resolver answer. |
+| C-id-02 | §3, §4 (handle ID-02) | I / D / G / opted-in statement | An rc/2 statement with actor I/G, signed by K, chained to D, in G's scope, with no cut: `eligible`, basis naming I, G, D and the root lineage. |
+| C-id-03 | §3, §4 (handle ID-03) | Rival root/delegate inception | A rival seq-0 inception by R (or by K) is a different lineage: a grant on it, or a G pinning the wrong D, never authorizes; `denied` naming the lineage. |
+| C-id-04 | §4 (handle ID-04) | Grant alone cannot attribute raw statements | Issuing G does not attribute K's earlier or later bare-key statements to I: those read `no_identity_actor` for identity, unchanged for bare-key use. |
+| C-id-05 | §2.3, §3, §4 (handle ID-05) | Wrong signer / I / G / self-grant | Actor statement signed by a key other than G's delegate, a grant not signed by I's root, or a grant whose delegate is R: `denied` with the named reason. |
+| C-id-06 | §4 (handle ID-06) | One key with grants for multiple identities | K holds grants from I and J: each statement acts for exactly the actor it names; a J statement never affects I's answers and vice versa. |
+| C-id-07 | §3, §7 (handle ID-07) | Missing dependencies or unsupported root operation | Missing I, G, D or an ancestor, or an authenticated in-lineage root event outside the closed vocabulary: `unknown`, naming each missing or unsupported id; never `eligible`. |
+| C-id-08 | §4, §5.1 (handle ID-08) | Known cut with missing ancestry or prefix | A held root cut for G whose last-good L or ancestry is missing: G's acts read `unknown` naming L; the cut is listed as relevant. |
+| C-id-09 | §1, §4 (handle ID-09) | Stale bundle omits entire cut | A bundle that omits a cut entirely: acts read `eligible` relative to held evidence; freshness is `not_established`; no claim that no cut exists. |
+| C-id-10 | §4.1 (handle ID-10) | Worker self-revoke / rotate | K's own rc/1 revoke/rotate does not close G: identity acts under G stay `eligible` with a `delegate_self_event` warning; K's bare-key status follows the legacy rules. |
+| C-id-11 | §4 (handle ID-11) | Cut prefix excludes descendants/siblings | A cut at L keeps exactly L's inclusive prev+merges closure; descendants and siblings of L read `denied` (`cut_excluded`); other grants are unaffected. |
+| C-id-12 | §4 (handle ID-12) | Multiple cuts / wider cuts / null cut | Several valid cuts of G intersect (never newest/widest/union); `last_good:null` excludes everything; a later wider cut never reopens G; result is permutation-invariant. |
+| C-id-13 | §3, §4 (handle ID-13) | Malformed/unsupported relevant root cut | An authenticated root cut that is malformed, has a bad last-good, or names G under the wrong identity: denies G (never ignored); an unreadable grant on a cut makes every grant of I `unknown`. |
+| C-id-14 | §4 (handle ID-14) | New grant cannot relabel old bytes | A new grant G2 cannot relabel bytes signed under G1: an act signed with actor G1 is judged under G1 only, and re-signing would be a new statement. |
+| C-id-15 | §4, §7 (handle ID-15) | No cross-identity or raw-history interference | Adding evidence about another identity, or bare-key history of any key, never changes any answer for I. |
+| C-id-16 | §3 (handle ID-16) | Independent root-fork grants coexist | Grants issued on two root forks of I both stand; a later root merge never un-cuts a cut grant. |
+| C-id-17 | §3 (handle ID-17) | Root events in correct versus rival lineage | A valid rc/1 revoke/rotate placed on I's lineage by its prev chain retires I (`root_retired`) whatever its merges; the same event on a proved rival inception has no effect; unplaceable reads `unknown`. |
+| C-id-18 | §1, §3 (handle ID-18) | Root lost but public evidence held | With the root's private key lost, held public evidence evaluates exactly as before; nothing depends on key availability. |
+| C-id-19 | §3 (handle ID-19) | Closed permissions and exact targets | Permissions are closed: kind and target must match one complete entry; an incidental target, a merged pair of entries or an unknown kind never widens scope; an unknown kind affects its own grant only. |
+| C-id-20 | §3, §5.1 (handle ID-20) | Publish without amend permission | A grant with `amend:false` lets K publish `authored` in scope but an act carrying `amends` reads `denied` (scope). |
+| C-id-21 | §5.1 (handle ID-21) | Explicit cross-key concurrent amendments | Two eligible cross-key amendments of one claim with no amendment between them: the claim view is `contested`, both listed; no sequence, arrival or timestamp tiebreak. |
+| C-id-22 | §5.1 (handle ID-22) | Wrong principal/content or missing amendment target | An amendment naming a target of another principal, another content digest, or a missing target: no amendment applies; missing target makes the current view `unknown`, wrong principal/content is `denied`. |
+| C-id-23 | §4, §4.1 (handle ID-23) | Cut preserves claim but loses anchor | A cut that excludes K's anchor but preserves the claim: claim authority survives; the time bound from that anchor is lost and reported separately. |
+| C-id-24 | §2.2, §5.2 (handle ID-24) | Per-signature actors, one edition body | Approvals of one rc/2 edition by different signers with different actors share one edition id; each counts once for the subject its signature names. |
+| C-id-25 | §5.2 (handle ID-25) | Two delegates of one I count once | Two delegates of I approving one edition fill one identity slot, not two. |
+| C-id-26 | §5.2 (handle ID-26) | Missing identity authority is never root-key fallback | An identity approval with missing or invalid authority fills no slot (no key fallback); a root's raw signature does not fill an I slot. |
+| C-id-27 | §2.3, §5.2 (handle ID-27) | Mixed raw/identity slots with same signer | One key's raw approval and its identity approval of the same body are two signatures for two subjects; neither fills both slots. |
+| C-id-28 | §2.1, §5.2 (handle ID-28) | Complete typed controller changes and merges | A controller change must carry complete typed controllers and rule; partial, untyped or duplicate shapes are refused; merges need predecessor authority. |
+| C-id-29 | §5.2 (handle ID-29) | Key-and-grant-local withdrawal / reapproval | Withdrawal/reapproval is key-and-grant-local: one delegate cannot withdraw another's approval; a new grant cannot cancel an approval made under another. |
+| C-id-30 | §5.2 (handle ID-30) | Cut removes required resource approval | A cut that removes a required approval makes the edition and its dependants `contested`/unresolved; no fallback to an older tip. |
+| C-id-31 | §6 (handle ID-31) | Exact pin versus principal-following selection | An exact pin selects that statement only (no alias/successor); a principal selection follows that principal's eligible current claims. |
+| C-id-32 | §6 (handle ID-32) | Invalid/missing exact pin and policy conflicts | A missing or ineligible pinned statement is non-passing (never substituted); conflicting selections for the same content/role fail before evaluation (exit 2). |
+| C-id-33 | §6 (handle ID-33) | Trust purpose boundaries / received policy injection | Trust applies only to the named purpose and targets; a received statement (even root-signed) never installs or changes local policy. |
+| C-id-34 | §5.3 (handle ID-34) | Identity-counting quorum | Under `counting_unit: identity`, eligible submissions are deduplicated by I; unresolved actors are not counted and the answer names them. |
+| C-id-35 | §5.3 (handle ID-35) | Key counting cannot bypass actor authority | Under `counting_unit: key`, an identity submission with missing or denied actor authority is not counted for its key. |
+| C-id-36 | §2.4 (handle ID-36) | Old-reader compatibility | An unchanged rc/1 reader retains rc/2 lines unverified as unsupported, keeps key-local linkage and ids, and never panics or evaluates them in any view. |
+| C-id-37 | §2.2, §2.3 (handle ID-37) | Tamper / marker / criticality / canonicalization | Any byte tamper, actor/marker without the other, unknown critical token, or non-canonical signed form: never `eligible`; never better than withholding the line. |
+| C-id-38 | §7 (handle ID-38) | Cache / replay / permutation invariance | Duplicate, reordered or re-serialised delivery of the same evidence gives identical results, evidence digest and receipt; a cache/replay gives the same answer as a cold read. |
+| C-id-39 | §7 (handle ID-39) | Deterministic resource caps | Every evaluation cap reached returns `unknown`/non-passing naming the cap (exit 3), never a partial grant or prefix. |
+| C-id-40 | §8 (handle ID-40) | Root backup / compromised operational host | Root backup restore and a compromised operational host: drill outcome as recorded in §8 (custody, not protocol). |
+| C-id-41 | §2.3 (handle ID-41) | Marker without actor / actor without marker | An actor without the body marker, or a marker without the critical declaration, is invalid even when correctly signed; never read as bare-key. |
+| C-id-42 | §5.3 (handle ID-42) | Decide grant is not beneficiary role | A `decide` grant does not make K the beneficiary: `decide` by an actor that is not the pinned edition's beneficiary is `denied`. |
+| C-id-43 | §5.3 (handle ID-43) | Cross-key exact-intent continuity | `progress`/`withdraw` by K2 for I continues K1-for-I's exact intent; a bare-key K1 intent is not continued; a withdrawn attempt cannot be reopened. |
+| C-id-44 | §5.1 (handle ID-44) | Authorized unknown amendment versus outsider DoS | An issuer-authenticated amendment naming a missing target makes I's current view `unknown`; an outsider's unauthenticated I header with an invented G changes nothing. |
+| C-id-45 | §3, §5.1 (handle ID-45) | Identity-wide amendment breadth | `amend:true` lets any delegate of I amend any of I's claims within the content targets, across keys and grants; outside the targets `denied`. |

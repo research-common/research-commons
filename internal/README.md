@@ -99,7 +99,9 @@ consumer (authorship, resources, tasks, policy, time) reads the result yet.
 ## How tests map to CONFORMANCE.md
 
 Every case id in `docs/CONFORMANCE.md`, and in the profile notes listed in `conformance.ProfileNotes` (today the
-bitcoin-time note's §14), is a subtest of `TestConformanceCases`. Each id is defined in exactly one table; a note
+bitcoin-time note's §14 and the candidate fixed-root identity note's §10), is a subtest of `TestConformanceCases`.
+The report counts each profile on its own line; the `id` line belongs to a profile that is not active, so quote it
+separately from the totals of the active profiles. Each id is defined in exactly one table; a note
 restating a case defined elsewhere writes its id in backticks. A test declares what it checks:
 
 - `conformance.Covers(t, "C-core-105")`: this test checks the case's whole required outcome. The case passes.

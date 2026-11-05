@@ -67,6 +67,7 @@ func TestOnlyAdapterImportsModel(t *testing.T) {
 // cut, the documented evidence-relative limit; it must not be worse than that), and the mutated bytes never read
 // Valid under the victim's id.
 func TestByteMutationsNeverCreateAuthority(t *testing.T) {
+	conformance.Partial(t, "C-id-37", "adapter and model, sampled mutations; the production critical registry is not enabled, the profile is not active: no dual-major reader or consumer reads this answer")
 	w := base(t)
 	w.sign(stmt{name: "C1", by: "R", parent: "G2", kind: "identity_cut", body: cutBody(w, "G1", "A1")})
 	targets := []string{"I", "G1", "G2", "C1", "A1", "A2", "B2"}
@@ -119,6 +120,7 @@ func TestByteMutationsNeverCreateAuthority(t *testing.T) {
 // The unchanged reader stack (keylog + resolve) on the full slice, including rc/2 resource/task kinds and
 // authenticated-invalid controls: retained unverified, never evaluated, no panic in any view.
 func TestUnchangedReaderStackOnCandidateBytes(t *testing.T) {
+	conformance.Partial(t, "C-id-36", "keylog and resolve views on the slice only; unsupported-body hardening across every view and a dual-major reader are not built")
 	w := base(t)
 	w.sign(stmt{name: "Cbad", by: "R", parent: "G2", kind: "identity_cut", body: obj("identity", "zz", "grant", 7, "last_good", "x", "reason", "BAD")})
 	w.sign(stmt{name: "Gen", by: "K1", parent: "A2", kind: "genesis", body: obj("type", "collection", "name", "n",
@@ -174,6 +176,7 @@ func TestUnchangedReaderStackOnCandidateBytes(t *testing.T) {
 // Over the admission cap the whole snapshot is refused: no partial evidence set can produce a pass. Unverified
 // future-major lines are cheap distinct statements, so the cap is reached without signing 100k lines.
 func TestAdmitCapRefusesWholeSnapshot(t *testing.T) {
+	conformance.Partial(t, "C-id-39", "admission cap and the model's 2048-fact walk cap only; the proposed evaluation caps (100,000 dependencies, 1,000,000 inspections) are not reconciled or enforced, and exit 3 needs a command")
 	// Unproven (unverified, unvouched) lines cost nothing to mint and affect nothing: over their own cap they are
 	// dropped deterministically, never failing the snapshot (review O-F8).
 	signer := key("cap", false).Signer()

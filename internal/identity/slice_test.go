@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/research-common/research-commons/internal/canon"
+	"github.com/research-common/research-commons/internal/conformance"
 	"github.com/research-common/research-commons/internal/identity"
 	"github.com/research-common/research-commons/internal/identitymodel"
 	"github.com/research-common/research-commons/internal/keylog"
@@ -246,6 +247,8 @@ func hasReason(r identitymodel.Result, code string) bool {
 
 // Steps 1–2: transported, signed evidence authorizes explicit acts for I, per grant and scope.
 func TestSliceGrantsAuthorizeExplicitActs(t *testing.T) {
+	conformance.Partial(t, "C-id-02", "signed adapter and model eligibility only; the profile is not active: no dual-major reader or consumer reads this answer")
+	conformance.Partial(t, "C-id-04", "identity half (bare statements read no_identity_actor); the unchanged bare-key answer in the same run needs a consumer")
 	w := base(t)
 	s := w.admit()
 	if n := len(s.Refused()); n != 0 {
@@ -274,6 +277,7 @@ func TestSliceGrantsAuthorizeExplicitActs(t *testing.T) {
 
 // Step 3: an exact cut preserves L's inclusive ancestry, excludes descendants and siblings, spares other grants.
 func TestSliceCutAtExactLine(t *testing.T) {
+	conformance.Partial(t, "C-id-11", "signed adapter and model; the profile is not active: no dual-major reader or consumer reads this answer")
 	w := base(t)
 	w.sign(stmt{name: "C1", by: "R", parent: "G2", kind: "identity_cut", body: cutBody(w, "G1", "A1")})
 	s := w.admit()
@@ -296,6 +300,7 @@ func TestSliceCutAtExactLine(t *testing.T) {
 
 // Step 4: the worker's own revocation does not erase opted-in history; bare-key behavior stays legacy.
 func TestSliceWorkerSelfRevocation(t *testing.T) {
+	conformance.Partial(t, "C-id-10", "identity half (warning, grant still eligible); the bare-key half belongs to the legacy evaluator and the combined view needs a consumer")
 	w := base(t)
 	w.sign(stmt{name: "Krev", by: "K1", rc: "rc/1", parent: "A2", kind: "revoke_key", body: obj("reason", "key_compromise", "last_good", w.ids["K1.0"])})
 	w.sign(stmt{name: "K1.after", by: "K1", rc: "rc/1", parent: "Krev", kind: "authored", body: authoredBody(7)})
@@ -331,6 +336,12 @@ func TestSliceWorkerSelfRevocation(t *testing.T) {
 
 // Step 5: wrong root/key/lineage/scope/actor or tampering never passes; missing evidence never falls back.
 func TestSliceNegatives(t *testing.T) {
+	conformance.Partial(t, "C-id-03", "signed rival-lineage and wrong-inception cases at the adapter; the profile is not active: no dual-major reader or consumer reads this answer")
+	conformance.Partial(t, "C-id-05", "wrong delegate key and stranger-issued grant at the adapter; the profile is not active: no dual-major reader or consumer reads this answer")
+	conformance.Partial(t, "C-id-07", "missing grant and ancestry read unknown at the adapter; the profile is not active: no dual-major reader or consumer reads this answer")
+	conformance.Partial(t, "C-id-20", "amend:false denies an amending act at the adapter; publish under the same grant and any amendment consumer are not built")
+	conformance.Partial(t, "C-id-26", "identity half (missing grant, no key fallback); filling resource slots needs the resource consumer")
+	conformance.Partial(t, "C-id-41", "actor without critical marker at the adapter; mixed controller semantics need the resource consumer, the profile is not active: no dual-major reader or consumer reads this answer")
 	t.Run("stranger-issued grant naming I", func(t *testing.T) {
 		w := base(t)
 		w.sign(stmt{name: "S.0", by: "S", rc: "rc/1", kind: "authored", body: authoredBody(6)})
@@ -441,6 +452,8 @@ func TestSliceNegatives(t *testing.T) {
 // Step 6: a known authenticated unresolved or malformed cut blocks a clean pass; an unseen cut is the documented
 // evidence-relative limitation (no freshness claim).
 func TestSliceCutUncertainty(t *testing.T) {
+	conformance.Partial(t, "C-id-08", "signed adapter and model; the profile is not active: no dual-major reader or consumer reads this answer")
+	conformance.Partial(t, "C-id-09", "evidence-relative eligible with freshness not_established at the adapter; no surface prints the limitation")
 	t.Run("cut whose last_good is not held", func(t *testing.T) {
 		w := base(t)
 		w.sign(stmt{name: "C1", by: "R", parent: "G2", kind: "identity_cut", body: cutBody(w, "G1", "A1")})
@@ -488,6 +501,7 @@ func TestSliceCutUncertainty(t *testing.T) {
 
 // Step 7: root-terminal events, reverse/duplicate delivery, rebuild and explanations.
 func TestSliceRootTerminalAndDelivery(t *testing.T) {
+	conformance.Partial(t, "C-id-38", "delivery order, duplicates and rebuild at the adapter; the production evidence-snapshot serialization, caches and replay are not built")
 	t.Run("valid root revoke is terminal for all history", func(t *testing.T) {
 		w := base(t)
 		w.sign(stmt{name: "Rrev", by: "R", rc: "rc/1", parent: "G2", kind: "revoke_key", body: obj("reason", "superseded", "last_good", w.ids["G2"])})

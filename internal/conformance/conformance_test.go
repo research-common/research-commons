@@ -4,10 +4,13 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/research-common/research-commons/internal/canon"
 )
 
 // TestConformanceCases makes every case in CONFORMANCE.md a subtest. Covered cases pass and name their
@@ -144,5 +147,98 @@ func TestVectorsLoad(t *testing.T) {
 	if len(v.Positive) != 12 || len(v.Negative) != 13 || len(v.EdPositive) != 2 || len(v.EdNegative) != 13 {
 		t.Fatalf("vectors: %d positive, %d negative, %d ed25519 positive, %d ed25519 negative",
 			len(v.Positive), len(v.Negative), len(v.EdPositive), len(v.EdNegative))
+	}
+}
+
+// The row pattern accepts the identity profile's C-id-N ids and nothing that merely looks like them; Profile
+// files them under "id", separate from the active profiles.
+func TestCaseRowIdentityProfile(t *testing.T) {
+	doc := []byte("| C-id-07 | a |\n| C-id-12a | b |\n| ID-07 | handle, not a case |\n| C-ident-1 | no |\n| C-id- | no |\n| `C-id-09` | restated |\n")
+	ids, err := CaseIDs(doc)
+	if err != nil || len(ids) != 2 || ids[0] != "C-id-07" || ids[1] != "C-id-12a" {
+		t.Fatalf("C-id rows: %v %v", ids, err)
+	}
+	for id, want := range map[string]string{"C-id-07": "id", "C-btc-07": "btc", "C-core-01": "core", "P-03": "property"} {
+		if got := Profile(id); got != want {
+			t.Errorf("Profile(%q) = %q, want %q", id, got, want)
+		}
+	}
+}
+
+// The identity profile's scenario file (docs/fixed-root-identity.coverage.json) states each handle's case id and
+// harness status and lists its tests. Keep it equal to what the tests declare: handle ID-NN is case C-id-NN, its
+// "conformance" is covers/partial/pending as the scan finds it, and every test declaring the case is listed.
+func TestIdentityCoverageFileMatchesHarness(t *testing.T) {
+	root, err := RepoRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(root, "docs", "fixed-root-identity.coverage.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := canon.Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids, home, err := LoadCaseIDs(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cov, part, _, err := ScanCoverage(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	str := func(o *canon.Object, k string) string {
+		x, _ := o.Get(k)
+		s, _ := x.(canon.String)
+		return string(s)
+	}
+	top, _ := v.(*canon.Object)
+	sv, _ := top.Get("scenarios")
+	rows, _ := sv.(canon.Array)
+	seen := map[string]bool{}
+	for i, rv := range rows {
+		row, _ := rv.(*canon.Object)
+		handle, id := str(row, "handle"), str(row, "case")
+		if !strings.HasPrefix(handle, "ID-") || id != "C-id-"+strings.TrimPrefix(handle, "ID-") {
+			t.Errorf("row %d: handle %q, case %q", i, handle, id)
+			continue
+		}
+		seen[id] = true
+		if home[id] != "docs/DESIGN-notes-fixed-root-identity.md" {
+			t.Errorf("%s is not defined in the identity profile note", id)
+		}
+		want := "pending"
+		if len(cov[id]) > 0 {
+			want = "covers"
+		} else if len(part[id]) > 0 {
+			want = "partial"
+		}
+		if got := str(row, "conformance"); got != want {
+			t.Errorf("%s: coverage file says %q, the harness says %q", id, got, want)
+		}
+		listed := map[string]bool{}
+		tv, _ := row.Get("isolated_tests")
+		ta, _ := tv.(canon.Array)
+		for _, x := range ta {
+			s, _ := x.(canon.String)
+			listed[strings.Replace(string(s), ":", ".", 1)] = true
+		}
+		var decl []string
+		decl = append(decl, cov[id]...)
+		for _, p := range part[id] {
+			decl = append(decl, p[:strings.Index(p, ": ")])
+		}
+		for _, d := range decl {
+			if !listed[d] {
+				t.Errorf("%s: declared by %s, not listed in isolated_tests", id, d)
+			}
+		}
+	}
+	for _, id := range ids {
+		if Profile(id) == "id" && !seen[id] {
+			t.Errorf("%s has no row in the coverage file", id)
+		}
 	}
 }

@@ -134,4 +134,4 @@ Every rc/2 task kind is verified-`Unsupported`. No settlement or readiness can p
 
 Consumer wiring (authorship, amendments, resources, tasks, policy, time); major-aware edition ids; blob
 availability in the receipt; timestamp coherence as an identity input; a detached signing ceremony; devices.
-Scenario-level status: `docs/fixed-root-identity.coverage.json` (every row `not_claimed`).
+Scenario-level status: conformance cases `C-id-01` … `C-id-45` (profile note §10), mirrored in `docs/fixed-root-identity.coverage.json` (no case is covered while the profile is not active).
