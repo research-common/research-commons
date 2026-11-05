@@ -264,6 +264,8 @@ and descendants after it are excluded. A later wider cut or root merge never reo
 A new grant G2 cannot relabel bytes signed under G1. All conflicts and uncertainties
 remain in the explanation. Cut monotonicity holds only while grants/root state and
 other evidence are fixed; it is not a global theorem about adding arbitrary evidence.
+A cut applies wherever it sits on I's root lineage; it need not descend from the grant
+it names (this is what lets a cut clear a root fork).
 
 ### 4.1 Deliberate worker self-revocation exception
 
