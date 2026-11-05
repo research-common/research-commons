@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"go/build"
 	"os"
 	"path/filepath"
 	"strings"
@@ -227,6 +228,55 @@ var limits = []limit{
 				}
 			}
 			return true, "ipfs: s3: file: refused"
+		},
+	},
+	{
+		id:  "L-11",
+		gap: "The tool does not build for Windows: the execution sandbox opens files with `O_NOFOLLOW` and signals processes with Unix calls",
+		sources: []limitSource{
+			{file: "docs/CLI-OUTPUTS.md", says: "Windows is not supported: the tool does not build for it."},
+		},
+		probe:  "under GOOS=windows, `internal/run` includes a file that uses `syscall.O_NOFOLLOW`, and no `_windows.go` file exists in the package",
+		closes: "a Windows implementation of the sandbox file opens (a `_windows.go` file, or build constraints on the Unix-only files)",
+		open: func(t *testing.T) (bool, string) {
+			root, _ := conformance.RepoRoot()
+			ctx := build.Default
+			ctx.GOOS, ctx.GOARCH, ctx.CgoEnabled = "windows", "amd64", false
+			pkg, err := ctx.ImportDir(filepath.Join(root, "internal", "run"), 0)
+			if err != nil {
+				return false, err.Error()
+			}
+			for _, f := range pkg.GoFiles {
+				if strings.HasSuffix(f, "_windows.go") {
+					return false, "windows file " + f
+				}
+			}
+			for _, f := range pkg.GoFiles {
+				b, err := os.ReadFile(filepath.Join(root, "internal", "run", f))
+				if err != nil {
+					return false, err.Error()
+				}
+				if strings.Contains(string(b), "syscall.O_NOFOLLOW") {
+					return true, f + " is built for windows and uses syscall.O_NOFOLLOW"
+				}
+			}
+			return false, "no windows-built file uses syscall.O_NOFOLLOW"
+		},
+	},
+	{
+		id:  "L-12",
+		gap: "`--json` output may change between alpha releases: it carries no `schema` member yet",
+		sources: []limitSource{
+			{file: "docs/CLI-OUTPUTS.md", says: "the `--json` output may change between alpha releases. It carries no `schema` member yet."},
+		},
+		probe:  "`list --json` is an object with no `schema` member",
+		closes: "a `schema` member on every `--json` object, and a stated compatibility rule",
+		open: func(t *testing.T) (bool, string) {
+			w := fixture(t)
+			r := w.run("list", "--json")
+			o := jsonOf(t, r)
+			_, has := o.Members["schema"]
+			return r.code == ExitOK && !has, r.stdout[:min(len(r.stdout), 200)]
 		},
 	},
 }

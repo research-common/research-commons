@@ -7,6 +7,10 @@ Do not edit by hand: a test fails when this file and the code differ. `commons h
 Errors are RFC 9457 problem-details objects (`type`, `title`, `detail`, `class`, `scope`, `committed`,
 `next`, `exit`; peer-supplied text only in `peer_text`). Types are `urn:research-commons:problem:<slug>`.
 
+Platforms: Linux and macOS. Windows is not supported: the tool does not build for it.
+
+Stability: the `--json` output may change between alpha releases. It carries no `schema` member yet.
+
 ## Exit codes
 
 | exit | name | meaning |
