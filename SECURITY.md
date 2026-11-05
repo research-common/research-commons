@@ -16,7 +16,8 @@ small package or statement that reproduces it. A report without a polished proof
   limits, memory or disk exhaustion, requests to unintended hosts.
 - The execution sandbox (`verify --rerun`): escapes, or reading and writing outside what the policy grants.
 - Key handling: key files created with the wrong mode, keys written to output or logs.
-- The release process: tampered release artifacts or an unpinned CI action in the hub template.
+- The release process: release artifacts that don't match their checksums or provenance attestation, or an
+  unpinned action in this repository's workflows.
 
 Out of scope: gaps already listed in [`docs/KNOWN-LIMITS.md`](docs/KNOWN-LIMITS.md); an attacker who already holds your
 key file or can write to your store directory; denial of service by a user running the tool on their own huge input

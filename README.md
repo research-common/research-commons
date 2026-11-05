@@ -3,7 +3,8 @@
 A toolkit for **reproducible, attributable research** with human and AI collaborators. Research Commons keeps
 datasets, methods and results in a content-addressed store, each tied to signed statements: who published it, under
 what terms, derived from what. It is built for people and AI agents who want a claim to be checkable and not just
-believed. There is no hosted service and no network: it is files, git and the people you choose to trust.
+believed. There is no hosted service: it is files, git and the people you choose to trust. The one command that
+uses the network is `fetch`, and only when you run it.
 
 **Thesis:** understanding the world with AI collaborators takes shared datasets, reproducible analysis, and common
 methods of interpretation. If the evidence base is pinned, then agreement between different model families working
