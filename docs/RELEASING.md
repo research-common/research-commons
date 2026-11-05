@@ -95,6 +95,12 @@ then they describe the alpha line only.
    ```
    `--prerelease` matters: it's GitHub's own signal for an `-alpha`/`-beta`/`-rc` suffixed tag,
    and lines up with SemVer's pre-release precedence (`0.2.0-alpha.1` sorts before `0.2.0`).
+   **Binaries attach automatically.** Publishing the release runs `.github/workflows/release.yml`,
+   which builds linux/darwin × amd64/arm64 archives, writes `SHA256SUMS`, attests build provenance,
+   and uploads them to the release. The workflow refuses a tag that differs from `VERSION`. When it
+   finishes, check the assets: `gh release download v0.2.0-alpha.1 --pattern 'SHA256SUMS' --pattern '*.tar.gz'`,
+   `sha256sum -c SHA256SUMS`, and `gh attestation verify <archive> --repo research-common/research-commons`.
+   A dry run (Actions → release → Run workflow) builds and checksums without attesting or uploading.
 6. Bump the hub template's pin (separate repo, `research-commons-hub-template`, also PR-first):
    pin `hub-check.yml`'s tool checkout by the **full 40-char commit SHA** (immutable), with the
    tag as a trailing comment for human skimmability (`ref: <sha>  # v0.2.0-alpha.1`), switch

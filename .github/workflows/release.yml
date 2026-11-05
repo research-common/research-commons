@@ -1,0 +1,109 @@
+# Release binaries for the Go implementation: built when a GitHub release is published, attested, and attached.
+# `workflow_dispatch` is a dry run: it builds and checksums every target and uploads workflow artifacts only;
+# it never attests and never touches a release. Public repo: actions pinned by full commit SHA, a read-only
+# default token, and write permissions granted only to the one job that needs them.
+name: release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - {goos: linux, goarch: amd64}
+          - {goos: linux, goarch: arm64}
+          - {goos: darwin, goarch: amd64}
+          - {goos: darwin, goarch: arm64}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Build and package
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          EVENT: ${{ github.event_name }}
+          TAG: ${{ github.event.release.tag_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = release ]; then
+            VERSION="${TAG#v}"
+            # The tag must name the version the tree declares: refuse a release cut from a mismatched commit.
+            if [ "$VERSION" != "$(tr -d '[:space:]' < VERSION)" ]; then
+              echo "tag $TAG does not match VERSION ($(cat VERSION))" >&2
+              exit 1
+            fi
+          else
+            VERSION="$(tr -d '[:space:]' < VERSION)"
+          fi
+          name="commons-$VERSION-$GOOS-$GOARCH"
+          dir="$(mktemp -d)"
+          mkdir "$dir/$name"
+          go build -trimpath -ldflags "-s -w -X main.version=$VERSION -X main.commit=$SHA" \
+            -o "$dir/$name/commons" ./cmd/commons
+          cp LICENSE NOTICE README.md "$dir/$name/"
+          # Reproducible archive: fixed order, owner and mtime; gzip without a timestamp.
+          tar --sort=name --owner=0 --group=0 --numeric-owner --mtime='1970-01-01 00:00:00 UTC' \
+            -cf - -C "$dir" "$name" | gzip -n -9 > "$name.tar.gz"
+          ls -l "$name.tar.gz"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: commons-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: commons-*.tar.gz
+          if-no-files-found: error
+
+  upload:
+    name: checksums, attest, upload
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      attestations: write
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: commons-*
+          merge-multiple: true
+      - name: Checksums
+        run: |
+          set -euo pipefail
+          test "$(ls commons-*.tar.gz | wc -l)" -eq 4
+          sha256sum commons-*.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+      - name: Attest build provenance
+        if: github.event_name == 'release'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            commons-*.tar.gz
+            SHA256SUMS
+      - name: Attach to the release
+        if: github.event_name == 'release'
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" commons-*.tar.gz SHA256SUMS
+      - name: Dry run - keep the checksums as a workflow artifact
+        if: github.event_name != 'release'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: SHA256SUMS
+          path: SHA256SUMS
