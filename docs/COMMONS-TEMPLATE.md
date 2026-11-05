@@ -1,3 +1,5 @@
+> **Describes the 0.4 alpha (the `main` branch); the next format replaces it. See the [README](../README.md) and the design notes under `docs/` for the current format.**
+
 # COMMONS.md: template and review rubric
 
 A project's `COMMONS.md` is its **integration contract** with a Research Commons registry:

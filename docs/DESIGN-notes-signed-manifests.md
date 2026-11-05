@@ -1,3 +1,5 @@
+> **Describes the 0.4 alpha (the `main` branch); the next format replaces it. See the [README](../README.md) and the design notes under `docs/` for the current format.**
+
 # Design note: Signed manifest views
 
 **Date:** 2026-10-02, revised 2026-10-06 · **Status:** proposal for design review (revision 2)
