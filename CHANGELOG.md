@@ -27,6 +27,13 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   a tip whose branch carries a key event outside the line extended; it also refuses (exit 1) when the history it
   extends already holds an in-force key event, or the successor's log here carries one; a successor equal to the
   signing key is exit 2 (#128).
+- **Edition rules that read content now see inside archives** (C-core-95). The `publish` pre-pin check
+  (`--intended-for`) and `hub check` hand a rule the members of a tar, gzip or zip blob, each read by the bounded
+  archive scanner, instead of the archive's raw bytes. A member the scanner cannot examine (a compression it has
+  no reader for, such as xz; a scan limit) is passed as an unscanned unit naming the member and the limit, so the
+  rule's outcome is `unchecked`, never `ok`. A blob that is itself in such a compression is one unscanned unit.
+  Other blobs are read as before. Previously a forbidden key inside a compressed archive was missed and the rule
+  could record `ok`.
 
 ## [0.5.0-alpha.1] - 2026-11-05
 

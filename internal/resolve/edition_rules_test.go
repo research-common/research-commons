@@ -752,9 +752,9 @@ func archive() []ContentUnit {
 // TestUnscannedArchive: C-core-95. Forbidden-key rule; the key hides in an archive member the reader cannot
 // decompress. (a) As an edition rule: unchecked naming the member, never ok, not endorsed, no "clean". (b) As a
 // pre-pin check: the draft passes with outcome `unchecked` recorded; re-applied by a reader (hub) it admits
-// nothing.
+// nothing. The reader here is a stand-in table; the case with the shipped archive scanner is
+// internal/gate.TestUnscannedArchiveMember (resolver) and internal/cli.TestPublishPrePin (publish).
 func TestUnscannedArchive(t *testing.T) {
-	conformance.Partial(t, "C-core-95", "the rule and pre-pin check at the resolver; the archive scanner is a stand-in ContentReader (no archive scanner ships); publish records unchecked for an unscanned unit in internal/cli.TestPublishPrePin")
 	w := newWorld(t)
 	x := w.authored("X", "M", "arch")
 	g := w.genesis("G", "A", 0, "A")

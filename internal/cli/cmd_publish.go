@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/research-common/research-commons/internal/canon"
+	"github.com/research-common/research-commons/internal/gate"
 	"github.com/research-common/research-commons/internal/keylog"
 	"github.com/research-common/research-commons/internal/rctime"
 	"github.com/research-common/research-commons/internal/refusal"
@@ -490,7 +491,8 @@ func hashFile(path string) (string, int64, error) {
 }
 
 // prepinContent gives edition rules the bytes: the draft's own file for its digest (not installed yet: a refused
-// draft leaves nothing behind), the store's blobs otherwise. A whole blob is one unit: no archive is opened.
+// draft leaves nothing behind), the store's blobs otherwise. An archive is walked member by member by the store's
+// scanner (gate.ScanReader, C-core-95); any other blob is one unit.
 type prepinContent struct {
 	st     *store.Store
 	digest string
@@ -513,14 +515,12 @@ func (p prepinContent) Units(d string) ([]resolve.ContentUnit, bool) {
 		r = f
 	}
 	defer r.Close()
-	b, err := io.ReadAll(io.LimitReader(r, maxScan+1))
+	// An archive is walked member by member by the store's scanner (C-core-95); any other blob is one unit.
+	units, err := gate.ScanReader(keylog.Short(strings.TrimPrefix(d, "sha256:")), r, store.DefaultLimits(), maxScan, "size limit="+strconv.Itoa(maxScan))
 	if err != nil {
 		return nil, false
 	}
-	if len(b) > maxScan {
-		return []resolve.ContentUnit{{Name: keylog.Short(strings.TrimPrefix(d, "sha256:")), Unscanned: "size limit=" + strconv.Itoa(maxScan)}}, true
-	}
-	return []resolve.ContentUnit{{Name: keylog.Short(strings.TrimPrefix(d, "sha256:")), Data: b}}, true
+	return units, true
 }
 
 // --- run ----------------------------------------------------------------------------------------------------

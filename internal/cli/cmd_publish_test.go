@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"archive/tar"
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -47,6 +49,28 @@ func (r forbid) Eval(d *resolve.Domain) (resolve.Outcome, string, []string) {
 		}
 	}
 	return resolve.RuleOK, "", nil
+}
+
+// xzSecret is `{"secret":1}` compressed with xz: the key is in it, not in its bytes.
+var xzSecret = func() []byte {
+	b, _ := hex.DecodeString("fd377a585a0000016922de36020021011c00000010cf58cc01000b7b22736563726574223a317d008f9ca1410001200ca2ddb4bc9042990d010000000001595a")
+	return b
+}()
+
+// tarOf packs regular files in order (ustar).
+func tarOf(t *testing.T, files ...[2]string) []byte {
+	var b bytes.Buffer
+	tw := tar.NewWriter(&b)
+	for _, f := range files {
+		if err := tw.WriteHeader(&tar.Header{Name: f[0], Mode: 0o644, Size: int64(len(f[1])), Typeflag: tar.TypeReg, Format: tar.FormatUSTAR}); err != nil {
+			t.Fatal(err)
+		}
+		tw.Write([]byte(f[1]))
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return b.Bytes()
 }
 
 func withDialect(t *testing.T) {
@@ -255,10 +279,10 @@ func TestPublishFutureTS(t *testing.T) {
 	}
 }
 
-// TestPublishPrePin: C-core-95a, C-core-96 and the publish half of C-core-95.
+// TestPublishPrePin: C-core-95a, C-core-96 and the publish half of C-core-95 (an archive member in an unsupported
+// compression, through the shipped scanner; the resolver half is internal/gate.TestUnscannedArchiveMember).
 func TestPublishPrePin(t *testing.T) {
-	conformance.Covers(t, "C-core-95a", "C-core-96")
-	conformance.Partial(t, "C-core-95", "publish records intended_for with outcome unchecked for a unit the reader could not scan (the size limit; the forbidden key unreadable) and a reader re-applying the rule does not admit it; no archive scanner exists in the CLI, so the unscanned unit is a whole blob over the scan limit, not an archive member in an unsupported compression")
+	conformance.Covers(t, "C-core-95", "C-core-95a", "C-core-96")
 	withDialect(t)
 	p := newPubWorld(t)
 	g, e := p.collection("FORBID secret")
@@ -316,6 +340,28 @@ func TestPublishPrePin(t *testing.T) {
 	v, _ := loadView(p.s, nil, resolve.WithDialect(forbidDialect{}), resolve.WithContent(prepinContent{st: p.s}))
 	if rec, ok := v.r.CheckRecorded(id); !ok || rec.Named == resolve.RuleOK || rec.Endorsed {
 		t.Fatalf("C-core-95: re-applied: %+v", rec)
+	}
+
+	// C-core-95 (publish half): the candidate is a tar whose member holding the key is xz-compressed. The scanner
+	// names the member unscanned; publish records unchecked, never ok; a reader re-applying the rule admits nothing.
+	arch := p.file("arch.tar", string(tarOf(t, [2]string{"a.json", `{"ok":1}`}, [2]string{"b.json.xz", string(xzSecret)})))
+	r = p.publish("--kind", "authored", "--content", arch, "--intended-for", g+"/"+e)
+	if r.code != 0 || !strings.Contains(r.stdout, `"state":"unchecked"`) || !strings.Contains(r.stdout, "!/b.json.xz unscanned (compression=xz)") || strings.Contains(r.stdout, "clean") {
+		t.Fatalf("C-core-95 archive: %d %s", r.code, r.stdout)
+	}
+	id = idsOf(outObj(t, r))[0]
+	if !strings.Contains(p.run("show", id, "--json").stdout, `"outcome":"unchecked"`) {
+		t.Fatal("C-core-95 archive: unchecked not recorded")
+	}
+	v, _ = loadView(p.s, nil, resolve.WithDialect(forbidDialect{}), resolve.WithContent(prepinContent{st: p.s}))
+	if rec, ok := v.r.CheckRecorded(id); !ok || rec.Named != resolve.RuleUnchecked || rec.Endorsed {
+		t.Fatalf("C-core-95 archive: re-applied: %+v", rec)
+	}
+	// control: the same tar with the member stored uncompressed is walked and refused (the key is reached)
+	plain := p.file("plain.tar", string(tarOf(t, [2]string{"a.json", `{"ok":1}`}, [2]string{"b.json", `{"secret":1}`})))
+	r = p.publish("--kind", "authored", "--content", plain, "--intended-for", g+"/"+e)
+	if r.code != 1 || !strings.Contains(r.stdout, "forbidden key secret in ") || !strings.Contains(r.stdout, "!/b.json") {
+		t.Fatalf("C-core-95 control: %d %s", r.code, r.stdout)
 	}
 
 	// no dialect configured (production): the rule cannot be evaluated: unchecked, never ok
