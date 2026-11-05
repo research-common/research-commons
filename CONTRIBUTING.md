@@ -38,7 +38,8 @@ contribution necessarily reads on, and only patents you can license.
 The current alpha is in **maintenance mode: security fixes only** (since 2026-10-11). The next
 format is being designed in the open in #69. Until it settles:
 
-- **Security fixes** to the alpha are welcome, with the usual tests (below).
+- **Security fixes** to the alpha are welcome. They are made against `main`, where the alpha's
+  own suite (`tests/run-all.sh`) lives; everything below describes `next`.
 - **Design feedback** on #69 and line comments on its design note are the most useful
   contribution.
 - **Features and non-security bug fixes** for the alpha won't be merged. If you hit one, open an
@@ -51,24 +52,21 @@ merged design notes until `next` replaces it.
 
 ## What a change must pass
 
-1. **The full test suite.** `tests/run-all.sh` — hermetic, clears ambient
-   `COMMONS_*` env. All suites must be green, and the per-suite counts must not
-   silently *drop*: a suite that stops running tests looks identical to a suite
-   that passes them. Report before/after counts in the PR.
+1. **The test suite.** `go vet ./... && go test ./...` — hermetic, no network. Both must
+   be clean, and the number of tests must not silently *drop*: a package that stops
+   running tests looks identical to one that passes them. Report anything that changed
+   in the PR.
 2. **New behaviour needs regression coverage**, and the test must be shown to go
    red against the unfixed code. A test that passes both ways proves nothing.
-3. **No secrets.** `lib/publish_lint.py` runs over published content; run it over
-   anything you add. Never commit `registry/peers.json`, `registry/exec-policy.json`,
-   private keys, or anything under `store/` that you did not publish through the
-   CLI.
+3. **No secrets.** Never commit private keys, local trust or execution policy files,
+   or the contents of a `store/` directory you did not publish through the CLI.
 4. **Documentation in the same change.** If you alter a command's behaviour,
    update `README.md` and the relevant `docs/` file in the same commit.
 
 ### What CI runs (Go implementation, `next`)
 
 `.github/workflows/go.yml` runs on pull requests into `next` (and into the stacked `stage3/*` branches) and on
-pushes to `next`. The Go module lives on `next` only; the alpha under `bin/` and `lib/` is still tested with `tests/run-all.sh`
-as above. The workflow has read-only permissions, uses no secrets, and pins every action by commit SHA.
+pushes to `next`. The Go module lives on `next` only; the Python alpha lives on `main` and at the tag `v0.4.0-alpha.1`, not here. The workflow has read-only permissions, uses no secrets, and pins every action by commit SHA.
 
 - `go vet ./...` and `go test ./...` on Linux and macOS, with the Go version taken from `go.mod`.
 - `go test ./...` on Linux with `TMPDIR` behind a symlink, so `t.TempDir()` is not a realpath
@@ -111,17 +109,11 @@ of its own, and after that as a new signed commit (a cherry-pick), never by a me
 
 These come from real incidents. They are not style preferences.
 
-- **Never modify `registry/` or `store/` by hand.** Publish through
-  `commons publish`; the manifest and blob are content-addressed and a hand-edit
+- **Never modify a hub's registry or a `store/` directory by hand.** Publish through
+  `commons`; the manifest and blob are content-addressed and a hand-edit
   desynchronizes them.
-- **`comparators/*.py` are published artifacts.** Their file bytes are hashed and
-  stored as `sk-…` skills, and `run_comparator` executes the *blob from the
-  store*, not the working-tree file. Editing one without republishing makes the
-  source and the artifact diverge silently. Same applies to anything else
-  published from the tree.
-- **Local-only files stay local.** `peers.json` is the trust boundary and
-  `exec-policy.json` is execution policy — both are deliberately excluded from
-  federation. A peer must never be able to reconfigure your sandbox.
+- **Local-only files stay local.** Trust policy and execution policy are deliberately
+  excluded from federation. A peer must never be able to reconfigure your sandbox.
 - **Availability is not correctness.** Licensing and obtainability metadata must
   never move a verification tier or a chain grade. They change *who can check*,
   not *what was checked*.
@@ -134,8 +126,8 @@ These come from real incidents. They are not style preferences.
 Do not open a public issue for a vulnerability in the trust model, the ingest
 gate, or the execution sandbox. Contact the maintainer directly.
 
-Note the threat model: the ingest gate is the security boundary, and `peers.json`
-trust levels are the control. Findings that involve a peer escalating trust,
+Note the threat model: the ingest gate is the security boundary, and the
+reader's trust policy is the control. Findings that involve a peer escalating trust,
 escaping the sandbox, or reconfiguring another peer's execution policy are
 high-severity — there is prior art for exactly that class of bug in this
 codebase.

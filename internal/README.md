@@ -3,7 +3,7 @@
 This tree is the new implementation of the format specified in `docs/DESIGN-notes-claims-model.md`,
 `docs/DESIGN-notes-wire-format.md` and the other design notes, built test-first against
 `docs/CONFORMANCE.md`. It lives on the `next` branch and will ship as `0.5.0-alpha.1`. The command is
-`cmd/commons` (package `cli` below); the alpha CLI under `bin/` and `lib/` is unchanged.
+`cmd/commons` (package `cli` below). The Python alpha is not in this tree: it lives on `main` and at the tag `v0.4.0-alpha.1`.
 
 ## Build and test
 

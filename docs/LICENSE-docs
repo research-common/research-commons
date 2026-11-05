@@ -37,7 +37,7 @@ changes were made.
 What this license does NOT cover
 --------------------------------
 
-  - Code: `bin/`, `lib/`, `comparators/`, `tests/`, `scripts/` are Apache-2.0.
+  - Code: `cmd/`, `internal/`, `scripts/` are Apache-2.0.
     See the root LICENSE file.
 
   - Registry content: artifacts published through this software carry their own
