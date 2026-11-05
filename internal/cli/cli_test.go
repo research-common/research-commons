@@ -510,3 +510,24 @@ func TestStatusAndVersion(t *testing.T) {
 		t.Fatalf("env discovery: %d %s", r.code, r.stderr)
 	}
 }
+
+// TestHelpMultiWord: a multi-word command name works unquoted, quoted as one word, and wrong names still refuse.
+func TestHelpMultiWord(t *testing.T) {
+	d := t.TempDir()
+	for _, args := range [][]string{{"help", "publish", "task"}, {"help", "key", "new"}, {"help", "hub", "check"},
+		{"help", "hub check"}, {"help", "publish task"}} {
+		r := runIn(d, nil, append(args, "--json")...)
+		if r.code != 0 {
+			t.Fatalf("%q: exit %d\n%s", args, r.code, r.stdout+r.stderr)
+		}
+		want := "commons " + strings.Join(strings.Fields(strings.Join(args[1:], " ")), " ")
+		if !strings.Contains(r.stdout, `"usage":"`+want) {
+			t.Fatalf("%q: not the help for %q:\n%s", args, want, r.stdout)
+		}
+	}
+	for _, args := range [][]string{{"help", "hub", "nope"}, {"help", "hub nope"}, {"help", "hub check extra"}} {
+		if r := runIn(d, nil, args...); r.code != 2 {
+			t.Fatalf("%q: want exit 2, got %d", args, r.code)
+		}
+	}
+}
