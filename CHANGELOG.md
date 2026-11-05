@@ -17,6 +17,9 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 - `commons help "hub check"` (a multi-word command name quoted as one word) now works like `commons help hub check`.
 - `commons pull` no longer reports the store marker (or any control-plane file) as "not applied" when it is byte-identical to the receiver's own; a differing one is still reported.
 - Hub policy knob `selection.refuse_incomplete` (default off): `hub check` refuses an edition whose completeness claim fails against the readings the hub holds, and reports a claim it cannot check as could-not-check (exit 3).
+- **Identity evaluation caps follow the profile (#126).** The model's 2,048-fact walk limit is replaced by three
+  deterministic per-query caps (100,000 dependencies, 100,000 path edges, 1,000,000 inspections); hitting one is
+  `unknown` naming the cap, and ancestry is memoized so long histories stay linear.
 
 ## [0.5.0-alpha.1] - 2026-11-05
 

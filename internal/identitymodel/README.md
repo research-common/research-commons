@@ -77,8 +77,9 @@ but not the relevant authority decision. Removal of retained evidence must be an
 explicit new snapshot; production storage must ensure known cuts cannot disappear
 through cache rebuilding.
 
-The model limits each ancestry traversal and relevant authenticated root-event
-scan to 2,048 facts. Exceeding a limit adds an `unknown` reason; a partial walk must
+The model enforces three per-query caps (`Limits`; defaults 100,000 distinct
+dependencies, 100,000 path edges, 1,000,000 inspections; accounting in `limits.go`
+and the profile's §7). Reaching one adds an `unknown` `model_limit` reason naming the cap; a partial walk must
 never produce a pass. Independent/unproven noise does not consume another
 identity's semantic limit. This is **not** a transport/memory DoS admission layer:
 constructing/hashing a snapshot and locating its relevant facts still examine held

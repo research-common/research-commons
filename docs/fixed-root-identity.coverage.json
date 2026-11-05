@@ -559,10 +559,11 @@
         "internal/wire:TestFixedRootCandidateCanonicalization",
         "internal/identity:TestAdmitCapRefusesWholeSnapshot",
         "internal/identity:TestReviewCandidateMergesCap",
-        "internal/identity:TestReviewDelegateSelfEventsBounded"
+        "internal/identity:TestReviewDelegateSelfEventsBounded",
+        "internal/identitymodel:TestDefaultCapsAdmitLongLivedIdentity"
       ],
       "conformance": "partial",
-      "remaining": "PAE/depth syntax bounds tested; evaluation operation/dependency caps and production exit 3 not implemented."
+      "remaining": "PAE/depth syntax bounds and the model evaluation caps are tested; the production exit 3 mapping needs a command."
     },
     {
       "handle": "ID-40",

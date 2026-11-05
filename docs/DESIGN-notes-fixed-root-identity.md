@@ -463,8 +463,22 @@ predecessors and merges 256 each; the inherited JSON depth/PAE limits above. A f
 reader additionally uses evaluation caps of 100,000 distinct statement dependencies,
 100,000 ancestry edges on one path, and 1,000,000 dependency/edge inspections per
 query. Account work deterministically; on a cap, return unknown/non-passing and the cap,
-not a partial grant/prefix. These evaluation caps are a proposal, **not enforced by the
-syntax-only harness**; model/production integration must agree on accounting.
+not a partial grant/prefix. The identity model enforces these three caps (injectable for
+tests, defaulting to the numbers above); the syntax-only harness does not. Accounting,
+identical for the same evidence and limits whatever the delivery order:
+
+- **Dependency:** one distinct statement id the query reads, held or missing: the statement,
+  its inception and grant, every node of every ancestry closure walked, each prev/merge link
+  read for a sequence check, and each authenticated root-signer event examined. Counted once
+  per query however often it is read.
+- **Path edge:** the longest prev/merge path from a walked head to the end of its closure (a
+  missing link is one edge), and the prev-only path a placement walk follows to an inception.
+- **Inspection:** every fact read, link followed or memoized result reused; the total-work bound.
+  Ancestry proofs are memoized per query, so a long linear history costs work linear in its length.
+
+A cap yields `unknown` with a `model_limit` reason naming the cap (`dependencies`,
+`path_edges`, `inspections`) and its value; definite denials established first stay denied.
+Unrelated or unproven facts are never read, so noise cannot spend another identity's budget.
 
 **Evidence digest integration gap:** the production evidence snapshot serialization
 must be pinned before claiming cache/replay equivalence across implementations. It

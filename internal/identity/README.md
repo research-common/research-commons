@@ -99,10 +99,9 @@ Otherwise: wire `Valid` → `Understood`; `Invalid` → per §3; `Unsupported` o
   (a dropped link reads missing, which is no more permissive than unproven); the snapshot does not fail.
 - rc/2 sets (merges, targets, subjects, predecessors) are capped at 256 and permissions at 64; over a cap the line
   is authenticated-invalid. Per-line bounds are wire's (`MaxLine`, `MaxSignedString`).
-- Evaluation: the model's `MaxTraversalFacts = 2048` per walk is the effective cap; reaching it is `unknown`
-  (`model_limit`). `MaxDelegateSelfEvents = 64` bounds the warnings for a delegate's own raw key events.
-  **Open liveness item:** a long-lived worker log exceeds 2048 lines. Reconcile with the profile's proposed
-  100,000 / 1,000,000 accounting (§7) before any real use.
+- Evaluation: the model enforces the profile's caps per query (100,000 distinct dependencies, 100,000 ancestry edges
+  on one path, 1,000,000 inspections; see the model README and profile §7); reaching one is `unknown` (`model_limit`
+  naming the cap). `MaxDelegateSelfEvents = 64` bounds the warnings for a delegate's own raw key events.
 - Two digests, never conflated. `EvidenceDigest` (model) is over normalized facts. `Receipt` (adapter) is
   SHA-256 over the sorted `id`, length and canonical stored line of each admitted line, keeping the smallest
   canonical line per id so duplicate deliveries with different valid signatures give the same receipt. For an
