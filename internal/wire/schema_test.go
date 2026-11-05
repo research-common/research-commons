@@ -210,6 +210,10 @@ func TestSchemaRules(t *testing.T) {
 			body("rule", "r", "state_at_capture", body("depth", 1))), "exact-bytes and source observations only"},
 		{"finality state with two units", "observed", setField(setField(m("observed"), "class", s("source")), "finality",
 			body("rule", "r", "state_at_capture", body("depth", 1, "run", "R1"))), "exactly one"},
+		{"source window not an object", "observed", setField(setField(m("observed"), "class", s("source")), "referent",
+			body("endpoint", "e", "parameters", body(), "response_digest", tDig, "window", "2026-10")), "referent.window"},
+		{"batch endpoint not a string", "observed", setField(setField(m("observed"), "class", s("source")), "referent",
+			body("requests", body("digest", tDig, "format", "f", "count", 1, "endpoint", 7))), "referent.requests.endpoint"},
 		{"source with one request and a batch", "observed", setField(setField(m("observed"), "class", s("source")), "referent",
 			body("endpoint", "e", "requests", body("digest", tDig, "format", "f", "count", 1))), "one or the other"},
 		{"referent field wrong type", "observed", setField(setField(m("observed"), "class", s("exact-bytes")), "referent",
@@ -278,6 +282,12 @@ func TestSchemaUnpinned(t *testing.T) {
 		{"method without environment.platform", obs("method", body("method_edition", tID, "environment", body("image_digest", tDig, "harness_commit", strings.Repeat("a", 40)),
 			"system", body("model", "m"), "window", body("from", tTS, "to", tTS))), []string{"referent.environment.platform"}},
 		{"source batch without count", obs("source", body("requests", body("digest", tDig, "format", "jsonl"))), []string{"referent.requests.count"}},
+		// an optional member never makes a referent unpinned: the batch endpoint, the source window
+		{"source batch with endpoint, without count", obs("source", body("requests", body("digest", tDig, "format", "jsonl", "endpoint", "https://e.example/d"))), []string{"referent.requests.count"}},
+		{"source batch with endpoint and window", obs("source", body("requests", body("digest", tDig, "format", "jsonl", "count", 2, "endpoint", "https://e.example/d"),
+			"window", body("from", tTS, "to", tTS))), nil},
+		{"source single with window and timescale", obs("source", body("endpoint", "https://e.example/d", "parameters", body(), "response_digest", tDig,
+			"window", body("from", "2026-10-01T00:00:00", "to", "2026-11-01T00:00:00"), "timescale", "TAI")), nil},
 		{"source single empty", obs("source", body()), []string{"referent.endpoint", "referent.parameters", "referent.response_digest"}},
 		{"none-yet takes anything", obs("none-yet", body("anything", 1)), nil},
 	} {

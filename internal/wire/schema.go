@@ -381,7 +381,10 @@ var referentFields = map[string][]field{
 
 var (
 	sourceOne   = []field{req("endpoint", text()), req("parameters", anyObject()), req("response_digest", digest())}
-	sourceBatch = []field{req("requests", object(req("digest", digest()), req("format", text()), req("count", integer())))}
+	sourceBatch = []field{req("requests", object(req("digest", digest()), req("format", text()), req("count", integer()), opt("endpoint", text())))}
+	// sourceEither: optional in both forms, so neither marks a referent as a single request: the period the
+	// response covers (not when it was fetched) and its timescale.
+	sourceEither = []field{opt("window", windowObj), opt("timescale", text())}
 )
 
 // checkBody applies §5 to a body. known is false for a kind §5 does not list (C-core-13): such a statement is
@@ -538,9 +541,9 @@ func checkReferent(ref *canon.Object, class string, ctx *schemaCtx) error {
 			return bad(p, "carries both one request and a batch; a source referent is one or the other")
 		}
 		if batch {
-			return pinned(sourceBatch)
+			return pinned(append(slices.Clone(sourceBatch), sourceEither...))
 		}
-		return pinned(sourceOne)
+		return pinned(append(slices.Clone(sourceOne), sourceEither...))
 	default:
 		return pinned(referentFields[class])
 	}
@@ -560,7 +563,7 @@ func missingOnly(v canon.Value, f field, p string) ([]string, []string, bool) {
 	case "window":
 		sub = []field{req("from", ts()), req("to", ts())}
 	case "requests":
-		sub = []field{req("digest", digest()), req("format", text()), req("count", integer())}
+		sub = []field{req("digest", digest()), req("format", text()), req("count", integer()), opt("endpoint", text())}
 	default:
 		return nil, nil, false
 	}
@@ -569,7 +572,9 @@ func missingOnly(v canon.Value, f field, p string) ([]string, []string, bool) {
 	for _, s := range sub {
 		fv, present := o.Get(s.name)
 		if !present {
-			missing = append(missing, "referent."+f.name+"."+s.name)
+			if s.req {
+				missing = append(missing, "referent."+f.name+"."+s.name)
+			}
 			continue
 		}
 		if s.r(fv, p, ctx) != nil {

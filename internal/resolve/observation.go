@@ -33,7 +33,7 @@ import (
 // Referent fields each class pins, in display order (wire §5).
 var referentOrder = map[string][]string{
 	"exact-bytes": {"chain_id", "block_hash", "depth"},
-	"source":      {"endpoint", "parameters", "response_digest", "requests"},
+	"source":      {"endpoint", "parameters", "response_digest", "requests", "window", "timescale"},
 	"phenomenon":  {"instrument", "location", "place", "at", "timescale"},
 	"method":      {"method_edition", "environment", "system", "inputs", "window", "timescale"},
 }
