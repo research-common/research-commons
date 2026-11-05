@@ -85,6 +85,7 @@ takes `--json`, which prints one JSON object (an RFC 9457 problem-details object
 | `publish` | sign and commit a statement: authored (with bytes), holds, describes, retracts, or a draft |
 | `publish task` | create a task, or publish a new edition of one |
 | `revoke` | revoke your signing key, keeping the history you choose |
+| `rotate` | retire your signing key and name its successor |
 | `pull` | admit a package (a store directory or a tar archive) under this reader's policy |
 | `fetch` | obtain blobs from the locations a `holds` statement names, verified by full hash |
 | `list` / `show` | the blobs and statements the store holds, with authorship, grade and disclosures |

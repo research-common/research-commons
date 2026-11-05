@@ -20,6 +20,13 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 - **Identity evaluation caps follow the profile (#126).** The model's 2,048-fact walk limit is replaced by three
   deterministic per-query caps (100,000 dependencies, 100,000 path edges, 1,000,000 inspections); hitting one is
   `unknown` naming the cap, and ancestry is memoized so long histories stay linear.
+### Added
+
+- **`commons rotate`** signs a `rotate_key` naming the successor (`--successor <key>`, or `--successor-key <file>`
+  whose signer is used and never its key). It merges every held tip as a soft revocation does and refuses (exit 1)
+  a tip whose branch carries a key event outside the line extended; it also refuses (exit 1) when the history it
+  extends already holds an in-force key event, or the successor's log here carries one; a successor equal to the
+  signing key is exit 2 (#128).
 
 ## [0.5.0-alpha.1] - 2026-11-05
 

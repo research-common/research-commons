@@ -264,6 +264,10 @@ is a **fork point**:
   decidable), and the owner picks which to keep and which line is `last_good`. Folding a thief's tips into the owner's history would make
   them count. `revoke` offers the three documented reasons with no default, and refuses to run
   non-interactively without `--reason`.
+  The tool's `rotate` builds a `rotate_key`'s history the same way as a soft reason (a rotation is soft): every
+  held tip is merged, a tip carrying a foreign key event is refused. It also refuses a rotation whose history
+  already holds an in-force key event (it would sit after it and count toward nothing) and a successor whose log
+  here carries a key event, in force or detached.
 
 A fork is never a refusal: no gate may refuse a statement because its signer's log has forked (I7 applies to
 the signer's own relayers too). A fork is also not a claim of misbehaviour; it is what two honest processes
