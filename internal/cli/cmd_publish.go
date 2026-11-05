@@ -928,7 +928,7 @@ func noteLock(out *Obj, l *store.WriterLock) {
 	}
 }
 
-// lockFor takes the writer lock for a command that may write. A dry run writes nothing, not even a lock file,
+// lockFor takes the writer lock for a command that may write. A dry run writes nothing, not even an empty signer directory,
 // so it takes none (a nil lock is a held one for Unlock and noteLock).
 func lockFor(c *Ctx, signer string) *store.WriterLock {
 	if _, dry := c.Flag("dry-run"); dry {
