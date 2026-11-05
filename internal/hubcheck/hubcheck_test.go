@@ -113,7 +113,10 @@ func newHub(t *testing.T, policy string) *hub {
 // git runs git in the hub with no system or global configuration (these repositories are throwaway).
 func (h *hub) git(args ...string) string {
 	h.t.Helper()
-	cmd := exec.Command("git", append([]string{"-C", h.dir, "-c", "user.name=test", "-c", "user.email=test@example.invalid"}, args...)...)
+	// commit signing off (a developer's or CI's config may sign), and maintenance.auto/gc.auto off: git 2.56 starts
+	// a detached `maintenance run --auto` after a commit, whose lock files can race the next command.
+	cmd := exec.Command("git", append([]string{"-C", h.dir, "-c", "user.name=test", "-c", "user.email=test@example.invalid", "-c", "commit.gpgsign=false",
+		"-c", "maintenance.auto=false", "-c", "gc.auto=0"}, args...)...)
 	cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull)
 	out, err := cmd.CombinedOutput()
 	if err != nil {

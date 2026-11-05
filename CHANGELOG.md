@@ -52,6 +52,12 @@ unchanged on this branch.
 - **`holds.withdrawn`** is checked (`true` only; malformed beside `locations`), and an `anchors` whose `covered`
   names another key's line is refused in the signer's log (an anchor bounds only its signer's log).
 
+- **`pull` reads a tar archive of a store tree** (plain or gzip-compressed, recognised from its bytes) as the
+  same package the unpacked directory is: members are judged by name and bytes and never extracted, so `..`,
+  absolute names, symlinks, hard links and devices are refused as in a tree, under the scan limits that
+  `status --limits` prints. An archive not read to its end is judged not at all (exit 3); one with a member
+  name twice or bytes after its end is refused whole (exit 1). zip is not read.
+
 ### Fixed
 - **Wire-format vector V5** listed its `controllers` set unsorted, which the note's own set rule refuses. Sorted
   and re-chained (V5–V12 and N8–N13 change; #88).

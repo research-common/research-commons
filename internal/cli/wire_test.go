@@ -471,7 +471,7 @@ func TestFsckAndLimits(t *testing.T) {
 			t.Fatalf("hub policy limit: %s", canon.Encode(o))
 		}
 	}
-	for _, n := range []string{"blob_bytes", "statement_bytes", "scan.member_bytes", "fetch_bytes", "gc_grace", "wire.line_bytes"} {
+	for _, n := range []string{"blob_bytes", "statement_bytes", "scan.member_bytes", "archive_bytes", "fetch_bytes", "gc_grace", "wire.line_bytes"} {
 		if !seen[n] {
 			t.Fatalf("limits table lacks %s", n)
 		}
