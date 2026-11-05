@@ -84,6 +84,18 @@ var vocabulary = []Token{
 	{"retracted", "label", "the author signed a retraction; display only, the bytes may still be served"},
 	{"held here", "bytes", "this store holds the blob's bytes and they hash correctly when read"},
 	{"not held here", "bytes", "this store does not hold the blob's bytes"},
+	// fetch (storage note §9; claims §11): one state per blob and per location tried. The location itself is in
+	// the row's location member, so "unavailable (holder's word: <location>)" stays one closed token.
+	{"fetched-and-verified", "fetch", "the bytes were fetched from a location and installed after the size and full-hash check; equivalent to a blob from a package"},
+	{"unavailable (not held locally)", "fetch", "not held here and no held holds names a location for it"},
+	{"unavailable (holder's word)", "fetch", "a holder said the bytes are at the location; it could not be reached (or the transfer died midway), so nothing was installed"},
+	{"unavailable (hash mismatch)", "fetch", "the location served bytes whose full hash differs; refused (intrinsic), both hashes and the location named, nothing installed"},
+	{"unavailable (size mismatch)", "fetch", "the location served a different number of bytes than the holds declares; refused (intrinsic) before the hash was relied on, nothing installed"},
+	{"unavailable (size limit)", "fetch", "the declared size, or the stream when none is declared, exceeds the reader's fetch limit (max_fetch_bytes); refused (operational), a declared size before dialling"},
+	{"unavailable (scheme not fetched)", "fetch", "the location's URI scheme is not one this reader fetches (https by default, http with --allow-http); refused before dialling"},
+	{"unavailable (no transport in this build)", "fetch", "this build has no network transport, so nothing was dialled"},
+	{"would fetch (dry run)", "fetch", "a dry run: the location would be dialled; nothing was"},
+	{"stored copy corrupt", "fetch", "the blob file held here does not hash to its name; never used, replaced (and quarantined) only by verified bytes"},
 	{"unpinned", "verify", "a pin the statement needs is missing: a derivation input it did not pin (nothing to re-run), or a referent field an observation's class requires (no class agreement model applied)"},
 	// referent status of an observation (claims §5.3.1, §7): the reader's computation, shown beside the observer's
 	// asserted state at capture. `provisional` is printed with its states ("provisional (3; final at 6)").

@@ -38,6 +38,9 @@ type Arg struct {
 	Name     string
 	Shape    Shape
 	Optional bool
+	// Variadic (last argument only): the argument may be given more than once; every value is shape-checked
+	// and Ctx.Many holds them all, in order (Ctx.Args holds the first).
+	Variadic bool
 }
 
 // Flag is a command option. Value names the option's argument ("" for a boolean option).
@@ -86,6 +89,11 @@ func Register(c *Command) {
 	for _, d := range registry {
 		if d.Name == c.Name {
 			panic("cli: command " + c.Name + " registered twice")
+		}
+	}
+	for i, a := range c.Args {
+		if a.Variadic && i != len(c.Args)-1 {
+			panic("cli: command " + c.Name + " argument " + a.Name + " is variadic and not last")
 		}
 	}
 	for _, f := range c.Flags {
@@ -138,6 +146,9 @@ func synopsis(c *Command) string {
 	}
 	for _, a := range c.Args {
 		x := "<" + a.Name + ">"
+		if a.Variadic {
+			x += "…"
+		}
 		if a.Optional {
 			x = "[" + x + "]"
 		}

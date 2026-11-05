@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -102,8 +101,8 @@ func TestShelfLifeSurfaces(t *testing.T) {
 // A fetch of the right bytes installs them and the reader shows revealed. The held-but-no-holds control: the
 // author's own store holds the bytes from the start and does not read as revealed.
 func TestWithheldReveal(t *testing.T) {
-	conformance.Partial(t, "C-core-75", "publish withheld (--no-holds), pull to a second store, reveal by a later holds, fetch by full hash, revealed: covered through the store's fetch, since no `fetch` command exists; the `anchored` half needs an anchor writer (no command writes one yet)")
-	conformance.Partial(t, "C-core-76", "the mismatching reveal is refused intrinsic (hash mismatch) scoped to that fetch, installs nothing and leaves the statement withheld, through the store's fetch; no `fetch` command prints the refusal yet")
+	conformance.Partial(t, "C-core-75", "publish withheld (--no-holds), pull to a second store, reveal by a later holds, `fetch` by full hash, revealed: covered through the commands; the `anchored` half needs an anchor writer (no command writes one yet)")
+	conformance.Covers(t, "C-core-76")
 	author := newPubWorld(t)
 	data := "season seed 0x5eed with a 128-bit nonce 4f1c9a2e7b3d5a60c8e1f2a3b4c5d6e7"
 	c := author.file("seed", data)
@@ -161,10 +160,14 @@ func TestWithheldReveal(t *testing.T) {
 	// C-core-76: the location serves other bytes of the same length
 	wrong := []byte(strings.Replace(data, "0x5eed", "0x5eee", 1))
 	before := snapshot(t, reader.root)
-	_, err := reader.s.Fetch(store.Digest(d), store.MapTransport{loc: wrong}, store.FetchOptions{})
-	var ref *refusal.Refusal
-	if !errors.As(err, &ref) || ref.Class != refusal.Intrinsic || ref.Reason != store.HashMismatch || !strings.Contains(ref.Detail, loc) {
-		t.Fatalf("mismatch: %v", err)
+	served := func(b []byte) Fetcher { return func(FetchConfig) store.Transport { return store.MapTransport{loc: b} } }
+	r = runFetch(reader.root, served(wrong), "fetch", d, "--json")
+	row := fetchRows(t, r)[0]
+	at := attemptsOf(row)
+	if r.code != 1 || stateOf(row) != store.StateMismatch || len(at) != 1 || at[0].Members["class"] != canon.String(string(refusal.Intrinsic)) ||
+		at[0].Members["reason"] != canon.String(store.HashMismatch) || at[0].Members["location"] != canon.String(loc) ||
+		!strings.Contains(string(at[0].Members["detail"].(canon.String)), run.Digest(wrong)) {
+		t.Fatalf("mismatch: %d %s", r.code, r.stdout)
 	}
 	if reader.s.HasBlob(store.Digest(d)) || reader.s.HasBlob(store.Digest(run.Digest(wrong))) {
 		t.Fatal("bytes installed on a mismatch")
@@ -180,9 +183,12 @@ func TestWithheldReveal(t *testing.T) {
 	}
 
 	// C-core-75: the right bytes; fetch verifies by full hash and the reader shows revealed
-	res, err := reader.s.Fetch(store.Digest(d), store.MapTransport{loc: []byte(data)}, store.FetchOptions{})
-	if err != nil || res.State != store.StateFetched {
-		t.Fatalf("fetch: %v %+v", err, res)
+	stmts := snapshot(t, filepath.Join(reader.root, "statements"))
+	if r := runFetch(reader.root, served([]byte(data)), "fetch", d, "--json"); r.code != 0 || stateOf(fetchRows(t, r)[0]) != store.StateFetched {
+		t.Fatalf("fetch: %d %s", r.code, r.stdout)
+	}
+	if snapshot(t, filepath.Join(reader.root, "statements")) != stmts {
+		t.Fatal("fetch published something")
 	}
 	if got := reveal(reader); !strings.HasPrefix(got, "revealed:") {
 		t.Fatalf("after fetch: %q", got)
@@ -194,7 +200,7 @@ func TestWithheldReveal(t *testing.T) {
 // explain), the mirror is still listed as a holder, the fetch from the mirror succeeds, and after the fetch the
 // label is still shown (and the reader's copy shows bytes held here).
 func TestRetractionEverywhere(t *testing.T) {
-	conformance.Partial(t, "C-core-139", "retracted on show, list, verify and explain in a reader store that pulled the statements; the mirror's holds still serves through the store's fetch; `the mirror shows the token` is checked on the reader's view of the mirror's holds, since the hub view of another hub is not a command")
+	conformance.Partial(t, "C-core-139", "retracted on show, list, verify and explain in a reader store that pulled the statements; the mirror's holds still serves through the `fetch` command; `the mirror shows the token` is checked on the reader's view of the mirror's holds, since the hub view of another hub is not a command")
 	src := newWorld(t)
 	src.blob("x", []byte("x"))
 	a := src.authored("A:x", "K1", "x", "licence", "CC0-1.0")
@@ -230,9 +236,9 @@ func TestRetractionEverywhere(t *testing.T) {
 		}
 	}
 	check("before fetch")
-	res, err := reader.s.Fetch(store.Digest(d), store.MapTransport{loc: []byte("x")}, store.FetchOptions{})
-	if err != nil || res.State != store.StateFetched || res.Attempts[0].Holder != src.ids["H:mirror"] {
-		t.Fatalf("fetch from the mirror: %v %+v", err, res)
+	r := runFetch(reader.root, func(FetchConfig) store.Transport { return store.MapTransport{loc: []byte("x")} }, "fetch", d, "--json")
+	if row := fetchRows(t, r)[0]; r.code != 0 || stateOf(row) != store.StateFetched || attemptsOf(row)[0].Members["holds"] != canon.String(src.ids["H:mirror"]) {
+		t.Fatalf("fetch from the mirror: %d %s", r.code, r.stdout)
 	}
 	check("after fetch")
 	if !strings.Contains(reader.run("show", d, "--json").stdout, `"bytes":"held here"`) {

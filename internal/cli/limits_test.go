@@ -212,6 +212,23 @@ var limits = []limit{
 			return KeyFormat == "rc-key/0" && ExecPolicyFormat == "rc-exec-policy/0", KeyFormat + " " + ExecPolicyFormat
 		},
 	},
+	{
+		id:  "L-10",
+		gap: "`fetch` dials https (and http on request) only, through no proxy: a holds naming an `ipfs:`, object-store or `file:` location is never fetched",
+		sources: []limitSource{
+			{help: []string{"fetch"}, says: "content-addressed networks (ipfs:), object-store schemes and file: are not fetched: admit a local copy with pull. The transport uses no proxy."},
+		},
+		probe:  "an `ipfs:`, an `s3:` and a `file:` location are refused before dialling with every opt-in given",
+		closes: "a transport for another scheme, or proxy support",
+		open: func(t *testing.T) (bool, string) {
+			for _, l := range []string{"ipfs://bafy", "s3://bucket/key", "file:///tmp/x"} {
+				if schemeAllowed(l, true) == nil {
+					return false, l + " is fetched"
+				}
+			}
+			return true, "ipfs: s3: file: refused"
+		},
+	},
 }
 
 // TestDocumentedLimits: C-core-07.

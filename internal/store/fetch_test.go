@@ -351,6 +351,31 @@ func TestFetchSizeDeclared(t *testing.T) {
 	}
 }
 
+// TestFetchDeclaredOverLimit: a holder's declared size above the reader's fetch limit is refused before
+// anything is dialled (operational, the limit named), and the next location is still tried. Without the check a
+// declared size would replace the limit as the stream's bound, so a holder could declare its way past it.
+func TestFetchDeclaredOverLimit(t *testing.T) {
+	data := []byte("0123456789")
+	d := digestOf(data)
+	big, small := "https://big.example/x", "https://small.example/x"
+	s := open(t, t.TempDir(), Options{NoSync: true})
+	ct := &countingTransport{inner: MapTransport{big: data, small: data}}
+	res, err := s.Fetch(d, ct, FetchOptions{Locations: []string{big}, Size: 11, MaxBytes: 10})
+	var ref *refusal.Refusal
+	if !errors.As(err, &ref) || ref.Class != refusal.Operational || ref.Reason != refusal.SizeLimit ||
+		!strings.Contains(ref.Detail, "max_fetch_bytes=10") || res.Attempts[0].State != StateTooLarge {
+		t.Fatal(res, err)
+	}
+	if len(ct.asked) != 0 || s.HasBlob(d) {
+		t.Fatalf("dialled %v or installed past the limit", ct.asked)
+	}
+	// control: at the limit the same bytes are fetched
+	res, err = s.Fetch(d, ct, FetchOptions{Locations: []string{small}, Size: 10, MaxBytes: 10})
+	if err != nil || res.State != StateFetched || len(ct.asked) != 1 {
+		t.Fatal(res, err, ct.asked)
+	}
+}
+
 // failingReader errors midway: a transfer that dies.
 type failingTransport struct{ data []byte }
 
@@ -470,5 +495,31 @@ func TestHTTPTransportByteExact(t *testing.T) {
 	f.Close()
 	if !bytes.Equal(got, payload) {
 		t.Fatal("bytes were transformed in transit")
+	}
+}
+
+// TestPublicAddress: the addresses fetch refuses without --allow-private. Beyond net.IP's predicates (loopback,
+// RFC 1918 and fc00::/7, link-local, unspecified, multicast): RFC 6598 shared address space (carrier-grade NAT,
+// some cloud metadata services, overlay networks), RFC 1122 "this network", the other IANA non-global blocks,
+// IPv4-mapped IPv6, and NAT64/6to4 addresses that embed a non-public IPv4 address. NAT64 and 6to4 addresses that
+// embed a public one stay fetchable: IPv6-only networks reach the internet that way.
+func TestPublicAddress(t *testing.T) {
+	for _, c := range []struct {
+		ip   string
+		want bool
+	}{
+		{"93.184.215.14", true}, {"2606:2800:21f:cb07:6820:80da:af6b:8b2c", true},
+		{"127.0.0.1", false}, {"10.1.2.3", false}, {"172.16.0.1", false}, {"192.168.1.1", false}, {"169.254.169.254", false},
+		{"100.64.0.1", false}, {"100.100.100.200", false}, {"100.127.255.254", false}, {"100.128.0.1", true},
+		{"0.0.0.1", false}, {"0.0.0.0", false}, {"192.0.0.170", false}, {"198.18.0.1", false}, {"192.0.2.1", false},
+		{"240.0.0.1", false}, {"255.255.255.255", false}, {"224.0.0.1", false},
+		{"::1", false}, {"::", false}, {"fd00::1", false}, {"fe80::1", false}, {"2001:db8::1", false}, {"100::1", false},
+		{"::ffff:10.0.0.1", false}, {"::ffff:100.64.0.1", false}, {"::ffff:93.184.215.14", true},
+		{"64:ff9b::a00:1", false}, {"64:ff9b::6440:1", false}, {"64:ff9b::5db8:d70e", true}, {"64:ff9b:1::a9fe:a9fe", false},
+		{"2002:0a00:0001::1", false}, {"2002:5db8:d70e::1", true},
+	} {
+		if got := PublicAddress(net.ParseIP(c.ip)); got != c.want {
+			t.Errorf("PublicAddress(%s) = %v, want %v", c.ip, got, c.want)
+		}
 	}
 }

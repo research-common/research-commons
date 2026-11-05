@@ -481,12 +481,15 @@ A `holds` statement may name a location outside any hub (claims-model note §11)
    transport is binary-safe (#64). Each location is an RFC 3986 URI (wire-format note §5). When the statement
    declares the size (`content.size`), a fetch that delivers a different number of bytes is refused before
    the hash is computed, and a fetch that runs past the declared size is cut off there; the OCI descriptor
-   rule ("verify size before digest") applied to a hold;
+   rule ("verify size before digest") applied to a hold. A declared size above the reader's fetch limit is
+   refused (operational) before anything is dialled. A reader fetches the schemes it implements and reports
+   every other location as `unavailable (scheme not fetched)` without dialling; which schemes ship is an
+   implementation limit, documented (I11);
 2. on match, installs the blob; from then on the local store serves it and every operation treats it exactly
    as a blob from a package (C-core-120: "fetched-and-verified");
 3. on mismatch, refuses (intrinsic), names both hashes and the location, installs nothing, and leaves the
    `holds` statement valid as the holder's word;
-4. on unreachable, reports `unavailable (holder's word: <location>)` and installs nothing.
+4. on unreachable, reports `unavailable (holder's word)` with the location beside it, and installs nothing.
 
 Fetching never publishes a `holds` of one's own: holding bytes and asserting that one serves them are
 different acts. A hub carrying statements and external holds only is a conforming store whose every blob is
