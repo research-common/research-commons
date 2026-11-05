@@ -4,89 +4,111 @@ All notable changes to the `research-commons` tool are documented here. Format f
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); this project uses
 [Semantic Versioning](https://semver.org/) with the 0.y.z ("anything may change") clause in
 effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps, and the
-`VERSION` file for the currently checked-out tool version (independent of `SCHEMA`, the on-disk
-manifest/ledger format version — `commons --version` prints both).
+`VERSION` file for the currently checked-out tool version (independent of the wire format major,
+`rc/1`). Entries up to 0.4.0-alpha.1 describe the Python alpha, which lives on `main`.
 
 ## [Unreleased]
 
-Work toward `0.5.0-alpha.1`, the first release of the next format. The Go implementation is wired to a command,
-`cmd/commons` (`init`, `key new`/`key show`, `publish`, `publish task`, `revoke`, `pull`, `fetch`, `show`, `verify`, `explain`, `list`,
-`status`, `fsck`, `gc`, `hub check`; `commons help` lists them). The alpha CLI under `bin/` and `lib/` is unchanged
-on this branch.
+Nothing yet.
+
+## [0.5.0-alpha.1] - 2026-11-05
+
+The first release of the **next format**, a clean break from the 0.4 alpha: one signed, append-only statement log
+per key, a content-addressed store directory (`rc-store/1`), and a new command-line tool written in Go
+(`cmd/commons`). There is no importer from the 0.4 format. The 0.4 alpha (Python CLI, hubs, ledgers) stays on
+`main` and at `v0.4.0-alpha.1`, and gets security fixes only.
+
+**This is an alpha.** The format may still change between alpha releases, and so may `--json` output (it carries
+no `schema` member yet), key files (`rc-key/0`) and execution policies (`rc-exec-policy/0`). What the tool does not
+do yet is listed in `docs/KNOWN-LIMITS.md`, each line backed by a test that fails when the gap closes.
+
+**Conformance at this tag** (`go test -run TestConformanceCases -v ./internal/conformance`; covered = the case's
+whole required outcome is tested, partial = a test names what remains; no case is untested):
+
+| profile | covered | partial | cases |
+|---|---|---|---|
+| core (`docs/CONFORMANCE.md`) | 133 | 46 | 179 |
+| Bitcoin time | 29 | 4 | 33 |
+| exchange | 5 | 15 | 20 |
+| execution | 16 | 2 | 18 |
+| properties | 4 | 8 | 12 |
+
+The fixed-root identity profile (`rc/2`) is a **candidate, not active**: 0 covered, 39 partial and 6 pending of 45
+scenario cases, counted on its own line and never in a total.
+
+**Install:** `go install github.com/research-common/research-commons/cmd/commons@v0.5.0-alpha.1` (Go 1.26+), or
+the attested linux/darwin × amd64/arm64 binaries attached to the GitHub release (`SHA256SUMS`,
+`gh attestation verify`). Windows does not build (L-11).
 
 ### Added
-- **Go implementation, wire layer** (`internal/`, see `internal/README.md`): strict JSON reader and RFC 8785
-  writer, time values, Ed25519 with the pinned pre-checks and EIP-191 with canonical signature storage, the
-  envelope, DSSE PAE signed string and statement ids. Every vector in `docs/DESIGN-notes-wire-format.vectors.json`
-  runs as a test; every case in `docs/CONFORMANCE.md` is a pending subtest until a test declares it.
-- **Body schema and per-key logs.** Every kind's body fields are checked for presence and type (wire format
-  §5), with an `observed` lacking a class-required referent field admitted as `unpinned` and an unlisted kind
-  kept as `unknown kind`. Per-key logs apply the ownership rule, show `FORK` and clear it only through
-  `merges`, keep a line whose predecessor is missing as `detached` with the gap named, and flag `incoherent`
-  times. Fork clearing for logs and for resource editions is one function.
+- **The command line**: `init`, `key new` / `key show`, `publish` (authored, holds, describes, retracts, or a
+  draft file), `publish task`, `revoke`, `pull`, `fetch`, `show`, `verify` (`--rerun` with an execution policy),
+  `explain`, `list`, `status` (`--limits`), `fsck`, `gc`, `hub check`. One closed vocabulary of state tokens and one
+  exit table (`docs/CLI-OUTPUTS.md`, generated from code): 0 ok, 1 checked and wrong, 2 did not start, 3 could not
+  check, 4 nothing to re-run, 5 environment mismatch. Errors are RFC 9457 problem details; peer text never reaches
+  the terminal unescaped. `--json` on every command. Keys come only from `--key` or `COMMONS_KEY`: no default path,
+  no implicit generation.
+- **Bitcoin-time profile** (`docs/DESIGN-notes-bitcoin-time.md`): receiver-local verification of OpenTimestamps
+  proofs against a headers-only chain validated in-process, with a receipt store. No command syncs headers yet, so
+  no anchor is verified in practice (L-01, L-02).
+- **Resource editions, series, observations and corroboration** (claims-model §5.3, §8): edition rules read the
+  referent record and the edition under formation, order-free; same-predecessor editions show as a fork; exact-bytes
+  finality drives status only; corroboration counts by signing key in `rc/1` and names the unit.
+- **Execution profile** (`docs/DESIGN-notes-execution.md`): re-runs in an OCI sandbox only when the reader passes
+  `--rerun` and an execution policy that admits the workflow; the environment is measured, never copied.
+- **One validation core** for `pull`, `hub check` and the publisher's pre-pin check: per-object verdicts with a
+  refusal class, scope and typed overrides; data never carries control. Reader policy (`docs/READER-POLICY.md`,
+  provisional) with a trust floor.
+- **Exchange** (claims-model §9): tasks with provisional contracts, submissions, decisions that cite exact
+  submissions, and `counting_unit`.
+- **Disclosures and determinism:** availability as two values, shelf-life age against an injected read time,
+  retractions display-only, declared vs computed sampling n; delivery order, duplication and relayers never change
+  a view; `explain` lists every statement behind an answer.
+- **Completeness claims carry a scope** (`completeness: {class, source, window}`) and are checked against the
+  observations held: `ok`, `fail` naming each unlisted reading, or `unchecked`. Display only.
+- **`pull` reads a tar or tar.gz archive** of a store tree as the same package as the unpacked tree, never
+  extracting it; ambiguous archives are refused whole (exit 1), truncated ones judged not at all (exit 3).
+- **`commons revoke`** with three documented reasons and no default; soft reasons merge every held tip, and refuse
+  (exit 1) a tip whose branch carries a key event outside the line extended; `key_compromise` needs `--last-good`.
+- **`commons fetch`** from the locations held `holds` statements name: https by default (`--allow-http`),
+  non-global addresses refused at connect time unless `--allow-private`, size checked before the hash, a location
+  serving other bytes refused and the next tried. It never publishes a `holds`. Invoking it is the opt-in to the
+  network; no other command dials.
+- **Per-key advisory writer lock** around resolve-head → sign → commit for every writer (#127): `flock` on
+  directories every store already has (it creates nothing); waits 10 s, then proceeds and says so
+  (`writer_lock`). `status --limits` declares `locks: advisory`.
+- **Fixed-root identity profile, candidate** (`docs/DESIGN-notes-fixed-root-identity.md`): schemas, vectors, a
+  reference model and an opt-in reader, with its 45 scenarios registered as conformance cases. Not activated:
+  `wire.Major` stays 1 and an `rc/2` line reads as unsupported (L-07).
+- **Release tooling:** `commons --version` reports the embedded `VERSION` on an unstamped build (a hub's CI no
+  longer prints `devel`); `.github/workflows/release.yml` builds reproducible, attested binaries and `SHA256SUMS`
+  on publish.
+- **A scripted two-store drill** (`internal/cli/drill_test.go`): publish, pull, verify, fsck, a checkout pull, and
+  a fork across two sources.
+- `SECURITY.md`: report through private vulnerability reporting; supported versions.
 
-- **Local store and commit protocol.** Blobs install from a temporary on the same filesystem and are
-  re-hashed before reuse; a corrupt stored copy is quarantined, never read. Every write is one operation
-  whose journal record is the commit point; a crash at any point recovers to the previous state or the complete
-  operation on the next open, and a failed write says whether it got past the commit point. A corrupt stored
-  statement file is quarantined and replaced by the verified line, never left to block the store from opening.
-  A failed projection leaves the operation `committed, needs repair`. The store prints what it guarantees
-  (`fsync`, `link`, same filesystem).
-- **Statements of another format major chain.** Under the linkage contract (wire format §6) the id formula and
-  `signer`, `seq`, `prev`, `merges` are the same in every major, so a reader computes another major's ids and
-  places its lines once a verified line of the same key names them; they stay `unsupported` and unverified.
-- **`anchors` is format-neutral:** `covered`, `proof`, `proof_format`, `services` (wire §5).
-- **Key events in per-key logs.** A `rotate_key` or `revoke_key` is in force once it chains, and not before
-  (wire format §7, "Gaps"); the log names which lines come after each in-force event through `prev` and
-  `merges`, so on a forked log an event on one branch never reaches the other. Rotations are reported as
-  successions across algorithms (Ed25519 to secp256k1 and back). What an event means for authority stays with
-  the resolver and the reader's policy.
-- **Resolver: authorship, derivation groups and grades** (claims-model §5.1, §5.2, §7). Per blob: sole author,
-  `derived by k`, `default author` with later claimants, or `contested`. Priority ranks only on a bound the reader
-  verified itself through a pluggable time verifier. The default verifies nothing, so every rival construction is
-  `contested` until the Bitcoin-time profile lands. A key's later `authored` on the same blob amends its earlier
-  one and keeps its bound. Single-party fields default by agreement inside a derivation group, are `contested`
-  per field, and list every rival with its signer. Derivation groups read bytes against the workflow's own
-  declared replication and comparator: T0, `diverged`, `identical bytes (protocol workflow)`, T1 under a
-  comparator the reader runs, or `unchecked`. The chain grade is the weakest derivation step; observations and
-  constructions without provenance are summarised beside it. Key events reach authorship as they reach
-  editions (the sibling rule, hard revocations).
-- **`commons revoke`** signs a `revoke_key` whose history is built by reason (storage note §4.2). The three
-  documented reasons are offered with no default; without `--reason` it asks on a terminal and refuses
-  otherwise. A soft reason merges every held tip of the key's log, and refuses (exit 1, nothing signed) when a
-  tip's branch carries a `rotate_key` or `revoke_key` outside the line extended, since merging it would let that
-  event outrank the revocation. `key_compromise` merges only the lines named with `--merge` and needs
-  `--last-good <id>` or `--last-good none`. Every tip is listed with what happens to it, and the lines that stop
-  counting are named. `--dry-run`, `--prev`, `--ts` and the key options are publish's.
-- **`holds.withdrawn`** is checked (`true` only; malformed beside `locations`), and an `anchors` whose `covered`
-  names another key's line is refused in the signer's log (an anchor bounds only its signer's log).
-- **Completeness claims can be checked.** An edition declaring `selection` `completeness` now names its scope,
-  `completeness: {class, source, window}` (wire format §5; malformed beside any other selection). The resolver
-  checks it against the observations held: a reading of that class from that source in the window that the
-  edition does not list makes the check `fail`, naming it; a reading it cannot place makes it `unchecked`;
-  otherwise `ok`, scoped to the statements held. The check never moves a membership, grade or exit. No command
-  prints it yet.
+### Changed
+- **Writer refusals decided over held statements exit 1** (a check that completed and disagreed); 3 stays for
+  refusals that depend on statements not held or on a choice the tool won't make for the owner.
+- README, GETTING-STARTED and RELEASING rewritten for the Go tool. Documents that describe only the 0.4 alpha carry
+  a banner pointing at `main`.
 
-- **`pull` reads a tar archive of a store tree** (plain or gzip-compressed, recognised from its bytes) as the
-  same package the unpacked directory is: members are judged by name and bytes and never extracted, so `..`,
-  absolute names, symlinks, hard links and devices are refused as in a tree, under the scan limits that
-  `status --limits` prints. An archive not read to its end is judged not at all (exit 3); one with a member
-  name twice or bytes after its end is refused whole (exit 1). zip is not read.
-
-- **`commons fetch <digest|id>…`** obtains blobs from the locations named by the `holds` statements this store
-  holds (storage note §9), through the exact-bytes install: a declared size is held to before the hash, a
-  location serving other bytes is refused (intrinsic, both hashes and the location named, nothing installed) and
-  the next one is tried, an unreachable one is `unavailable (holder's word)`. It never signs or publishes a
-  `holds`. Invoking it is the opt-in to dial: https only by default (`--allow-http` adds http), loopback,
-  private, link-local, shared (RFC 6598) and other non-global addresses refused unless `--allow-private` (NAT64 and 6to4 judged by the IPv4 address they embed), any other scheme refused before dialling,
-  `--timeout` per location (default 5m), `--max-bytes` (default 1 GiB; a declared size over it is refused before
-  dialling). `--dry-run` prints the plan and dials nothing. Exit 0 every blob held and verified, 1 a blob
-  refused on a completed hash or size mismatch with no good location, 3 unobtained otherwise. A corrupt held
-  copy is replaced by verified bytes and quarantined. Positional arguments of a command may now be variadic.
+### Removed
+- **The Python alpha CLI is no longer on this line** (`bin/`, `lib/`, `comparators/`, `tests/`, `registry/`,
+  `environments/`, `package.json`). It remains on `main` and at `v0.4.0-alpha.1`.
 
 ### Fixed
 - **Wire-format vector V5** listed its `controllers` set unsorted, which the note's own set rule refuses. Sorted
   and re-chained (V5–V12 and N8–N13 change; #88).
+
+### Known issues (open at this tag)
+- Every gap in `docs/KNOWN-LIMITS.md` (L-01…L-12). The ones a first user meets:
+  - No command verifies Bitcoin time yet, so every rival construction is `contested`. (#59)
+  - There is no Windows build (L-11), and `--json` output may change between alphas (L-12).
+- The identity profile's traversal cap (2,048 relevant root events) is below its own stated limits; fixed before
+  any consumer is built (#126).
+- No `commons rotate` (#128); `fetch --timeout` is whole-request, not idle (#129).
+- The `next-format` issues are requirements for later stages, not defects in this release.
 
 ## [0.4.0-alpha.1] - 2026-10-12
 
@@ -469,7 +491,8 @@ contributions, landed on top of that baseline.
 - **#12** — COMMONS.md review request from an external hub: the first outside use of the
   template and rubric.
 
-[Unreleased]: https://github.com/research-common/research-commons/compare/v0.4.0-alpha.1...HEAD
+[Unreleased]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.1...next
+[0.5.0-alpha.1]: https://github.com/research-common/research-commons/releases/tag/v0.5.0-alpha.1
 [0.4.0-alpha.1]: https://github.com/research-common/research-commons/compare/v0.3.0-alpha.1...v0.4.0-alpha.1
 [0.3.0-alpha.1]: https://github.com/research-common/research-commons/compare/v0.2.0-alpha.1...v0.3.0-alpha.1
 [0.2.0-alpha.1]: https://github.com/research-common/research-commons/releases/tag/v0.2.0-alpha.1
