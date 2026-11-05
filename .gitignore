@@ -1,39 +1,8 @@
-# derived: rebuildable from manifests via `commons reindex`
-registry/index.sqlite
-
-# derived: rebuildable from manifests via `commons render-site` (static browser)
-site/browse/
-__pycache__/
-*.pyc
-# local-only: this host's trust policy and view, never replicated
-registry/peers.json
-registry/quarantine.log
-
-# runtime logs (local operational noise, not registry content)
-logs/
-
-# OpenTimestamps upgrade byproducts (the .ots proof itself is the artifact)
-*.ots.bak
-
-registry/exec-policy.json
-
-# local-only subscription state (refused on push/pull, like exec-policy.json)
-registry/subscriptions.json
 # local build/export output
 dist/
 
-# scratch/trash and one-off working files, never registry content
+# scratch/trash, never repository content
 .trash/
-r.json
-*.pre-archive-bak
-*.bak-normalize-*
 
-# signer dependency (npm install at repo root). package-lock.json is intentionally NOT
-# ignored as of 0.2.0-alpha.1: it's committed so `npm ci` is reproducible (research-commons-
-# hub-template#1); only the installed node_modules/ tree stays untracked.
-node_modules/
-
-# tool/data split: artifacts live in hubs (`commons hub init`), never in the tool repo
-registry/*
-!registry/exec-policy.example.json
+# a hub's object store, created by `commons` in the working directory
 /store/
