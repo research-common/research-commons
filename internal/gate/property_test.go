@@ -296,7 +296,7 @@ var controlPaths = []string{
 func TestPropertyDataNeverCarriesControl(t *testing.T) {
 	conformance.Covers(t, "P-05")
 	keys := map[string]wire.Key{"A": testKey("A"), "B": testKey("B"), "C": testKey("C")}
-	polBytes := []byte(`{"limits":{"blob_bytes":4096},"not_served":[],"policy":"rc-hub-policy/1","series":{"refuse_premature_freeze":true}}`)
+	polBytes := []byte(`{"limits":{"blob_bytes":4096},"not_served":[],"policy":"rc-hub-policy/1","selection":{"refuse_incomplete":true},"series":{"refuse_premature_freeze":true}}`)
 	fixture.Check(t, 1300, 80, fixture.Default, func(f fixture.Fixture) string {
 		pol, err := ParseHubPolicy(polBytes, "reader")
 		if err != nil {
