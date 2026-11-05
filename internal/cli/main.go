@@ -544,6 +544,8 @@ func outputsMarkdown() string {
 	b.WriteString("Generated from `internal/cli` (`exit.go`, `vocab.go`) by `RC_UPDATE_DOCS=1 go test -run TestOutputsDoc ./internal/cli`.\n")
 	b.WriteString("Do not edit by hand: a test fails when this file and the code differ. `commons help exits` and\n`commons help outputs` print the same tables.\n\n")
 	b.WriteString("Errors are RFC 9457 problem-details objects (`type`, `title`, `detail`, `class`, `scope`, `committed`,\n`next`, `exit`; peer-supplied text only in `peer_text`). Types are `" + ProblemTypeBase + "<slug>`.\n\n")
+	b.WriteString("Platforms: Linux and macOS. Windows is not supported: the tool does not build for it.\n\n")
+	b.WriteString("Stability: the `--json` output may change between alpha releases. It carries no `schema` member yet.\n\n")
 	b.WriteString("## Exit codes\n\n| exit | name | meaning |\n|---|---|---|\n")
 	for _, r := range ExitRows() {
 		b.WriteString("| " + r[0] + " | " + r[1] + " | " + r[2] + " |\n")
