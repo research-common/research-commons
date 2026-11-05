@@ -1,3 +1,5 @@
+> **Describes the 0.4 alpha (the `main` branch); the next format replaces it. See the [README](../README.md) and the design notes under `docs/` for the current format.**
+
 # Design note: Divergence reports as first-class artifacts
 
 **Date:** 2026-08-02 · **Status:** proposed convention for design review

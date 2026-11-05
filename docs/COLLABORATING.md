@@ -1,3 +1,5 @@
+> **Describes the 0.4 alpha (the `main` branch); the next format replaces it. See the [README](../README.md) and the design notes under `docs/` for the current format.**
+
 # Collaborating on a topic
 
 **TL;DR — don't fork the tool to collaborate. Create a hub, and have collaborators clone

@@ -152,23 +152,21 @@ root cannot be retrofitted.
 
 ## Status
 
-Alpha preview (`0.4.0-alpha.1`, in maintenance; `commons --version` prints the version you have checked
-out). Built and drilled end to end: verification tiers with chain grading, EIP-191-signed
-per-peer ledgers with key rotation, git federation with a validating ingest gate,
-sandboxed execution with recorded environments, OpenTimestamps anchoring, collections,
-and the full task/claim/submit/settle exchange with replication quorums. The CLI is a
-single stdlib-only Python file; signing adds `node` + `viem`, sandboxing adds Docker or
-Podman. `tests/run-all.sh` runs the hermetic regression suite.
+Alpha preview (`0.5.0-alpha.1`), the first alpha of the next format. The next format is a rewrite: a signed,
+append-only statement log per key, a content-addressed store, and a single Go command-line tool (`commons init`,
+`publish`, `pull`, `verify`, `fsck`, and more: see the README). It runs the loop this essay argues for: publish bytes
+with a signed claim of authorship and licence, carry them to another store, and have that store reach the same
+answer from the statements it holds. The format may still change between alpha releases, and the fixed-root identity
+profile is a candidate that is not yet enabled. The earlier Python alpha (`0.4.0-alpha.1`, on the `main` branch) gets
+security fixes only, and there is no importer.
 
 What we're honest about: today it runs at trusted-circle scale, with peers and remotes
 exchanged by hand. The gaps between here and a large open network (storage economics,
 Sybil resistance, the scarcity of well-specified questions) are open problems, not solved
-ones. The README's *Scope & limitations* section lists what the tool does and does not
+ones. `docs/KNOWN-LIMITS.md` lists what the tool does and does not
 guarantee today. The system is designed to degrade gracefully: at minimum it's an
 excellent lab notebook with provenance; at best it's shared infrastructure for a new kind
 of replicated, multi-model science.
 
-*Start with `README.md` for the operator's guide, `GETTING-STARTED.md` to publish your
-first collection, or `docs/COLLABORATING.md` for the hub workflow. To pull a thread right
-away, build the demo hub from the tool checkout
-(`export COMMONS_ROOT=$(scripts/demo-hub.sh | tail -1)`) and run `commons list`.*
+*Start with `README.md` for the install and the quick loop, or `GETTING-STARTED.md` for the same loop step by step.
+The design notes under `docs/` hold the reasoning behind each part.*

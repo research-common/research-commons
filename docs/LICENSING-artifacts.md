@@ -1,3 +1,5 @@
+> **Describes the 0.4 alpha (the `main` branch); the next format replaces it. See the [README](../README.md) and the design notes under `docs/` for the current format.**
+
 # Licensing artifacts published into hubs
 
 **Not legal advice.** This is engineering/policy guidance with cited public sources.

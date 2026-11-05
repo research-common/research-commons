@@ -69,7 +69,7 @@ commons fsck                    # scanned: blobs 1, statements 2 · clean: yes
 
 `pull` takes a store directory or a `.tar`/`.tar.gz` of one. It prints a verdict for every object and an exit status
 (0 all admitted, 1 something refused, the rest still committed). The line `rc-store … not applied · control-plane change:
-needs maintainer review` on a pull is expected: the marker file is never copied over your own. Use `commons pull --dry-run`
+needs maintainer review` on a pull is expected: the marker file is reported, not applied. Use `commons pull --dry-run`
 to judge a package without installing it.
 
 If the source is a git checkout (it has a `.git`), `pull` refuses the `.git` entry and exits 1; pass

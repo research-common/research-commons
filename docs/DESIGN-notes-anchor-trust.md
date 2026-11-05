@@ -1,3 +1,5 @@
+> **Describes the 0.4 alpha (the `main` branch); the next format replaces it. See the [README](../README.md) and the design notes under `docs/` for the current format.**
+
 # Anchor trust: read-side containment
 
 An anchor JSON file is replicated data, not a receiver's verification verdict. Its
