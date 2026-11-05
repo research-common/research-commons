@@ -497,12 +497,13 @@ decide who is right.
    A completeness claim names its scope in the same edition, as `completeness: {class, source, window}`: an
    observation class (`source`, `phenomenon` or `method`), the source as that class's identifying referent
    field (`endpoint`, `instrument`, `method_edition`), and a time window. A reader checks it against the
-   observations it holds. A counted `observed` of that class whose referent names that source, and whose
-   position falls in the window, is in scope, and the edition must list it, by statement or by its content.
+   observations it holds. A counted `observed` of that class whose referent names that source (URIs compared
+   after normalization, wire-format note §5), and whose position falls in the window, is in scope, and the edition must list it, by statement or by its content.
    The position is read as a series segment's is (§8): the start of the referent's window, else its time,
    else the time in its finality state at capture. One in scope and not listed makes the check `fail`,
-   naming each such reading; a reading of that class whose source or position the reader cannot read, or
-   whose position is in another timescale (never converted), makes it `unchecked` unless another reading
+   naming each such reading; a reading of that class whose source or position the reader cannot read, whose source
+   matches only loosely (a trailing `/`, a percent-encoding), or whose position is in another timescale (never
+   converted), makes it `unchecked` unless another reading
    already fails it; otherwise it is `ok`, scoped to the statements the reader holds, which is never a claim
    that no other reading exists. The check is declared beside computed (§7): it never moves a grade, a membership
    or a `verify` exit (I6), and a hub may refuse an edition whose claim fails, under its own policy, as it may
