@@ -71,6 +71,17 @@ unchanged on this branch.
   `status --limits` prints. An archive not read to its end is judged not at all (exit 3); one with a member
   name twice or bytes after its end is refused whole (exit 1). zip is not read.
 
+- **`commons fetch <digest|id>…`** obtains blobs from the locations named by the `holds` statements this store
+  holds (storage note §9), through the exact-bytes install: a declared size is held to before the hash, a
+  location serving other bytes is refused (intrinsic, both hashes and the location named, nothing installed) and
+  the next one is tried, an unreachable one is `unavailable (holder's word)`. It never signs or publishes a
+  `holds`. Invoking it is the opt-in to dial: https only by default (`--allow-http` adds http), loopback,
+  private and link-local addresses refused unless `--allow-private`, any other scheme refused before dialling,
+  `--timeout` per location (default 5m), `--max-bytes` (default 1 GiB; a declared size over it is refused before
+  dialling). `--dry-run` prints the plan and dials nothing. Exit 0 every blob held and verified, 1 a blob
+  refused on a completed hash or size mismatch with no good location, 3 unobtained otherwise. A corrupt held
+  copy is replaced by verified bytes and quarantined. Positional arguments of a command may now be variadic.
+
 ### Fixed
 - **Wire-format vector V5** listed its `controllers` set unsorted, which the note's own set rule refuses. Sorted
   and re-chained (V5–V12 and N8–N13 change; #88).

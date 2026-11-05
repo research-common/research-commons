@@ -60,6 +60,7 @@ func init() {
 		},
 		Store: true,
 		Help: "Each argument is a blob digest, or the id of a held statement whose content is fetched. A blob already held and intact is not fetched again; a corrupt held copy is replaced by a verified one (the corrupt file goes to quarantine). " +
+			"Only https locations are fetched, and http with --allow-http; content-addressed networks (ipfs:), object-store schemes and file: are not fetched: admit a local copy with pull. The transport uses no proxy. " +
 			"Exit 0 every blob is held and verified (a location that served wrong bytes before another served the right ones is reported, and still 0); 1 a blob was refused on a completed hash or size mismatch and no location served it; " +
 			"3 a blob was not obtained without such a refusal (unreachable, no location named, a fetch limit, a scheme not fetched, no transport in this build, the statement not held); 2 did not start. A dry run exits 0 once the plan is made.",
 		Run: fetchCmd})
