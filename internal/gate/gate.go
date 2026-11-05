@@ -877,12 +877,12 @@ func completenessCheck(r *Result, res *resolve.Resolver) {
 	st := r.st
 	rid, _ := st.Body.Get("resource")
 	resID, _ := rid.(canon.String)
+	if resolve.Selection(st.Body) != "completeness" {
+		return // no claim: the knob has nothing to say
+	}
 	c, ok := res.Completeness(string(resID), resolve.EditionID(st.Body))
 	if !ok {
 		r.label(LabelCompleteness, "edition not authorized in the evaluated set; completeness policy not applicable")
-		return
-	}
-	if !c.Declared {
 		return
 	}
 	r.Completeness = c
