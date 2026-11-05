@@ -25,7 +25,7 @@ import (
 //
 // Invoking fetch is the reader's opt-in to dial. This package dials nothing: the transport comes from the
 // binary (Env.Fetch), as the re-run bridge does. Only https is fetched by default (--allow-http adds http),
-// loopback, private and link-local addresses are refused unless --allow-private names a local mirror, and
+// loopback, private, link-local, shared (RFC 6598) and other non-global addresses are refused unless --allow-private names a local mirror, and
 // every other scheme (file:, ipfs:, …) is refused before dialling: local copies are admitted through pull.
 
 // FetchConfig is the reader's choice for one fetch invocation, passed to the transport factory.
@@ -47,7 +47,7 @@ func init() {
 		Args: []Arg{{Name: "digest|id", Shape: ShapeRef, Variadic: true}},
 		Flags: []Flag{
 			{Name: "allow-http", Help: "also fetch plain http locations (default: https only)"},
-			{Name: "allow-private", Help: "allow loopback, private and link-local addresses (a local mirror); refused by default, checked on the address actually dialled"},
+			{Name: "allow-private", Help: "allow loopback, private, link-local, shared (100.64.0.0/10) and other non-global addresses (a local mirror); refused by default, checked on the address actually dialled"},
 			{Name: "timeout", Value: "duration", Help: "the bound on one location (Go duration, e.g. 30s, 5m); default 5m", Check: positiveDuration},
 			{Name: "max-bytes", Value: "n", Help: "the fetch limit max_fetch_bytes: a location whose declared size exceeds it is refused before dialling, and a stream with no declared size is cut off past it (default 1073741824)",
 				Check: func(v string) error {

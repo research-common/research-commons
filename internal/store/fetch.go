@@ -445,9 +445,8 @@ func (h HTTPTransport) client() *http.Client {
 			if err != nil {
 				return err
 			}
-			ip := net.ParseIP(host)
-			if ip == nil || ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast() {
-				return fmt.Errorf("refusing to connect to %s: loopback, private and link-local addresses are not fetched from by default", host)
+			if ip := net.ParseIP(host); ip == nil || !PublicAddress(ip) {
+				return fmt.Errorf("refusing to connect to %s: loopback, private, link-local, shared and reserved addresses are not fetched from by default", host)
 			}
 			return nil
 		}
@@ -494,4 +493,65 @@ func (h HTTPTransport) Fetch(ctx context.Context, location string) (io.ReadClose
 		return nil, fmt.Errorf("%s: HTTP %d", location, resp.StatusCode)
 	}
 	return resp.Body, nil
+}
+
+// nonGlobal are the IANA special-purpose blocks (RFC 6890 registries) that net.IP's predicates do not cover
+// and that are not globally reachable: RFC 1122 "this network", RFC 6598 shared address space (carrier-grade
+// NAT; also where some cloud metadata services and overlay networks put their nodes), RFC 6890 IETF protocol
+// assignments, RFC 2544 benchmarking, RFC 1112 reserved (incl. limited broadcast), and the IPv6 documentation,
+// discard-only and ORCHID blocks.
+var nonGlobal = func() []*net.IPNet {
+	var ns []*net.IPNet
+	for _, c := range []string{"0.0.0.0/8", "100.64.0.0/10", "192.0.0.0/24", "192.0.2.0/24", "198.18.0.0/15", "198.51.100.0/24",
+		"203.0.113.0/24", "240.0.0.0/4", "100::/64", "2001::/23", "2001:db8::/32", "3fff::/20", "5f00::/16"} {
+		_, n, _ := net.ParseCIDR(c)
+		ns = append(ns, n)
+	}
+	return ns
+}()
+
+// embedding are IPv6 blocks whose address carries an IPv4 address a gateway reaches: NAT64 (RFC 6052 well-known
+// prefix, RFC 8215 local-use) with the IPv4 address in the last 32 bits, and 6to4 (RFC 3056) in bits 16–47. Such
+// an address is as public as the IPv4 address it embeds.
+var embedding = func() []struct {
+	n   *net.IPNet
+	off int
+} {
+	var es []struct {
+		n   *net.IPNet
+		off int
+	}
+	for _, e := range []struct {
+		c   string
+		off int
+	}{{"64:ff9b::/96", 12}, {"64:ff9b:1::/48", 12}, {"2002::/16", 2}} {
+		_, n, _ := net.ParseCIDR(e.c)
+		es = append(es, struct {
+			n   *net.IPNet
+			off int
+		}{n, e.off})
+	}
+	return es
+}()
+
+// PublicAddress reports whether fetch may connect to ip without --allow-private: not loopback, private,
+// link-local, unspecified, multicast or in another non-global special-purpose block, and, for an IPv6 address
+// that embeds an IPv4 one (NAT64, 6to4), the embedded address is public too.
+func PublicAddress(ip net.IP) bool {
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast() {
+		return false
+	}
+	for _, n := range nonGlobal {
+		if n.Contains(ip) {
+			return false
+		}
+	}
+	if ip.To4() == nil {
+		for _, e := range embedding {
+			if e.n.Contains(ip) {
+				return PublicAddress(net.IP(ip.To16()[e.off : e.off+4]))
+			}
+		}
+	}
+	return true
 }

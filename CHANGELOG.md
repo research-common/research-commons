@@ -76,7 +76,7 @@ unchanged on this branch.
   location serving other bytes is refused (intrinsic, both hashes and the location named, nothing installed) and
   the next one is tried, an unreachable one is `unavailable (holder's word)`. It never signs or publishes a
   `holds`. Invoking it is the opt-in to dial: https only by default (`--allow-http` adds http), loopback,
-  private and link-local addresses refused unless `--allow-private`, any other scheme refused before dialling,
+  private, link-local, shared (RFC 6598) and other non-global addresses refused unless `--allow-private` (NAT64 and 6to4 judged by the IPv4 address they embed), any other scheme refused before dialling,
   `--timeout` per location (default 5m), `--max-bytes` (default 1 GiB; a declared size over it is refused before
   dialling). `--dry-run` prints the plan and dials nothing. Exit 0 every blob held and verified, 1 a blob
   refused on a completed hash or size mismatch with no good location, 3 unobtained otherwise. A corrupt held
