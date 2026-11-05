@@ -265,12 +265,16 @@ func fetchCmd(c *Ctx) (*Obj, int, error) {
 				row.set("state", tokV(tok(fsHeld)))
 				held++
 			default:
-				st := fsNoTransport
 				if strings.HasPrefix(av.State, store.StateCorrupt) {
 					row.set("local_copy", tokV(tok(fsCorrupt)))
 				}
+				pl := planRows(av, cfg, max, false)
+				st := fsNoTransport
+				if len(pl) == 0 {
+					st = fsNoLocation // nothing to dial even with a transport
+				}
 				row.set("state", tokV(tok(st)))
-				row.set("attempts", planRows(av, cfg, max, false))
+				row.set("attempts", pl)
 				unobtained++
 			}
 			rows = append(rows, row)

@@ -347,6 +347,10 @@ func TestFetchNoTransport(t *testing.T) {
 	if r.code != 3 || stateOf(rows[1]) != "unavailable (no transport in this build)" || !strings.Contains(r.stdout, "https://e.example/y") {
 		t.Fatalf("no transport: %d %s", r.code, r.stdout)
 	}
+	// a blob no holds names a location for: unavailable (not held locally), with or without a transport
+	if r := w.run("fetch", dig("nobody"), "--json"); r.code != 3 || stateOf(fetchRows(t, r)[0]) != store.StateNotHeld {
+		t.Fatalf("no location: %d %s", r.code, r.stdout)
+	}
 	// a nil transport from the factory is the same as none
 	if r := runFetch(w.root, func(FetchConfig) store.Transport { return nil }, "fetch", shaB(data), "--json"); r.code != 3 {
 		t.Fatalf("nil factory: %d", r.code)
