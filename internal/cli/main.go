@@ -38,6 +38,9 @@ type Env struct {
 	// asking. A nil Stdin reads nothing.
 	Stdin       io.Reader
 	Interactive bool
+	// Fetch builds the network transport `fetch` dials through; nil in a build without network access (fetch then
+	// answers from what is held, exit 3 for anything not held). This package never dials anything itself.
+	Fetch Fetcher
 }
 
 // Ctx is one invocation as a command's Run sees it: arguments and flags already validated, the store (when
