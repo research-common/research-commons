@@ -14,6 +14,8 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   from the last body byte received, so a large transfer that keeps flowing is no longer cut off after five minutes.
   `--timeout` is now an optional cap on the whole location and has no default; the output limits show both
   (`timeout_per_location` reads `none` when unset, `idle_timeout` is new). (#129)
+- `commons help "hub check"` (a multi-word command name quoted as one word) now works like `commons help hub check`.
+- `commons pull` no longer reports the store marker (or any control-plane file) as "not applied" when it is byte-identical to the receiver's own; a differing one is still reported.
 
 ## [0.5.0-alpha.1] - 2026-11-05
 

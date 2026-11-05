@@ -210,13 +210,18 @@ func dispatch(argv []string, env *Env) (*Obj, int, error) {
 		return helpObj(nil), ExitOK, nil
 	}
 	if pre.words[0] == "help" {
-		c, n := lookup(pre.words[1:])
-		if len(pre.words) > 1 && (c == nil || n != len(pre.words)-1) {
-			if len(pre.words) == 2 && (pre.words[1] == "outputs" || pre.words[1] == "exits") {
-				return outputsObj(pre.words[1]), ExitOK, nil
+		// a multi-word name may arrive quoted as one word ("hub check") or as separate words
+		var topic []string
+		for _, w := range pre.words[1:] {
+			topic = append(topic, strings.Fields(w)...)
+		}
+		c, n := lookup(topic)
+		if len(topic) > 0 && (c == nil || n != len(topic)) {
+			if len(topic) == 1 && (topic[0] == "outputs" || topic[0] == "exits") {
+				return outputsObj(topic[0]), ExitOK, nil
 			}
 			return nil, 0, usage("unknown-command", "unknown command", "there is no such command; nothing was done",
-				"invocation", "run commons help to list the commands", strings.Join(pre.words[1:], " "))
+				"invocation", "run commons help to list the commands", strings.Join(topic, " "))
 		}
 		return helpObj(c), ExitOK, nil
 	}

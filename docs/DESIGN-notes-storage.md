@@ -271,7 +271,8 @@ produce.
 
 ### 4.3 Local writer lock
 
-An implementation holds an advisory, per-key, process-scoped lock around "resolve head → sign → step 3" so
+An implementation holds an advisory, per-key lock, scoped per process or finer (`flock` is per open file
+description, so two writers inside one process exclude each other too), around "resolve head → sign → step 3" so
 that two of *its own* processes on one machine do not fork casually. The lock is an optimization:
 
 - a writer that cannot acquire it waits a bounded time, then proceeds without it and may fork;
@@ -283,7 +284,8 @@ The reference implementation locks with `flock` on directories every store alrea
 (no lock file, no directory), so the layout gains no path and a refused write leaves the store unchanged: a
 shared lock on `statements/` plus an exclusive one on `statements/<signer>/`, or, for a key's first write
 (no such directory yet), an exclusive lock on `statements/`. It waits up to 10 s, then proceeds without the
-lock and says so in the command's output (`writer_lock`). A dry run takes none.
+lock and says so in the command's output (`writer_lock`). A dry run takes none. The `locks` declaration (§7) is
+the capability; a write that proceeded unlocked says so in its own output.
 
 ### 4.4 Same blob, two publishers (C-core-128)
 

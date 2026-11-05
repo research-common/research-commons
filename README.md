@@ -44,7 +44,7 @@ go build -o commons ./cmd/commons
 ```
 
 Pre-built binaries will be attached to the GitHub release once release builds are published; until then, build from
-source. The module has three runtime dependencies.
+source. The module has three direct runtime dependencies (`golang.org/x/sys` comes in indirectly through `golang.org/x/crypto`).
 
 ## The quick loop
 

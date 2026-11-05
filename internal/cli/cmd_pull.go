@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -210,6 +211,7 @@ func pullCmd(c *Ctx) (*Obj, int, error) {
 		}
 		return nil, 0, failed(err, "package "+dir, false, "pull again; nothing was committed")
 	}
+	dropUnchangedControlPlane(rep, pkg, c.Root)
 	o := gateReport(rep)
 	o.set("package", peerV(dir))
 	if format != "" {
@@ -290,4 +292,32 @@ func readArchive(path string, maxBytes int64) (gate.Package, error) {
 		p.Exit = ExitCouldNot
 	}
 	return gate.Package{}, p
+}
+
+// dropUnchangedControlPlane removes from a pull's report the control-plane objects that are byte-identical to the
+// receiver's own file at the same path (the store marker of a fresh store, a hub's README the receiver already
+// holds): there is nothing for a maintainer to review, so the report does not ask. A control-plane object that
+// differs, or that the receiver does not have, is kept as "not applied".
+func dropUnchangedControlPlane(rep *gate.Report, pkg gate.Package, root string) {
+	data := map[string][]byte{}
+	for _, ob := range pkg.Objects {
+		if ob.Mode == gate.Regular && ob.Change != gate.Delete {
+			data[ob.Path] = ob.Data
+		}
+	}
+	kept := rep.Results[:0:0]
+	for _, r := range rep.Results {
+		if r.Kind == gate.KindControlPlane || r.Kind == gate.KindMarker {
+			if in, ok := data[r.Path]; ok && r.Verdict == gate.NotApplied {
+				fp := filepath.Join(root, filepath.FromSlash(r.Path))
+				if fi, err := os.Lstat(fp); err == nil && fi.Mode().IsRegular() {
+					if mine, err := os.ReadFile(fp); err == nil && bytes.Equal(mine, in) {
+						continue
+					}
+				}
+			}
+		}
+		kept = append(kept, r)
+	}
+	rep.Results = kept
 }
