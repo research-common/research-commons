@@ -456,7 +456,7 @@ func reencode(t *testing.T, line []byte) []byte {
 // controller twice: FORK, no tip, verify exit 3, every order alike.
 func TestEditionFork(t *testing.T) {
 	conformance.Partial(t, "C-core-84", "timestamps tied/skewed/reversed are not read by the resolver at all (no ts in resource.go); file order is covered by delivery permutations")
-	conformance.Partial(t, "C-core-86", "two hubs: the union of their statements is resolved here; pull is not built")
+	conformance.Partial(t, "C-core-86", "two hubs: the union of their statements is resolved here; the two-hub drill through `pull` is not scripted")
 	for _, twice := range []bool{false, true} {
 		w := newWorld(t)
 		g := w.genesis("G", "A", 0, "A", "B")
