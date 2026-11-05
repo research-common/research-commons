@@ -135,14 +135,21 @@ func (c *Completeness) inScope(p *Placed, from, to rctime.Time) (bool, string) {
 	ref := object(p.St.Body, "referent")
 	f := sourceField[c.Class]
 	src := str(ref, f)
+	if src == "" && c.Class == "source" {
+		// a batch names the endpoint every logged request shares, when there is one (wire §5)
+		src, f = str(object(ref, "requests"), "endpoint"), "endpoint (one request) or requests.endpoint (a batch)"
+	}
 	if src == "" {
 		return false, "referent names no " + f + ": its source cannot be read"
 	}
-	if src != c.Source {
+	switch compareSource(src, c.Source) {
+	case uriDiffer:
 		return false, ""
+	case uriLoose:
+		return false, "source " + quoteInert(src) + " equals the claim's only once a trailing / or a percent-encoding is set aside: it may or may not be the same resource"
 	}
-	// the position, read as a series segment's (§8): the start of the window, else the time, else the time in
-	// the finality state at capture
+	// the position, read as a series segment's (§8): the start of the window (for a source, the period the
+	// response covers), else the time, else the time in the finality state at capture
 	text, scale := str(object(ref, "window"), "from"), str(ref, "timescale")
 	if text == "" {
 		text = str(ref, "at")

@@ -163,3 +163,70 @@ func completenessIDs(ids ...string) []string {
 	slices.Sort(out)
 	return out
 }
+
+// TestCompletenessSourceClass: a completeness claim over a source (one month of a dataset endpoint), as a hub
+// that captures in batches and after the fact would declare it. A reading's position is its referent window
+// (the period the response covers), not when it was fetched: a November capture of October data is in an
+// October window, and missing from the edition it makes the check `fail`. A batch names its source by
+// `requests.endpoint`; a batch without one cannot be placed (`unchecked`). The endpoint is compared after RFC
+// 3986 normalization (an upper-case host and the default port are the same endpoint, in scope); a spelling
+// equal only once a trailing slash is set aside is undecided (`unchecked`, never out of scope); a reading with
+// no window falls back to its finality state's `captured_at`, and with a run-labelled state it has no position.
+func TestCompletenessSourceClass(t *testing.T) {
+	const ep = "https://data.example.org/api/v1/datasets/B1610"
+	w := newWorld(t)
+	g := w.sign("G", "A", "genesis", obj("type", "collection", "name", "october", "controllers", w.controllers("A"), "rule", obj("any_one", true)))
+	oct := func(from, to string) canon.Value { return obj("from", from, "to", to) }
+	batch := func(name, x, endpoint string, window canon.Value, captured string) string {
+		req := obj("digest", dig(x+"-log"), "format", "jsonl", "count", 300)
+		if endpoint != "" {
+			req = obj("digest", dig(x+"-log"), "format", "jsonl", "count", 300, "endpoint", endpoint)
+		}
+		ref := obj("requests", req)
+		if window != nil {
+			ref = obj("requests", req, "window", window)
+		}
+		return w.observedRef(name, "O1", x, "source", ref, "finality", obj("rule", "settlement", "state_at_capture", obj("captured_at", captured)))
+	}
+	// listed: an October batch captured in October
+	listed := batch("B1", "oct-a", ep, oct("2026-10-01T00:00:00Z", "2026-10-08T00:00:00Z"), "2026-10-09T00:00:00Z")
+	// missing: October data captured on 20 November, endpoint spelled with an upper-case host and port 443
+	late := batch("B2", "oct-b", "https://DATA.example.org:443/api/v1/datasets/B1610", oct("2026-10-08T00:00:00Z", "2026-10-15T00:00:00Z"), "2026-11-20T00:00:00Z")
+	// out of scope: September data captured in October (its window is outside, though its capture is inside)
+	batch("B3", "sep", ep, oct("2026-09-24T00:00:00Z", "2026-10-01T00:00:00Z"), "2026-10-02T00:00:00Z")
+	scope := obj("class", "source", "source", ep, "window", obj("from", "2026-10-01T00:00:00Z", "to", "2026-11-01T00:00:00Z"))
+	claim := w.editionWith("E1", "A", g, []string{g}, "members", entries(st(listed)), "selection", "completeness", "completeness", scope)
+	c, _ := w.store(nil).Completeness(g, "")
+	if c.Edition != w.ed(claim) || c.Outcome != RuleFail || !slices.Equal(c.Missing, []string{late}) || len(c.Unread) != 0 {
+		t.Fatalf("want fail naming the late capture of October data: %s", c.Render())
+	}
+	// list it: ok
+	w.editionWith("E2", "A", g, []string{claim}, "members", entries(st(listed), st(late)), "selection", "completeness", "completeness", scope)
+	if c, _ := w.store(nil).Completeness(g, ""); c.Outcome != RuleOK {
+		t.Fatalf("both listed: %s", c.Render())
+	}
+	// a batch that names no endpoint: its source cannot be read
+	anon := batch("B4", "anon", "", oct("2026-10-15T00:00:00Z", "2026-10-22T00:00:00Z"), "2026-10-23T00:00:00Z")
+	c, _ = w.store(nil).Completeness(g, "")
+	if c.Outcome != RuleUnchecked || !strings.Contains(c.Unread[anon], "requests.endpoint") {
+		t.Fatalf("batch without endpoint: %s", c.Render())
+	}
+	// a trailing slash: maybe another resource, so undecided, never out of scope
+	w2 := newWorld(t)
+	g2 := w2.sign("G", "A", "genesis", obj("type", "collection", "name", "october", "controllers", w2.controllers("A"), "rule", obj("any_one", true)))
+	slash := w2.observedRef("S1", "O1", "s", "source", obj("endpoint", ep+"/", "parameters", obj(), "response_digest", dig("s"),
+		"window", oct("2026-10-03T00:00:00Z", "2026-10-04T00:00:00Z")))
+	// no window: placed by captured_at; a run-labelled finality state gives no position
+	byCapture := w2.observedRef("S2", "O1", "c", "source", obj("endpoint", ep, "parameters", obj(), "response_digest", dig("c")),
+		"finality", obj("rule", "r", "state_at_capture", obj("captured_at", "2026-10-05T00:00:00Z")))
+	noPos := w2.observedRef("S3", "O1", "r", "source", obj("endpoint", ep, "parameters", obj(), "response_digest", dig("r")),
+		"finality", obj("rule", "r", "state_at_capture", obj("run", "SF")))
+	w2.editionWith("E1", "A", g2, []string{g2}, "members", entries(st(byCapture)), "selection", "completeness", "completeness", scope)
+	c, _ = w2.store(nil).Completeness(g2, "")
+	if c.Outcome != RuleUnchecked || !strings.Contains(c.Unread[slash], "trailing /") || c.Unread[noPos] == "" || len(c.Missing) != 0 {
+		t.Fatalf("loose match and no position must be unchecked, the captured_at reading listed: %s", c.Render())
+	}
+	if !slices.Contains(c.Listed, byCapture) {
+		t.Fatalf("a reading with no window is placed by captured_at: %s", c.Render())
+	}
+}
