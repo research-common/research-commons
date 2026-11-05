@@ -163,7 +163,7 @@ func objectRow(t *testing.T, rep *canon.Object, path string) *canon.Object {
 func TestPullTrustFloor(t *testing.T) {
 	conformance.Covers(t, "C-core-111")
 	conformance.Covers(t, "C-core-113")
-	conformance.Partial(t, "C-core-137", "pull --dry-run states its side effects and a before/after snapshot proves nothing changed; fetch --dry-run (fetch, cache, quarantine) has no command yet")
+	conformance.Partial(t, "C-core-137", "pull --dry-run states its side effects and a before/after snapshot proves nothing changed; the fetch --dry-run half is TestFetchDryRun")
 	src, dst, pkg, zPath, badPath := pullWorld(t)
 	pf := filepath.Join(t.TempDir(), "policy.json")
 	os.WriteFile(pf, []byte(readerPolicyDoc(sortedKeys(src.signer("K1"), src.signer("Y"))...)), 0o644)

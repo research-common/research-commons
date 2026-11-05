@@ -154,7 +154,7 @@ func TestShelfLifeAge(t *testing.T) {
 // holder's word, not revealed, and the declared value still reads withheld.
 func TestWithheldRevealResolver(t *testing.T) {
 	conformance.Partial(t, "C-core-75", "resolver: before the reveal withheld until <condition>, not revealed, statement verifies (exit 0); after a holds with the bytes held and verified, revealed; the fetch by full hash is internal/cli.TestWithheldReveal and internal/store; the anchored-at-publish half rests on the anchor of the publish path, which no command writes yet")
-	conformance.Partial(t, "C-core-76", "resolver: a holds whose bytes were not installed is the holder's word and the statement stays withheld; the intrinsic hash-mismatch refusal scoped to the fetch is internal/cli.TestWithheldReveal and internal/store; no `fetch` command prints it yet")
+	conformance.Partial(t, "C-core-76", "resolver: a holds whose bytes were not installed is the holder's word and the statement stays withheld; the intrinsic hash-mismatch refusal printed by the fetch command is internal/cli.TestWithheldReveal")
 	av := obj("redistribution", "withheld", "obtainable", false, "withheld_until", "task edition T2")
 
 	w := newWorld(t)
