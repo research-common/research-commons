@@ -5,6 +5,7 @@ import (
 	"github.com/research-common/research-commons/internal/conformance"
 	"reflect"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -435,7 +436,7 @@ func TestSnapshotConstructorAndLimit(t *testing.T) {
 	if _, err := NewSnapshot([]Fact{{}}); err == nil {
 		t.Fatal("empty ID accepted")
 	}
-	for n := 0; n <= MaxTraversalFacts; n++ {
+	for n := 0; n <= 2048; n++ {
 		fs = append(fs, line(ID(fmt.Sprintf("extra-%d", n)), "unused", 0, "", Inert))
 		forged := cut(ID(fmt.Sprintf("forged-%d", n)), "missing")
 		forged.Authentication = Unproven
@@ -445,27 +446,51 @@ func TestSnapshotConstructorAndLimit(t *testing.T) {
 	requireStatus(t, snapshot(t, nil), "absent", Unknown, "missing_evidence")
 }
 
+// The caps are injectable so every one is reached cheaply; each hit is unknown naming the cap, never a pass.
 func TestRelevantTraversalLimitsCannotYieldPartialPass(t *testing.T) {
+	const small = 64
+	requireLimit := func(t *testing.T, s *Snapshot, id ID, lim Limits, name string) {
+		t.Helper()
+		r := s.EvaluateWith(id, lim)
+		if r.Status == Eligible || !slices.ContainsFunc(r.Reasons, func(v Reason) bool {
+			return v.Code == "model_limit" && strings.HasPrefix(v.Detail, name+" limit ")
+		}) {
+			t.Fatalf("%s: want non-passing model_limit %q, got %s %+v", id, name, r.Status, r.Reasons)
+		}
+	}
+	base := snapshot(t, fixture())
+	requireStatus(t, base, "A", Eligible, "")
+	// The fixture fits easily under small caps; the hits below come from the added evidence alone.
+	if r := base.EvaluateWith("Z", Limits{small, small, 10 * small}); r.Status != Eligible {
+		t.Fatalf("fixture under small caps: %s %+v", r.Status, r.Reasons)
+	}
 	fs := fixture()
-	for n := 0; n < MaxTraversalFacts; n++ {
+	for n := 0; n < small; n++ {
 		fs = append(fs, line(ID(fmt.Sprintf("root-extra-%d", n)), "R", 2, "G", Inert))
 	}
-	requireStatus(t, snapshot(t, fs), "A", Unknown, "model_limit")
+	requireLimit(t, snapshot(t, fs), "A", Limits{Dependencies: small}, LimitDependencies)
+	requireLimit(t, snapshot(t, fs), "A", Limits{Inspections: 4 * small}, LimitInspections)
 	fs = fixture()
 	prev := ID("Z")
-	for n := 5; n <= MaxTraversalFacts+5; n++ {
+	for n := 5; n <= small+5; n++ {
 		id := ID(fmt.Sprintf("long-%d", n))
 		fs = append(fs, data(id, uint64(n), prev))
 		prev = id
 	}
-	requireStatus(t, snapshot(t, fs), prev, Unknown, "model_limit")
-	requireStatus(t, snapshot(t, append(fs, cut("long-cut", prev))), "A", Unknown, "model_limit")
+	requireLimit(t, snapshot(t, fs), prev, Limits{PathEdges: small}, LimitPathEdges)
+	requireLimit(t, snapshot(t, append(fs, cut("long-cut", prev))), "A", Limits{PathEdges: small}, LimitPathEdges)
 	fs = fixture()
 	prev = "G"
-	for n := 2; n <= MaxTraversalFacts+2; n++ {
+	for n := 2; n <= small+2; n++ {
 		id := ID(fmt.Sprintf("root-long-%04d", n))
 		fs = append(fs, line(id, "R", uint64(n), prev, Inert))
 		prev = id
 	}
-	requireStatus(t, snapshot(t, fs), "A", Unknown, "model_limit")
+	requireLimit(t, snapshot(t, fs), "A", Limits{PathEdges: small}, LimitPathEdges)
+	// A definite denial found before the cap stays denied; the cap is still named.
+	fs = mutate(fs, "A", func(f *Fact) { f.Validity = Invalid })
+	r := snapshot(t, fs).EvaluateWith("A", Limits{PathEdges: small})
+	if r.Status != Denied || !hasReason(r, "model_limit") {
+		t.Fatalf("denial before the cap: %s %+v", r.Status, r.Reasons)
+	}
 }
