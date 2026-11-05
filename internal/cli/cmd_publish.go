@@ -576,15 +576,18 @@ func publishCmd(c *Ctx) (*Obj, int, error) {
 		}
 	}
 	opts = append(opts, resolve.WithContent(prepinContent{st: c.Store, digest: digest, file: p.content}))
+	signer := p.key.Key.Signer()
+	wl := lockFor(c, signer)
+	defer wl.Unlock()
 	v, err := loadView(c.Store, nil, opts...)
 	if err != nil {
 		return nil, 0, failed(err, "store", false, "run status, then fsck")
 	}
-	signer := p.key.Key.Signer()
 	h, prob := v.nextLine(c, signer)
 	if prob != nil {
 		return nil, 0, prob
 	}
+	afterHead()
 	body := p.body
 	if digest != "" {
 		co := &canon.Object{Keys: []string{"digest", "size"}, Members: map[string]canon.Value{"digest": canon.String(digest), "size": canon.Int(size)}}
@@ -609,6 +612,7 @@ func publishCmd(c *Ctx) (*Obj, int, error) {
 		digest = d
 	}
 	out := newObj()
+	noteLock(out, wl)
 	// the pre-pin check (claims-model note §8): the publisher's own policy, chosen by naming the edition
 	if p.resource != "" {
 		pp, err := v.r.CheckIntendedFor(body, p.resource, p.edition)
@@ -790,15 +794,18 @@ func commitUnit(c *Ctx, out *Obj, op string, sts []signed, blobs []store.Digest,
 
 func publishTaskCmd(c *Ctx) (*Obj, int, error) {
 	p := c.Prep.(*pubPrep)
+	signer := p.key.Key.Signer()
+	wl := lockFor(c, signer)
+	defer wl.Unlock()
 	v, err := viewOf(c)
 	if err != nil {
 		return nil, 0, err
 	}
-	signer := p.key.Key.Signer()
 	h, prob := v.nextLine(c, signer)
 	if prob != nil {
 		return nil, 0, prob
 	}
+	afterHead()
 	contents := &canon.Object{Keys: []string{"contract"}, Members: map[string]canon.Value{"contract": p.contract}}
 	var drafts []wire.Draft
 	if p.taskName != "" {
@@ -846,6 +853,7 @@ func publishTaskCmd(c *Ctx) (*Obj, int, error) {
 
 	// how the edition will be settled: the reader's own resolution of the store plus these lines
 	out := newObj().set("task", refV(task)).set("edition", refV(edition))
+	noteLock(out, wl)
 	rd, state, why := v.readinessWith(c, sts, task, edition)
 	if state != string(resolve.Authorized) {
 		return nil, 0, &Problem{Slug: "edition-not-authorized", Title: "the edition would not be authorized", Class: refusal.Policy,
@@ -906,4 +914,25 @@ func (v *view) readinessWith(c *Ctx, sts []signed, task, edition string) (*Obj, 
 		}
 	}
 	return o, b.State, ""
+}
+
+// afterHead is a test seam called once the head is resolved and before the line is signed: tests widen the
+// window the writer lock exists to close. It is nil in production.
+var afterHead = func() {}
+
+// noteLock records, on a write whose writer lock could not be taken, that it proceeded without it (storage
+// note §4.3: the lock is an optimization; the write is never refused for it). A held lock prints nothing.
+func noteLock(out *Obj, l *store.WriterLock) {
+	if l != nil && !l.Held {
+		out.set("writer_lock", textV("not held: "+l.Why+"; proceeded without it, so a concurrent writer of this key may fork its log"))
+	}
+}
+
+// lockFor takes the writer lock for a command that may write. A dry run writes nothing, not even a lock file,
+// so it takes none (a nil lock is a held one for Unlock and noteLock).
+func lockFor(c *Ctx, signer string) *store.WriterLock {
+	if _, dry := c.Flag("dry-run"); dry {
+		return nil
+	}
+	return c.Store.LockKey(signer)
 }

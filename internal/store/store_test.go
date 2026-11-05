@@ -66,8 +66,8 @@ func snapshot(t *testing.T, root string) map[string]string {
 			return err
 		}
 		rel, _ := filepath.Rel(root, p)
-		if strings.HasPrefix(rel, "tmp"+string(filepath.Separator)) {
-			return nil
+		if strings.HasPrefix(rel, "tmp"+string(filepath.Separator)) || strings.HasPrefix(rel, "locks"+string(filepath.Separator)) {
+			return nil // locks/: the per-key writer lock files (§4.3) carry no data
 		}
 		b, _ := os.ReadFile(p)
 		out[rel] = string(digestOf(b))

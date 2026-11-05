@@ -36,6 +36,8 @@ type Options struct {
 	// GCGrace is the local policy grace window (§6.1.1) the declaration prints; zero means DefaultGrace. gc
 	// takes its own GCConfig: a command passes this value as GCConfig.Policy.
 	GCGrace time.Duration
+	// LockWait bounds how long a writer waits for the per-key writer lock (§4.3); zero means DefaultLockWait.
+	LockWait time.Duration
 	// crash, when set, is called at each commit point and may abort the operation there (tests only).
 	crash func(point string) error
 }
@@ -122,7 +124,7 @@ func (s *Store) Root() string { return s.root }
 // Durability returns this store's declaration (§7).
 func (s *Store) Durability() Durability {
 	d := Durability{FileSync: "fsync", DirSync: "fsync", Rename: "atomic", ExclusiveCreate: "link",
-		SameFilesystem: "checked", Locks: "none", GCGrace: DefaultGrace.String(),
+		SameFilesystem: "checked", Locks: lockDeclaration, GCGrace: DefaultGrace.String(),
 		Assumes: "POSIX rename and link semantics; a local filesystem (not NFS)"}
 	if s.opt.GCGrace != 0 {
 		d.GCGrace = s.opt.GCGrace.String()
