@@ -33,6 +33,11 @@ type Env struct {
 	// Rerun is the re-run bridge `verify --rerun` calls; nil in a build without execution (the command then
 	// answers "re-run not available in this build", exit 3). This package never executes anything itself.
 	Rerun Rerunner
+	// Stdin and Interactive serve a command that may ask the user (revoke without --reason). Interactive is true
+	// only when stdin is a terminal; with it false (a pipe, a test, cron) such a command refuses instead of
+	// asking. A nil Stdin reads nothing.
+	Stdin       io.Reader
+	Interactive bool
 }
 
 // Ctx is one invocation as a command's Run sees it: arguments and flags already validated, the store (when
@@ -407,7 +412,11 @@ func discover(flags map[string]string, env *Env) (string, *Problem) {
 
 // OSEnv is the process environment.
 func OSEnv(b Build) *Env {
-	return &Env{Stdout: os.Stdout, Stderr: os.Stderr, Getenv: os.Getenv, Getwd: os.Getwd, Build: b}
+	interactive := false
+	if fi, err := os.Stdin.Stat(); err == nil && fi.Mode()&os.ModeCharDevice != 0 {
+		interactive = true
+	}
+	return &Env{Stdout: os.Stdout, Stderr: os.Stderr, Getenv: os.Getenv, Getwd: os.Getwd, Build: b, Stdin: os.Stdin, Interactive: interactive}
 }
 
 func versionObj(b Build) *Obj {

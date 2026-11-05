@@ -12,7 +12,7 @@ Errors are RFC 9457 problem-details objects (`type`, `title`, `detail`, `class`,
 | exit | name | meaning |
 |---|---|---|
 | 0 | ok | the requested operation succeeded; for verify, checked and passed. Not a claim that everything referenced is valid |
-| 1 | checked and wrong | a check ran to completion and found something wrong: verify's comparison disagreed, a gate (hub check, pull) refused at least one object, or fsck made a fatal finding. What a gate admitted beside a refusal is still committed (pull) and said so |
+| 1 | checked and wrong | a check ran to completion and found something wrong: verify's comparison disagreed, a gate (hub check, pull) refused at least one object, fsck made a fatal finding, or a writer refused a request its check over the statements held decided (a rule the publisher named failing its bytes; a revocation that would undo itself), so holding more statements would not change the answer. What a gate admitted beside a refusal is still committed (pull) and said so |
 | 2 | did not start | the invocation or the reader's own configuration could not be acted on: unknown option, malformed argument, unreadable or unparseable policy, no store. Nothing ran and nothing was committed |
 | 3 | could not check | contested, unknown, unchecked, unpinned, unsupported, an optional capability not configured, a reader limit, or a failure after work started |
 | 4 | nothing to re-run | the derivation names an input it did not pin |
