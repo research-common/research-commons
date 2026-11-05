@@ -195,11 +195,13 @@ type revokePlan struct {
 
 func revokeCmd(c *Ctx) (*Obj, int, error) {
 	p := c.Prep.(*revokePrep)
+	k := p.key.Key
+	wl := lockFor(c, k.Signer())
+	defer wl.Unlock()
 	v, err := loadView(c.Store, nil)
 	if err != nil {
 		return nil, 0, failed(err, "store", false, "run status, then fsck")
 	}
-	k := p.key.Key
 	lv := v.logs.Log(k.Signer()).View()
 	hard := revokeHard(p.reason)
 	chained := map[string]*wire.Statement{}
@@ -213,6 +215,8 @@ func revokeCmd(c *Ctx) (*Obj, int, error) {
 		return nil, 0, prob
 	}
 	out := newObj().set("reason", textV(p.reason))
+	noteLock(out, wl)
+	afterHead()
 	if hard {
 		out.set("reason_kind", textV("hard: only the history of last_good keeps counting"))
 	} else {

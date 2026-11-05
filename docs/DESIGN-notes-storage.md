@@ -279,6 +279,12 @@ that two of *its own* processes on one machine do not fork casually. The lock is
   degrade to "may fork", never to "may lose a line";
 - the lock is never consulted at read time and never recorded in any statement.
 
+The reference implementation locks with `flock` on directories every store already has, and creates nothing
+(no lock file, no directory), so the layout gains no path and a refused write leaves the store unchanged: a
+shared lock on `statements/` plus an exclusive one on `statements/<signer>/`, or, for a key's first write
+(no such directory yet), an exclusive lock on `statements/`. It waits up to 10 s, then proceeds without the
+lock and says so in the command's output (`writer_lock`). A dry run takes none.
+
 ### 4.4 Same blob, two publishers (C-core-128)
 
 Two processes publishing the same bytes, same or different keys, concurrently: step 1 installs one blob

@@ -488,6 +488,9 @@ func TestStatusAndVersion(t *testing.T) {
 			t.Fatalf("durability lacks %s", k)
 		}
 	}
+	if got := s.Members["durability"].(*canon.Object).Members["locks"]; got != canon.String("advisory") {
+		t.Fatalf("status durability locks = %s, want advisory (storage note §4.3)", canon.Encode(got))
+	}
 	// a corrupt pending journal record: quarantined on open, reported, nothing from it installed
 	os.WriteFile(filepath.Join(w.root, "journal", "pending", strings.Repeat("0", 64)+".json"), []byte("{"), 0o644)
 	s = jsonOf(t, w.run("status", "--json"))

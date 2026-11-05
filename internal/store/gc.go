@@ -563,6 +563,8 @@ func (s *Store) Release(blob Digest, sg Signer) (*ReleaseResult, error) {
 		}
 		return res, fmt.Errorf("blob %s: %s has no current serving holds for it, so there is nothing to release (gc removes it once unreferenced and outside the grace window)", blob, sg.Key())
 	}
+	wl := s.LockKey(sg.Key())
+	defer wl.Unlock()
 	prev, err := s.logHead(sg.Key())
 	if err != nil {
 		return res, err
