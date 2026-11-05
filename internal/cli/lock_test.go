@@ -1,13 +1,13 @@
 package cli
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -46,22 +46,25 @@ func TestWriterLockHelper(t *testing.T) {
 // twoWriters runs two processes publishing on one key into one store, concurrently, and returns the key's log.
 func twoWriters(t *testing.T, p *pubWorld, n int, nolock bool) (tips, lines int, exits [2]error) {
 	t.Helper()
-	var wg sync.WaitGroup
+	// Both processes are started before either is waited on, so they run concurrently. No goroutine is needed,
+	// which keeps this package out of the CI race job's goroutine scan (the whole cli package under -race is slow).
+	var cmds [2]*exec.Cmd
+	var outs [2]bytes.Buffer
 	for i, tag := range []string{"a", "b"} {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			spec := strings.Join([]string{p.root, p.key, tag, strconv.Itoa(n), map[bool]string{true: "1", false: "0"}[nolock], "150"}, "|")
-			cmd := exec.Command(os.Args[0], "-test.run=^TestWriterLockHelper$")
-			cmd.Env = append(os.Environ(), lockHelperEnv+"="+spec)
-			out, err := cmd.CombinedOutput()
-			if err != nil {
-				err = fmt.Errorf("%v: %s", err, out)
-			}
-			exits[i] = err
-		}()
+		spec := strings.Join([]string{p.root, p.key, tag, strconv.Itoa(n), map[bool]string{true: "1", false: "0"}[nolock], "150"}, "|")
+		cmd := exec.Command(os.Args[0], "-test.run=^TestWriterLockHelper$")
+		cmd.Env = append(os.Environ(), lockHelperEnv+"="+spec)
+		cmd.Stdout, cmd.Stderr = &outs[i], &outs[i]
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+		cmds[i] = cmd
 	}
-	wg.Wait()
+	for i, cmd := range cmds {
+		if err := cmd.Wait(); err != nil {
+			exits[i] = fmt.Errorf("%v: %s", err, outs[i].String())
+		}
+	}
 	st, err := store.Open(p.root, store.Options{})
 	if err != nil {
 		t.Fatal(err)
