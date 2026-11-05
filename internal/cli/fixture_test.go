@@ -300,11 +300,6 @@ func snapshot(t testing.TB, root string) string {
 			t.Fatal(err)
 		}
 		rel, _ := filepath.Rel(root, p)
-		if rel == "locks" || strings.HasPrefix(rel, "locks"+string(filepath.Separator)) {
-			// per-key writer lock files (storage note §4.3) are not data: a refused writer that took its lock leaves
-			// the empty file behind, and nothing reads, scans or replicates it (TestWriterLockFileIsNotData)
-			return nil
-		}
 		fi, _ := d.Info()
 		line := rel + " " + fi.Mode().String()
 		if !d.IsDir() {

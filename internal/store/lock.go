@@ -2,7 +2,6 @@ package store
 
 import (
 	"os"
-	"path/filepath"
 	"time"
 )
 
@@ -30,9 +29,10 @@ type WriterLock struct {
 
 // LockKey takes the advisory writer lock for signer's log, waiting at most Options.LockWait (default
 // DefaultLockWait). Call it before resolving the log's head and hold it until the statements are committed.
-// It never returns an error for lock trouble: it degrades to a WriterLock with Held false. The lock file
-// lives at locks/<signer>.lock under the store root: outside blobs/ and statements/, so nothing scans it,
-// replicates it or reads it back as data; it carries no content and is never consulted at read time.
+// It never returns an error for lock trouble: it degrades to a WriterLock with Held false. The lock is an
+// flock on the key's own statement directory, statements/<signer>/ (created empty if the key has no statement
+// yet; the commit would create it anyway). No lock file is written, so the store layout gains no path that a
+// pull, a hub check or a replica would have to know about; an empty directory is not an object.
 func (s *Store) LockKey(signer string) *WriterLock {
 	if DisableWriterLock {
 		return &WriterLock{Why: "writer lock disabled (test hook)"}
@@ -41,13 +41,13 @@ func (s *Store) LockKey(signer string) *WriterLock {
 	if wait <= 0 {
 		wait = DefaultLockWait
 	}
-	dir := s.dir("locks")
+	dir := s.dir("statements", signerDir(signer))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return &WriterLock{Why: "no lock directory: " + err.Error()}
+		return &WriterLock{Why: "no statement directory to lock: " + err.Error()}
 	}
-	f, err := os.OpenFile(filepath.Join(dir, signerDir(signer)+".lock"), os.O_CREATE|os.O_RDWR, 0o644)
+	f, err := os.Open(dir)
 	if err != nil {
-		return &WriterLock{Why: "no lock file: " + err.Error()}
+		return &WriterLock{Why: "statement directory not openable for locking: " + err.Error()}
 	}
 	held, why := flockWait(f, wait)
 	if !held {

@@ -144,34 +144,34 @@ func TestWriterLockBoundedWait(t *testing.T) {
 	again.Unlock()
 }
 
-// TestWriterLockFileIsNotData: the lock file lives under locks/, which no scan, fsck, pull archive or
-// replication reads: the store stays clean and the data surface lists nothing from it.
-func TestWriterLockFileIsNotData(t *testing.T) {
+// TestWriterLockAddsNoPath: the lock is an flock on the key's statement directory, so a writer leaves no file
+// outside the store layout: fsck stays clean, and the whole store tree (not only its data directories) pulls
+// into a fresh store with nothing refused. A lock file anywhere else would be refused by the next pull as
+// outside the data surface.
+func TestWriterLockAddsNoPath(t *testing.T) {
 	p := newPubWorld(t)
 	if r := p.publish("--kind", "authored", "--content", p.file("d.bin", "one"), "--licence", "CC0-1.0", "--description", "x"); r.code != 0 {
 		t.Fatalf("publish: %d %s", r.code, r.stdout)
 	}
-	lock := filepath.Join(p.root, "locks", strings.ReplaceAll(p.signer, ":", "-")+".lock")
-	if _, err := os.Stat(lock); err != nil {
-		t.Fatalf("a writer leaves its lock file at locks/<signer>.lock: %v", err)
+	if _, err := os.Stat(filepath.Join(p.root, "locks")); err == nil {
+		t.Fatal("a writer created locks/")
 	}
-	if fi, _ := os.Stat(lock); fi.Size() != 0 {
-		t.Fatalf("the lock file carries no content, size %d", fi.Size())
+	if r := p.run("fsck", "--json"); r.code != 0 {
+		t.Fatalf("fsck: %d %s", r.code, r.stdout)
 	}
-	blobs, stmts := dataObjects(t, p.root)
-	for _, o := range append(blobs, stmts...) {
-		if strings.Contains(o, "lock") {
-			t.Fatalf("data surface lists %s", o)
-		}
+	// a lock on a key with no statement yet (a refused first write) leaves only an empty signer directory
+	l := p.s.LockKey("ed25519:" + strings.Repeat("ab", 32))
+	if !l.Held {
+		t.Fatalf("lock on a new key: %s", l.Why)
 	}
-	if r := p.run("fsck", "--json"); r.code != 0 || strings.Contains(r.stdout, "locks") {
-		t.Fatalf("fsck must be clean and silent about locks/: %d %s", r.code, r.stdout)
+	l.Unlock()
+	d := filepath.Join(t.TempDir(), "b")
+	if r := runIn(filepath.Dir(d), nil, "init", d, "--json"); r.code != 0 {
+		t.Fatalf("init: %d %s", r.code, r.stdout)
 	}
-	// a pull reads the data surface only; copying it (as the sweep fixtures do) never carries locks/
-	d := t.TempDir()
-	copyData(t, p.root, d)
-	if _, err := os.Stat(filepath.Join(d, "locks")); err == nil {
-		t.Fatal("locks/ is part of the replicated surface")
+	r := runIn(d, nil, "pull", p.root, "--json")
+	if r.code != 0 || !strings.Contains(r.stdout, `"refused":0`) {
+		t.Fatalf("pull of a store a writer locked must refuse nothing: %d %s", r.code, r.stdout)
 	}
 }
 
@@ -214,7 +214,7 @@ func TestEveryWriterWaitsOnTheLock(t *testing.T) {
 }
 
 // TestDryRunTakesNoLock: a dry run writes nothing, so it leaves no lock file either (the snapshot of the
-// whole root, locks/ included, is unchanged).
+// whole root is unchanged, and the key's statement directory was not created).
 func TestDryRunTakesNoLock(t *testing.T) {
 	p := newPubWorld(t)
 	before := snapshot(t, p.root)
@@ -224,7 +224,7 @@ func TestDryRunTakesNoLock(t *testing.T) {
 	if snapshot(t, p.root) != before {
 		t.Fatal("a dry run changed the store")
 	}
-	if _, err := os.Stat(filepath.Join(p.root, "locks")); err == nil {
-		t.Fatal("a dry run created locks/")
+	if _, err := os.Stat(filepath.Join(p.root, "statements", strings.ReplaceAll(p.signer, ":", "-"))); err == nil {
+		t.Fatal("a dry run created the key's statement directory")
 	}
 }

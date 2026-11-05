@@ -279,9 +279,10 @@ that two of *its own* processes on one machine do not fork casually. The lock is
   degrade to "may fork", never to "may lose a line";
 - the lock is never consulted at read time and never recorded in any statement.
 
-The reference implementation takes a `flock` on `locks/<signer>.lock` (an empty file outside `blobs/` and
-`statements/`, so no scan, `fsck`, pull or replication reads it), waits up to 10 s, then proceeds without the
-lock and says so in the command's output (`writer_lock`). A dry run takes none.
+The reference implementation takes a `flock` on the key's own statement directory (`statements/<signer>/`,
+created empty if the key has none yet), so the lock adds no path to the layout and a store stays a valid
+package for `pull` and replication. It waits up to 10 s, then proceeds without the lock and says so in the
+command's output (`writer_lock`). A dry run takes none.
 
 ### 4.4 Same blob, two publishers (C-core-128)
 
