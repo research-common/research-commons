@@ -1,106 +1,98 @@
-# Getting started: your first hub and collection
+# Getting started
 
-Ten minutes, from zero to a published collection that others can clone. Every command
-below was run against fresh clones of the tool and a new hub. The roles, the review flow,
-and the "who forks what" FAQ are in [`docs/COLLABORATING.md`](docs/COLLABORATING.md).
+Ten minutes, from nothing to two stores that agree. Every command below was run against this tool. The background
+is in the [README](README.md); the reasoning is in [`docs/WHY.md`](docs/WHY.md).
 
-**Mental model:** this repo is the *tool* (code only). Your collection lives in a *hub*,
-a separate data-only git repo that you create. Collaborators clone your hub, not a fork of
-the tool.
+**Mental model.** A *store* is a directory (it holds a marker file, `rc-store`). You publish *signed statements*
+into it: "I authored these bytes, under this licence". A reader never takes another store's word: `pull` judges every
+object, and `verify` answers from the statements the reader itself holds.
 
-## 1. Install the tool
-
-```bash
-git clone https://github.com/research-common/research-commons.git ~/research-commons
-cd ~/research-commons && npm ci             # viem, for signing
-export PATH="$HOME/research-commons/bin:$PATH"
-tests/run-all.sh cold-path                  # smoke test
-```
-
-## 2. Mint your signing identity
+## 1. Install
 
 ```bash
-mkdir -p ~/.commons && chmod 700 ~/.commons
-python3 -c "import secrets;print('0x'+secrets.token_hex(32))" > ~/.commons/signing.key
-chmod 600 ~/.commons/signing.key
-export COMMONS_SIGNING_KEY=~/.commons/signing.key   # a PATH, never the key itself
-export COMMONS_AGENT=<your-handle>                  # attribution name in the ledger
-commons peer whoami                                 # your address: share this, never the key
+go install github.com/research-common/research-commons/cmd/commons@v0.5.0-alpha.1
+commons --version
+commons help                    # every command; `commons help <command>` for its options
 ```
 
-## 3. Create a hub
+Or build from a clone of the `next` branch: `go build -o commons ./cmd/commons`. Go 1.26+; Windows is not supported.
 
-Use the template repo's "Use this template" button on GitHub and clone the result, or
-create one locally:
+## 2. Make a store and a key
 
 ```bash
-commons hub init ~/hubs/my-topic --name "My topic"
-cd ~/hubs/my-topic
-commons hub where                                   # → ~/hubs/my-topic
-commons peer add "$(commons peer whoami | head -1)" --agent-id "$COMMONS_AGENT" --trust full --note me
+mkdir demo && cd demo
+commons init a
+commons key new --out k.key
 ```
 
-`peers.json` (your trust list) is git-ignored by design. No one else can decide whom your
-checkout trusts.
+`init` prints `result: created`. `key new` writes a key file (mode 0600, never overwritten) and prints your **signer**,
+`ed25519:<64 hex>`. Share the signer; never the file. The tool keeps no copy and has no default key location, so back
+the file up once, somewhere only you can read, and don't reuse a payment key.
 
-## 4. Publish the evidence first
+## 3. Publish something
 
 ```bash
-commons publish dataset data.csv "Dataset: what it is" \
-  -d "Where it came from, when, how it was captured" -t my-topic \
-  --license CC0-1.0 --obtainability open \
-  --criteria "Captured from <source> on <date> via <method>"   # T3 attestation text
-# → ds-xxxxxxxx
-commons publish report analysis.md "Report: …" --link cites:ds-xxxxxxxx
-# → rp-xxxxxxxx
+echo "hello commons" > data.txt
+cd a
+COMMONS_KEY=../k.key commons publish --kind authored --content ../data.txt --licence CC0-1.0
 ```
 
-A deterministic `workflow` turns a claim into something readers can re-derive
-byte-for-byte (T0). See **Verification tiers** and **Provenance rules** in the README.
-
-## 5. Publish the collection (the front door)
-
-```json
-{
-  "scope": "One paragraph: what this topic is and what belongs here.",
-  "maintainers": [{"agent": "<your-handle>", "addr": "0x<your address>"}],
-  "members": [
-    {"id": "ds-xxxxxxxx", "role": "primary-dataset"},
-    {"id": "rp-xxxxxxxx", "role": "report"}
-  ],
-  "task_criteria": "What work you want from others, and what you don't.",
-  "open_questions": ["What would most improve this collection?"]
-}
-```
+(or pass `--key ../k.key`). One command signs two statements, `authored` and `holds`, and commits them with the bytes
+in one journal record: `committed: yes`. Add `--dry-run` first to see what would be signed without writing anything.
 
 ```bash
-commons publish collection collection.json "Collection: <topic>" --license CC-BY-4.0
-commons collection show cl-xxxxxxxx
+commons list
 ```
 
-Ids are content hashes, so every edit gives a new id. To revise, add
-`"supersedes": ["cl-old"]` to the spec and publish it (or use `commons collection add-member`,
-which does both).
+shows the blob (`sha256:…`), `authorship: sole author`, and each disclosure: here the licence is `CC0-1.0`, the rest
+`undeclared`. `commons show <digest>` shows the same for one blob.
 
-## 6. Check and publish the hub
+## 4. Verify
 
 ```bash
-commons hub check              # blobs, signatures, per-signer logs, no local-only files
-commons fsck --availability    # every dataset declares license + obtainability
-commons render-site --out site/browse   # optional: what readers will see (git-ignored)
-git add -A && git commit -s -m "hub: first collection"
-git remote add origin git@github.com:<you>/my-topic-hub.git
-commons push origin            # gated push
+commons verify sha256:<digest>
+echo $?                         # 0
 ```
 
-On GitHub, protect `main` and require the `hub-check` status (it needs no secrets). Then
-add your handle and address to the hub README's maintainer table, and share the **hub** URL
-with your collaborators. They follow COLLABORATING.md §3–4.
+Exit 0 means checked and passed: the statements held support the answer. Exit codes (`commons help exits`): 0 ok,
+1 checked and wrong, 2 did not start, 3 could not check, 4 nothing to re-run, 5 environment mismatch. Everything
+is stated "within statements you hold": nothing is claimed about statements this store never received.
 
-## Ground rules
+## 5. Pull into a second store
 
-- **One key per person, never shared.** Two people on one key count as a single signer.
-- **Hubs hold data, never code.** `pull` and hub CI both refuse anything else.
-- **No secrets in content.** Publishing runs a secret lint. Don't override it lightly.
-- **Licenses:** tool code is Apache-2.0 and docs are CC-BY-4.0. Each dataset declares its
-  own SPDX id (CC0-1.0 is the simplest choice). Sign off commits with `git commit -s` (DCO).
+```bash
+cd .. && commons init b && cd b
+commons pull ../a
+commons verify sha256:<digest>  # exit 0: same answer, from b's own copy
+commons fsck                    # scanned: blobs 1, statements 2 · clean: yes
+```
+
+`pull` takes a store directory or a `.tar`/`.tar.gz` of one. It prints a verdict for every object and an exit status
+(0 all admitted, 1 something refused, the rest still committed). The line `rc-store … not applied · control-plane change:
+needs maintainer review` on a pull is expected: the marker file is never copied over your own. Use `commons pull --dry-run`
+to judge a package without installing it.
+
+If the source is a git checkout (it has a `.git`), `pull` refuses the `.git` entry and exits 1; pass
+`--from-checkout` to skip it as transport metadata. To pull under your own rules (a trust floor, overrides), write a
+reader policy: [`docs/READER-POLICY.md`](docs/READER-POLICY.md).
+
+## 6. Keep going
+
+- `commons fsck` any time you suspect damage; `commons status` shows unfinished operations and what the filesystem
+  guarantees (`--limits` lists the scan limits).
+- A blob made by a script can carry `--provenance` (workflow, inputs, environment); `verify --rerun --exec-policy
+  <file>` re-runs it in a sandbox under *your* policy: [`docs/EXEC-POLICY.md`](docs/EXEC-POLICY.md).
+- Tasks others can claim: `commons publish task --help`. Rules for how editions are read: the
+  [claims model](docs/DESIGN-notes-claims-model.md).
+- Fetch bytes a `holds` statement points at: `commons fetch --help`.
+
+## 7. Share it as a hub
+
+A hub is a git repository whose tree is a store. Create one from the
+[hub template](https://github.com/research-common/research-commons-hub-template) ("Use this template" on GitHub), or
+`git init` a store directory and commit it. Collaborators clone it and `commons pull` from the clone (add
+`--from-checkout`). The template's `hub-check` workflow runs `commons hub check` on every pull request, as the hub's
+CI; run it yourself in the hub directory first (it needs at least one commit; `--base <rev>` checks only a change).
+`hub check` writes nothing.
+
+What is not built yet, and what may change: [`docs/KNOWN-LIMITS.md`](docs/KNOWN-LIMITS.md).
