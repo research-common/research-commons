@@ -9,7 +9,11 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+- `commons fetch` now gives up on a location by **idle time**, not total time: `--idle-timeout` (default 60s) counts
+  from the last body byte received, so a large transfer that keeps flowing is no longer cut off after five minutes.
+  `--timeout` is now an optional cap on the whole location and has no default; the output limits show both
+  (`timeout_per_location` reads `none` when unset, `idle_timeout` is new). (#129)
 
 ## [0.5.0-alpha.1] - 2026-11-05
 

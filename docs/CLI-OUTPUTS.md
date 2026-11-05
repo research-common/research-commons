@@ -86,7 +86,7 @@ JSON members carrying tokens: `authorship`, `role`, `state`, `grade`, `step`, `q
 | `not held here` | bytes | this store does not hold the blob's bytes |
 | `fetched-and-verified` | fetch | the bytes were fetched from a location and installed after the size and full-hash check; equivalent to a blob from a package |
 | `unavailable (not held locally)` | fetch | not held here and no held holds names a location for it |
-| `unavailable (holder's word)` | fetch | a holder said the bytes are at the location; it could not be reached (or the transfer died midway), so nothing was installed |
+| `unavailable (holder's word)` | fetch | a holder said the bytes are at the location; it could not be reached (or the transfer died midway, or made no progress for --idle-timeout, default 60s), so nothing was installed |
 | `unavailable (hash mismatch)` | fetch | the location served bytes whose full hash differs; refused (intrinsic), both hashes and the location named, nothing installed |
 | `unavailable (size mismatch)` | fetch | the location served a different number of bytes than the holds declares; refused (intrinsic) before the hash was relied on, nothing installed |
 | `unavailable (size limit)` | fetch | the declared size, or the stream when none is declared, exceeds the reader's fetch limit (max_fetch_bytes); refused (operational), a declared size before dialling |

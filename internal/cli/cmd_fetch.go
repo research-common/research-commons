@@ -31,16 +31,18 @@ import (
 // FetchConfig is the reader's choice for one fetch invocation, passed to the transport factory.
 type FetchConfig struct {
 	AllowHTTP, AllowPrivate bool
-	// Timeout bounds one location: connecting, the response and the whole body.
+	// Timeout is an optional cap on one whole location (connecting, response and body); zero means none.
 	Timeout time.Duration
+	// IdleTimeout bounds how long one location may make no progress (header wait, or between body bytes).
+	IdleTimeout time.Duration
 }
 
 // Fetcher builds the transport a fetch dials through. The binary supplies one; tests supply fakes or a real
 // transport over loopback. Nil in a build without network access: fetch then answers from what is held.
 type Fetcher func(FetchConfig) store.Transport
 
-// DefaultFetchTimeout bounds one location when --timeout is not given (a documented limit).
-const DefaultFetchTimeout = 5 * time.Minute
+// DefaultFetchIdleTimeout is the idle bound when --idle-timeout is not given (a documented limit).
+const DefaultFetchIdleTimeout = 60 * time.Second
 
 func init() {
 	Register(&Command{Name: "fetch", Summary: "obtain blobs from the locations held `holds` statements name, verified by full hash; never publishes a holds",
@@ -48,7 +50,8 @@ func init() {
 		Flags: []Flag{
 			{Name: "allow-http", Help: "also fetch plain http locations (default: https only)"},
 			{Name: "allow-private", Help: "allow loopback, private, link-local, shared (100.64.0.0/10) and other non-global addresses (a local mirror); refused by default, checked on the address actually dialled"},
-			{Name: "timeout", Value: "duration", Help: "the bound on one location (Go duration, e.g. 30s, 5m); default 5m", Check: positiveDuration},
+			{Name: "idle-timeout", Value: "duration", Help: "give up on a location that makes no progress for this long: no response headers, or no body bytes (Go duration, e.g. 30s, 5m); default 60s. Connecting and the TLS handshake keep a fixed 15s bound", Check: positiveDuration},
+			{Name: "timeout", Value: "duration", Help: "optional cap on one whole location, however much progress it makes (Go duration, e.g. 30m); default none (the idle timeout and max-bytes bound a transfer)", Check: positiveDuration},
 			{Name: "max-bytes", Value: "n", Help: "the fetch limit max_fetch_bytes: a location whose declared size exceeds it is refused before dialling, and a stream with no declared size is cut off past it (default 1073741824)",
 				Check: func(v string) error {
 					if n, err := strconv.ParseInt(v, 10, 64); err != nil || n <= 0 {
@@ -154,6 +157,14 @@ func (g timeoutGate) Fetch(ctx context.Context, loc string) (io.ReadCloser, erro
 	return cancelOnClose{rc, cancel}, nil
 }
 
+// timeoutText is the overall cap as disclosed: "none" when unset.
+func timeoutText(d time.Duration) string {
+	if d <= 0 {
+		return "none"
+	}
+	return d.String()
+}
+
 // fetchTarget is one argument resolved: the blob, and the statement it was named through ("" for a digest).
 type fetchTarget struct {
 	blob, via string
@@ -214,11 +225,14 @@ func fetchCmd(c *Ctx) (*Obj, int, error) {
 	if err != nil {
 		return nil, 0, failed(err, "store", false, "run status, then fsck")
 	}
-	cfg := FetchConfig{Timeout: DefaultFetchTimeout}
+	cfg := FetchConfig{IdleTimeout: DefaultFetchIdleTimeout}
 	_, cfg.AllowHTTP = c.Flag("allow-http")
 	_, cfg.AllowPrivate = c.Flag("allow-private")
 	if v, ok := c.Flag("timeout"); ok {
 		cfg.Timeout, _ = time.ParseDuration(v)
+	}
+	if v, ok := c.Flag("idle-timeout"); ok {
+		cfg.IdleTimeout, _ = time.ParseDuration(v)
 	}
 	max := int64(store.DefaultMaxFetchBytes)
 	if v, ok := c.Flag("max-bytes"); ok {
@@ -231,7 +245,10 @@ func fetchCmd(c *Ctx) (*Obj, int, error) {
 	var tr store.Transport
 	if c.Env.Fetch != nil {
 		if inner := c.Env.Fetch(cfg); inner != nil {
-			tr = timeoutGate{schemeGate{inner, cfg.AllowHTTP}, cfg.Timeout}
+			tr = schemeGate{inner, cfg.AllowHTTP}
+			if cfg.Timeout > 0 {
+				tr = timeoutGate{tr, cfg.Timeout}
+			}
 		}
 	}
 	rows := listV{}
@@ -453,6 +470,6 @@ func fetchPlan(c *Ctx, targets []fetchTarget, cfg FetchConfig, max int64) (*Obj,
 		rows = append(rows, row)
 	}
 	o := newObj().set("blobs", rows).set("dry_run", boolV(true)).set("side_effects", textV(fetchSideEffects))
-	o.set("timeout_per_location", textV(cfg.Timeout.String())).set("max_fetch_bytes", intV(max))
+	o.set("timeout_per_location", textV(timeoutText(cfg.Timeout))).set("idle_timeout", textV(cfg.IdleTimeout.String())).set("max_fetch_bytes", intV(max))
 	return o, ExitOK, nil
 }
