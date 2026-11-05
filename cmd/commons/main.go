@@ -27,5 +27,5 @@ func main() {
 }
 
 func transport(c cli.FetchConfig) store.Transport {
-	return store.HTTPTransport{AllowHTTP: c.AllowHTTP, AllowPrivate: c.AllowPrivate, Timeout: c.Timeout}
+	return store.HTTPTransport{AllowHTTP: c.AllowHTTP, AllowPrivate: c.AllowPrivate, Timeout: c.Timeout, IdleTimeout: c.IdleTimeout}
 }

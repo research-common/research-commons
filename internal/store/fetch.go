@@ -430,8 +430,49 @@ type HTTPTransport struct {
 	AllowPrivate bool
 	// Client overrides the HTTP client (its Transport's dialing then is the caller's responsibility).
 	Client *http.Client
-	// Timeout bounds one request, zero means 60 s.
+	// Timeout is an optional cap on the whole request, body included; zero means none (a transfer that keeps
+	// making progress is not a failure; MaxBytes bounds the download).
 	Timeout time.Duration
+	// IdleTimeout bounds how long the transfer may make no progress: the wait for the response headers and each
+	// wait for body bytes. Zero means DefaultIdleTimeout. Connect and TLS handshake keep their own 15 s bounds.
+	IdleTimeout time.Duration
+}
+
+// DefaultIdleTimeout is the idle bound HTTPTransport applies when IdleTimeout is zero.
+const DefaultIdleTimeout = 60 * time.Second
+
+// IdleError is the error of a transfer that made no progress for the idle bound.
+type IdleError struct{ D time.Duration }
+
+func (e IdleError) Error() string {
+	return fmt.Sprintf("idle_timeout: no data received for %s", e.D)
+}
+
+// idleBody wraps a response body: the idle timer runs only while a Read (or the header wait) is outstanding,
+// so a slow consumer never trips it, and it is reset by every Read that returns bytes.
+type idleBody struct {
+	rc     io.ReadCloser
+	timer  *time.Timer
+	d      time.Duration
+	ctx    context.Context
+	cancel context.CancelCauseFunc
+}
+
+func (b *idleBody) Read(p []byte) (int, error) {
+	b.timer.Reset(b.d)
+	n, err := b.rc.Read(p)
+	b.timer.Stop()
+	if err != nil && err != io.EOF && errors.Is(context.Cause(b.ctx), IdleError{b.d}) {
+		err = IdleError{b.d}
+	}
+	return n, err
+}
+
+func (b *idleBody) Close() error {
+	b.timer.Stop()
+	err := b.rc.Close()
+	b.cancel(nil)
+	return err
 }
 
 func (h HTTPTransport) client() *http.Client {
@@ -451,12 +492,8 @@ func (h HTTPTransport) client() *http.Client {
 			return nil
 		}
 	}
-	to := h.Timeout
-	if to == 0 {
-		to = 60 * time.Second
-	}
 	return &http.Client{
-		Timeout:   to,
+		Timeout:   h.Timeout,
 		Transport: &http.Transport{DialContext: d.DialContext, DisableCompression: true, Proxy: nil, TLSHandshakeTimeout: 15 * time.Second},
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 3 {
@@ -479,20 +516,35 @@ func (h HTTPTransport) Fetch(ctx context.Context, location string) (io.ReadClose
 	if u.Scheme != "https" && !(h.AllowHTTP && u.Scheme == "http") {
 		return nil, fmt.Errorf("%s: scheme %q is not fetched by this transport", location, u.Scheme)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, location, nil)
+	idle := h.IdleTimeout
+	if idle <= 0 {
+		idle = DefaultIdleTimeout
+	}
+	ictx, cancel := context.WithCancelCause(ctx)
+	timer := time.AfterFunc(idle, func() { cancel(IdleError{idle}) })
+	req, err := http.NewRequestWithContext(ictx, http.MethodGet, location, nil)
 	if err != nil {
+		timer.Stop()
+		cancel(nil)
 		return nil, err
 	}
 	req.Header.Set("Accept-Encoding", "identity")
 	resp, err := h.client().Do(req)
+	timer.Stop()
 	if err != nil {
+		var ie IdleError
+		if errors.As(context.Cause(ictx), &ie) {
+			err = fmt.Errorf("%s: waiting for the response: %w", location, ie)
+		}
+		cancel(nil)
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
+		cancel(nil)
 		return nil, fmt.Errorf("%s: HTTP %d", location, resp.StatusCode)
 	}
-	return resp.Body, nil
+	return &idleBody{rc: resp.Body, timer: timer, d: idle, ctx: ictx, cancel: cancel}, nil
 }
 
 // nonGlobal are the IANA special-purpose blocks (RFC 6890 registries) that net.IP's predicates do not cover

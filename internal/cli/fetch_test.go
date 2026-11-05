@@ -141,11 +141,11 @@ func TestFetchBinaryOverHTTP(t *testing.T) {
 			// the test server's certificate is trusted only by its own client; the scheme and timeout gates of the
 			// command still sit in front of it
 			f = func(c FetchConfig) store.Transport {
-				return store.HTTPTransport{Client: tlsSrv.Client(), AllowHTTP: c.AllowHTTP, Timeout: c.Timeout}
+				return store.HTTPTransport{Client: tlsSrv.Client(), AllowHTTP: c.AllowHTTP, Timeout: c.Timeout, IdleTimeout: c.IdleTimeout}
 			}
 		} else {
 			f = func(c FetchConfig) store.Transport {
-				return store.HTTPTransport{AllowHTTP: c.AllowHTTP, AllowPrivate: c.AllowPrivate, Timeout: c.Timeout}
+				return store.HTTPTransport{AllowHTTP: c.AllowHTTP, AllowPrivate: c.AllowPrivate, Timeout: c.Timeout, IdleTimeout: c.IdleTimeout}
 			}
 			extra = append(extra, "--allow-http")
 		}
@@ -192,7 +192,7 @@ func TestFetchNetworkDefaults(t *testing.T) {
 	}))
 	defer srv.Close()
 	real := func(c FetchConfig) store.Transport {
-		return store.HTTPTransport{AllowHTTP: c.AllowHTTP, AllowPrivate: c.AllowPrivate, Timeout: c.Timeout}
+		return store.HTTPTransport{AllowHTTP: c.AllowHTTP, AllowPrivate: c.AllowPrivate, Timeout: c.Timeout, IdleTimeout: c.IdleTimeout}
 	}
 	w := newWorld(t)
 	w.holds("H", "K1", data, len(data), srv.URL+"/x")
