@@ -73,7 +73,9 @@ then they describe the alpha line only.
    entry, confirm the "Pending before tag" PRs have actually merged (drop the section if empty),
    and refresh "Known issues" against `gh issue list -R research-common/research-commons --state open`.
 2. Update `VERSION` (and `package.json`'s `"version"` field — keep them equal; a test asserts
-   this) to the new version string.
+   this) to the new version string. The Go binary embeds `VERSION` (root `version.go`), so an
+   unstamped `go build ./cmd/commons` reports it; release builds may still override it with
+   `-ldflags "-X main.version=…"`.
 3. Commit, push, open a PR, get it merged to `main` (this repo is PR-first per `AGENTS.md`/
    `CONTRIBUTING.md` — never commit directly to `main`).
 4. Tag the release PR's **squash commit** on `main` (not the release-prep branch tip, which
