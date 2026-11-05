@@ -11,7 +11,7 @@ import (
 const lockDeclaration = "none"
 
 // flockWait: no advisory locks on this platform; the writer proceeds without one (storage note §4.3).
-func flockWait(f *os.File, wait time.Duration) (bool, string) {
+func flockWait(f *os.File, exclusive bool, left, total time.Duration) (bool, string) {
 	return false, "no advisory locks on this platform"
 }
 

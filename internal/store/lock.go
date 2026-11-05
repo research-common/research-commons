@@ -24,15 +24,21 @@ type WriterLock struct {
 	// caller proceeds without the lock; Why then says so for a warning.
 	Held bool
 	Why  string
-	f    *os.File
+	f    []*os.File
 }
 
 // LockKey takes the advisory writer lock for signer's log, waiting at most Options.LockWait (default
 // DefaultLockWait). Call it before resolving the log's head and hold it until the statements are committed.
-// It never returns an error for lock trouble: it degrades to a WriterLock with Held false. The lock is an
-// flock on the key's own statement directory, statements/<signer>/ (created empty if the key has no statement
-// yet; the commit would create it anyway). No lock file is written, so the store layout gains no path that a
-// pull, a hub check or a replica would have to know about; an empty directory is not an object.
+// It never returns an error for lock trouble: it degrades to a WriterLock with Held false.
+//
+// The lock creates nothing (no lock file, no directory), so a refused write leaves the store byte-identical and
+// the layout gains no path a pull, a hub check or a replica would have to know about. It is two flocks on
+// directories every write already has:
+//   - signer has a statement directory: a shared flock on statements/, then an exclusive one on
+//     statements/<signer>/. Writers of different keys don't wait on each other.
+//   - signer has none yet (its first write creates it): an exclusive flock on statements/. That excludes every
+//     writer holding the shared one, so a second first-writer of the key, and a writer that sees the directory
+//     appear mid-commit, both wait until this write is committed.
 func (s *Store) LockKey(signer string) *WriterLock {
 	if DisableWriterLock {
 		return &WriterLock{Why: "writer lock disabled (test hook)"}
@@ -41,28 +47,42 @@ func (s *Store) LockKey(signer string) *WriterLock {
 	if wait <= 0 {
 		wait = DefaultLockWait
 	}
-	dir := s.dir("statements", signerDir(signer))
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return &WriterLock{Why: "no statement directory to lock: " + err.Error()}
-	}
-	f, err := os.Open(dir)
+	deadline := time.Now().Add(wait)
+	root, err := os.Open(s.dir("statements"))
 	if err != nil {
-		return &WriterLock{Why: "statement directory not openable for locking: " + err.Error()}
+		return &WriterLock{Why: "statements/ not openable for locking: " + err.Error()}
 	}
-	held, why := flockWait(f, wait)
-	if !held {
-		f.Close()
+	kd, err := os.Open(s.dir("statements", signerDir(signer)))
+	if err != nil {
+		// first write of this key
+		if held, why := flockWait(root, true, time.Until(deadline), wait); !held {
+			root.Close()
+			return &WriterLock{Why: why}
+		}
+		return &WriterLock{Held: true, f: []*os.File{root}}
+	}
+	if held, why := flockWait(root, false, time.Until(deadline), wait); !held {
+		root.Close()
+		kd.Close()
 		return &WriterLock{Why: why}
 	}
-	return &WriterLock{Held: true, f: f}
+	if held, why := flockWait(kd, true, time.Until(deadline), wait); !held {
+		funlock(root)
+		root.Close()
+		kd.Close()
+		return &WriterLock{Why: why}
+	}
+	return &WriterLock{Held: true, f: []*os.File{root, kd}}
 }
 
 // Unlock releases the lock; safe on a nil receiver and to call twice.
 func (l *WriterLock) Unlock() {
-	if l == nil || l.f == nil {
+	if l == nil {
 		return
 	}
-	funlock(l.f)
-	l.f.Close()
+	for i := len(l.f) - 1; i >= 0; i-- {
+		funlock(l.f[i])
+		l.f[i].Close()
+	}
 	l.f = nil
 }

@@ -124,6 +124,10 @@ func TestWriterLockBoundedWait(t *testing.T) {
 		t.Fatal(err)
 	}
 	signer := testKey("K1").Signer()
+	// keys with statements: each has its statements/<signer>/ directory (a key's first write is below)
+	for _, k := range []string{signer, testKey("K2").Signer()} {
+		os.MkdirAll(filepath.Join(root, "statements", strings.ReplaceAll(k, ":", "-")), 0o755)
+	}
 	first := s.LockKey(signer)
 	if !first.Held {
 		t.Fatalf("first lock not held: %s", first.Why)
@@ -132,10 +136,28 @@ func TestWriterLockBoundedWait(t *testing.T) {
 	if other.Held || other.Why == "" {
 		t.Fatalf("a second writer must time out unheld with a reason: %+v", other)
 	}
-	if !s.LockKey(testKey("K2").Signer()).Held {
+	k2 := s.LockKey(testKey("K2").Signer())
+	if !k2.Held {
 		t.Fatal("the lock is per key: another key's writer must not wait")
 	}
+	k2.Unlock()
+	// a key's first write (no directory yet) locks the whole statements/ directory, so it waits for writers
+	// of other keys too, and they wait for it: two first writers of one key can't both start a log.
+	if fresh := s.LockKey(testKey("K3").Signer()); fresh.Held {
+		t.Fatal("a first write must wait while another key's writer holds its lock")
+	}
 	first.Unlock()
+	fresh := s.LockKey(testKey("K3").Signer())
+	if !fresh.Held {
+		t.Fatalf("a first write with no other writer: %s", fresh.Why)
+	}
+	if again := s.LockKey(testKey("K3").Signer()); again.Held {
+		t.Fatal("a second first-writer of one key must wait")
+	}
+	if k1 := s.LockKey(signer); k1.Held {
+		t.Fatal("a first write excludes writers of other keys while it commits")
+	}
+	fresh.Unlock()
 	first.Unlock() // idempotent
 	again := s.LockKey(signer)
 	if !again.Held {
@@ -144,8 +166,8 @@ func TestWriterLockBoundedWait(t *testing.T) {
 	again.Unlock()
 }
 
-// TestWriterLockAddsNoPath: the lock is an flock on the key's statement directory, so a writer leaves no file
-// outside the store layout: fsck stays clean, and the whole store tree (not only its data directories) pulls
+// TestWriterLockAddsNoPath: the lock is flocks on existing directories, so a writer leaves no file outside the store
+// layout: fsck stays clean, and the whole store tree (not only its data directories) pulls
 // into a fresh store with nothing refused. A lock file anywhere else would be refused by the next pull as
 // outside the data surface.
 func TestWriterLockAddsNoPath(t *testing.T) {
@@ -159,12 +181,16 @@ func TestWriterLockAddsNoPath(t *testing.T) {
 	if r := p.run("fsck", "--json"); r.code != 0 {
 		t.Fatalf("fsck: %d %s", r.code, r.stdout)
 	}
-	// a lock on a key with no statement yet (a refused first write) leaves only an empty signer directory
+	// a lock on a key with no statement yet creates nothing
+	before := snapshot(t, p.root)
 	l := p.s.LockKey("ed25519:" + strings.Repeat("ab", 32))
 	if !l.Held {
 		t.Fatalf("lock on a new key: %s", l.Why)
 	}
 	l.Unlock()
+	if snapshot(t, p.root) != before {
+		t.Fatal("taking the lock changed the store")
+	}
 	d := filepath.Join(t.TempDir(), "b")
 	if r := runIn(filepath.Dir(d), nil, "init", d, "--json"); r.code != 0 {
 		t.Fatalf("init: %d %s", r.code, r.stdout)
@@ -214,7 +240,7 @@ func TestEveryWriterWaitsOnTheLock(t *testing.T) {
 }
 
 // TestDryRunTakesNoLock: a dry run writes nothing, so it leaves no lock file either (the snapshot of the
-// whole root is unchanged, and the key's statement directory was not created).
+// whole root is unchanged).
 func TestDryRunTakesNoLock(t *testing.T) {
 	p := newPubWorld(t)
 	before := snapshot(t, p.root)
@@ -224,7 +250,5 @@ func TestDryRunTakesNoLock(t *testing.T) {
 	if snapshot(t, p.root) != before {
 		t.Fatal("a dry run changed the store")
 	}
-	if _, err := os.Stat(filepath.Join(p.root, "statements", strings.ReplaceAll(p.signer, ":", "-"))); err == nil {
-		t.Fatal("a dry run created the key's statement directory")
-	}
+
 }
