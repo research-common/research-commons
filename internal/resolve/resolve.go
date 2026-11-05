@@ -7,7 +7,7 @@
 // resources (collections, tasks, series; claims-model note §8) in resource.go; authorship, priority and
 // single-party defaults (§5.1, §5.2) in artifact.go; derivation groups and grades (§5.2, §7) in group.go; time
 // bounds (§10) in time.go; edition rules (§8) in edition_rules.go; membership and the pre-pin check in
-// membership.go; growing series in series.go; observations, referent status and capture evidence (§5.3.1,
+// membership.go; growing series in series.go; the completeness-claim check (§6 (3)) in completeness.go; observations, referent status and capture evidence (§5.3.1,
 // §5.3.3) in observation.go; corroboration status and reputation projections (§5.3.2, §5.4) in corroboration.go; the research exchange
 // (§9: tasks, contracts, readiness, decisions, pre-registration, credit) in task.go, contract.go, prereg.go and credit.go.
 //

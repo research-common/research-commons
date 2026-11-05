@@ -51,6 +51,12 @@ unchanged on this branch.
   editions (the sibling rule, hard revocations).
 - **`holds.withdrawn`** is checked (`true` only; malformed beside `locations`), and an `anchors` whose `covered`
   names another key's line is refused in the signer's log (an anchor bounds only its signer's log).
+- **Completeness claims can be checked.** An edition declaring `selection` `completeness` now names its scope,
+  `completeness: {class, source, window}` (wire format §5; malformed beside any other selection). The resolver
+  checks it against the observations held: a reading of that class from that source in the window that the
+  edition does not list makes the check `fail`, naming it; a reading it cannot place makes it `unchecked`;
+  otherwise `ok`, scoped to the statements held. The check never moves a membership, grade or exit. No command
+  prints it yet.
 
 - **`pull` reads a tar archive of a store tree** (plain or gzip-compressed, recognised from its bytes) as the
   same package the unpacked directory is: members are judged by name and bytes and never extracted, so `..`,

@@ -22,22 +22,8 @@ func checkBodyTimes(kind string, body *canon.Object) error {
 			return err
 		}
 		if ref, ok := obj(body, "referent"); ok {
-			scale := ""
-			if v, ok := ref.Get("timescale"); ok {
-				s, ok := v.(canon.String)
-				if !ok || !rctime.ValidTimescale(string(s)) {
-					return refusal.Malformed("referent timescale is not an admitted FITS code")
-				}
-				scale = string(s)
-			}
-			for _, path := range [][]string{{"at"}, {"window", "from"}, {"window", "to"}} {
-				if s, ok, err := strAt(ref, path...); err != nil {
-					return err
-				} else if ok {
-					if _, err := rctime.ParseIn(s, scale); err != nil {
-						return err
-					}
-				}
+			if err := scaledTimes(ref, [][]string{{"at"}, {"window", "from"}, {"window", "to"}}); err != nil {
+				return err
 			}
 		}
 		return samplingWindow(body)
@@ -48,6 +34,34 @@ func checkBodyTimes(kind string, body *canon.Object) error {
 			return err
 		} else if ok {
 			if _, err := rctime.ParseDate(s); err != nil {
+				return err
+			}
+		}
+		// a completeness window is in the timescale its scope names, as a referent's window is
+		if c, ok := obj(body, "contents"); ok {
+			if sc, ok := obj(c, "completeness"); ok {
+				return scaledTimes(sc, [][]string{{"window", "from"}, {"window", "to"}})
+			}
+		}
+	}
+	return nil
+}
+
+// scaledTimes checks the time fields at paths of o in the timescale o names (UTC when none, §1.1).
+func scaledTimes(o *canon.Object, paths [][]string) error {
+	scale := ""
+	if v, ok := o.Get("timescale"); ok {
+		s, ok := v.(canon.String)
+		if !ok || !rctime.ValidTimescale(string(s)) {
+			return refusal.Malformed("referent timescale is not an admitted FITS code")
+		}
+		scale = string(s)
+	}
+	for _, path := range paths {
+		if s, ok, err := strAt(o, path...); err != nil {
+			return err
+		} else if ok {
+			if _, err := rctime.ParseIn(s, scale); err != nil {
 				return err
 			}
 		}

@@ -494,6 +494,21 @@ decide who is right.
    an undeclared selection as curated, the weakest claim. No statement kind carries a hub's own selection
    today, so a hub declares it through a collection it controls whose editions carry `selection`,
    and the hub's display cites that collection's edition.
+   A completeness claim names its scope in the same edition, as `completeness: {class, source, window}`: an
+   observation class (`source`, `phenomenon` or `method`), the source as that class's identifying referent
+   field (`endpoint`, `instrument`, `method_edition`), and a time window. A reader checks it against the
+   observations it holds. A counted `observed` of that class whose referent names that source (URIs compared
+   after normalization, wire-format note §5), and whose position falls in the window, is in scope, and the edition must list it, by statement or by its content.
+   The position is read as a series segment's is (§8): the start of the referent's window, else its time,
+   else the time in its finality state at capture. One in scope and not listed makes the check `fail`,
+   naming each such reading; a reading of that class whose source or position the reader cannot read, whose source
+   matches only loosely (a trailing `/`, a percent-encoding), or whose position is in another timescale (never
+   converted), makes it `unchecked` unless another reading
+   already fails it; otherwise it is `ok`, scoped to the statements the reader holds, which is never a claim
+   that no other reading exists. The check is declared beside computed (§7): it never moves a grade, a membership
+   or a `verify` exit (I6), and a hub may refuse an edition whose claim fails, under its own policy, as it may
+   refuse a premature freeze (§8). A `completeness` selection that names no scope is shown as declared, and
+   its check is `unchecked`.
 4. **The reader brings the references.** A reader can re-run any corroboration against reference data *it*
    trusts. The project ships **no default reference collections**: they are ordinary collections that anyone
    may curate and readers choose among, consistent with categories being convention rather than protocol (#16).
@@ -526,7 +541,7 @@ the source.
 | shelf life | publisher-declared validity; age shown at read time (#4). The age is counted from a verified bound (§10: the header time of the verified anchor's block, labelled miner-reported) to the reader's evaluation time, which is part of the answer's time context (I14); with no verified anchor, only a local or self-declared time, the age reads `unknown`, never a number. The age is display only, never an ordering key. |
 | capture evidence | §5.3.3 level, verified or not |
 | corroboration | §5.3.2 status, scoped |
-| selection | curated · rule-based · completeness claim · undeclared (§6). Missing means undeclared. |
+| selection | curated · rule-based · completeness claim (with its scope and this reader's check: `ok`, `fail` naming the readings not listed, or `unchecked`) · undeclared (§6). Missing means undeclared. |
 | referent status | still canonical · `provisional` · `final` · `final (as captured, not re-checked)` (the observer's asserted state meets the rule; no re-check yet) · `revised` · `not canonical` · source still available / unknown · `unpinned` (a field its class requires, or a `system` member its method edition declares, is missing) · `finality unchecked` (a declared rule the reader has no source profile to evaluate) · `pinned` (phenomenon and method classes, whose referent has no re-check) (§5.3.1) |
 
 | pre-registration | `pre-registered <task edition> (<bound quality>)` · `exploratory` · undeclared (#3). Missing means undeclared, not exploratory. |

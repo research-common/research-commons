@@ -344,6 +344,10 @@ var kinds = map[string][]field{
 		opt("rules", list(object(req("dialect", text()), req("expr", text())))),
 		opt("contract", anyObject()),
 		opt("selection", enum("curated", "rule-based", "completeness")),
+		// completeness: the scope of a completeness claim, present only beside selection "completeness"
+		// (completenessBeside). The window is in the referent timescale it names, UTC when none (§1.1).
+		opt("completeness", object(req("class", enum("source", "phenomenon", "method")),
+			req("source", text()), req("window", windowObj), opt("timescale", text()))),
 		opt("frozen_before", exactlyOne([]field{opt("date", date()), opt("height", integer()), opt("run", text())})),
 		// system_keys: a method edition's declaration of the referent.system keys an observed under it must
 		// pin. A non-empty set (omit the field to declare nothing); flat key names, so "system.model" is
@@ -377,7 +381,10 @@ var referentFields = map[string][]field{
 
 var (
 	sourceOne   = []field{req("endpoint", text()), req("parameters", anyObject()), req("response_digest", digest())}
-	sourceBatch = []field{req("requests", object(req("digest", digest()), req("format", text()), req("count", integer())))}
+	sourceBatch = []field{req("requests", object(req("digest", digest()), req("format", text()), req("count", integer()), opt("endpoint", text())))}
+	// sourceEither: optional in both forms, so neither marks a referent as a single request: the period the
+	// response covers (not when it was fetched) and its timescale.
+	sourceEither = []field{opt("window", windowObj), opt("timescale", text())}
 )
 
 // checkBody applies §5 to a body. known is false for a kind §5 does not list (C-core-13): such a statement is
@@ -403,6 +410,9 @@ func bodySchema(kind string, body *canon.Object) (bool, *schemaCtx, error) {
 	}
 	if kind == "genesis" {
 		return true, ctx, satisfiable(body, "body")
+	}
+	if kind == "edition" {
+		return true, ctx, completenessBeside(body)
 	}
 	if kind == "holds" {
 		_, w := body.Get("withdrawn")
@@ -450,6 +460,19 @@ func satisfiable(body *canon.Object, p string) error {
 		if k < 1 || k > int64(len(ctrl)) {
 			return bad(p+".rule.k_of_n.k", "is "+strconv.FormatInt(k, 10)+" with "+itoa(len(ctrl))+" controllers: no set of controllers satisfies it")
 		}
+	}
+	return nil
+}
+
+// completenessBeside refuses a completeness scope beside any selection but "completeness" (wire §5): a scope
+// on a curated or rule-based edition would be a claim its own selection does not make.
+func completenessBeside(body *canon.Object) error {
+	cv := body.Members["contents"].(*canon.Object)
+	if _, ok := cv.Get("completeness"); !ok {
+		return nil
+	}
+	if s, _ := cv.Members["selection"].(canon.String); s != "completeness" {
+		return bad("body.contents.completeness", `is present without selection "completeness"`)
 	}
 	return nil
 }
@@ -518,9 +541,9 @@ func checkReferent(ref *canon.Object, class string, ctx *schemaCtx) error {
 			return bad(p, "carries both one request and a batch; a source referent is one or the other")
 		}
 		if batch {
-			return pinned(sourceBatch)
+			return pinned(append(slices.Clone(sourceBatch), sourceEither...))
 		}
-		return pinned(sourceOne)
+		return pinned(append(slices.Clone(sourceOne), sourceEither...))
 	default:
 		return pinned(referentFields[class])
 	}
@@ -540,7 +563,7 @@ func missingOnly(v canon.Value, f field, p string) ([]string, []string, bool) {
 	case "window":
 		sub = []field{req("from", ts()), req("to", ts())}
 	case "requests":
-		sub = []field{req("digest", digest()), req("format", text()), req("count", integer())}
+		sub = []field{req("digest", digest()), req("format", text()), req("count", integer()), opt("endpoint", text())}
 	default:
 		return nil, nil, false
 	}
@@ -549,7 +572,9 @@ func missingOnly(v canon.Value, f field, p string) ([]string, []string, bool) {
 	for _, s := range sub {
 		fv, present := o.Get(s.name)
 		if !present {
-			missing = append(missing, "referent."+f.name+"."+s.name)
+			if s.req {
+				missing = append(missing, "referent."+f.name+"."+s.name)
+			}
 			continue
 		}
 		if s.r(fv, p, ctx) != nil {
