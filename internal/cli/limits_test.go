@@ -50,7 +50,7 @@ var limits = []limit{
 		gap: "Priority needs time evidence this reader verified, and no command verifies Bitcoin time: every multi-author construction is `contested` (#59)",
 		sources: []limitSource{
 			{file: "docs/DESIGN-notes-claims-model.md", says: "Until readers can verify Bitcoin time evidence locally (#59), every multi-author construction is honestly `contested`."},
-			{file: "CHANGELOG.md", says: "The default verifies nothing, so every rival construction is `contested` until the Bitcoin-time profile lands."},
+			{file: "CHANGELOG.md", says: "No command verifies Bitcoin time yet, so every rival construction is `contested`."},
 		},
 		probe:  "two keys claim one blob, each with an anchor whose proof parses: `verify` exits 3, authorship `contested`, each anchor's time state `backend-unconfigured`",
 		closes: "a chain backend verifies one claimant's bound strictly earlier: `default author`",
