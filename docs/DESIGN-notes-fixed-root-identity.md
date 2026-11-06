@@ -521,7 +521,8 @@ root scan reads every authenticated R fact as a dependency before deciding it is
 I's lineage (a rival inception's events included), and the delegate scan inspects every
 fact of K's log. Only R or K can author that load, so it is not third-party noise; it
 fails closed (`model_limit`). On linear histories the dependency cap binds before the
-inspection cap (measured: inspections at about 3–10× dependencies); on merge-dense logs the
+inspection cap (measured: about 7.7 inspections per dependency at 6,000 root events plus a
+5,000-edge delegate path); on merge-dense logs the
 inspection cap can bind first.
 
 **Evidence digest integration gap:** the production evidence snapshot serialization
