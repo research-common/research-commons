@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +16,7 @@ import (
 	"github.com/research-common/research-commons/internal/gate"
 	"github.com/research-common/research-commons/internal/policy"
 	"github.com/research-common/research-commons/internal/refusal"
+	"github.com/research-common/research-commons/internal/resolve"
 	"github.com/research-common/research-commons/internal/store"
 	"github.com/research-common/research-commons/internal/wire"
 )
@@ -150,6 +153,38 @@ func (f trustFloor) CheckStatement(st *wire.Statement) *refusal.Refusal {
 	return a.Refusal
 }
 
+// pullContent gives edition rules the bytes at pull, so a content rule reads what `hub check` reads instead of
+// `unchecked (content not held)`: the package's own blobs (the gate has not installed them yet; only a blob whose
+// bytes hash to its name is entered, as at hub check) and the blobs this store already holds. An archive is
+// walked member by member by the store's scanner under the default scan limits (gate.ScanUnits); any other
+// blob is one unit. Nothing is copied: the units share the package's bytes, so memory stays what the package
+// read already held plus the members the scanner keeps (bounded by the scan's total_bytes).
+type pullContent struct {
+	pkg  map[string][]byte
+	held prepinContent
+}
+
+func newPullContent(pkg gate.Package, st *store.Store) pullContent {
+	c := pullContent{pkg: map[string][]byte{}, held: prepinContent{st: st}}
+	for _, o := range pkg.Objects {
+		if o.Mode != gate.Regular || !strings.HasPrefix(o.Path, "blobs/sha256/") {
+			continue
+		}
+		h := sha256.Sum256(o.Data)
+		if d := "sha256:" + hex.EncodeToString(h[:]); gate.BlobPath(d) == o.Path {
+			c.pkg[d] = o.Data
+		}
+	}
+	return c
+}
+
+func (c pullContent) Units(d string) ([]resolve.ContentUnit, bool) {
+	if b, ok := c.pkg[d]; ok {
+		return gate.ScanUnits(d, b, store.DefaultLimits()), true
+	}
+	return c.held.Units(d)
+}
+
 // pullSideEffects is the dry run's declaration (claims-model note §13, C-core-137).
 const pullSideEffects = "no registry change; no fetch; no cache"
 
@@ -203,6 +238,13 @@ func pullCmd(c *Ctx) (*Obj, int, error) {
 		}
 		pkg.Objects = kept
 	}
+	// Edition rules read content as `hub check` does: the package's blobs (by digest, only those whose bytes hash to
+	// their name) and, for a blob the package does not carry, the ones this store already holds.
+	ropts := []resolve.Option{resolve.WithContent(newPullContent(pkg, c.Store))}
+	for _, d := range ruleDialects {
+		ropts = append(ropts, resolve.WithDialect(d))
+	}
+	pol.Resolver = append(ropts, pol.Resolver...)
 	rep, err := gate.Pull(pkg, gate.StoreHeld{S: c.Store}, &pol, opt)
 	if err != nil {
 		var d *gate.DidNotStart
