@@ -147,12 +147,6 @@ const (
 const (
 	EvaluatorVersion = "fixed-root-model-2"
 	NotEstablished   = "not_established"
-	// MaxTraversalFacts bounds each ancestry walk and the relevant authenticated
-	// root-event scan, not the total snapshot or wire protocol. Hitting a limit
-	// yields unknown, never a partial pass. Unrelated/unproven noise does not
-	// consume another identity's semantic budget. Transport/memory admission
-	// limits belong to the trusted caller, not this model.
-	MaxTraversalFacts = 2048
 	// MaxDelegateSelfEvents bounds how many of a delegate's own raw key events one
 	// evaluation examines for warnings. Warnings carry no authority, so the limit
 	// emits a warning and never changes a status.
@@ -201,9 +195,10 @@ type Result struct {
 // request-specific results or caches. It is safe for concurrent evaluations.
 // Construct a new snapshot to add evidence; there is no destructive cut removal API.
 type Snapshot struct {
-	facts  map[ID]Fact
-	order  []ID
-	digest string
+	facts    map[ID]Fact
+	order    []ID
+	bySigner map[Key][]ID // Authenticated facts only, each list in sorted id order.
+	digest   string
 }
 
 // NewSnapshot deep-copies and normalizes model sets. Identical duplicate facts
@@ -227,6 +222,7 @@ func NewSnapshot(facts []Fact) (*Snapshot, error) {
 		s.order = append(s.order, f.ID)
 	}
 	slices.Sort(s.order)
+	s.index()
 	ordered := make([]Fact, 0, len(s.order))
 	for _, id := range s.order {
 		ordered = append(ordered, s.facts[id])
@@ -275,6 +271,17 @@ func copyFact(f Fact) Fact {
 	return f
 }
 
+// index builds the per-signer scan lists. Only authenticated facts are indexed:
+// an unproven signer claim never enters another identity's scan or budget.
+func (s *Snapshot) index() {
+	s.bySigner = map[Key][]ID{}
+	for _, id := range s.order {
+		if f := s.facts[id]; f.Authentication == Authenticated {
+			s.bySigner[f.Signer] = append(s.bySigner[f.Signer], id)
+		}
+	}
+}
+
 func (s *Snapshot) EvidenceDigest() string { return s.digest }
 
 // Clone is request-independent and shares no mutable state with its source.
@@ -283,5 +290,6 @@ func (s *Snapshot) Clone() *Snapshot {
 	for id, f := range s.facts {
 		out.facts[id] = copyFact(f)
 	}
+	out.index()
 	return out
 }

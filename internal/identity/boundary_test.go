@@ -176,7 +176,7 @@ func TestUnchangedReaderStackOnCandidateBytes(t *testing.T) {
 // Over the admission cap the whole snapshot is refused: no partial evidence set can produce a pass. Unverified
 // future-major lines are cheap distinct statements, so the cap is reached without signing 100k lines.
 func TestAdmitCapRefusesWholeSnapshot(t *testing.T) {
-	conformance.Partial(t, "C-id-39", "admission cap and the model's 2048-fact walk cap only; the proposed evaluation caps (100,000 dependencies, 1,000,000 inspections) are not reconciled or enforced, and exit 3 needs a command")
+	conformance.Partial(t, "C-id-39", "the admission cap and the model's evaluation caps (100,000 dependencies, 100,000 path edges, 1,000,000 inspections) are enforced; the exit 3 mapping needs a command")
 	// Unproven (unverified, unvouched) lines cost nothing to mint and affect nothing: over their own cap they are
 	// dropped deterministically, never failing the snapshot (review O-F8).
 	signer := key("cap", false).Signer()
