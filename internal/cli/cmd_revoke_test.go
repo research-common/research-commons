@@ -159,9 +159,10 @@ func TestRevokeSoftRefusesForeignKeyEvent(t *testing.T) {
 				t.Fatalf("%s does not count: %s", id[:12], c)
 			}
 		}
-		// the fork cleared: the next publish needs no --prev
-		if r := p.publish("--kind", "describes", "--about", dig("a"), "--note", "after"); r.code != 0 {
-			t.Fatalf("fork not cleared: %d %s", r.code, r.stdout)
+		// the fork cleared: the next publish is placed without --prev (no log-fork), and then refused because the key
+		// is revoked (a line after a revocation counts toward nothing)
+		if r := p.publish("--kind", "describes", "--about", dig("a"), "--note", "after"); r.code != 1 || !strings.Contains(r.stdout, "key-already-retired") {
+			t.Fatalf("fork not cleared, or a line after the revocation accepted: %d %s", r.code, r.stdout)
 		}
 	})
 }

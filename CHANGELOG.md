@@ -20,6 +20,9 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 - **Identity evaluation caps follow the profile (#126).** The model's 2,048-fact walk limit is replaced by three
   deterministic per-query caps (100,000 dependencies, 100,000 path edges, 1,000,000 inspections); hitting one is
   `unknown` naming the cap, and ancestry is memoized so long histories stay linear.
+- **`publish` and `publish task` refuse to sign with a retired key** (exit 1, `key-already-retired`): once this
+  store holds a `rotate_key` or `revoke_key` of the signing key (in force, or detached until its gap fills), a new
+  ordinary line would count toward nothing on any branch, so nothing is signed. A key-event draft is still signed.
 ### Added
 
 - **`commons rotate`** signs a `rotate_key` naming the successor (`--successor <key>`, or `--successor-key <file>`

@@ -435,7 +435,28 @@ type head struct {
 	fork bool // the chosen prev is not a tip: this line makes a fork
 }
 
-func (v *view) nextLine(c *Ctx, signer string) (head, *Problem) {
+// nextLine places the next line of signer's log, for a statement of kind. Unless kind is itself a key event, it
+// refuses when the log holds a key event of the key: a line counts only inside the history of every in-force
+// rotation or revocation of its key (claims-model note §4.1), and a new line is in none of them, wherever it is
+// placed, so it would count toward nothing. A detached key event counts too, since it is in force once its gap
+// fills. A key event signed later counts only where it is stricter, so key-event drafts are left to that rule.
+func (v *view) nextLine(c *Ctx, signer, kind string) (head, *Problem) {
+	h, prob := v.placeLine(c, signer)
+	if prob != nil || kind == "rotate_key" || kind == "revoke_key" {
+		return h, prob
+	}
+	if evs := v.logs.Log(signer).View().KeyState().Events; len(evs) > 0 {
+		return head{}, &Problem{Slug: "key-already-retired", Title: "refused: your key already has a key event",
+			Class: refusal.Policy, Scope: "this key's log",
+			Detail: "this store holds " + eventList(evs) + " in your key's log; a line signed after a rotation or revocation counts toward nothing, on any branch; nothing was signed or appended",
+			Next:   "sign with the key that is current (the successor a rotation names, or a new key: commons key new --out <file>); if the event is not yours, revoke with --reason key_compromise and --last-good",
+			Peer:   evs[0].St.ID, Exit: exitWriterRefused}
+	}
+	return h, nil
+}
+
+// placeLine is nextLine's placement: the head named by --prev, the one tip, or a refusal for a fork or a detached log.
+func (v *view) placeLine(c *Ctx, signer string) (head, *Problem) {
 	lv := v.logs.Log(signer).View()
 	placed := map[string]keylog.Line{}
 	for _, l := range lv.Lines {
@@ -583,7 +604,7 @@ func publishCmd(c *Ctx) (*Obj, int, error) {
 	if err != nil {
 		return nil, 0, failed(err, "store", false, "run status, then fsck")
 	}
-	h, prob := v.nextLine(c, signer)
+	h, prob := v.nextLine(c, signer, p.kind)
 	if prob != nil {
 		return nil, 0, prob
 	}
@@ -801,7 +822,7 @@ func publishTaskCmd(c *Ctx) (*Obj, int, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	h, prob := v.nextLine(c, signer)
+	h, prob := v.nextLine(c, signer, "task")
 	if prob != nil {
 		return nil, 0, prob
 	}
