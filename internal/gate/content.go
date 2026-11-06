@@ -24,20 +24,7 @@ func ScanUnits(name string, data []byte, lim store.Limits) []resolve.ContentUnit
 	}
 	col := &collector{}
 	res, err := (&store.Scanner{Limits: lim, Inspector: col}).Scan(name, data)
-	var out []resolve.ContentUnit
-	unscanned, k := false, 0
-	for _, m := range res.Members {
-		switch m.Status {
-		case store.MemberScanned:
-			if k < len(col.data) {
-				out = append(out, resolve.ContentUnit{Name: m.Path, Data: col.data[k]})
-			}
-			k++
-		case store.MemberUnscanned:
-			unscanned = true
-			out = append(out, resolve.ContentUnit{Name: m.Path, Unscanned: m.Limit + "=" + m.Value})
-		}
-	}
+	out, unscanned := pairUnits(res.Members, col.data)
 	if err != nil && !unscanned {
 		// A stop always records the unit it cut; this is the guard for one that did not.
 		out = append(out, resolve.ContentUnit{Name: name, Unscanned: "incomplete scan: " + err.Error()})
@@ -68,6 +55,38 @@ func ScanReader(name string, r io.Reader, lim store.Limits, plainMax int64, plai
 		return []resolve.ContentUnit{{Name: name, Unscanned: label}}, nil
 	}
 	return ScanUnits(name, b, lim), nil
+}
+
+// unpaired is the unscanned label of a member the scanner reports as read whose bytes cannot be paired with it.
+const unpaired = "internal: member bytes not paired"
+
+// pairUnits pairs the scanner's members with the bytes the collector kept, in scan order: one collected entry per
+// scanned member. The scanner records a member as scanned only after inspecting it, so the counts agree by
+// construction. If they ever did not, no pairing can be trusted (bytes could sit under another member's name), so
+// every scanned member becomes an unscanned unit naming it: a rule over them is `unchecked`, never `ok`, and no
+// member is dropped. unscanned reports whether any unit is unscanned.
+func pairUnits(members []store.MemberResult, data [][]byte) (out []resolve.ContentUnit, unscanned bool) {
+	scanned := 0
+	for _, m := range members {
+		if m.Status == store.MemberScanned {
+			scanned++
+		}
+	}
+	aligned, k := scanned == len(data), 0
+	for _, m := range members {
+		switch {
+		case m.Status == store.MemberScanned && aligned:
+			out = append(out, resolve.ContentUnit{Name: m.Path, Data: data[k]})
+			k++
+		case m.Status == store.MemberScanned:
+			unscanned = true
+			out = append(out, resolve.ContentUnit{Name: m.Path, Unscanned: unpaired})
+		case m.Status == store.MemberUnscanned:
+			unscanned = true
+			out = append(out, resolve.ContentUnit{Name: m.Path, Unscanned: m.Limit + "=" + m.Value})
+		}
+	}
+	return out, unscanned
 }
 
 // collector keeps the bytes of each member the scanner reads in full, in scan order.

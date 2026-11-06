@@ -23,6 +23,10 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 - **`publish` and `publish task` refuse to sign with a retired key** (exit 1, `key-already-retired`): once this
   store holds a `rotate_key` or `revoke_key` of the signing key (in force, or detached until its gap fills), a new
   ordinary line would count toward nothing on any branch, so nothing is signed. A key-event draft is still signed.
+- The `publish` pre-pin check reads a plain (non-archive) blob up to the archive bound at the default scan limits
+  (about 551 MiB, was 64 MiB), so a publisher sees the same rule outcome for a large plain capture as a hub does,
+  instead of `unchecked`. If the archive scanner ever reported a member as read without its bytes, that member is
+  now an unscanned unit naming it (`unchecked`, never `ok`) rather than being skipped.
 ### Added
 
 - **`commons rotate`** signs a `rotate_key` naming the successor (`--successor <key>`, or `--successor-key <file>`

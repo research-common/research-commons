@@ -41,8 +41,11 @@ var Now = time.Now
 // production records `unchecked`, never `ok`, for any edition with rules. Tests add one.
 var ruleDialects []resolve.Dialect
 
-// maxScan bounds the bytes the pre-pin content reader reads per blob; past it the unit is unscanned (I15).
-const maxScan = 64 << 20
+// maxScan bounds the bytes the pre-pin content reader reads from a blob that is not an archive; past it the unit is
+// unscanned (I15). It is the archive bound at the default scan limits (store.MaxArchiveFileBytes), the same memory
+// class as an archive the reader walks, so a plain capture of that size is checked by its publisher as it is by
+// a hub. A variable so tests can lower it.
+var maxScan = store.MaxArchiveFileBytes(store.DefaultLimits())
 
 // publishDisclosures maps each `authored` disclosure (run.Disclosure, wire §5) to its flag and value shape.
 // intended_for is the pre-pin request (--intended-for <resource>/<edition>), not a value.
@@ -537,7 +540,7 @@ func (p prepinContent) Units(d string) ([]resolve.ContentUnit, bool) {
 	}
 	defer r.Close()
 	// An archive is walked member by member by the store's scanner (C-core-95); any other blob is one unit.
-	units, err := gate.ScanReader(keylog.Short(strings.TrimPrefix(d, "sha256:")), r, store.DefaultLimits(), maxScan, "size limit="+strconv.Itoa(maxScan))
+	units, err := gate.ScanReader(keylog.Short(strings.TrimPrefix(d, "sha256:")), r, store.DefaultLimits(), maxScan, "size limit="+strconv.FormatInt(maxScan, 10))
 	if err != nil {
 		return nil, false
 	}

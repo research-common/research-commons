@@ -328,7 +328,9 @@ func TestPublishPrePin(t *testing.T) {
 	}
 
 	// C-core-95 (publish half): a unit the reader cannot scan: unchecked recorded, never ok; re-applied, not admitted
-	big := p.file("big.json", `{"secret":1,"pad":"`+strings.Repeat("x", maxScan)+`"}`)
+	defer func(m int64) { maxScan = m }(maxScan)
+	maxScan = 1 << 10 // the default is the archive bound (hundreds of MiB): lowered so the test writes a small file
+	big := p.file("big.json", `{"secret":1,"pad":"`+strings.Repeat("x", int(maxScan))+`"}`)
 	r = p.publish("--kind", "authored", "--content", big, "--intended-for", g+"/"+e)
 	if r.code != 0 || !strings.Contains(r.stdout, `"state":"unchecked"`) || !strings.Contains(r.stdout, "unscanned (size limit") {
 		t.Fatalf("C-core-95: %d %s", r.code, r.stdout[:min(len(r.stdout), 2000)])
