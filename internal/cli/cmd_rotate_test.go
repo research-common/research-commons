@@ -10,10 +10,27 @@ import (
 	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/conformance"
 	"github.com/research-common/research-commons/internal/keylog"
+	"github.com/research-common/research-commons/internal/resolve"
 	"github.com/research-common/research-commons/internal/wire"
 )
 
 // rotate runs the command with the world's key file.
+// rawDescribe signs a describes line with the world's key file and commits it without the writer's checks: how
+// a line signed elsewhere (another machine, an older tool) arrives in this store.
+func (p *pubWorld) rawDescribe(t *testing.T, note string, seq int64, prev string) string {
+	t.Helper()
+	k, prob := loadKey(p.key, "test")
+	if prob != nil {
+		t.Fatal(prob.Title)
+	}
+	line, id := wire.Sign(wire.Draft{Kind: "describes", Seq: seq, Prev: prev, TS: "2026-10-16T03:00:00Z",
+		Body: obj("about", obj("content", dig("a")), "note", note)}, k.Key)
+	if _, err := p.s.Commit("publish", [][]byte{line}, nil); err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
 func (p *pubWorld) rotate(args ...string) result {
 	return runIn(p.root, nil, append([]string{"rotate", "--key", p.key, "--json"}, args...)...)
 }
@@ -150,8 +167,14 @@ func TestRotateRetiresKey(t *testing.T) {
 	if !strings.Contains(r.stdout, `"merges"`) || !strings.Contains(r.stdout, b) || o.Members["stop_counting"] != nil {
 		t.Fatalf("the fork's other tip should be merged and nothing cut: %s", r.stdout)
 	}
-	after := p.describe(t, "after", rot)
-	sibling := p.describe(t, "sibling", a2)
+	// the writer now refuses both lines (key-already-retired); sign them directly to check the reader's half
+	for _, prev := range []string{rot, a2} {
+		if r := p.publish("--kind", "describes", "--about", dig("a"), "--note", "late", "--prev", prev); r.code != 1 || !strings.Contains(r.stdout, "key-already-retired") {
+			t.Fatalf("publish after the rotation: %d %s", r.code, r.stdout)
+		}
+	}
+	after := p.rawDescribe(t, "after", 3, rot)
+	sibling := p.rawDescribe(t, "sibling", 2, a2)
 	for id, want := range map[string]string{a1: "counted", a2: "counted", b: "counted", rot: "counted", after: "not counted", sibling: "not counted"} {
 		if c := counted(t, p, id); c != want {
 			t.Fatalf("%s: %s, want %s", keylog.Short(id), c, want)
@@ -246,6 +269,61 @@ func TestRotateRefusals(t *testing.T) {
 		r = p.rotate("--successor", z.Signer())
 		if r.code != 1 || !strings.Contains(r.stdout, "successor-retired") || !strings.Contains(r.stdout, "detached") || snapshot(t, p.root) != before {
 			t.Fatalf("detached: exit %d %s", r.code, r.stdout)
+		}
+	})
+}
+
+// TestPublishAfterKeyEvent: once the key's log holds a rotate_key or revoke_key, every writer that would sign an
+// ordinary line refuses (exit 1, reader policy, key-already-retired, nothing written): such a line is outside every
+// key event's history and counts toward nothing (claims-model note §4.1, C-core-143). That holds for publish from
+// options, from a draft, with --dry-run, with --prev on a sibling branch, for publish task, and for a key event
+// still detached (in force once its gap fills). A key event itself is not refused here: one signed later counts
+// where it is stricter.
+func TestPublishAfterKeyEvent(t *testing.T) {
+	refused := func(t *testing.T, p *pubWorld, r result, what string) {
+		t.Helper()
+		o := outObj(t, r)
+		if r.code != 1 || o.Members["class"] != canon.String("reader policy") || !strings.Contains(r.stdout, "key-already-retired") {
+			t.Fatalf("%s: exit %d %s", what, r.code, r.stdout)
+		}
+	}
+	p := newPubWorld(t)
+	a1 := p.describe(t, "A1")
+	if r := p.rotate("--successor", testKey("S").Signer()); r.code != 0 {
+		t.Fatalf("rotate: %d %s", r.code, r.stdout)
+	}
+	before := snapshot(t, p.root)
+	refused(t, p, p.publish("--kind", "describes", "--about", dig("a"), "--note", "late"), "publish")
+	refused(t, p, p.publish("--kind", "describes", "--about", dig("a"), "--note", "late", "--dry-run"), "dry run")
+	refused(t, p, p.publish("--kind", "describes", "--about", dig("a"), "--note", "sibling", "--prev", a1), "sibling branch")
+	refused(t, p, p.publish("--draft", p.file("d.json", `{"kind":"retracts","body":{"of":"`+a1+`"}}`)), "draft")
+	ct := p.file("c.json", `{"profile":"`+resolve.ProvisionalProfile+`","beneficiary":"`+p.signer+`","any_issuer":true}`)
+	refused(t, p, runIn(p.root, nil, "publish", "task", "--key", p.key, "--name", "t", "--contract", ct, "--json"), "publish task")
+	if snapshot(t, p.root) != before {
+		t.Fatal("a refused publish wrote something")
+	}
+	// a stricter key event after the rotation is still signed: a revoke_key draft
+	rv := p.file("rv.json", `{"kind":"revoke_key","body":{"reason":"key_compromise","last_good":"`+a1+`"}}`)
+	if r := p.publish("--draft", rv); r.code != 0 {
+		t.Fatalf("revoke_key draft after the rotation: %d %s", r.code, r.stdout)
+	}
+
+	t.Run("detached key event", func(t *testing.T) {
+		p := newPubWorld(t)
+		p.describe(t, "A1")
+		k, prob := loadKey(p.key, "test")
+		if prob != nil {
+			t.Fatal(prob.Title)
+		}
+		line, _ := wire.Sign(wire.Draft{Kind: "revoke_key", Seq: 5, Prev: strings.Repeat("ab", 32), TS: "2026-10-16T02:00:00Z",
+			Body: obj("reason", "key_compromise", "last_good", strings.Repeat("ab", 32))}, k.Key)
+		if _, err := p.s.Commit("publish", [][]byte{line}, nil); err != nil {
+			t.Fatal(err)
+		}
+		r := p.publish("--kind", "describes", "--about", dig("a"), "--note", "late")
+		refused(t, p, r, "detached revoke")
+		if !strings.Contains(r.stdout, "detached") {
+			t.Fatalf("the refusal should say the event is detached: %s", r.stdout)
 		}
 	})
 }
