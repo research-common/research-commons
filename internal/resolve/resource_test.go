@@ -1077,3 +1077,10 @@ func TestKOfNSameKeyTwice(t *testing.T) {
 	}
 	wantCurrent(t, res, g)
 }
+
+// The rc/1 edition-body domain constant is the major-keyed helper's v1 value, and differs from v2.
+func TestEditionBodyTypeIsV1Domain(t *testing.T) {
+	if EditionBodyType != wire.EditionBodyType(1) || EditionBodyType == wire.EditionBodyType(2) {
+		t.Fatalf("%s vs %s / %s", EditionBodyType, wire.EditionBodyType(1), wire.EditionBodyType(2))
+	}
+}

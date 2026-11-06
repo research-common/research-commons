@@ -533,13 +533,17 @@ func TestSliceRootTerminalAndDelivery(t *testing.T) {
 		w.sign(stmt{name: "R3", by: "R", rc: "rc/3", parent: "G2", kind: "identity_cut", body: obj("future", true)})
 		w.sign(stmt{name: "Rdesc", by: "R", rc: "rc/1", parent: "R3", kind: "describes", body: obj("about", obj("statement", w.ids["I"]), "note", "ops")})
 		s := w.admit()
-		if st, verified := s.Status(w.ids["R3"]); st != wire.Unsupported || verified {
-			t.Fatalf("rc/3 read as %s/%v", st, verified)
+		if st, verified := s.Status(w.ids["R3"]); st != wire.Unsupported || verified || !s.Authenticated(w.ids["R3"]) {
+			t.Fatalf("rc/3 read as %s/%v, authenticated %v", st, verified, s.Authenticated(w.ids["R3"]))
 		}
 		w.expect(s, "A1", identitymodel.Unknown, "unsupported_root_event")
 		w.expect(s, "B1", identitymodel.Unknown, "unsupported_root_event")
 		// Unvouched, the same bytes are indistinguishable from a forgery naming R as signer: no effect.
-		w.expect(w.admit(without(w.order, "Rdesc")...), "A1", identitymodel.Eligible, "")
+		un := w.admit(without(w.order, "Rdesc")...)
+		if un.Authenticated(w.ids["R3"]) || !un.Authenticated(w.ids["I"]) || un.Authenticated("absent") {
+			t.Fatal("Authenticated: an unvouched unverified line is not authenticated; a verified one is; an absent one is not")
+		}
+		w.expect(un, "A1", identitymodel.Eligible, "")
 	})
 	t.Run("vouched future-major worker line is ancestry", func(t *testing.T) {
 		w := base(t)

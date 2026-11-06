@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -194,4 +195,138 @@ func TestSetValuedFieldsAreOrderIndependent(t *testing.T) {
 	if got := snapshot(t, fs).Evaluate("M"); !reflect.DeepEqual(got, base.Evaluate("M")) {
 		t.Fatalf("model set ordering changed result: %+v", got)
 	}
+}
+
+// TestSeededEvidenceNeverRaisesStatus: monotonicity over the shapes the table tests cover one at a time. From a
+// generated delegate DAG, each step adds one fact of a random shape: a terminal root event, a rival inception
+// (and events under it), a root fork, a root merge, a cut placed before its grant on a root fork (prev = I), a
+// cut with a missing or wrong-lineage prev, an unsupported or invalid root line, a sibling grant, a second
+// identity granting the same K, a delegate self-event, a K line with a missing link, a root event with a
+// rejected signature, an unsupported sibling grant, or an ordinary cut. No step supplies an id earlier evidence
+// named as missing, so no status may rise (denied < unknown < eligible) for any statement.
+func TestSeededEvidenceNeverRaisesStatus(t *testing.T) {
+	conformance.Partial(t, "C-id-12", "seeded monotonicity over model facts for fourteen evidence shapes; signed bytes and consumers are not covered")
+	rank := map[Status]int{Denied: 0, Unknown: 1, Eligible: 2}
+	moves := map[string]int{}
+	for seed := int64(1); seed <= 150; seed++ {
+		fs, candidates, _ := generatedDAG(seed)
+		rng := rand.New(rand.NewSource(seed + 50000))
+		seqOf := map[ID]uint64{"I": 0, "G": 1}
+		root := []ID{"I", "G"}
+		var rival []ID
+		n := 0
+		fresh := func(p string) ID { n++; return ID(fmt.Sprintf("%s-%d", p, n)) }
+		rootLine := func(event Event) Fact {
+			prev := root[rng.Intn(len(root))]
+			f := line(fresh("r"), "R", seqOf[prev]+1, prev, event)
+			return f
+		}
+		pick := func() ID { return candidates[rng.Intn(len(candidates))] }
+		before := snapshot(t, fs)
+		for step := 0; step < 8; step++ {
+			var add []Fact
+			switch shape := rng.Intn(15); shape {
+			case 0: // terminal root event
+				add = append(add, rootLine([]Event{RotateKey, RevokeKey}[rng.Intn(2)]))
+			case 1: // rival inception by R, with an event under it
+				ri := line(fresh("rival"), "R", 0, "", IdentityInception)
+				ri.Inception = &Inception{Profile: FixedRoot}
+				ev := line(fresh("rival-ev"), "R", 1, ri.ID, Inert)
+				rival = append(rival, ri.ID, ev.ID)
+				add = append(add, ri, ev)
+			case 2: // root fork (inert)
+				add = append(add, rootLine(Inert))
+			case 3: // root merge of two root lines
+				f := rootLine(Inert)
+				other := root[rng.Intn(len(root))]
+				if other != f.Prev {
+					f.Merges = []ID{other}
+					f.Seq = max(seqOf[f.Prev], seqOf[other]) + 1
+				}
+				add = append(add, f)
+			case 4: // cut placed before its grant, on a root fork (prev = I)
+				c := cut(fresh("cut-before"), pick())
+				c.Prev, c.Seq = "I", 1
+				add = append(add, c)
+			case 5: // cut with a missing prev
+				c := cut(fresh("cut-missing"), pick())
+				c.Prev, c.Seq = ID(fmt.Sprintf("never-held-%d", n)), 7
+				add = append(add, c)
+			case 6: // cut on a rival lineage
+				if len(rival) == 0 {
+					continue
+				}
+				c := cut(fresh("cut-rival"), pick())
+				c.Prev, c.Seq = rival[0], 1
+				add = append(add, c)
+			case 7: // unsupported root line
+				f := rootLine(Inert)
+				f.Validity = Unsupported
+				add = append(add, f)
+			case 8: // invalid root line
+				f := rootLine(Inert)
+				f.Validity = Invalid
+				add = append(add, f)
+			case 9: // sibling grant to another key
+				g := rootLine(GrantEvent)
+				g.Grant = &Grant{Identity: "I", Delegate: "K2", Inception: "D2", Permissions: []Permission{{Kind: Authored, Mode: AnyTarget}}}
+				add = append(add, line("D2", "K2", 0, "", Inert), g)
+			case 10: // a second identity J granting the same K
+				j := line(fresh("J"), "R2", 0, "", IdentityInception)
+				j.Inception = &Inception{Profile: FixedRoot}
+				g := line(fresh("GJ"), "R2", 1, j.ID, GrantEvent)
+				g.Grant = &Grant{Identity: j.ID, Delegate: "K", Inception: "D", Permissions: []Permission{{Kind: Authored, Mode: AnyTarget}}}
+				add = append(add, j, g)
+			case 11: // delegate self-event
+				prev := pick()
+				add = append(add, line(fresh("k-self"), "K", 9, prev, []Event{RotateKey, RevokeKey}[rng.Intn(2)]))
+			case 12: // K line with a missing link
+				f := data(fresh("k-dangling"), 9, ID(fmt.Sprintf("never-held-k-%d", n)))
+				add = append(add, f)
+			case 13: // root event with a rejected signature
+				c := cut(fresh("cut-badsig"), "")
+				c.Authentication = RejectedSignature
+				add = append(add, c)
+			case 14: // unsupported sibling grant, or an ordinary cut
+				if rng.Intn(2) == 0 {
+					g := rootLine(GrantEvent)
+					g.Validity = Unsupported
+					g.Grant = &Grant{Identity: "I", Delegate: "K3", Inception: "D3", Permissions: []Permission{{Kind: Authored, Mode: AnyTarget}}}
+					add = append(add, g)
+				} else {
+					c := cut(fresh("cut"), pick())
+					prev := root[rng.Intn(len(root))]
+					c.Prev, c.Seq = prev, seqOf[prev]+1
+					add = append(add, c)
+				}
+			}
+			for _, f := range add {
+				if f.Signer == "R" && f.Authentication == Authenticated && f.Event != IdentityInception && !slices.Contains(rival, f.ID) && !strings.HasPrefix(string(f.Prev), "never-held") && !slices.Contains(rival, f.Prev) {
+					root = append(root, f.ID)
+					seqOf[f.ID] = f.Seq
+				}
+			}
+			fs = append(fs, add...)
+			after := snapshot(t, fs)
+			for _, id := range candidates {
+				was, now := before.Evaluate(id).Status, after.Evaluate(id).Status
+				if rank[now] > rank[was] {
+					t.Fatalf("seed %d step %d: %s rose %s → %s after adding %v", seed, step, id, was, now, ids(add))
+				}
+				if now != was {
+					moves[string(was)+"→"+string(now)]++
+				}
+			}
+			before = after
+		}
+	}
+	t.Logf("status moves over 150 seeds × 8 steps: %v (none upward)", moves)
+}
+
+func ids(fs []Fact) []ID {
+	var out []ID
+	for _, f := range fs {
+		out = append(out, f.ID)
+	}
+	return out
 }
