@@ -2,6 +2,8 @@ package identitymodel
 
 import (
 	"fmt"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -100,4 +102,85 @@ func BenchmarkEvaluateDefaultCaps(b *testing.B) {
 			b.ReportMetric(float64(stats.Dependencies), "deps")
 		})
 	}
+}
+
+// Which facts a query spends its budget on (profile §7). Facts by other keys are never read: 400 lines by an
+// unrelated key Q leave I eligible under a tight cap. The root's own facts are read whether or not they turn out
+// relevant (the root scan reads every R fact before placing it), so a rival inception by R with inert events
+// under it can exhaust the dependency cap for I; the delegate's own log is inspected in full, so bare seq-0 lines
+// by K can exhaust the inspection cap. Both fail closed, and only R or K can author them.
+func TestBudgetIsSpentOnlyOnTheRootsAndDelegatesOwnFacts(t *testing.T) {
+	stranger := fixture()
+	for n := 0; n < 400; n++ {
+		stranger = append(stranger, line(ID(fmt.Sprintf("q-%03d", n)), "Q", 0, "", Inert))
+	}
+	if r := snapshot(t, stranger).EvaluateWith("Z", Limits{Dependencies: 64, Inspections: 300}); r.Status != Eligible {
+		t.Fatalf("another key's facts spent I's budget: %s %+v", r.Status, r.Reasons)
+	}
+
+	rival := fixture()
+	ri := line("rival-I", "R", 0, "", IdentityInception)
+	ri.Inception = &Inception{Profile: FixedRoot}
+	rival = append(rival, ri)
+	prev := ID("rival-I")
+	for n := 0; n < 80; n++ {
+		id := ID(fmt.Sprintf("rival-%03d", n))
+		rival = append(rival, line(id, "R", uint64(n+1), prev, Inert))
+		prev = id
+	}
+	s := snapshot(t, rival)
+	if r := s.Evaluate("Z"); r.Status != Eligible {
+		t.Fatalf("rival inception at default caps: %s %+v", r.Status, r.Reasons)
+	}
+	if r := s.EvaluateWith("Z", Limits{Dependencies: 64}); r.Status != Unknown || !limitNamed(r, LimitDependencies) {
+		t.Fatalf("R's rival lineage under a 64-dependency cap: %s %+v", r.Status, r.Reasons)
+	}
+
+	bare := fixture()
+	for n := 0; n < 400; n++ {
+		bare = append(bare, line(ID(fmt.Sprintf("k-bare-%03d", n)), "K", 0, "", Inert))
+	}
+	s = snapshot(t, bare)
+	if r := s.Evaluate("Z"); r.Status != Eligible {
+		t.Fatalf("bare K lines at default caps: %s %+v", r.Status, r.Reasons)
+	}
+	if r := s.EvaluateWith("Z", Limits{Inspections: 300}); r.Status != Unknown || !limitNamed(r, LimitInspections) {
+		t.Fatalf("K's bare lines under a 300-inspection cap: %s %+v", r.Status, r.Reasons)
+	}
+}
+
+// "The dependency cap binds first" holds on linear histories only (profile §7). At the default caps, a delegate
+// chain of 6,000 statements each merging 200 earlier ones reaches the inspection cap while far under the
+// dependency cap (the shape from the profile's first outside review).
+func TestMergeDenseLogReachesInspectionsFirst(t *testing.T) {
+	if testing.Short() {
+		t.Skip("6,000 × 200 merges")
+	}
+	fs := fixture()
+	head := ID("Z")
+	var earlier []ID
+	for n := 0; n < 6000; n++ {
+		id := ID(fmt.Sprintf("w-%05d", n))
+		f := data(id, uint64(n+5), head)
+		if len(earlier) > 200 {
+			f.Merges = slices.Clone(earlier[len(earlier)-201 : len(earlier)-1])
+		}
+		fs = append(fs, f)
+		earlier = append(earlier, id)
+		head = id
+	}
+	r, stats := snapshot(t, fs).evaluate(head, DefaultLimits())
+	if r.Status != Unknown || !limitNamed(r, LimitInspections) || stats.Dependencies >= DefaultMaxDependencies {
+		t.Fatalf("%s %+v (%d dependencies)", r.Status, r.Reasons, stats.Dependencies)
+	}
+	t.Logf("merge-dense: inspection cap reached at %d dependencies", stats.Dependencies)
+}
+
+func limitNamed(r Result, name string) bool {
+	for _, x := range r.Reasons {
+		if x.Code == "model_limit" && strings.Contains(x.Detail, name) {
+			return true
+		}
+	}
+	return false
 }

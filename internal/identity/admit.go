@@ -39,6 +39,7 @@ type Refused struct {
 type Snapshot struct {
 	model   *identitymodel.Snapshot
 	held    map[string]*wire.Statement
+	vouched map[string]bool
 	receipt string
 	refused []Refused
 
@@ -71,6 +72,7 @@ func Admit(lines [][]byte) (*Snapshot, error) {
 		s.held[st.ID], stored[st.ID] = st, canonical
 	}
 	vouched := vouch(s.held)
+	s.vouched = vouched
 	var authenticated int
 	var unproven []string
 	for id, st := range s.held {
@@ -143,13 +145,22 @@ func (s *Snapshot) EvidenceDigest() string { return s.model.EvidenceDigest() }
 // Refused lists the received lines that are not evidence.
 func (s *Snapshot) Refused() []Refused { return slices.Clone(s.refused) }
 
-// Status reports how the reader holds a statement id ("" when not held).
+// Status reports how the reader holds a statement id ("" when not held) and whether its signature was verified
+// here. A vouched line reads (Unsupported, false) yet is authenticated evidence: read Authenticated beside it.
 func (s *Snapshot) Status(id string) (wire.Status, bool) {
 	st, ok := s.held[id]
 	if !ok {
 		return "", false
 	}
 	return st.Status, st.Verified
+}
+
+// Authenticated reports whether a held line is authenticated evidence: verified here, or vouched (its exact bytes
+// committed to by a verified line of the same key). This is what the model treats as Authenticated; an
+// unverified, unvouched line is unproven.
+func (s *Snapshot) Authenticated(id string) bool {
+	st, ok := s.held[id]
+	return ok && (st.Verified || s.vouched[id])
 }
 
 // vouch returns the unverified lines (another major, an unknown alg) whose exact bytes a verified line of the

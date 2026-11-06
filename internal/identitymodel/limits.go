@@ -26,9 +26,13 @@ import "fmt"
 //     reused counts one. This is the total-work bound: memoization keeps a long
 //     linear history linear, and the cap keeps any adversarial shape bounded.
 //
-// Unrelated or unproven facts are never read by a query (scans use per-signer
-// indexes of authenticated facts), so noise cannot consume another identity's
-// budget.
+// Facts by other keys and unproven facts are never read by a query (scans use
+// per-signer indexes of authenticated facts), so they cannot spend this identity's
+// budget. The root's and the delegate's own authenticated facts are: the root scan
+// reads every R fact as a dependency before deciding it is outside I's lineage, and
+// the delegate scan inspects every fact of K's log. Only R or K can author that
+// load, and it fails closed. On linear histories the dependency cap binds first;
+// on merge-dense logs the inspection cap can.
 type Limits struct {
 	Dependencies int
 	PathEdges    int

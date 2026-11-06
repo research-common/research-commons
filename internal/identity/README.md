@@ -97,8 +97,9 @@ Otherwise: wire `Valid` → `Understood`; `Invalid` → per §3; `Unsupported` o
   fails as a whole: no partial snapshot, so no partial pass (`TestAdmitCapRefusesWholeSnapshot`).
 - `MaxUnprovenLines = 100000` unverified, unvouched lines. Over it, the largest ids are dropped deterministically
   (a dropped link reads missing, which is no more permissive than unproven); the snapshot does not fail.
-- rc/2 sets (merges, targets, subjects, predecessors) are capped at 256 and permissions at 64; over a cap the line
-  is authenticated-invalid. Per-line bounds are wire's (`MaxLine`, `MaxSignedString`).
+- rc/2 merges and permission targets are capped at 256 and permissions at 64; over a cap the line is
+  authenticated-invalid. Subjects and predecessors are not checked here: rc/2 `genesis` and `edition` read as
+  unsupported before any member is read, so their caps apply once a reader implements them. Per-line bounds are wire's (`MaxLine`, `MaxSignedString`).
 - Evaluation: the model enforces the profile's caps per query (100,000 distinct dependencies, 100,000 ancestry edges
   on one path, 1,000,000 inspections; see the model README and profile §7); reaching one is `unknown` (`model_limit`
   naming the cap). `MaxDelegateSelfEvents = 64` bounds the warnings for a delegate's own raw key events.

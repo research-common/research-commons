@@ -117,6 +117,14 @@ func PayloadType(kind string, major int) string {
 	return "application/vnd.research-commons." + kind + ".v" + strconv.Itoa(major) + "+json"
 }
 
+// EditionBodyType is the payload type an edition body of the given major is hashed under for its edition id:
+// application/vnd.research-commons.edition-body.v<major>+json. The major is the statement's, so an rc/2
+// edition's id is never computed in the v1 domain (identity profile §2.2). "edition-body" is no statement kind,
+// so an edition id never equals a statement id.
+func EditionBodyType(major int) string {
+	return PayloadType("edition-body", major)
+}
+
 // PAE is the DSSE v1 pre-authentication encoding.
 func PAE(payloadType string, body []byte) []byte {
 	b := make([]byte, 0, len(payloadType)+len(body)+32)

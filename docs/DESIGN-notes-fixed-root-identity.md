@@ -23,6 +23,19 @@ administration without invalidating already provable grants; a restored copy of 
 **same** root key can resume. Root compromise requires a new I and independently
 accepted resource/policy changes. Independently generated spare keys are not recovery.
 
+**Root compromise is total and retroactive.** A raw `revoke_key` or `rotate_key` on I's
+lineage (§3) ends every passing use of I, including every identity act signed before it;
+`last_good` is not read. This is deliberate. A worker's hard revocation can keep a
+prefix (claims-model note §4.1) because the root that issued the grant stays trusted
+and can say which lines were the worker's. Nothing stands above R to say when R was
+taken: the time of a root compromise cannot be established from the log, and a thief
+holding R can sign grants, cuts and forks that look exactly like the owner's, on any
+branch and with any timestamp. A prefix-preserving root revoke would trust R's own
+statement about where the compromise began, which is the statement a compromise makes
+worthless. The delegates' bytes survive as bare-key statements; nothing "as I" passes.
+Recovery is a new identity plus resources that list a second controller subject
+(§8). Issuer tools must say this before an inception is signed.
+
 This is not proof of a person, institutional membership, unique operator, independent
 experiment, truth, or freshness. Public key/identity associations are correlatable.
 An offline bundle can omit a cut; all positive results are relative to held evidence.
@@ -65,8 +78,10 @@ not suppress the selected major's base schema. No conversion is performed on exi
 signed statements. Old key-only resources adopt typed controllers only through an
 edition authorized under their existing controller authority (or a new resource).
 
-A future dual-major reader must reject identity actor/marker use in `rc/1` as outside
-this profile, not silently upgrade it. Unextended `rc/1` remains unchanged. There is
+A dual-major reader never upgrades identity actor/marker use in `rc/1`: an `rc/1`
+`x_actor_v1` is not read (the line is evaluated as a bare-key line and grants nothing
+as an identity), and an `rc/1` `crit` naming `x_identity_v1` makes the line
+unsupported, since this reader registers no `rc/1` extension. Unextended `rc/1` remains unchanged. There is
 **no alpha-ledger importer** here: dual reading concerns only these `rc/1` and `rc/2`
 statement envelopes, not older ledger formats.
 
@@ -109,7 +124,7 @@ claim that the remaining positive grant is complete (§5).
 | Signed body and envelope | Upgraded interpretation |
 |---|---|
 | `rc/1`, no identity marker or actor | Existing `key(K)` semantics. |
-| `rc/2`, understood marker, no actor | `key(K)` on an identity-aware body; may fill only a key slot. |
+| `rc/2`, understood marker, no actor | `key(K)` on an identity-aware body; may fill only a key slot. It carries no `amends` (that requires an actor). Open, decided with the claim consumer: whether it amends the same key's `rc/1` `authored` of the same digest through same-key ancestry (§5.1 "bare-key amendment rules do not change") or stands beside it. |
 | `rc/2`, understood marker and one actor I/G | Exactly I/G, subject to authority checks; never a key fallback. |
 | Actor without body marker or without critical declaration | Invalid candidate even if correctly signed. |
 | Marker present but unknown critical feature/profile | Unsupported/non-passing, not bare-key interpretation. |
@@ -208,6 +223,9 @@ UI must disclose and require acknowledgment of this breadth, especially with
 `any_content:true`. `amend:false` prevents explicit supersession, but another new claim
 may still conflict with the principal's other claims. No implicit expiry, renewal,
 sequence budget, same-grant-only amendment right, or timestamp-based scope is provided.
+(Open, review of this profile: whether a same-key amendment mode, which narrows the actor's
+own targets and so is a leaf under the invariant above, is added before anything consumes
+`amend`. Until decided, `amend` has exactly the two values above.)
 
 Root vocabulary on the pinned I lineage is closed for authority evaluation:
 
@@ -218,7 +236,8 @@ Root vocabulary on the pinned I lineage is closed for authority evaluation:
   irrespective of defects in its own ancestry or merges: placement on I's lineage is
   decided by its `prev` chain alone. (Otherwise one malformed line planted by whoever
   holds the root key could void the owner's fork-clearing revoke.) All
-  passing identity authority stops, including historical uses. No successor inherits I.
+  passing identity authority stops, including historical uses (why: §1). No successor
+  inherits I.
   To close workers while keeping accepted history, cut grants instead of revoking R.
 * Fully understood raw `describes` and `anchors` are inert for administration. They
   do not modify grants; anchors remain subject to their ordinary time/coverage rules.
@@ -274,6 +293,12 @@ signals **do not erase or close G**. The signals remain visible as warnings, and
 their unchanged effects on bare-key uses. Before a root cut is known, an otherwise
 valid G may still authorize K after a visible self-revoke. Operators must publish a
 root cut to shut it off; an emergency self-revoke UI must not claim otherwise.
+Requirements on consumers: every view of a delegate K shows two axes side by side,
+bare-key status ("self-revoked; bare-key lines after X do not count") and per-grant
+status ("G from I: open / cut at L / cut null / unknown"); an identity act under an open
+G after a visible self-revoke is never shown as a clean `eligible` (the
+`delegate_self_event` warning travels with it); and a self-revoke command prints, by id,
+every grant it does not close.
 
 The reader must separate cryptographic verification, complete linkage, understanding,
 bare-key eligibility and actor eligibility. It must not discard identity evidence by
@@ -317,7 +342,8 @@ subject scope before propagating its uncertainty. Unsupported/unproven affiliati
 remains unresolved for that candidate only. Later real grant delivery can change the
 answer; this is not a completeness assertion. The same relevance boundary applies to
 unresolved resource predecessors/approvals and task decisions. A cut authenticated by
-the pinned root qualifies even when its prefix dependency is missing. Definite denials
+the pinned root is relevant even when its prefix dependency is missing, and reads unknown
+(§4: a missing L is unknown); its uncertainty propagates to the grant it names. Definite denials
 are reported alongside unknowns and never hidden by them.
 
 ### 5.2 Resources
@@ -336,7 +362,9 @@ Approval withdrawal/reapproval is **key-and-grant-local** (raw-key context has n
 Use existing same-key ordering; one delegate cannot withdraw another delegate's
 approval merely because they both act for I. A new grant also does not let the same
 key cancel an approval made under a different G. Principal-wide withdrawal and
-cross-key withdrawal ordering are not implemented by this profile.
+cross-key withdrawal ordering are not implemented by this profile. Because withdrawal is
+key-and-grant-local, a `withdraw_approval` permission is usable only by a delegate whose
+same grant also carries `edition` for that resource (the approval it withdraws).
 
 ### 5.3 Task roles and lifecycle
 
@@ -375,12 +403,17 @@ implicitly upgraded or assigned new roles by this candidate.
 A withdrawn attempt cannot be reopened by reordered or later progress. New intent
 means a new attempt. Cross-key decisions by the same I use the existing explicit
 `body.supersedes` statement id; targets must have the same task edition and beneficiary.
+This needs only the `decide` grant for the task, not `amend:true`: `decide` is already
+restricted to the beneficiary, so a delegate's decision superseding another delegate's is
+within the authority the `decide` grant discloses.
 Conflicting unsuperseded decisions remain contested; authorized unknown decisions
 prevent clean settlement. No implicit cross-key ordering.
 
 Identity counting deduplicates eligible explicit I values. Bare submissions do not turn
 into identity votes. Key counting deduplicates actual K values **after** actor authority
-passes; it never bypasses a missing G. Counting principals does not establish human or
+passes; it never bypasses a missing G. Under key counting, a raw submission by K and an
+identity submission by K for I count once: the unit is the key, whatever subject it acted
+for (§2.3 treats them as two subjects for authority, not for counting). Counting principals does not establish human or
 experimental independence. Existing `rc/1` tasks retain their legacy defaults; received
 evidence never changes their counting unit.
 
@@ -389,6 +422,9 @@ evidence never changes their counting unit.
 The production reader already loads `reader-policy-v1` with key principals only; its user-facing
 specification is `docs/READER-POLICY.md` (provisional). This section stays the candidate profile's text,
 including what an `{identity: I}` principal would mean once the profile is active.
+(Open, decided with the consumer work: whether admitting `{identity: I}` principals needs a
+new `reader-policy` version string. The version is in the policy digest, so the answer
+changes digests; §2.1 bumps a major for the same kind of type change in signed statements.)
 
 `fixed-root-identity-policy.schema.json` is a linked **candidate local policy**, not a
 received statement. It requires `version:"reader-policy-v1"`, `selections` and `trust`
@@ -478,7 +514,16 @@ identical for the same evidence and limits whatever the delivery order:
 
 A cap yields `unknown` with a `model_limit` reason naming the cap (`dependencies`,
 `path_edges`, `inspections`) and its value; definite denials established first stay denied.
-Unrelated or unproven facts are never read, so noise cannot spend another identity's budget.
+Facts by other keys and unproven facts are never read (scans use per-signer indexes of
+authenticated facts), so they cannot spend this identity's budget. The root's and the
+delegate's own authenticated facts are read whether or not they turn out relevant: the
+root scan reads every authenticated R fact as a dependency before deciding it is outside
+I's lineage (a rival inception's events included), and the delegate scan inspects every
+fact of K's log. Only R or K can author that load, so it is not third-party noise; it
+fails closed (`model_limit`). On linear histories the dependency cap binds before the
+inspection cap (measured: about 7.7 inspections per dependency at 6,000 root events plus a
+5,000-edge delegate path); on merge-dense logs the
+inspection cap can bind first.
 
 **Evidence digest integration gap:** the production evidence snapshot serialization
 must be pinned before claiming cache/replay equivalence across implementations. It
@@ -524,6 +569,29 @@ signing must fail, not silently change algorithm/preimage. A valid signature doe
 prove safe informed approval or custody quality. GitHub can transport unsigned packages
 and logs without holding a root; a secret-bearing workflow is optional, user-owned,
 lower-assurance deployment work, not the default or a tested service.
+
+**The simple path, which most volunteer hubs will take:** R is an ordinary `rc-key/0`
+key file (`docs/KEY-FILES.md`) kept on a machine that does not run the hub's daily work,
+and the CLI signs with it. No package, connector or hardware is involved. The custody
+questions are a backup of that file and how quickly its holder can sign.
+
+**Reachability, not only safety.** Closing a stolen delegate key needs a root cut, and a
+prefix-preserving cut needs L known at cut time, so it cannot be pre-signed. The root
+must therefore be reachable within the exposure window the hub tolerates. That, rather
+than fear of compromise, is what pulls a root toward being kept warm.
+
+**Hub resources should list a second controller subject.** If a resource's controllers
+are `{identity: I}` alone, re-accepting it after a compromise of R is authorized by
+"predecessor controllers" (§2.1), which then includes the thief. A second subject (a
+second identity, or a key held apart) under a controller `rule` gives the resource layer
+the threshold this profile does not have.
+
+**Co-maintenance.** There are two honest patterns: shared custody of one root file (§1
+treats a restored copy as the same root), or one identity per maintainer with every hub
+resource listing both under a `rule`. The second gives co-maintenance at the resource
+layer but not for grants: a delegate acts for exactly one I.
+
+No custody drill has been run or recorded; C-id-40 stays pending until one is.
 
 ## 9. Schemas, vectors and reproducible checks
 
@@ -644,7 +712,7 @@ a scenario.
 | C-id-37 | §2.2, §2.3 (handle ID-37) | Tamper / marker / criticality / canonicalization | Any byte tamper, actor/marker without the other, unknown critical token, or non-canonical signed form: never `eligible`; never better than withholding the line. |
 | C-id-38 | §7 (handle ID-38) | Cache / replay / permutation invariance | Duplicate, reordered or re-serialised delivery of the same evidence gives identical results, evidence digest and receipt; a cache/replay gives the same answer as a cold read. |
 | C-id-39 | §7 (handle ID-39) | Deterministic resource caps | Every evaluation cap reached returns `unknown`/non-passing naming the cap (exit 3), never a partial grant or prefix. |
-| C-id-40 | §8 (handle ID-40) | Root backup / compromised operational host | Root backup restore and a compromised operational host: drill outcome as recorded in §8 (custody, not protocol). |
+| C-id-40 | §8 (handle ID-40) | Root backup / compromised operational host | Root backup restore and a compromised operational host: a recorded drill (custody, not protocol). None is recorded yet (§8). |
 | C-id-41 | §2.3 (handle ID-41) | Marker without actor / actor without marker | An actor without the body marker, or a marker without the critical declaration, is invalid even when correctly signed; never read as bare-key. |
 | C-id-42 | §5.3 (handle ID-42) | Decide grant is not beneficiary role | A `decide` grant does not make K the beneficiary: `decide` by an actor that is not the pinned edition's beneficiary is `denied`. |
 | C-id-43 | §5.3 (handle ID-43) | Cross-key exact-intent continuity | `progress`/`withdraw` by K2 for I continues K1-for-I's exact intent; a bare-key K1 intent is not continued; a withdrawn attempt cannot be reopened. |

@@ -42,11 +42,13 @@ import (
 // Nothing here reads `ts`, file order or arrival order: the tip is computed from predecessor links alone, two
 // editions with one predecessor are a FORK (package dag), and only a merge edition clears it (C-core-84, 85).
 
-// EditionBodyType is the payload type an edition body is hashed under for its edition id. It differs from every
-// statement payload type, so an edition id never equals a statement id.
+// EditionBodyType is the payload type an rc/1 edition body is hashed under for its edition id
+// (equal to wire.EditionBodyType(1); a test pins it). It differs from every statement payload type, so an edition id never equals a
+// statement id. This resolver reads rc/1 editions only; one that reads rc/2 must take the major from the
+// statement (wire.EditionBodyType(major)), never this constant.
 const EditionBodyType = "application/vnd.research-commons.edition-body.v1+json"
 
-// EditionID is the id of the edition a body proposes.
+// EditionID is the id of the rc/1 edition a body proposes.
 func EditionID(body *canon.Object) string {
 	h := sha256.Sum256(wire.PAE(EditionBodyType, canon.Encode(body)))
 	return hex.EncodeToString(h[:])

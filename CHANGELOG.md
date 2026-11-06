@@ -27,6 +27,12 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   (about 551 MiB, was 64 MiB), so a publisher sees the same rule outcome for a large plain capture as a hub does,
   instead of `unchecked`. If the archive scanner ever reported a member as read without its bytes, that member is
   now an unscanned unit naming it (`unchecked`, never `ok`) rather than being skipped.
+- Candidate fixed-root identity profile, after its first outside review: the profile states that a root compromise
+  is total and retroactive and why, corrects what the evaluation caps read (the root's and the delegate's own facts
+  count; other keys' never), and adds custody guidance (the plain key-file path, root reachability, a second
+  controller subject on hub resources, co-maintenance). New: `identity.Snapshot.Authenticated`,
+  `wire.EditionBodyType(major)`, and a seeded monotonicity property over fourteen evidence shapes. Nothing is
+  activated.
 ### Added
 
 - **`commons rotate`** signs a `rotate_key` naming the successor (`--successor <key>`, or `--successor-key <file>`

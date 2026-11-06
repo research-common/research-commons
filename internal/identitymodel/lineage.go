@@ -116,6 +116,8 @@ func (w *walker) local(id ID, key Key, pin ID) *node {
 		if f.Validity == Invalid {
 			p.add("invalid_ancestry", Denied, id, pin, "")
 		} else if f.Validity == Unchecked || f.Validity > Invalid {
+			// > Invalid is not dead: Validity is a uint8 a caller can set out of range. An unknown value is
+			// treated as unchecked (fail closed), never as understood.
 			p.add("unchecked_ancestry", Unknown, id, pin, "")
 		}
 		if f.Seq == 0 {

@@ -170,7 +170,8 @@
         "cut-last-good-required"
       ],
       "isolated_tests": [
-        "internal/identitymodel:TestSeededCutsMatchIndependentSetOracleAndNeverWiden"
+        "internal/identitymodel:TestSeededCutsMatchIndependentSetOracleAndNeverWiden",
+        "internal/identitymodel:TestSeededEvidenceNeverRaisesStatus"
       ],
       "conformance": "partial",
       "remaining": "Mandatory nullable prefix syntax checked; intersection and permutation semantics belong to model."
@@ -572,7 +573,7 @@
       "schema_vectors": [],
       "isolated_tests": [],
       "conformance": "pending",
-      "remaining": "Pending: no test. A custody drill on real signer hardware (profile §8); not a unit test. Authorized custody drill and actual signer adapters are not run or claimed."
+      "remaining": "Pending: no test. A recorded custody drill (profile §8): restore of the root key file from backup, and a compromised operational host; not a unit test. No drill is recorded and no signer adapter is claimed."
     },
     {
       "handle": "ID-41",

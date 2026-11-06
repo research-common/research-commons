@@ -80,8 +80,10 @@ through cache rebuilding.
 The model enforces three per-query caps (`Limits`; defaults 100,000 distinct
 dependencies, 100,000 path edges, 1,000,000 inspections; accounting in `limits.go`
 and the profile's §7). Reaching one adds an `unknown` `model_limit` reason naming the cap; a partial walk must
-never produce a pass. Independent/unproven noise does not consume another
-identity's semantic limit. This is **not** a transport/memory DoS admission layer:
+never produce a pass. Facts by other keys and unproven facts are never read, so
+they cannot spend this identity's budget; the root's and the delegate's own
+authenticated facts are read whether or not they turn out relevant (profile §7), so
+R or K can exhaust a cap for I, which fails closed. This is **not** a transport/memory DoS admission layer:
 constructing/hashing a snapshot and locating its relevant facts still examine held
 input. An eventual reader must separately bound admission, bytes, links and work.
 

@@ -597,7 +597,10 @@ func TestFixedRootCandidateSharedEdition(t *testing.T) {
 			t.Fatal(err)
 		}
 		ids[ID(PAE(PayloadType("edition", 2), canon.Encode(draft)))] = true
-		e := ID(PAE("application/vnd.research-commons.edition-body.v2+json", canon.Encode(draft.Members["body"])))
+		if EditionBodyType(2) != "application/vnd.research-commons.edition-body.v2+json" || EditionBodyType(1) != "application/vnd.research-commons.edition-body.v1+json" {
+			t.Fatalf("edition-body domains: %s %s", EditionBodyType(1), EditionBodyType(2))
+		}
+		e := ID(PAE(EditionBodyType(2), canon.Encode(draft.Members["body"])))
 		if edition != "" && e != edition {
 			t.Fatal("actor changed shared edition id")
 		}

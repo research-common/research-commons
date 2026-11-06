@@ -220,7 +220,7 @@ func (s *Snapshot) rootState(e *evaluation, root Fact, actor Actor, grant *Grant
 			}
 			continue
 		}
-		if f.Validity == Unsupported || f.Validity == Unchecked || f.Validity > Invalid {
+		if f.Validity == Unsupported || f.Validity == Unchecked || f.Validity > Invalid { // out of range: as unchecked
 			e.proof(p.get())
 			e.add("unsupported_root_event", Unknown, id, root.ID, "authenticated in-lineage event is not understood")
 			continue
