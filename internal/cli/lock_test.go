@@ -204,7 +204,7 @@ func TestWriterLockAddsNoPath(t *testing.T) {
 	}
 }
 
-// TestEveryWriterWaitsOnTheLock: publish, publish task and revoke each go through the writer lock. Another
+// TestEveryWriterWaitsOnTheLock: publish, publish task, rotate and revoke each go through the writer lock. Another
 // holder is placed on the key; each writer must wait the bounded time (shortened here), then proceed without
 // the lock, succeed, and say so in its output. A writer that never reached LockKey would return at once with
 // no note.
@@ -225,6 +225,7 @@ func TestEveryWriterWaitsOnTheLock(t *testing.T) {
 	}{
 		{"publish", []string{"publish", "--key", p.key, "--json", "--kind", "authored", "--content", p.file("d.bin", "x"), "--licence", "CC0-1.0", "--description", "x"}},
 		{"publish task", []string{"publish", "task", "--key", p.key, "--name", "t", "--contract", ct, "--json"}},
+		{"rotate", []string{"rotate", "--key", p.key, "--successor", testKey("S").Signer(), "--json"}},
 		{"revoke", []string{"revoke", "--key", p.key, "--reason", "superseded", "--json"}},
 	} {
 		start := time.Now()
