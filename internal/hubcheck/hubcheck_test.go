@@ -1,6 +1,9 @@
 package hubcheck
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -1065,4 +1068,59 @@ func TestRefuseIncomplete(t *testing.T) {
 	if r := verdict(t, res, np); r.Verdict != gate.Admitted || len(r.Labels) != 0 {
 		t.Fatalf("%s %v %v", r.Verdict, r.Refusal, r.Labels)
 	}
+}
+
+// TestHubScansArchiveContent: the hub's content reader walks archives with the store's scanner. A statement
+// recording intended_for outcome ok over a tar.gz whose member holds the forbidden key shows fail (the old
+// whole-blob reader saw only compressed bytes and would have computed ok); over a tar whose member holding the
+// key is xz-compressed it shows unchecked, never ok; neither is endorsed.
+func TestHubScansArchiveContent(t *testing.T) {
+	h := newHub(t, defaultPolicy)
+	s := newSigner()
+	gp, gl, g := s.sign("C", "genesis", obj("type", "collection", "name", "r", "controllers", []string{s.key("C").Signer()}, "rule", obj("any_one", true)))
+	eb := editionBody(g, []string{g}, "rules", canon.Array{obj("dialect", "rc-test/1", "expr", "FORBID secret")})
+	ep, el, _ := s.sign("C", "edition", eb)
+	e := resolve.EditionID(eb)
+	xz, _ := hex.DecodeString("fd377a585a0000016922de36020021011c00000010cf58cc01000b7b22736563726574223a317d008f9ca1410001200ca2ddb4bc9042990d010000000001595a")
+	tgz := gzTar(t, [2]string{"a.json", `{"ok":1}`}, [2]string{"b.json", `{"secret":1}`})
+	txz := gzTar(t, [2]string{"a.json", `{"ok":1}`}, [2]string{"b.json.xz", string(xz)})
+	for p, l := range map[string][]byte{gp: gl, ep: el, gate.BlobPath(dig(tgz)): tgz, gate.BlobPath(dig(txz)): txz} {
+		h.write(p, l)
+	}
+	h.commit("collection, blobs held")
+	h.branch("pr")
+	claim := obj("resource", g, "edition", e, "edition_applied", e, "outcome", "ok")
+	p1, l1, _ := s.sign("M", "authored", obj("content", contentOf(tgz), "type", "dataset", "intended_for", claim))
+	p2, l2, _ := s.sign("M", "authored", obj("content", contentOf(txz), "type", "dataset", "intended_for", claim))
+	h.write(p1, l1)
+	h.write(p2, l2)
+	h.commit("two claims")
+	res := h.check("main", resolve.WithDialect(forbidDialect{}))
+	if r := verdict(t, res, p1); r.IntendedFor == nil || r.IntendedFor.Named != resolve.RuleFail || r.IntendedFor.Endorsed {
+		t.Fatalf("tar.gz: %+v", r.IntendedFor)
+	}
+	r := verdict(t, res, p2)
+	if r.IntendedFor == nil || r.IntendedFor.Named != resolve.RuleUnchecked || r.IntendedFor.Endorsed {
+		t.Fatalf("xz member: %+v", r.IntendedFor)
+	}
+	// the hub report shows outcomes only; the member is named in the evaluation (internal/gate.TestUnscannedArchiveMember)
+}
+
+func gzTar(t *testing.T, files ...[2]string) []byte {
+	var b bytes.Buffer
+	zw := gzip.NewWriter(&b)
+	tw := tar.NewWriter(zw)
+	for _, f := range files {
+		if err := tw.WriteHeader(&tar.Header{Name: f[0], Mode: 0o644, Size: int64(len(f[1])), Typeflag: tar.TypeReg, Format: tar.FormatUSTAR}); err != nil {
+			t.Fatal(err)
+		}
+		tw.Write([]byte(f[1]))
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return b.Bytes()
 }

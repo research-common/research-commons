@@ -359,6 +359,14 @@ func sniff(b []byte) string {
 	return ""
 }
 
+// ArchiveFormat names the archive format the scanner walks ("tar", "gzip", "zip") from the leading bytes, or
+// "" when the bytes are not one. A caller decides with it whether a blob is scanned member by member.
+func ArchiveFormat(b []byte) string { return sniff(b) }
+
+// Compression names a compression the scanner has no reader for ("xz", "zstd", ...), or "". Bytes in such a
+// compression cannot be inspected: a reader records them unscanned rather than reading them as opaque bytes.
+func Compression(b []byte) string { return isCompressedOther(b) }
+
 // isCompressedOther names compression the scanner has no reader for, so a member in it is unscanned with the
 // method named rather than inspected as opaque bytes.
 func isCompressedOther(b []byte) string {

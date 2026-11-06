@@ -19,6 +19,7 @@ import (
 
 	"github.com/research-common/research-commons/internal/gate"
 	"github.com/research-common/research-commons/internal/resolve"
+	"github.com/research-common/research-commons/internal/store"
 	"github.com/research-common/research-commons/internal/wire"
 )
 
@@ -173,7 +174,8 @@ func (c treeContent) Units(d string) ([]resolve.ContentUnit, bool) {
 	if !ok {
 		return nil, false
 	}
-	return []resolve.ContentUnit{{Name: d, Data: b}}, true
+	// An archive is walked member by member by the store's scanner (C-core-95); any other blob is one unit.
+	return gate.ScanUnits(d, b, store.DefaultLimits()), true
 }
 
 func (c treeContent) add(path string, b []byte) {
