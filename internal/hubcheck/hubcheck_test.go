@@ -215,6 +215,10 @@ func TestPolicyParser(t *testing.T) {
 		`{"policy":"rc-hub-policy/1","not_served":[{"digest":"` + dig(nil) + `"},{"digest":"` + dig(nil) + `"}]}`,
 		`{"policy":"rc-hub-policy/1","series":{"refuse_premature_freeze":"yes"}}`,
 		`{"policy":"rc-hub-policy/1","series":{"other":true}}`,
+		`{"policy":"rc-hub-policy/1","selection":{"refuse_incomplete":"yes"}}`,
+		`{"policy":"rc-hub-policy/1","selection":{"refuse_incomplete":1}}`,
+		`{"policy":"rc-hub-policy/1","selection":{"other":true}}`,
+		`{"policy":"rc-hub-policy/1","selection":true}`,
 	} {
 		_, err := gate.ParseHubPolicy([]byte(bad), "rev")
 		d := didNotStart(t, err)
@@ -955,5 +959,110 @@ func TestRawGitRead(t *testing.T) {
 	res := h.check("main")
 	if r := verdict(t, res, gate.BlobPath(dig(b))); r.Verdict != gate.Admitted {
 		t.Fatalf("%s %v", r.Verdict, r.Refusal)
+	}
+}
+
+// TestRefuseIncomplete: selection.refuse_incomplete. With the knob in the base policy, a pushed resource
+// edition whose completeness claim fails against the readings the hub holds is refused under reader policy,
+// scope that edition (exit 1); a claim that cannot be checked is could-not-check (exit 3); a claim that holds
+// is admitted and labelled; an edition with no claim is untouched. Without the knob the failing edition is
+// admitted.
+func TestRefuseIncomplete(t *testing.T) {
+	const station = "urn:example:station-7"
+	scope := obj("class", "phenomenon", "source", station, "window", obj("from", "2026-01-01T00:00:00Z", "to", "2026-02-01T00:00:00Z"))
+	setup := func(policy string) (*hub, *signer, string, []string) {
+		h := newHub(t, policy)
+		s := newSigner()
+		gp, gline, g := s.sign("C", "genesis", obj("type", "collection", "name", "january", "controllers", []string{s.key("C").Signer()}, "rule", obj("any_one", true)))
+		h.write(gp, gline)
+		var ids []string
+		for _, n := range []string{"jan-03", "jan-10"} {
+			p, line, id := s.sign("O", "observed", obj("content", contentOf([]byte(n)), "class", "phenomenon",
+				"referent", obj("instrument", station, "location", "geo:39.74,-104.99", "at", "2026-01-"+n[4:]+"T12:00:00Z"),
+				"capture", obj("at", "2026-01-02T00:00:00Z", "evidence", "self-asserted")))
+			h.write(p, line)
+			ids = append(ids, id)
+		}
+		h.commit("genesis and readings")
+		return h, s, g, ids
+	}
+	members := func(ids ...string) canon.Array {
+		var a canon.Array
+		for _, id := range ids {
+			a = append(a, resolve.Entry("statement", id, "member"))
+		}
+		return a
+	}
+	knob := `{"policy":"rc-hub-policy/1","selection":{"refuse_incomplete":true}}`
+	h, s, g, ids := setup(knob)
+
+	// a claim that lists one of the two readings the hub holds fails: refused, scope that edition
+	h.branch("partial")
+	ep, eline, _ := s.sign("C", "edition", editionBody(g, []string{g}, "members", members(ids[0]), "selection", "completeness", "completeness", scope))
+	h.write(ep, eline)
+	h.commit("incomplete claim")
+	res := h.check("main")
+	refusedAs(t, res, ep, refusal.Policy, gate.HubRules+": selection.refuse_incomplete")
+	r := verdict(t, res, ep)
+	if r.Completeness == nil || r.Completeness.Outcome != resolve.RuleFail || res.Exit() != 1 {
+		t.Fatalf("%v\n%s", r.Refusal, res.Render())
+	}
+	if !strings.Contains(r.Refusal.Detail, "not listed") || r.Scope != "object "+ep {
+		t.Fatalf("scope %q detail %q", r.Scope, r.Refusal.Detail)
+	}
+
+	// each branch below forks from main: the controller's log continues from the genesis, not from the edition above
+	fork := func() *signer {
+		s2 := *s
+		s2.head, s2.seq = maps(s.head), maps64(s.seq)
+		s2.head["C"], s2.seq["C"] = g, 1
+		return &s2
+	}
+	// without the knob the same edition is admitted
+	n, ns, ng, nids := setup(`{"policy":"rc-hub-policy/1"}`)
+	n.branch("partial")
+	xp, xline, _ := ns.sign("C", "edition", editionBody(ng, []string{ng}, "members", members(nids[0]), "selection", "completeness", "completeness", scope))
+	n.write(xp, xline)
+	n.commit("incomplete claim")
+	if r := verdict(t, n.check("main"), xp); r.Verdict != gate.Admitted {
+		t.Fatalf("%s %v", r.Verdict, r.Refusal)
+	}
+
+	// a claim the hub cannot check (a reading with no position) is could-not-check, never a pass
+	u, us, ug, uids := setup(knob)
+	up, uline, _ := us.sign("O", "observed", obj("content", contentOf([]byte("nowhere")), "class", "phenomenon",
+		"referent", obj("instrument", station, "location", "geo:39.74,-104.99"),
+		"capture", obj("at", "2026-01-02T00:00:00Z", "evidence", "self-asserted")))
+	u.write(up, uline)
+	u.commit("reading with no position")
+	u.branch("unchecked")
+	uep, ueline, _ := us.sign("C", "edition", editionBody(ug, []string{ug}, "members", members(uids...), "selection", "completeness", "completeness", scope))
+	u.write(uep, ueline)
+	u.commit("claim over an unplaced reading")
+	res = u.check("main")
+	if r := verdict(t, res, uep); r.Verdict != gate.Undecided || res.Exit() != 3 || r.Next == "" || r.Completeness == nil {
+		t.Fatalf("%s %v\n%s", r.Verdict, r.Refusal, res.Render())
+	}
+
+	// control: a complete claim is admitted and labelled
+	h.git("checkout", "-q", "main")
+	h.branch("complete")
+	cp, cline, _ := fork().sign("C", "edition", editionBody(g, []string{g}, "members", members(ids...), "selection", "completeness", "completeness", scope))
+	h.write(cp, cline)
+	h.commit("complete claim")
+	res = h.check("main")
+	if r := verdict(t, res, cp); r.Verdict != gate.Admitted || !r.HasLabel(gate.LabelCompleteness) || res.Exit() != 0 {
+		t.Fatalf("%s %v\n%s", r.Verdict, r.Refusal, res.Render())
+	}
+
+	// control: an edition with no claim is untouched
+	h.git("checkout", "-q", "main")
+	h.branch("noclaim")
+	np, nline, _ := fork().sign("C", "edition", editionBody(g, []string{g}, "members", members(ids[0])))
+	h.write(np, nline)
+	h.commit("no claim")
+	res = h.check("main")
+	if r := verdict(t, res, np); r.Verdict != gate.Admitted || len(r.Labels) != 0 {
+		t.Fatalf("%s %v %v", r.Verdict, r.Refusal, r.Labels)
 	}
 }

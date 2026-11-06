@@ -727,3 +727,27 @@ func TestGateAndGCAgree(t *testing.T) {
 		}
 	}
 }
+
+// TestRefuseIncompleteKnob: selection.refuse_incomplete is a boolean, off when absent, and nothing else is
+// accepted under `selection`.
+func TestRefuseIncompleteKnob(t *testing.T) {
+	for in, want := range map[string]bool{
+		`{"policy":"rc-hub-policy/1"}`:                                         false,
+		`{"policy":"rc-hub-policy/1","selection":{}}`:                          false,
+		`{"policy":"rc-hub-policy/1","selection":{"refuse_incomplete":false}}`: false,
+		`{"policy":"rc-hub-policy/1","selection":{"refuse_incomplete":true}}`:  true,
+	} {
+		p, err := ParseHubPolicy([]byte(in), "rev")
+		if err != nil || p.RefuseIncomplete != want {
+			t.Fatalf("%s: %v %v", in, p, err)
+		}
+	}
+	for _, bad := range []string{`"x"`, `{"refuse_incomplete":"true"}`, `{"refuse_incomplete":null}`, `{"refuse_incomplete":true,"x":1}`} {
+		if _, err := ParseHubPolicy([]byte(`{"policy":"rc-hub-policy/1","selection":`+bad+`}`), "rev"); err == nil {
+			t.Fatalf("selection %s was accepted", bad)
+		}
+	}
+	if DefaultPolicy().RefuseIncomplete {
+		t.Fatal("default policy refuses incomplete editions")
+	}
+}

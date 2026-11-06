@@ -157,6 +157,7 @@ const (
 	LabelIntendedFor   = "intended_for"
 	LabelOverridden    = "admitted by override"
 	LabelSeriesUnknown = "series boundary"
+	LabelCompleteness  = "completeness claim"
 	LabelTrustFloor    = "below trust floor"
 	LabelNotHeld       = "not held"
 )
@@ -195,6 +196,8 @@ type Result struct {
 	IntendedFor *resolve.Recorded
 	// Series is the series view behind a freeze-policy verdict (C-core-104), when there is one.
 	Series *resolve.Series
+	// Completeness is the receiver's check of the edition's completeness claim behind a refuse_incomplete verdict.
+	Completeness *resolve.Completeness
 
 	data []byte
 	st   *wire.Statement
@@ -458,7 +461,7 @@ func Admit(gate string, pkg Package, held Held, pol *Policy, opt Options) (*Repo
 	}
 
 	// 5. Resolver-level policy: intended_for re-application (C-core-98) and the freeze policy (C-core-104).
-	if pol.Freeze != nil || anyIntendedFor(results, cands) {
+	if pol.Freeze != nil || pol.RefuseIncomplete || anyIntendedFor(results, cands) {
 		res := resolver(evaluated, pol)
 		for _, i := range cands {
 			r := &results[i]
@@ -828,6 +831,12 @@ func resolverChecks(r *Result, res *resolve.Resolver, pol *Policy) {
 			}
 		}
 	}
+	if pol.RefuseIncomplete && st.Kind == "edition" {
+		completenessCheck(r, res)
+		if r.Verdict == Refused {
+			return
+		}
+	}
 	if pol.Freeze != nil && st.Kind == "edition" {
 		rid, _ := st.Body.Get("resource")
 		resID, _ := rid.(canon.String)
@@ -860,6 +869,39 @@ func resolverChecks(r *Result, res *resolve.Resolver, pol *Policy) {
 		}
 	}
 }
+
+// completenessCheck applies selection.refuse_incomplete to one edition (C-core-59 with the hub-policy knob): the
+// receiver evaluates the edition's completeness claim from the statements it holds (no live re-check); a failed
+// claim is refused under reader policy, an unchecked one is could not check, no claim leaves the edition alone.
+func completenessCheck(r *Result, res *resolve.Resolver) {
+	st := r.st
+	rid, _ := st.Body.Get("resource")
+	resID, _ := rid.(canon.String)
+	if resolve.Selection(st.Body) != "completeness" {
+		return // no claim: the knob has nothing to say
+	}
+	c, ok := res.Completeness(string(resID), resolve.EditionID(st.Body))
+	if !ok {
+		r.label(LabelCompleteness, "edition not authorized in the evaluated set; completeness policy not applicable")
+		return
+	}
+	r.Completeness = c
+	switch c.Outcome {
+	case resolve.RuleFail:
+		r.refuse(&refusal.Refusal{Class: refusal.Policy, Reason: HubRules + ": selection.refuse_incomplete",
+			Detail: inert(c.Line()) + "; the edition stays a valid statement elsewhere; " + CompletenessScope}, "object "+r.Path)
+	case resolve.RuleOK:
+		r.label(LabelCompleteness, c.Line())
+	default:
+		r.Verdict, r.Scope = Undecided, "object "+r.Path
+		r.label(LabelCompleteness, c.Line())
+		r.Next = "make the claim checkable (name its scope; make every reading in the class readable and positioned) or accept that this edition is not endorsed here"
+	}
+}
+
+// CompletenessScope is added to a selection.refuse_incomplete refusal: the check is this receiver's, over the
+// statements it holds, not a claim about readings it has not seen.
+const CompletenessScope = "the missing readings are ones this receiver holds; it cannot know of readings it does not"
 
 // NoSegmentRecheck is what every series.refuse_premature_freeze verdict says about this tool version: it ships
 // no finality re-check for series segments (the default segment reader records positions only), so a members'

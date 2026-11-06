@@ -136,6 +136,7 @@ var vocabulary = []Token{
 	{"intended_for", "label", "the receiver's re-application of the statement's intended_for, beside the signer's record"},
 	{"admitted by override", "label", "a reader-policy refusal lifted by a typed override that names this object"},
 	{"series boundary", "label", "a series boundary the freeze policy could not decide"},
+	{"completeness claim", "label", "the receiver's check of an edition's completeness claim (selection.refuse_incomplete): holds, or could not be checked"},
 	{"below trust floor", "label", "the signer is not trusted for admission by this reader's policy; admitted and labelled (--below-floor label)"},
 	// the reader's own re-run (verify --rerun; execution note §5.2). The token's parameter (the exit status, the
 	// cap, the environment fields) is in the cause's detail member, so the token itself stays closed.

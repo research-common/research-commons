@@ -128,6 +128,7 @@ JSON members carrying tokens: `authorship`, `role`, `state`, `grade`, `step`, `q
 | `intended_for` | label | the receiver's re-application of the statement's intended_for, beside the signer's record |
 | `admitted by override` | label | a reader-policy refusal lifted by a typed override that names this object |
 | `series boundary` | label | a series boundary the freeze policy could not decide |
+| `completeness claim` | label | the receiver's check of an edition's completeness claim (selection.refuse_incomplete): holds, or could not be checked |
 | `below trust floor` | label | the signer is not trusted for admission by this reader's policy; admitted and labelled (--below-floor label) |
 | `match` | rerun | the re-run's output equals the pinned output (bytes), or the comparator said match (protocol) |
 | `match (identical bytes)` | rerun | a protocol workflow re-ran to identical bytes: consistent with a re-run and with a copy; no T0 |

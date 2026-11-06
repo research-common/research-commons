@@ -82,6 +82,9 @@ type Policy struct {
 	Limits map[string]int64
 	// Freeze is the series freeze policy (C-core-104); nil means none.
 	Freeze resolve.FreezePolicy
+	// RefuseIncomplete refuses a resource edition whose completeness claim this receiver's own check finds
+	// failed (`selection.refuse_incomplete`); a claim it cannot check is could not check. False means off.
+	RefuseIncomplete bool
 	// IntendedFor is what the receiver does with intended_for.
 	IntendedFor IntendedForMode
 	// Hooks are further reader-policy checks (a trust floor).
@@ -322,6 +325,21 @@ func ParseHubPolicy(data []byte, source string) (*Policy, error) {
 				if b {
 					p.Freeze = resolve.RequireDeclaredNotAfterComputed{}
 				}
+			}
+		case "selection":
+			so, ok := val.(*canon.Object)
+			if !ok {
+				return nil, fail("selection is not an object")
+			}
+			for _, sk := range so.Keys {
+				if sk != "refuse_incomplete" {
+					return nil, fail("selection carries undefined field %q", sk)
+				}
+				b, ok := so.Members[sk].(canon.Bool)
+				if !ok {
+					return nil, fail("selection.refuse_incomplete is not a boolean")
+				}
+				p.RefuseIncomplete = bool(b)
 			}
 		default:
 			return nil, fail("undefined field %q", k)
