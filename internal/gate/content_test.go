@@ -218,3 +218,29 @@ func mustBody(t *testing.T, line []byte) *canon.Object {
 	}
 	return st.Body
 }
+
+// TestPairUnits: scanned members pair with the collected bytes in order. If the counts ever disagree, every scanned
+// member becomes an unscanned unit naming it (a rule over it is unchecked, never ok) rather than being skipped or
+// paired with another member's bytes; unscanned members keep their limit either way.
+func TestPairUnits(t *testing.T) {
+	ms := []store.MemberResult{
+		{Path: "x!/a", Status: store.MemberScanned},
+		{Path: "x!/d", Status: store.MemberSkipped},
+		{Path: "x!/b", Status: store.MemberUnscanned, Limit: "member_bytes", Value: "8"},
+		{Path: "x!/c", Status: store.MemberScanned},
+	}
+	out, un := pairUnits(ms, [][]byte{[]byte("A"), []byte("C")})
+	if got := unitsOf(out); !un || got != "x!/a=A | x!/b unscanned(member_bytes=8) | x!/c=C" {
+		t.Fatalf("aligned: %v %s", un, got)
+	}
+	for _, data := range [][][]byte{{[]byte("A")}, {[]byte("A"), []byte("C"), []byte("E")}, nil} {
+		out, un := pairUnits(ms, data)
+		want := "x!/a unscanned(" + unpaired + ") | x!/b unscanned(member_bytes=8) | x!/c unscanned(" + unpaired + ")"
+		if got := unitsOf(out); !un || got != want {
+			t.Fatalf("%d collected for 2 scanned: %v %s", len(data), un, got)
+		}
+	}
+	if out, un := pairUnits(ms[:2], [][]byte{[]byte("A")}); un || unitsOf(out) != "x!/a=A" {
+		t.Fatalf("all scanned: %v %s", un, unitsOf(out))
+	}
+}
