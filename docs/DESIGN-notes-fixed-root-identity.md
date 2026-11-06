@@ -206,8 +206,15 @@ entries to manufacture broader authority.
 No resource/task wildcard, administrative grant, root control, or key-event delegation
 is admitted. `describes` and genesis remain raw-key statements. A permission for one
 kind does not authorize another. A target mentioned incidentally elsewhere in a body
-does not satisfy scope. Unknown permission kinds/target modes make the grant unsupported
-and non-passing, not broader. That uncertainty is confined to the one grant: grants only
+does not satisfy scope. A permission has three extension points a later version of this
+profile may use: a new `kind`, a new target mode (a token key of `targets`), and a new
+`amend` mode (a token in place of the boolean). Each makes the grant unsupported and
+non-passing, not broader. Shapes that are malformed rather than new stay invalid: a
+missing `amend` (absence is not a mode), a value that is neither a boolean nor a token,
+two target modes, a known mode on the wrong kind, and `any_resource` / `any_task`, which
+this profile excludes for good. The schema describes `fixed-root-v1` itself and rejects
+all three extensions; the reader's unsupported reading is what lets a later version add
+one without older readers denying acts they cannot judge. That uncertainty is confined to the one grant: grants only
 accumulate and never restrict each other, and every permission kind in `fixed-root-v1`
 is a leaf operation, so no grant can carry a power over another grant, a cut, or the
 root. Acts under the unsupported grant read unknown; sibling grants are evaluated
@@ -223,9 +230,14 @@ UI must disclose and require acknowledgment of this breadth, especially with
 `any_content:true`. `amend:false` prevents explicit supersession, but another new claim
 may still conflict with the principal's other claims. No implicit expiry, renewal,
 sequence budget, same-grant-only amendment right, or timestamp-based scope is provided.
-(Open, review of this profile: whether a same-key amendment mode, which narrows the actor's
-own targets and so is a leaf under the invariant above, is added before anything consumes
-`amend`. Until decided, `amend` has exactly the two values above.)
+A narrower amend mode (for example one limited to the actor's own key, so a capture agent
+can correct its own records without being able to rewrite everything the identity signed)
+is a leaf under the invariant above, so a later version can add it as an `amend` token.
+Its semantics need the claim consumer and are settled with it. Until then `amend` has the
+two values above, and an older reader reads a grant with a later mode as unsupported:
+acts under it read unknown, and the identity's other grants are unaffected. Issuers who
+want corrections to degrade that way should put the narrower mode on its own grant,
+beside an ordinary `amend:false` grant for everyday acts.
 
 Root vocabulary on the pinned I lineage is closed for authority evaluation:
 

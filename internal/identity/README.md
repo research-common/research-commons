@@ -115,11 +115,13 @@ Otherwise: wire `Valid` → `Understood`; `Invalid` → per §3; `Unsupported` o
 ## 7. Scope and invalidity
 
 - The permission registry is the profile's §3 table, which is the model's `scope.go` (15 kinds, the same target
-  domains). Wire validates the closed per-kind target shapes. An **unknown permission kind** makes its grant
+  domains). Wire validates the closed per-kind target shapes. An **unknown permission kind, target mode or amend
+  mode** (profile §3's three extension points) makes its grant
   verified-`Unsupported`: acts under that grant read `unknown` (no scope reason is computed from a partial
   parse), and sibling grants evaluate normally with an `unsupported_sibling_grant` warning. This relies on the
   profile §3 invariant that `fixed-root-v1` permissions are leaf operations. A malformed known permission makes
-  the grant `Invalid`.
+  the grant `Invalid` (a missing `amend`, a value that is neither boolean nor token, two target modes, a known
+  mode on the wrong kind, `any_resource` / `any_task`).
 - Inception profile: any token reads; only `fixed-root-v1` maps to `FixedRoot`; anything else is `unknown`.
 - Root vocabulary on the pinned lineage: rc/2 inception, grant, cut; rc/1 `rotate_key` / `revoke_key`
   (terminal); bare `describes` / `anchors` → `Inert`; everything else → `unknown`.
