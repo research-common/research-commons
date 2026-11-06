@@ -414,19 +414,19 @@ func grantBody(s *Statement, marker *canon.Object) (Status, string) {
 	unknown := ""
 	for i, p := range ps {
 		path := "body.permissions[" + strconv.Itoa(i) + "]"
-		k, why := permission(p, path)
+		u, why := permission(p, path)
 		if why != "" {
 			return Invalid, why
 		}
-		if k != "" && unknown == "" {
-			unknown = k
+		if u != "" && unknown == "" {
+			unknown = u
 		}
 		if i > 0 && canon.CompareKeys(string(canon.Encode(ps[i-1])), string(canon.Encode(p))) >= 0 {
 			return Invalid, "body.permissions is not sorted and duplicate-free"
 		}
 	}
 	if unknown != "" {
-		return Unsupported, "permission kind " + unknown
+		return Unsupported, unknown
 	}
 	return Valid, ""
 }
@@ -450,9 +450,21 @@ var nonDelegable = map[string]bool{
 	"rotate_key": true, "revoke_key": true, "genesis": true, "describes": true,
 }
 
-// permission checks one entry. It returns the kind when the kind is unknown (the grant is then Unsupported,
-// never broader), or a reason when the entry is malformed.
-func permission(v canon.Value, p string) (unknownKind, why string) {
+// targetModes are the profile's target modes (§3), each with the domain it belongs to. forbiddenModes are modes
+// the profile excludes for good ("no resource/task wildcard"): definitely invalid, never an extension.
+var (
+	targetModes = map[string]string{
+		"any_content": "contents", "contents": "contents", "any_statement": "statements", "statements": "statements",
+		"resources": "resources", "tasks": "tasks",
+	}
+	forbiddenModes = map[string]bool{"any_resource": true, "any_task": true}
+)
+
+// permission checks one entry. It returns what this reader does not know when the entry uses an extension point
+// of the profile (§3): an unknown kind, an unknown target mode, or an unknown `amend` mode. The grant is then
+// Unsupported, never broader, and that uncertainty stays with the one grant. It returns a reason when the entry
+// is malformed: a missing or wrongly typed field, a known target mode on the wrong kind, two target modes.
+func permission(v canon.Value, p string) (unsupported, why string) {
 	o, ok := v.(*canon.Object)
 	if !ok {
 		return "", p + " is not an object"
@@ -468,7 +480,7 @@ func permission(v canon.Value, p string) (unknownKind, why string) {
 		return "", p + ".kind " + kind + " is never delegable (root administration, key events, genesis, describes)"
 	}
 	if !known {
-		return kind, ""
+		return "permission kind " + kind, ""
 	}
 	amend := kind == "authored" || kind == "observed"
 	allowed := []string{"kind", "targets"}
@@ -481,10 +493,23 @@ func permission(v canon.Value, p string) (unknownKind, why string) {
 	if why := closed(o, p, allowed...); why != "" {
 		return "", why
 	}
+	amendMode := ""
 	if amend {
 		av, ok := o.Get("amend")
-		if _, isBool := av.(canon.Bool); !ok || !isBool {
-			return "", p + ".amend is required and boolean"
+		switch x := av.(type) {
+		case canon.Bool:
+		case canon.String:
+			// A later version of the profile may add an amend mode (a token): unsupported here, never broader.
+			// A missing amend stays invalid: absence is not a mode (and never defaults to false).
+			if !reToken.MatchString(string(x)) {
+				return "", p + ".amend is not a boolean or a mode token"
+			}
+			amendMode = "amend mode " + string(x)
+		default:
+			if !ok {
+				return "", p + ".amend is required"
+			}
+			return "", p + ".amend is not a boolean or a mode token"
 		}
 	}
 	if domain == "log" {
@@ -496,13 +521,24 @@ func permission(v canon.Value, p string) (unknownKind, why string) {
 		return "", p + ".targets must be an object with exactly one target mode"
 	}
 	mode := t.Keys[0]
+	if forbiddenModes[mode] {
+		return "", p + ".targets." + mode + " is never admitted (no resource or task wildcard)"
+	}
+	if _, knownMode := targetModes[mode]; !knownMode {
+		// A later version may add a target mode: unsupported here, never broader. Its value's shape is the later
+		// version's to define, so it is not checked.
+		if !reToken.MatchString(mode) {
+			return "", p + ".targets." + mode + " is not a target mode"
+		}
+		return "target mode " + mode, ""
+	}
 	elem := id()
 	switch {
 	case domain == "contents" && mode == "any_content", domain == "statements" && mode == "any_statement":
 		if b, ok := t.Members[mode].(canon.Bool); !ok || !bool(b) {
 			return "", p + ".targets." + mode + " is not true"
 		}
-		return "", ""
+		return amendMode, ""
 	case mode != domain:
 		return "", p + ".targets." + mode + " is not a target mode for " + kind
 	case domain == "contents":
@@ -511,7 +547,7 @@ func permission(v canon.Value, p string) (unknownKind, why string) {
 	if err := boundedSet(t.Members[mode], p+".targets."+mode, elem); err != nil {
 		return "", err.Error()
 	}
-	return "", ""
+	return amendMode, ""
 }
 
 func cutBody(s *Statement, marker *canon.Object) (Status, string) {

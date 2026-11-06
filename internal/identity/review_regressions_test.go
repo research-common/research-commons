@@ -172,6 +172,9 @@ func TestReviewUnsupportedGrantAffectsOnlyItself(t *testing.T) {
 	for _, perms := range [][]canon.Value{
 		{obj("kind", "zz_future")},
 		{authoredAny(), obj("kind", "zz_future")},
+		// extension points inside a known kind (§3): a later amend mode, a later target mode
+		{obj("kind", "authored", "targets", obj("any_content", true), "amend", "zz_mode")},
+		{authoredAny(), obj("kind", "authored", "targets", obj("zz_targets", []string{"x"}), "amend", false)},
 	} {
 		w := base(t)
 		w.sign(stmt{name: "G9", by: "R", parent: "G2", kind: "identity_grant", body: w.grantBody("K2", perms...)})
@@ -473,5 +476,46 @@ func TestReviewUnplaceableTerminalIsUnknownNotRetired(t *testing.T) {
 	r := w.expect(s, "A1", identitymodel.Denied, "invalid_prev_sequence")
 	if !hasReason(r, "unresolved_root_ancestry") || hasReason(r, "root_retired") {
 		t.Fatalf("want unresolved placement, no retirement: %+v", r.Reasons)
+	}
+}
+
+// The two-grant pattern a later amend mode relies on (profile §3): an agent holds an ordinary grant for its
+// captures and a second grant carrying an amend mode this reader does not know. The reader reads the second grant
+// as unsupported: acts under it read unknown (never denied, never eligible), and every act under the first grant
+// stays eligible, with a warning naming the grant it could not read. Shapes that are malformed rather than merely
+// unknown stay invalid: a missing amend, a non-token amend, a forbidden resource/task wildcard.
+func TestUnknownAmendModeLosesOnlyItsOwnGrant(t *testing.T) {
+	conformance.Partial(t, "C-id-19", "unknown amend and target modes are confined to their grant at the adapter; consumers are not built")
+	w := base(t)
+	w.sign(stmt{name: "G9", by: "R", parent: "G2", kind: "identity_grant", body: w.grantBody("K2",
+		obj("kind", "authored", "targets", obj("any_content", true), "amend", "own"))})
+	w.sign(stmt{name: "B9", by: "K2", parent: "B2", kind: "authored", body: withField(authoredBody(2), wire.IdentityCrit, obj("amends", []string{w.ids["B1"]})), actor: [2]string{"I", "G9"}})
+	s := w.admit()
+	if st, v := s.Status(w.ids["G9"]); st != wire.Unsupported || !v {
+		t.Fatalf("G9 read %s verified=%v, want verified unsupported", st, v)
+	}
+	r := w.expect(s, "B1", identitymodel.Eligible, "")
+	if !hasWarning(r, "unsupported_sibling_grant") {
+		t.Fatalf("B1: sibling warning missing: %+v", r.Warnings)
+	}
+	r = w.expect(s, "B9", identitymodel.Unknown, "unsupported_evidence")
+	for _, x := range r.Reasons {
+		if x.Status == identitymodel.Denied {
+			t.Fatalf("B9: definite denial %s under an unsupported grant", x.Code)
+		}
+	}
+	for name, perm := range map[string]canon.Value{
+		"missing amend":   obj("kind", "authored", "targets", obj("any_content", true)),
+		"non-token amend": obj("kind", "authored", "targets", obj("any_content", true), "amend", "Own Mode"),
+		"numeric amend":   obj("kind", "authored", "targets", obj("any_content", true), "amend", 1),
+		"any_resource":    obj("kind", "edition", "targets", obj("any_resource", true)),
+		"any_task":        obj("kind", "decide", "targets", obj("any_task", true)),
+		"wrong-kind mode": obj("kind", "authored", "targets", obj("tasks", []string{w.ids["I"]}), "amend", false),
+	} {
+		w := base(t)
+		w.sign(stmt{name: "G8", by: "R", parent: "G2", kind: "identity_grant", body: w.grantBody("K2", perm)})
+		if st, _ := w.admit().Status(w.ids["G8"]); st != wire.Invalid {
+			t.Fatalf("%s: read %s, want invalid", name, st)
+		}
 	}
 }

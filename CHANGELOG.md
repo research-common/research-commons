@@ -33,6 +33,9 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   controller subject on hub resources, co-maintenance). New: `identity.Snapshot.Authenticated`,
   `wire.EditionBodyType(major)`, and a seeded monotonicity property over fourteen evidence shapes. Nothing is
   activated.
+- Candidate identity reader: a grant permission using a later version's `amend` mode or target mode now reads as
+  unsupported (acts under that grant read `unknown`, sibling grants are unaffected), as an unknown permission kind
+  already did, instead of invalid (acts `denied`). Malformed shapes and `any_resource` / `any_task` stay invalid.
 ### Added
 
 - **`commons rotate`** signs a `rotate_key` naming the successor (`--successor <key>`, or `--successor-key <file>`

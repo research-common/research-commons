@@ -274,7 +274,8 @@
       ],
       "isolated_tests": [
         "internal/identity:TestSliceNegatives",
-        "internal/identity:TestReviewUnsupportedGrantAffectsOnlyItself"
+        "internal/identity:TestReviewUnsupportedGrantAffectsOnlyItself",
+        "internal/identity:TestUnknownAmendModeLosesOnlyItsOwnGrant"
       ],
       "conformance": "partial",
       "remaining": "Permission syntax tested; registered field dispatch and effective authorization need model/integration."
