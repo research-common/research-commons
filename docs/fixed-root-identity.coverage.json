@@ -41,7 +41,8 @@
         "shape-decide"
       ],
       "isolated_tests": [
-        "internal/identity:TestSliceGrantsAuthorizeExplicitActs"
+        "internal/identity:TestSliceGrantsAuthorizeExplicitActs",
+        "internal/wire:TestSignedIdentityPositiveVectors"
       ],
       "conformance": "partial",
       "remaining": "Bind the candidate signed bytes to authenticated lineage/scope inputs and evaluate complete authority."
@@ -196,7 +197,8 @@
       "schema_vectors": [],
       "isolated_tests": [
         "internal/wire:TestFixedRootCandidateCrypto",
-        "internal/identity:TestCaseNewGrantCannotRelabel"
+        "internal/identity:TestCaseNewGrantCannotRelabel",
+        "internal/wire:TestSignedIdentityNegativeVectors"
       ],
       "conformance": "partial",
       "remaining": "Actor/grant signature binding checked generically; full cut/new-grant authority fixture required."
@@ -238,7 +240,8 @@
         "internal/identity:TestReviewTerminalRootEventIgnoresAncestryDefects",
         "internal/identity:TestReviewCompromisedRootGrantDiesWithRevoke",
         "internal/identity:TestReviewMalformedRootKeyEventIsUnknown",
-        "internal/identity:TestReviewUnplaceableTerminalIsUnknownNotRetired"
+        "internal/identity:TestReviewUnplaceableTerminalIsUnknownNotRetired",
+        "internal/wire:TestSignedIdentityNegativeVectors"
       ],
       "conformance": "partial",
       "remaining": "Candidate uses raw rc/1 events; terminal identity evaluation and unknown ancestry remain to integrate."
@@ -506,7 +509,8 @@
         "internal/wire:TestFixedRootCandidateCrypto",
         "internal/wire:TestFixedRootCandidateLegacyUnmarkedActorIsNotSafe",
         "internal/identity:TestSliceNegatives",
-        "internal/identity:TestUnchangedReaderStackOnCandidateBytes"
+        "internal/identity:TestUnchangedReaderStackOnCandidateBytes",
+        "internal/wire:TestSignedIdentityPositiveVectors"
       ],
       "conformance": "partial",
       "remaining": "Actual wire/keylog tested, including unknown-major unverified retention; full unsupported-body/resource hardening remains a blocker."
@@ -538,7 +542,9 @@
         "internal/wire:TestFixedRootCandidateCanonicalization",
         "internal/wire:TestFixedRootCandidateBaseSchemaIsNotBypassed",
         "internal/identity:TestSliceNegatives",
-        "internal/identity:TestByteMutationsNeverCreateAuthority"
+        "internal/identity:TestByteMutationsNeverCreateAuthority",
+        "internal/wire:TestSignedIdentityVectorsReproduce",
+        "internal/wire:TestSignedIdentityNegativeVectors"
       ],
       "conformance": "partial",
       "remaining": "Concrete schema negatives and both algorithms tested; full production critical registry still disabled."
