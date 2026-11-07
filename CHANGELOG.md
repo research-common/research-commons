@@ -10,6 +10,8 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 ## [Unreleased]
 
 ### Changed
+- `commons pull` now gives edition rules the package's blob bytes (and the blobs this store already holds), as `hub check` does, so a content rule re-applied at pull (a forbidden key inside a pulled `.tar` or `.tar.gz` member) reads the content instead of `unchecked (content not held)`. Archives are walked by the same scanner under the same limits. Rule dialects still ship none, so a rule with no dialect stays `unchecked`.
+- `publish --draft` of a `rotate_key` now prints a warning naming the checks `commons rotate` would have made and this path skips (successor, key events already held, merged tips). It still signs, so the way out after a compromise stays open; the gap is listed in `docs/KNOWN-LIMITS.md` (L-13).
 - `commons fetch` now gives up on a location by **idle time**, not total time: `--idle-timeout` (default 60s) counts
   from the last body byte received, so a large transfer that keeps flowing is no longer cut off after five minutes.
   `--timeout` is now an optional cap on the whole location and has no default; the output limits show both

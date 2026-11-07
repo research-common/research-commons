@@ -244,3 +244,92 @@ func TestPairUnits(t *testing.T) {
 		t.Fatalf("all scanned: %v %s", un, unitsOf(out))
 	}
 }
+
+// countingContent counts how often a reader is asked about each digest.
+type countingContent struct {
+	inner resolve.ContentReader
+	calls map[string]int
+}
+
+func (c *countingContent) Units(d string) ([]resolve.ContentUnit, bool) {
+	c.calls[d]++
+	return c.inner.Units(d)
+}
+
+// TestMemoContent: the memo answers a repeated digest from memory (one inner scan however many rules and members
+// ask), returns exactly the units the inner reader returns, keeps nothing for a blob that is not held, and keeps
+// nothing past its byte bound (an answer over the bound is returned, and asked again each time, as without a memo).
+func TestMemoContent(t *testing.T) {
+	arch := tarFiles(t, [2]string{"a.json", `{"ok":1}`}, [2]string{"b.json", `{"secret":1}`})
+	d := blobDigest(arch)
+	in := &countingContent{inner: scanTable{d: arch}, calls: map[string]int{}}
+	m := NewMemoContent(in, 0)
+	first, ok := m.Units(d)
+	if !ok || len(first) != 2 {
+		t.Fatalf("first: %v %d", ok, len(first))
+	}
+	for i := 0; i < 5; i++ {
+		again, ok := m.Units(d)
+		if !ok || unitsOf(again) != unitsOf(first) {
+			t.Fatalf("repeat %d: %v %s", i, ok, unitsOf(again))
+		}
+		again[0].Name = "mutated" // a caller's edit of the slice never reaches the memo
+	}
+	if in.calls[d] != 1 {
+		t.Fatalf("inner scanned %d times for one digest", in.calls[d])
+	}
+	if got, _ := m.Units(d); unitsOf(got) != unitsOf(first) {
+		t.Fatalf("memo changed by a caller: %s", unitsOf(got))
+	}
+	// not held: not kept, so a later answer is the inner reader's
+	if us, ok := m.Units("sha256:" + strings.Repeat("0", 64)); ok || us != nil {
+		t.Fatalf("a blob not held answered: %v", us)
+	}
+	// over the bound: returned, never kept
+	small := NewMemoContent(in, 10)
+	for i := 0; i < 3; i++ {
+		if us, ok := small.Units(d); !ok || len(us) != 2 {
+			t.Fatalf("over bound: %v %d", ok, len(us))
+		}
+	}
+	// the first memo answered every repeat itself, so only the three bounded calls add to the one scan
+	if in.calls[d] != 4 || small.kept != 0 {
+		t.Fatalf("bounded memo kept %d bytes, inner calls %d (want 0 kept, 4 calls)", small.kept, in.calls[d])
+	}
+}
+
+// TestMemoContentOneScanPerRun: an edition with three rules over a member is evaluated with the content reader asked
+// once per digest through the memo (three times without it), with identical evaluations either way.
+func TestMemoContentOneScanPerRun(t *testing.T) {
+	w := newWorld(t)
+	arch := tarFiles(t, [2]string{"a.json", `{"ok":1}`}, [2]string{"b.json", `{"secret":1}`})
+	d := blobDigest(arch)
+	x := w.authored("X", arch)
+	g := w.sign("A", "genesis", obj("type", "collection", "name", "c", "controllers", []string{w.signer("A")}, "rule", obj("any_one", true)))
+	w.sign("A", "edition", obj("resource", g, "predecessors", []string{g}, "contents", obj(
+		"members", canon.Array{resolve.Entry("statement", x, "member")},
+		"rules", canon.Array{obj("dialect", "rc-test/1", "expr", "FORBID secret"), obj("dialect", "rc-test/1", "expr", "FORBID pad"), obj("dialect", "rc-test/1", "expr", "FORBID ok")})))
+	eval := func(memo bool) (int, string) {
+		in := &countingContent{inner: scanTable{d: arch}, calls: map[string]int{}}
+		var rc resolve.ContentReader = in
+		if memo {
+			rc = NewMemoContent(in, 0)
+		}
+		s := keylog.NewStore()
+		for _, id := range sortedIDs(w.lines) {
+			if st, err := wire.Read(w.lines[id]); err == nil {
+				_, _ = s.Log(st.Signer).Add(w.lines[id])
+			}
+		}
+		m, ok := resolve.New(s, resolve.WithDialect(forbidDialect{}), resolve.WithContent(rc)).Membership(g, x)
+		if !ok {
+			t.Fatal("no membership")
+		}
+		return in.calls[d], m.Render()
+	}
+	plainCalls, plainOut := eval(false)
+	memoCalls, memoOut := eval(true)
+	if plainCalls != 3 || memoCalls != 1 || plainOut != memoOut {
+		t.Fatalf("calls without memo %d (want 3), with %d (want 1); same output: %v", plainCalls, memoCalls, plainOut == memoOut)
+	}
+}

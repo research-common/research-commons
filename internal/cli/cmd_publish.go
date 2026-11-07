@@ -154,7 +154,7 @@ func init() {
 	}
 	Register(&Command{Name: "publish", Summary: "sign and commit a statement (authored with its bytes, holds, describes, retracts, or a draft)",
 		Store: true, Writes: true, Flags: flags, Prepare: preparePublish, Run: publishCmd,
-		Help: "Signs with --key (or $" + KeyEnv + ") and commits through the store's journal: the blob and its statements land together or not at all. A draft is never stored unsigned. Your log's next seq and prev come from the statements this store holds; a FORK in your log is refused until you name --prev. --intended-for runs the named edition's rules first and refuses on fail. With availability withheld and content under " + strconv.Itoa(WithheldWarnBelow) + " bytes it warns that short content may be enumerable against its hash (a heuristic; include a nonce) and proceeds; the warning is not recorded."})
+		Help: "Signs with --key (or $" + KeyEnv + ") and commits through the store's journal: the blob and its statements land together or not at all. A draft is never stored unsigned. Your log's next seq and prev come from the statements this store holds; a FORK in your log is refused until you name --prev. --intended-for runs the named edition's rules first and refuses on fail. With availability withheld and content under " + strconv.Itoa(WithheldWarnBelow) + " bytes it warns that short content may be enumerable against its hash (a heuristic; include a nonce) and proceeds; the warning is not recorded. A rotate_key draft is signed as written: none of `commons rotate`'s checks run (successor, key events already held, merged tips), so the way out after a compromise stays open; it warns and proceeds."})
 	tflags := append(slices.Clone(writerFlags),
 		Flag{Name: "name", Value: "text", Help: "a new task's name"},
 		Flag{Name: "task", Value: "id", Help: "an existing task (its genesis id): publish a new edition after its current one", Check: checkIDFlag},
@@ -599,7 +599,7 @@ func publishCmd(c *Ctx) (*Obj, int, error) {
 			return nil, 0, failed(err, "option --content", false, "check the file and run the command again")
 		}
 	}
-	opts = append(opts, resolve.WithContent(prepinContent{st: c.Store, digest: digest, file: p.content}))
+	opts = append(opts, resolve.WithContent(gate.NewMemoContent(prepinContent{st: c.Store, digest: digest, file: p.content}, 0)))
 	signer := p.key.Key.Signer()
 	wl := lockFor(c, signer)
 	defer wl.Unlock()
@@ -657,8 +657,15 @@ func publishCmd(c *Ctx) (*Obj, int, error) {
 		}
 		out.set("intended_for", pin)
 	}
+	var warns []string
 	if w := withheldWarning(body); w != "" {
-		out.set("warnings", texts(w))
+		warns = append(warns, w)
+	}
+	if p.kind == "rotate_key" {
+		warns = append(warns, draftRotateWarning)
+	}
+	if len(warns) > 0 {
+		out.set("warnings", texts(warns...))
 	}
 	drafts := []wire.Draft{{Kind: p.kind, Body: body}}
 	if p.holds {
@@ -679,6 +686,16 @@ func publishCmd(c *Ctx) (*Obj, int, error) {
 	// the pre-pin state was resolved from the statements this store holds: the output carries the view's scope
 	return v.scopedResult(commitUnit(c, out, "publish", sts, blobs, p.content, h))
 }
+
+// draftRotateWarning is printed when a rotate_key is signed from a draft. A draft is signed as written: none of
+// `commons rotate`'s checks run (the successor is not the signing key, the successor's log holds no key event, the
+// history extended holds no key event in force, no tip is merged so a fork is not closed). That is deliberate: the
+// owner's way out of a compromise must stay open even when this store's picture is stale or incomplete, and a
+// reader applies the same rules to the line whatever tool signed it. The warning is printed only, never recorded.
+const draftRotateWarning = "a rotate_key signed from a draft skips the checks `commons rotate` makes: the successor may be the signing key " +
+	"or already retired, and the history extended may already hold a key event, so the rotation can count toward nothing; " +
+	"no tip is merged, so lines on other branches are cut. This is deliberate (the way out after a compromise stays open); " +
+	"use `commons rotate` for the checks. This warning is not recorded and changes nothing"
 
 // WithheldWarnBelow is the content size, in bytes, under which publishing with availability withheld warns
 // (claims-model note §7, "availability can be withheld"). A commitment to low-entropy content is enumerable

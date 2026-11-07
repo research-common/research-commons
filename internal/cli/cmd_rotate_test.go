@@ -327,3 +327,38 @@ func TestPublishAfterKeyEvent(t *testing.T) {
 		}
 	})
 }
+
+// TestRotateDraftWarns: a rotate_key signed from a draft skips `commons rotate`'s checks on purpose (the way out
+// after a compromise stays open); the output names what was skipped, and nothing is refused.
+func TestRotateDraftWarns(t *testing.T) {
+	p := newPubWorld(t)
+	p.describe(t, "A1")
+	succ := testKey("S").Signer()
+	if r := p.rotate("--successor", succ); r.code != 0 {
+		t.Fatalf("first rotation: %d %s", r.code, r.stdout)
+	}
+	// the command refuses a second rotation; the draft path signs it, with the warning
+	if r := p.rotate("--successor", testKey("U").Signer()); r.code != 1 || !strings.Contains(r.stdout, "key-already-retired") {
+		t.Fatalf("rotate: %d %s", r.code, r.stdout)
+	}
+	d := p.file("rot-d.json", `{"kind":"rotate_key","body":{"successor":"`+testKey("U").Signer()+`"}}`)
+	r := p.publish("--draft", d)
+	o := outObj(t, r)
+	if r.code != 0 {
+		t.Fatalf("draft rotate: %d %s", r.code, r.stdout)
+	}
+	msg := string(canon.Encode(o.Members["warnings"]))
+	for _, s := range []string{"skips the checks `commons rotate` makes", "successor", "key event", "no tip is merged", "not recorded"} {
+		if !strings.Contains(msg, s) {
+			t.Fatalf("warning lacks %q: %s", s, msg)
+		}
+	}
+	if h := runIn(p.root, nil, append([]string{"publish", "--key", p.key}, "--draft", p.file("rot-e.json", `{"kind":"rotate_key","body":{"successor":"`+testKey("V").Signer()+`"}}`))...); h.code != 0 || !strings.Contains(h.stdout, "warnings:") {
+		t.Fatalf("human surface: %d %s", h.code, h.stdout)
+	}
+	// other drafts and the flag path print no rotation warning
+	q := newPubWorld(t)
+	if r := q.publish("--draft", q.file("r.json", `{"kind":"retracts","body":{"of":"`+q.describe(t, "A1")+`"}}`)); r.code != 0 || strings.Contains(r.stdout, "skips the checks") {
+		t.Fatalf("retracts draft: %d %s", r.code, r.stdout)
+	}
+}

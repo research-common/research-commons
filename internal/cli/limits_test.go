@@ -279,6 +279,30 @@ var limits = []limit{
 			return r.code == ExitOK && !has, r.stdout[:min(len(r.stdout), 200)]
 		},
 	},
+	{
+		id:  "L-13",
+		gap: "`publish --draft` signs a `rotate_key` without `commons rotate`'s checks (successor, key events already held, merged tips); it warns and proceeds, so the owner's way out after a compromise stays open",
+		sources: []limitSource{
+			{help: []string{"publish"}, says: "A rotate_key draft is signed as written: none of `commons rotate`'s checks run"},
+		},
+		probe:  "after `rotate` signs a first rotation, `rotate` refuses a second (`key-already-retired`, exit 1), while `publish --draft` of a `rotate_key` is signed (exit 0) with a `warnings` list naming the skipped checks",
+		closes: "`publish --draft` runs the rotate checks for a `rotate_key` (or refuses one it cannot check)",
+		open: func(t *testing.T) (bool, string) {
+			p := newPubWorld(t)
+			p.describe(t, "A1")
+			if r := p.rotate("--successor", testKey("S").Signer()); r.code != ExitOK {
+				return false, "first rotation: " + r.stdout
+			}
+			if r := p.rotate("--successor", testKey("U").Signer()); r.code != exitWriterRefused || !strings.Contains(r.stdout, "key-already-retired") {
+				return false, "rotate does not refuse a second rotation: " + r.stdout
+			}
+			d := p.file("rot2.json", `{"kind":"rotate_key","body":{"successor":"`+testKey("U").Signer()+`"}}`)
+			r := p.publish("--draft", d)
+			o := outObj(t, r)
+			w, has := o.Members["warnings"]
+			return r.code == ExitOK && has && strings.Contains(string(canon.Encode(w)), "skips the checks"), r.stdout[:min(len(r.stdout), 300)]
+		},
+	},
 }
 
 // TestDocumentedLimits: C-core-07.
