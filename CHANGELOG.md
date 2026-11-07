@@ -44,8 +44,14 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 - Candidate identity reader: a grant permission using a later version's `amend` mode or target mode now reads as
   unsupported (acts under that grant read `unknown`, sibling grants are unaffected), as an unknown permission kind
   already did, instead of invalid (acts `denied`). Malformed shapes and `any_resource` / `any_task` stay invalid.
+
 ### Added
 
+- Candidate identity profile: signed `rc/2` test vectors for both algorithms (`docs/fixed-root-identity.signed-vectors.json`):
+  inception, grant, cuts (`last_good` set and null), actor-bearing acts, an `rc/1` root `revoke_key`, and delivered
+  negatives (tampered or stripped actor, `v1` preimage, `rc/1`↔`rc/2` relabels, an Ed25519 edge case as an identity
+  line). Tests regenerate the file from published labels, read every entry with the candidate reader and check every
+  Ed25519 signature under two independent implementations. Nothing is activated.
 - **`commons rotate`** signs a `rotate_key` naming the successor (`--successor <key>`, or `--successor-key <file>`
   whose signer is used and never its key). It merges every held tip as a soft revocation does and refuses (exit 1)
   a tip whose branch carries a key event outside the line extended; it also refuses (exit 1) when the history it

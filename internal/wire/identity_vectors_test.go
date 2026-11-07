@@ -536,7 +536,6 @@ func TestSignedIdentityVectorKeys(t *testing.T) {
 func TestSignedIdentityPositiveVectors(t *testing.T) {
 	conformance.Partial(t, "C-id-36", "the unchanged wire reader on signed rc/2 lines of both algorithms: unsupported, unverified, same id; the keylog and resolver views are tested in keylog and identity")
 	conformance.Partial(t, "C-id-02", "representation only: the signed bytes of an inception, a grant and an actor-bearing act of both algorithms; whether the act is eligible is the evaluator's")
-	conformance.Partial(t, "C-id-41", "a signed act with the marker and the actor reads valid; the same bytes without either are tested in the adapter")
 	v := ivLoad(t)
 	counts := map[string]int{}
 	ids := map[string]*conformance.IdentityPositive{}
@@ -683,7 +682,8 @@ func TestSignedIdentityPositiveVectors(t *testing.T) {
 // over the unmutated bytes (or the v1 domain), so the refusal is the mutation's and not a broken fixture.
 func TestSignedIdentityNegativeVectors(t *testing.T) {
 	conformance.Partial(t, "C-id-37", "refusals before any fact exists for the signed negatives of both algorithms: tamper, v1 preimage, relabel both ways, an Ed25519 edge case as an rc/2 line; the production critical registry is still disabled")
-	conformance.Partial(t, "C-id-14", "the actor is bound into the signature in both algorithms: a changed actor is a bad signature; no grant-relabel evaluation here")
+	conformance.Partial(t, "C-id-14", "the actor is bound into the signature in both algorithms: a changed or stripped actor is a bad signature; no grant-relabel evaluation here")
+	conformance.Partial(t, "C-id-17", "representation only: the root's raw rc/1 revoke_key is a valid line after rc/2 lines and an rc/2 revoke_key reads invalid in both algorithms; placement on the identity's lineage and retirement are the evaluator's")
 	v := ivLoad(t)
 	pos := map[string]*conformance.IdentityPositive{}
 	for i := range v.Positive {

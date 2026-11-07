@@ -628,12 +628,35 @@ Files in this candidate:
   specified checks, not capabilities attributed to ordinary JSON Schema validators.
 * `fixed-root-identity-policy.schema.json`: standalone local policy syntax; same-subject
   selection conflicts and set sorting require the additional checks.
-* `fixed-root-identity.vectors.json`: **82 unsigned schema vectors**, including all
+* `fixed-root-identity.vectors.json`: **82 unsigned schema vectors** (the signed counterpart is below), including all
   candidate kinds, forbidden `rc/2` key events, actor/marker combinations, typed mixed
   controllers, scope modes, tasks, policy and negatives. Example ids are SHA-256 of
   labels, not actual referents; example signer strings are not proven public keys.
   `accept:true` means syntax/local constraints only, **never valid signed wire or
   eligible authority**. The task contract example is explicitly unimplemented.
+* `fixed-root-identity.signed-vectors.json`: **signed rc/2 vectors for both required algorithms**
+  (`ed25519`, `eip191-secp256k1`), in the style of the wire-format vectors. Four published test-only keys
+  (root and worker per algorithm; the secret is `sha256` of a published label, so anyone can reproduce and
+  nobody may use them operationally). Per algorithm, one log of each signer: the worker's `rc/1` genesis (the
+  delegate inception D); the root's `identity_inception`, an `identity_grant` for the worker, two
+  `identity_cut`s (`last_good` set and `null`), and the root's raw **`rc/1` `revoke_key`** after them (§2.1: raw key
+  events stay `rc/1`; a root revoke is therefore not an `rc/2` positive); the worker's two `authored` acts
+  under `x_actor_v1`, the second carrying `amends`. Each positive entry gives the payload type
+  (`…<kind>.v2+json`), the JCS payload, the exact PAE signed string, its byte count, the statement id, the
+  signature and the delivered line, plus the outcome the candidate reader must give (and the actor it must
+  read). Negative entries are delivered lines derived from a positive by exactly the members named in
+  `changed_members`: the actor changed or stripped after signing; a signature over the `.v1+json` preimage of an
+  `rc/2` envelope; `rc/2`→`rc/1` and `rc/1`→`rc/2` relabels; (valid signatures, retained as given) an `rc/1`
+  line carrying `x_actor_v1` (valid, actor not read), an `rc/1` line naming `x_identity_v1` in `crit`
+  (unsupported), and an `rc/2` `revoke_key` (invalid, never an identity act); and, for Ed25519, three wire-format
+  edge cases (`NE1`, `NE7`, `NE11`) and the identity-point forgery delivered as `rc/2` identity lines, each a bad
+  signature at the pinned step. The vectors check **representation** (bytes, domain separation, ids,
+  signatures, reader outcome), never authority. `internal/wire` regenerates the file from the labels and compares
+  it byte for byte, runs every entry through the production `rc/2` reader and the unchanged `rc/1` reader, and
+  `internal/sig` verifies every Ed25519 signature under two independent implementations (the pinned verifier and
+  a standard-library reimplementation of the pinned rule) and re-signs each positive with the standard
+  library's signer. `RC_REGENERATE_SIGNED_IDENTITY_VECTORS=1 go test -run TestSignedIdentityVectorsReproduce
+  ./internal/wire` rewrites the file after a deliberate change.
 * `fixed-root-identity.coverage.json`: the 45 scenario handles (ID-01 … ID-45), each with
   its registered case id (§10), vector/test links and the exact remaining model/integration
   obligations. A linked shape check does not mean the scenario is covered. The handles are
