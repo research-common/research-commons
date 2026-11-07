@@ -1,0 +1,866 @@
+{
+ "description": "Signed rc/2 test vectors of the CANDIDATE fixed-root identity profile (DESIGN-notes-fixed-root-identity.md §2.2, §9), both required algorithms. Each positive entry is a REPRODUCIBLE signed line: payload_type, jcs (the envelope without sig, the PAE payload), signed_string (the exact signed bytes), bytes, id and sig follow from the published key and the entry's envelope; line is what a peer sends. Each negative entry is one delivered line with the outcome the candidate reader must give, derived from the positive named in of by exactly the members named in changed_members. The profile is NOT active: these vectors check REPRESENTATION (bytes, domain separation, ids, signatures, reader outcome), never authority; whether an act is eligible is the evaluator's, not a vector's.",
+ "status": "SIGNED. Keys are test-only and public: sha256(label) is the secret. Never use them operationally.",
+ "keys": [
+  {
+   "name": "ed25519-root",
+   "alg": "ed25519",
+   "label": "research-commons fixed-root identity signed vectors: root key (ed25519)",
+   "secret": "88d0ddc4364dc589f2a0a90c6ce340106d61a4a5a3ac092986ff3388e74977b6",
+   "signer": "ed25519:7803013dc64b2a56e43038545e7bcda9a3b7e51659bd3ed3a14061b499c96e11"
+  },
+  {
+   "name": "ed25519-worker",
+   "alg": "ed25519",
+   "label": "research-commons fixed-root identity signed vectors: worker key (ed25519)",
+   "secret": "76aaddb0f87d197141ac1d1a89fe75243a99dad48d3a53eb6cb1b906174ef90a",
+   "signer": "ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c"
+  },
+  {
+   "name": "eip191-secp256k1-root",
+   "alg": "eip191-secp256k1",
+   "label": "research-commons fixed-root identity signed vectors: root key (eip191-secp256k1)",
+   "secret": "f21bb149166b9220d9942ee8422aedc94bb551b7d82a61fe881e85e6d74f86bd",
+   "signer": "0x4586abc8188dc0503f69a905d26cbd4abeacb838"
+  },
+  {
+   "name": "eip191-secp256k1-worker",
+   "alg": "eip191-secp256k1",
+   "label": "research-commons fixed-root identity signed vectors: worker key (eip191-secp256k1)",
+   "secret": "cc693495a8eb401d05b1163f45354b46fed9cfbd2d909c749bc9ecab26bfd4eb",
+   "signer": "0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682"
+  }
+ ],
+ "positive": [
+  {
+   "name": "ed-worker-genesis",
+   "chain": "ed",
+   "alg": "ed25519",
+   "rc": "rc/1",
+   "kind": "authored",
+   "signer": "ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c",
+   "payload_type": "application/vnd.research-commons.authored.v1+json",
+   "jcs": "{\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:9999999999999999999999999999999999999999999999999999999999999999\",\"size\":4096},\"type\":\"dataset\"},\"kind\":\"authored\",\"prev\":null,\"rc\":\"rc/1\",\"seq\":0,\"signer\":\"ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "signed_string": "DSSEv1 49 application/vnd.research-commons.authored.v1+json 312 {\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:9999999999999999999999999999999999999999999999999999999999999999\",\"size\":4096},\"type\":\"dataset\"},\"kind\":\"authored\",\"prev\":null,\"rc\":\"rc/1\",\"seq\":0,\"signer\":\"ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "bytes": 376,
+   "id": "64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c",
+   "sig": "d201a29fb79b69c4eaef2fed8631ee11e947e2b38b7a04682a69ad2c9099f22954d201f24eaaa50515f36ea708acaf4b78b77c80926bbe5de120d9f076414d06",
+   "line": "{\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:9999999999999999999999999999999999999999999999999999999999999999\",\"size\":4096},\"type\":\"dataset\"},\"kind\":\"authored\",\"prev\":null,\"rc\":\"rc/1\",\"seq\":0,\"sig\":\"d201a29fb79b69c4eaef2fed8631ee11e947e2b38b7a04682a69ad2c9099f22954d201f24eaaa50515f36ea708acaf4b78b77c80926bbe5de120d9f076414d06\",\"signer\":\"ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "expect": {
+    "status": "valid",
+    "why": ""
+   }
+  },
+  {
+   "name": "ed-inception",
+   "chain": "ed",
+   "alg": "ed25519",
+   "rc": "rc/2",
+   "kind": "identity_inception",
+   "signer": "ed25519:7803013dc64b2a56e43038545e7bcda9a3b7e51659bd3ed3a14061b499c96e11",
+   "payload_type": "application/vnd.research-commons.identity_inception.v2+json",
+   "jcs": "{\"alg\":\"ed25519\",\"body\":{\"profile\":\"fixed-root-v1\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"identity_inception\",\"prev\":null,\"rc\":\"rc/2\",\"seq\":0,\"signer\":\"ed25519:7803013dc64b2a56e43038545e7bcda9a3b7e51659bd3ed3a14061b499c96e11\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "signed_string": "DSSEv1 59 application/vnd.research-commons.identity_inception.v2+json 268 {\"alg\":\"ed25519\",\"body\":{\"profile\":\"fixed-root-v1\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"identity_inception\",\"prev\":null,\"rc\":\"rc/2\",\"seq\":0,\"signer\":\"ed25519:7803013dc64b2a56e43038545e7bcda9a3b7e51659bd3ed3a14061b499c96e11\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "bytes": 342,
+   "id": "6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2",
+   "sig": "93de561f73dd34087540213fc79a095226867d37942cd70fbc28a7d045aad89a6415ddd46a492625d1061cca5de886cb2d01cbcc1de0ffa9867954e4d2303207",
+   "line": "{\"alg\":\"ed25519\",\"body\":{\"profile\":\"fixed-root-v1\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"identity_inception\",\"prev\":null,\"rc\":\"rc/2\",\"seq\":0,\"sig\":\"93de561f73dd34087540213fc79a095226867d37942cd70fbc28a7d045aad89a6415ddd46a492625d1061cca5de886cb2d01cbcc1de0ffa9867954e4d2303207\",\"signer\":\"ed25519:7803013dc64b2a56e43038545e7bcda9a3b7e51659bd3ed3a14061b499c96e11\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "expect": {
+    "status": "valid",
+    "why": ""
+   }
+  },
+  {
+   "name": "ed-grant",
+   "chain": "ed",
+   "alg": "ed25519",
+   "rc": "rc/2",
+   "kind": "identity_grant",
+   "signer": "ed25519:7803013dc64b2a56e43038545e7bcda9a3b7e51659bd3ed3a14061b499c96e11",
+   "payload_type": "application/vnd.research-commons.identity_grant.v2+json",
+   "jcs": "{\"alg\":\"ed25519\",\"body\":{\"delegate\":{\"inception\":\"64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c\",\"key\":\"ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c\"},\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\",\"permissions\":[{\"amend\":true,\"kind\":\"authored\",\"targets\":{\"any_content\":true}}],\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"identity_grant\",\"prev\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\",\"rc\":\"rc/2\",\"seq\":1,\"signer\":\"ed25519:7803013dc64b2a56e43038545e7bcda9a3b7e51659bd3ed3a14061b499c96e11\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "signed_string": "DSSEv1 55 application/vnd.research-commons.identity_grant.v2+json 631 {\"alg\":\"ed25519\",\"body\":{\"delegate\":{\"inception\":\"64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c\",\"key\":\"ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c\"},\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\",\"permissions\":[{\"amend\":true,\"kind\":\"authored\",\"targets\":{\"any_content\":true}}],\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"identity_grant\",\"prev\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\",\"rc\":\"rc/2\",\"seq\":1,\"signer\":\"ed25519:7803013dc64b2a56e43038545e7bcda9a3b7e51659bd3ed3a14061b499c96e11\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "bytes": 701,
+   "id": "4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05",
+   "sig": "81fe081ab5ca1621d30d558145265ac3455b3327a9986d71487a2bc251bb42b40fd84092c0263db1a1a564d631639ebabdf3e8653312b5d8a0a1cdf7f13f540e",
+   "line": "{\"alg\":\"ed25519\",\"body\":{\"delegate\":{\"inception\":\"64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c\",\"key\":\"ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c\"},\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\",\"permissions\":[{\"amend\":true,\"kind\":\"authored\",\"targets\":{\"any_content\":true}}],\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"identity_grant\",\"prev\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\",\"rc\":\"rc/2\",\"seq\":1,\"sig\":\"81fe081ab5ca1621d30d558145265ac3455b3327a9986d71487a2bc251bb42b40fd84092c0263db1a1a564d631639ebabdf3e8653312b5d8a0a1cdf7f13f540e\",\"signer\":\"ed25519:7803013dc64b2a56e43038545e7bcda9a3b7e51659bd3ed3a14061b499c96e11\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "expect": {
+    "status": "valid",
+    "why": ""
+   }
+  },
+  {
+   "name": "ed-authored",
+   "chain": "ed",
+   "alg": "ed25519",
+   "rc": "rc/2",
+   "kind": "authored",
+   "signer": "ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c",
+   "payload_type": "application/vnd.research-commons.authored.v2+json",
+   "jcs": "{\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c\",\"rc\":\"rc/2\",\"seq\":1,\"signer\":\"ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\"}}",
+   "signed_string": "DSSEv1 49 application/vnd.research-commons.authored.v2+json 586 {\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c\",\"rc\":\"rc/2\",\"seq\":1,\"signer\":\"ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\"}}",
+   "bytes": 650,
+   "id": "b107c9a3050f0c6e7e8675f35f7f983b6a6021da9ebfb1d47415900c2d48b148",
+   "sig": "979fb4aca8779989d6084ac1b3cfd3c4f984c7654161349e8f1282026e1b29cb428cf8c380bfd8c7f5c53f80b4c9d68c1e3ac833c1477b0ce3690b6a39ea7b0f",
+   "line": "{\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c\",\"rc\":\"rc/2\",\"seq\":1,\"sig\":\"979fb4aca8779989d6084ac1b3cfd3c4f984c7654161349e8f1282026e1b29cb428cf8c380bfd8c7f5c53f80b4c9d68c1e3ac833c1477b0ce3690b6a39ea7b0f\",\"signer\":\"ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\"}}",
+   "expect": {
+    "status": "valid",
+    "why": "",
+    "actor": {
+     "identity": "6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2",
+     "grant": "4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05"
+    }
+   }
+  },
+  {
+   "name": "ed-authored-amends",
+   "chain": "ed",
+   "alg": "ed25519",
+   "rc": "rc/2",
+   "kind": "authored",
+   "signer": "ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c",
+   "payload_type": "application/vnd.research-commons.authored.v2+json",
+   "jcs": "{\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:2222222222222222222222222222222222222222222222222222222222222222\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{\"amends\":[\"b107c9a3050f0c6e7e8675f35f7f983b6a6021da9ebfb1d47415900c2d48b148\"]}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"b107c9a3050f0c6e7e8675f35f7f983b6a6021da9ebfb1d47415900c2d48b148\",\"rc\":\"rc/2\",\"seq\":2,\"signer\":\"ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\"}}",
+   "signed_string": "DSSEv1 49 application/vnd.research-commons.authored.v2+json 663 {\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:2222222222222222222222222222222222222222222222222222222222222222\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{\"amends\":[\"b107c9a3050f0c6e7e8675f35f7f983b6a6021da9ebfb1d47415900c2d48b148\"]}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"b107c9a3050f0c6e7e8675f35f7f983b6a6021da9ebfb1d47415900c2d48b148\",\"rc\":\"rc/2\",\"seq\":2,\"signer\":\"ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\"}}",
+   "bytes": 727,
+   "id": "5f5925cae7026396ba88f222f898ce170234d316f78c7f950ace46ea26b795b6",
+   "sig": "cf8ed55b625b69d783dcc3e66a739b57ac1966a92efb71c411853930741cc3bf13585444be008c2a595b8de2504c47133a8c17f4352e0260a402155eaaafa90b",
+   "line": "{\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:2222222222222222222222222222222222222222222222222222222222222222\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{\"amends\":[\"b107c9a3050f0c6e7e8675f35f7f983b6a6021da9ebfb1d47415900c2d48b148\"]}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"b107c9a3050f0c6e7e8675f35f7f983b6a6021da9ebfb1d47415900c2d48b148\",\"rc\":\"rc/2\",\"seq\":2,\"sig\":\"cf8ed55b625b69d783dcc3e66a739b57ac1966a92efb71c411853930741cc3bf13585444be008c2a595b8de2504c47133a8c17f4352e0260a402155eaaafa90b\",\"signer\":\"ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\"}}",
+   "expect": {
+    "status": "valid",
+    "why": "",
+    "actor": {
+     "identity": "6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2",
+     "grant": "4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05"
+    }
+   }
+  },
+  {
+   "name": "ed-cut-last-good",
+   "chain": "ed",
+   "alg": "ed25519",
+   "rc": "rc/2",
+   "kind": "identity_cut",
+   "signer": "ed25519:7803013dc64b2a56e43038545e7bcda9a3b7e51659bd3ed3a14061b499c96e11",
+   "payload_type": "application/vnd.research-commons.identity_cut.v2+json",
+   "jcs": "{\"alg\":\"ed25519\",\"body\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\",\"last_good\":\"b107c9a3050f0c6e7e8675f35f7f983b6a6021da9ebfb1d47415900c2d48b148\",\"reason\":\"key_compromise\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"identity_cut\",\"prev\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"rc\":\"rc/2\",\"seq\":2,\"signer\":\"ed25519:7803013dc64b2a56e43038545e7bcda9a3b7e51659bd3ed3a14061b499c96e11\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "signed_string": "DSSEv1 53 application/vnd.research-commons.identity_cut.v2+json 556 {\"alg\":\"ed25519\",\"body\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\",\"last_good\":\"b107c9a3050f0c6e7e8675f35f7f983b6a6021da9ebfb1d47415900c2d48b148\",\"reason\":\"key_compromise\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"identity_cut\",\"prev\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"rc\":\"rc/2\",\"seq\":2,\"signer\":\"ed25519:7803013dc64b2a56e43038545e7bcda9a3b7e51659bd3ed3a14061b499c96e11\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "bytes": 624,
+   "id": "544ac8fa65cd732a930af9312a4820846e5a0db4ae1dfba9bdb27bc1c6ac16ec",
+   "sig": "0c1a39f8347d309e0bff772da9a3a6790f3ed0970511e75bbcae7e63b6e35e76c5df9ae58cdd1f0493b15495b5b5bb564a5b471091f754c0d84226c57b189c0c",
+   "line": "{\"alg\":\"ed25519\",\"body\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\",\"last_good\":\"b107c9a3050f0c6e7e8675f35f7f983b6a6021da9ebfb1d47415900c2d48b148\",\"reason\":\"key_compromise\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"identity_cut\",\"prev\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"rc\":\"rc/2\",\"seq\":2,\"sig\":\"0c1a39f8347d309e0bff772da9a3a6790f3ed0970511e75bbcae7e63b6e35e76c5df9ae58cdd1f0493b15495b5b5bb564a5b471091f754c0d84226c57b189c0c\",\"signer\":\"ed25519:7803013dc64b2a56e43038545e7bcda9a3b7e51659bd3ed3a14061b499c96e11\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "expect": {
+    "status": "valid",
+    "why": ""
+   }
+  },
+  {
+   "name": "ed-cut-null",
+   "chain": "ed",
+   "alg": "ed25519",
+   "rc": "rc/2",
+   "kind": "identity_cut",
+   "signer": "ed25519:7803013dc64b2a56e43038545e7bcda9a3b7e51659bd3ed3a14061b499c96e11",
+   "payload_type": "application/vnd.research-commons.identity_cut.v2+json",
+   "jcs": "{\"alg\":\"ed25519\",\"body\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\",\"last_good\":null,\"reason\":\"key_compromise\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"identity_cut\",\"prev\":\"544ac8fa65cd732a930af9312a4820846e5a0db4ae1dfba9bdb27bc1c6ac16ec\",\"rc\":\"rc/2\",\"seq\":3,\"signer\":\"ed25519:7803013dc64b2a56e43038545e7bcda9a3b7e51659bd3ed3a14061b499c96e11\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "signed_string": "DSSEv1 53 application/vnd.research-commons.identity_cut.v2+json 494 {\"alg\":\"ed25519\",\"body\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\",\"last_good\":null,\"reason\":\"key_compromise\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"identity_cut\",\"prev\":\"544ac8fa65cd732a930af9312a4820846e5a0db4ae1dfba9bdb27bc1c6ac16ec\",\"rc\":\"rc/2\",\"seq\":3,\"signer\":\"ed25519:7803013dc64b2a56e43038545e7bcda9a3b7e51659bd3ed3a14061b499c96e11\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "bytes": 562,
+   "id": "eab3ddb93d2cca5d1d6d4be2fe139379ba8e4a6b5e0d5df4f082d65833c4d842",
+   "sig": "c8acd5e26f9fa64e1d876371b4751396907574be226cc4ca2ca5be71467454bda9d83a201f73814c72ee66c7f46ea5033f545ab41bbd9372c4da4205a1965a0c",
+   "line": "{\"alg\":\"ed25519\",\"body\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\",\"last_good\":null,\"reason\":\"key_compromise\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"identity_cut\",\"prev\":\"544ac8fa65cd732a930af9312a4820846e5a0db4ae1dfba9bdb27bc1c6ac16ec\",\"rc\":\"rc/2\",\"seq\":3,\"sig\":\"c8acd5e26f9fa64e1d876371b4751396907574be226cc4ca2ca5be71467454bda9d83a201f73814c72ee66c7f46ea5033f545ab41bbd9372c4da4205a1965a0c\",\"signer\":\"ed25519:7803013dc64b2a56e43038545e7bcda9a3b7e51659bd3ed3a14061b499c96e11\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "expect": {
+    "status": "valid",
+    "why": ""
+   }
+  },
+  {
+   "name": "ed-revoke-key",
+   "chain": "ed",
+   "alg": "ed25519",
+   "rc": "rc/1",
+   "kind": "revoke_key",
+   "signer": "ed25519:7803013dc64b2a56e43038545e7bcda9a3b7e51659bd3ed3a14061b499c96e11",
+   "payload_type": "application/vnd.research-commons.revoke_key.v1+json",
+   "jcs": "{\"alg\":\"ed25519\",\"body\":{\"reason\":\"key_compromise\"},\"kind\":\"revoke_key\",\"prev\":\"eab3ddb93d2cca5d1d6d4be2fe139379ba8e4a6b5e0d5df4f082d65833c4d842\",\"rc\":\"rc/1\",\"seq\":4,\"signer\":\"ed25519:7803013dc64b2a56e43038545e7bcda9a3b7e51659bd3ed3a14061b499c96e11\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "signed_string": "DSSEv1 51 application/vnd.research-commons.revoke_key.v1+json 278 {\"alg\":\"ed25519\",\"body\":{\"reason\":\"key_compromise\"},\"kind\":\"revoke_key\",\"prev\":\"eab3ddb93d2cca5d1d6d4be2fe139379ba8e4a6b5e0d5df4f082d65833c4d842\",\"rc\":\"rc/1\",\"seq\":4,\"signer\":\"ed25519:7803013dc64b2a56e43038545e7bcda9a3b7e51659bd3ed3a14061b499c96e11\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "bytes": 344,
+   "id": "7c38eb6176a893602bdece7892676b173af83f21e9ff3f84d9d1fb818f883e9c",
+   "sig": "7ac5718b5b9f2450040fcbd9dcad13f8b9f3c5cd7434956e8c17060b0cb4e36943e8caadadb0f3cf21f3649c482b280968ec204efdd0e2b4134d2c1ded5ed903",
+   "line": "{\"alg\":\"ed25519\",\"body\":{\"reason\":\"key_compromise\"},\"kind\":\"revoke_key\",\"prev\":\"eab3ddb93d2cca5d1d6d4be2fe139379ba8e4a6b5e0d5df4f082d65833c4d842\",\"rc\":\"rc/1\",\"seq\":4,\"sig\":\"7ac5718b5b9f2450040fcbd9dcad13f8b9f3c5cd7434956e8c17060b0cb4e36943e8caadadb0f3cf21f3649c482b280968ec204efdd0e2b4134d2c1ded5ed903\",\"signer\":\"ed25519:7803013dc64b2a56e43038545e7bcda9a3b7e51659bd3ed3a14061b499c96e11\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "expect": {
+    "status": "valid",
+    "why": ""
+   }
+  },
+  {
+   "name": "eip-worker-genesis",
+   "chain": "eip",
+   "alg": "eip191-secp256k1",
+   "rc": "rc/1",
+   "kind": "authored",
+   "signer": "0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682",
+   "payload_type": "application/vnd.research-commons.authored.v1+json",
+   "jcs": "{\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:9999999999999999999999999999999999999999999999999999999999999999\",\"size\":4096},\"type\":\"dataset\"},\"kind\":\"authored\",\"prev\":null,\"rc\":\"rc/1\",\"seq\":0,\"signer\":\"0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "signed_string": "DSSEv1 49 application/vnd.research-commons.authored.v1+json 291 {\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:9999999999999999999999999999999999999999999999999999999999999999\",\"size\":4096},\"type\":\"dataset\"},\"kind\":\"authored\",\"prev\":null,\"rc\":\"rc/1\",\"seq\":0,\"signer\":\"0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "bytes": 355,
+   "id": "3844ef7b3ee780bc3e4960eb3917f286be0b5dd954c49b5d13c026924770180e",
+   "sig": "0x5281d6af29cee03dfad5813fcc6acf5760d482030b67670b40ce3a218a12cdd97c826c8bff7fbedfcde3775a3a08bbf05bfac59deea5b5513e1d2b054033426a1b",
+   "line": "{\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:9999999999999999999999999999999999999999999999999999999999999999\",\"size\":4096},\"type\":\"dataset\"},\"kind\":\"authored\",\"prev\":null,\"rc\":\"rc/1\",\"seq\":0,\"sig\":\"0x5281d6af29cee03dfad5813fcc6acf5760d482030b67670b40ce3a218a12cdd97c826c8bff7fbedfcde3775a3a08bbf05bfac59deea5b5513e1d2b054033426a1b\",\"signer\":\"0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "equivalent_sigs": [
+    "0x5281d6af29cee03dfad5813fcc6acf5760d482030b67670b40ce3a218a12cdd97c826c8bff7fbedfcde3775a3a08bbf05bfac59deea5b5513e1d2b054033426a00",
+    "0x5281d6af29cee03dfad5813fcc6acf5760d482030b67670b40ce3a218a12cdd9837d937400804120321c88a5c5f7440e5eb41748c0a2eaea81b533879002fed71c",
+    "0x5281d6af29cee03dfad5813fcc6acf5760d482030b67670b40ce3a218a12cdd9837d937400804120321c88a5c5f7440e5eb41748c0a2eaea81b533879002fed701"
+   ],
+   "expect": {
+    "status": "valid",
+    "why": ""
+   }
+  },
+  {
+   "name": "eip-inception",
+   "chain": "eip",
+   "alg": "eip191-secp256k1",
+   "rc": "rc/2",
+   "kind": "identity_inception",
+   "signer": "0x4586abc8188dc0503f69a905d26cbd4abeacb838",
+   "payload_type": "application/vnd.research-commons.identity_inception.v2+json",
+   "jcs": "{\"alg\":\"eip191-secp256k1\",\"body\":{\"profile\":\"fixed-root-v1\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"identity_inception\",\"prev\":null,\"rc\":\"rc/2\",\"seq\":0,\"signer\":\"0x4586abc8188dc0503f69a905d26cbd4abeacb838\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "signed_string": "DSSEv1 59 application/vnd.research-commons.identity_inception.v2+json 247 {\"alg\":\"eip191-secp256k1\",\"body\":{\"profile\":\"fixed-root-v1\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"identity_inception\",\"prev\":null,\"rc\":\"rc/2\",\"seq\":0,\"signer\":\"0x4586abc8188dc0503f69a905d26cbd4abeacb838\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "bytes": 321,
+   "id": "f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10",
+   "sig": "0x5a2d1a1e1da911d9d4839fa68457e61323981ee8498cacf30036d7b9a6e287ac0a6fd6716ad9850097f3d5eba73e3c75fef7fa897ccc18495e4064085b6548281c",
+   "line": "{\"alg\":\"eip191-secp256k1\",\"body\":{\"profile\":\"fixed-root-v1\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"identity_inception\",\"prev\":null,\"rc\":\"rc/2\",\"seq\":0,\"sig\":\"0x5a2d1a1e1da911d9d4839fa68457e61323981ee8498cacf30036d7b9a6e287ac0a6fd6716ad9850097f3d5eba73e3c75fef7fa897ccc18495e4064085b6548281c\",\"signer\":\"0x4586abc8188dc0503f69a905d26cbd4abeacb838\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "equivalent_sigs": [
+    "0x5a2d1a1e1da911d9d4839fa68457e61323981ee8498cacf30036d7b9a6e287ac0a6fd6716ad9850097f3d5eba73e3c75fef7fa897ccc18495e4064085b65482801",
+    "0x5a2d1a1e1da911d9d4839fa68457e61323981ee8498cacf30036d7b9a6e287acf590298e95267aff680c2a1458c1c388bbb6e25d327c87f26191fa8474d0f9191b",
+    "0x5a2d1a1e1da911d9d4839fa68457e61323981ee8498cacf30036d7b9a6e287acf590298e95267aff680c2a1458c1c388bbb6e25d327c87f26191fa8474d0f91900"
+   ],
+   "expect": {
+    "status": "valid",
+    "why": ""
+   }
+  },
+  {
+   "name": "eip-grant",
+   "chain": "eip",
+   "alg": "eip191-secp256k1",
+   "rc": "rc/2",
+   "kind": "identity_grant",
+   "signer": "0x4586abc8188dc0503f69a905d26cbd4abeacb838",
+   "payload_type": "application/vnd.research-commons.identity_grant.v2+json",
+   "jcs": "{\"alg\":\"eip191-secp256k1\",\"body\":{\"delegate\":{\"inception\":\"3844ef7b3ee780bc3e4960eb3917f286be0b5dd954c49b5d13c026924770180e\",\"key\":\"0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682\"},\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\",\"permissions\":[{\"amend\":true,\"kind\":\"authored\",\"targets\":{\"any_content\":true}}],\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"identity_grant\",\"prev\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\",\"rc\":\"rc/2\",\"seq\":1,\"signer\":\"0x4586abc8188dc0503f69a905d26cbd4abeacb838\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "signed_string": "DSSEv1 55 application/vnd.research-commons.identity_grant.v2+json 580 {\"alg\":\"eip191-secp256k1\",\"body\":{\"delegate\":{\"inception\":\"3844ef7b3ee780bc3e4960eb3917f286be0b5dd954c49b5d13c026924770180e\",\"key\":\"0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682\"},\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\",\"permissions\":[{\"amend\":true,\"kind\":\"authored\",\"targets\":{\"any_content\":true}}],\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"identity_grant\",\"prev\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\",\"rc\":\"rc/2\",\"seq\":1,\"signer\":\"0x4586abc8188dc0503f69a905d26cbd4abeacb838\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "bytes": 650,
+   "id": "86811c45c1bc2d21616a9e594ffc0adae28c72e299ec9b7cc7ed6e85384bc9aa",
+   "sig": "0xf852beb797180ba21da0682ac80463b35d092e055c4a7597782073b40df136d10ef4fd7dbd89251f5f57f9af48592915fc342d9a02549f17d5e6d1dbcc474c4e1c",
+   "line": "{\"alg\":\"eip191-secp256k1\",\"body\":{\"delegate\":{\"inception\":\"3844ef7b3ee780bc3e4960eb3917f286be0b5dd954c49b5d13c026924770180e\",\"key\":\"0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682\"},\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\",\"permissions\":[{\"amend\":true,\"kind\":\"authored\",\"targets\":{\"any_content\":true}}],\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"identity_grant\",\"prev\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\",\"rc\":\"rc/2\",\"seq\":1,\"sig\":\"0xf852beb797180ba21da0682ac80463b35d092e055c4a7597782073b40df136d10ef4fd7dbd89251f5f57f9af48592915fc342d9a02549f17d5e6d1dbcc474c4e1c\",\"signer\":\"0x4586abc8188dc0503f69a905d26cbd4abeacb838\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "equivalent_sigs": [
+    "0xf852beb797180ba21da0682ac80463b35d092e055c4a7597782073b40df136d10ef4fd7dbd89251f5f57f9af48592915fc342d9a02549f17d5e6d1dbcc474c4e01",
+    "0xf852beb797180ba21da0682ac80463b35d092e055c4a7597782073b40df136d1f10b02824276dae0a0a80650b7a6d6e8be7aaf4cacf40123e9eb8cb103eef4f31b",
+    "0xf852beb797180ba21da0682ac80463b35d092e055c4a7597782073b40df136d1f10b02824276dae0a0a80650b7a6d6e8be7aaf4cacf40123e9eb8cb103eef4f300"
+   ],
+   "expect": {
+    "status": "valid",
+    "why": ""
+   }
+  },
+  {
+   "name": "eip-authored",
+   "chain": "eip",
+   "alg": "eip191-secp256k1",
+   "rc": "rc/2",
+   "kind": "authored",
+   "signer": "0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682",
+   "payload_type": "application/vnd.research-commons.authored.v2+json",
+   "jcs": "{\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"3844ef7b3ee780bc3e4960eb3917f286be0b5dd954c49b5d13c026924770180e\",\"rc\":\"rc/2\",\"seq\":1,\"signer\":\"0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"86811c45c1bc2d21616a9e594ffc0adae28c72e299ec9b7cc7ed6e85384bc9aa\",\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\"}}",
+   "signed_string": "DSSEv1 49 application/vnd.research-commons.authored.v2+json 565 {\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"3844ef7b3ee780bc3e4960eb3917f286be0b5dd954c49b5d13c026924770180e\",\"rc\":\"rc/2\",\"seq\":1,\"signer\":\"0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"86811c45c1bc2d21616a9e594ffc0adae28c72e299ec9b7cc7ed6e85384bc9aa\",\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\"}}",
+   "bytes": 629,
+   "id": "69d2afd14446a6c6993fe94720a680344f8157aca362e53c26cb3165eb73f6b4",
+   "sig": "0x5e353fe3bc013ddbe1a1de60733536b32b9c5363bd907a61768189b30ee1554f218075a5667c8f39f467280bb705529dbf5ad721f0358c67704c76416acfca701b",
+   "line": "{\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"3844ef7b3ee780bc3e4960eb3917f286be0b5dd954c49b5d13c026924770180e\",\"rc\":\"rc/2\",\"seq\":1,\"sig\":\"0x5e353fe3bc013ddbe1a1de60733536b32b9c5363bd907a61768189b30ee1554f218075a5667c8f39f467280bb705529dbf5ad721f0358c67704c76416acfca701b\",\"signer\":\"0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"86811c45c1bc2d21616a9e594ffc0adae28c72e299ec9b7cc7ed6e85384bc9aa\",\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\"}}",
+   "equivalent_sigs": [
+    "0x5e353fe3bc013ddbe1a1de60733536b32b9c5363bd907a61768189b30ee1554f218075a5667c8f39f467280bb705529dbf5ad721f0358c67704c76416acfca7000",
+    "0x5e353fe3bc013ddbe1a1de60733536b32b9c5363bd907a61768189b30ee1554fde7f8a5a998370c60b98d7f448faad60fb5405c4bf1313d44f85e84b656676d11c",
+    "0x5e353fe3bc013ddbe1a1de60733536b32b9c5363bd907a61768189b30ee1554fde7f8a5a998370c60b98d7f448faad60fb5405c4bf1313d44f85e84b656676d101"
+   ],
+   "expect": {
+    "status": "valid",
+    "why": "",
+    "actor": {
+     "identity": "f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10",
+     "grant": "86811c45c1bc2d21616a9e594ffc0adae28c72e299ec9b7cc7ed6e85384bc9aa"
+    }
+   }
+  },
+  {
+   "name": "eip-authored-amends",
+   "chain": "eip",
+   "alg": "eip191-secp256k1",
+   "rc": "rc/2",
+   "kind": "authored",
+   "signer": "0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682",
+   "payload_type": "application/vnd.research-commons.authored.v2+json",
+   "jcs": "{\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:2222222222222222222222222222222222222222222222222222222222222222\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{\"amends\":[\"69d2afd14446a6c6993fe94720a680344f8157aca362e53c26cb3165eb73f6b4\"]}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"69d2afd14446a6c6993fe94720a680344f8157aca362e53c26cb3165eb73f6b4\",\"rc\":\"rc/2\",\"seq\":2,\"signer\":\"0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"86811c45c1bc2d21616a9e594ffc0adae28c72e299ec9b7cc7ed6e85384bc9aa\",\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\"}}",
+   "signed_string": "DSSEv1 49 application/vnd.research-commons.authored.v2+json 642 {\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:2222222222222222222222222222222222222222222222222222222222222222\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{\"amends\":[\"69d2afd14446a6c6993fe94720a680344f8157aca362e53c26cb3165eb73f6b4\"]}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"69d2afd14446a6c6993fe94720a680344f8157aca362e53c26cb3165eb73f6b4\",\"rc\":\"rc/2\",\"seq\":2,\"signer\":\"0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"86811c45c1bc2d21616a9e594ffc0adae28c72e299ec9b7cc7ed6e85384bc9aa\",\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\"}}",
+   "bytes": 706,
+   "id": "9d5b8d5d2fe2fddc69ab0cccf7cc9cad63cee31d1c7119878c22abb85f2ccb71",
+   "sig": "0x3f30e670ad50c28fb00cac92a8c0f86f5d9fd12f29d1353da0a1da3b0a84bfa476818323c113574bfc9e23507454f17bb5db048af4974e4859753af1ee2edebd1b",
+   "line": "{\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:2222222222222222222222222222222222222222222222222222222222222222\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{\"amends\":[\"69d2afd14446a6c6993fe94720a680344f8157aca362e53c26cb3165eb73f6b4\"]}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"69d2afd14446a6c6993fe94720a680344f8157aca362e53c26cb3165eb73f6b4\",\"rc\":\"rc/2\",\"seq\":2,\"sig\":\"0x3f30e670ad50c28fb00cac92a8c0f86f5d9fd12f29d1353da0a1da3b0a84bfa476818323c113574bfc9e23507454f17bb5db048af4974e4859753af1ee2edebd1b\",\"signer\":\"0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"86811c45c1bc2d21616a9e594ffc0adae28c72e299ec9b7cc7ed6e85384bc9aa\",\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\"}}",
+   "equivalent_sigs": [
+    "0x3f30e670ad50c28fb00cac92a8c0f86f5d9fd12f29d1353da0a1da3b0a84bfa476818323c113574bfc9e23507454f17bb5db048af4974e4859753af1ee2edebd00",
+    "0x3f30e670ad50c28fb00cac92a8c0f86f5d9fd12f29d1353da0a1da3b0a84bfa4897e7cdc3eeca8b40361dcaf8bab0e8304d3d85bbab151f3665d239ae20762841c",
+    "0x3f30e670ad50c28fb00cac92a8c0f86f5d9fd12f29d1353da0a1da3b0a84bfa4897e7cdc3eeca8b40361dcaf8bab0e8304d3d85bbab151f3665d239ae207628401"
+   ],
+   "expect": {
+    "status": "valid",
+    "why": "",
+    "actor": {
+     "identity": "f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10",
+     "grant": "86811c45c1bc2d21616a9e594ffc0adae28c72e299ec9b7cc7ed6e85384bc9aa"
+    }
+   }
+  },
+  {
+   "name": "eip-cut-last-good",
+   "chain": "eip",
+   "alg": "eip191-secp256k1",
+   "rc": "rc/2",
+   "kind": "identity_cut",
+   "signer": "0x4586abc8188dc0503f69a905d26cbd4abeacb838",
+   "payload_type": "application/vnd.research-commons.identity_cut.v2+json",
+   "jcs": "{\"alg\":\"eip191-secp256k1\",\"body\":{\"grant\":\"86811c45c1bc2d21616a9e594ffc0adae28c72e299ec9b7cc7ed6e85384bc9aa\",\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\",\"last_good\":\"69d2afd14446a6c6993fe94720a680344f8157aca362e53c26cb3165eb73f6b4\",\"reason\":\"key_compromise\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"identity_cut\",\"prev\":\"86811c45c1bc2d21616a9e594ffc0adae28c72e299ec9b7cc7ed6e85384bc9aa\",\"rc\":\"rc/2\",\"seq\":2,\"signer\":\"0x4586abc8188dc0503f69a905d26cbd4abeacb838\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "signed_string": "DSSEv1 53 application/vnd.research-commons.identity_cut.v2+json 535 {\"alg\":\"eip191-secp256k1\",\"body\":{\"grant\":\"86811c45c1bc2d21616a9e594ffc0adae28c72e299ec9b7cc7ed6e85384bc9aa\",\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\",\"last_good\":\"69d2afd14446a6c6993fe94720a680344f8157aca362e53c26cb3165eb73f6b4\",\"reason\":\"key_compromise\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"identity_cut\",\"prev\":\"86811c45c1bc2d21616a9e594ffc0adae28c72e299ec9b7cc7ed6e85384bc9aa\",\"rc\":\"rc/2\",\"seq\":2,\"signer\":\"0x4586abc8188dc0503f69a905d26cbd4abeacb838\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "bytes": 603,
+   "id": "6ddce7635f60ea4566d69ab689166f3d3d3e1adf51140d7757d6353bbad024e0",
+   "sig": "0xf24559d6422837ea22736436b318501b74111f907bd82ada708dd0632946e010368ef91f3214d4b3bb59581c9c08962faf9b682a8188aa25b8678467d39c20831b",
+   "line": "{\"alg\":\"eip191-secp256k1\",\"body\":{\"grant\":\"86811c45c1bc2d21616a9e594ffc0adae28c72e299ec9b7cc7ed6e85384bc9aa\",\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\",\"last_good\":\"69d2afd14446a6c6993fe94720a680344f8157aca362e53c26cb3165eb73f6b4\",\"reason\":\"key_compromise\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"identity_cut\",\"prev\":\"86811c45c1bc2d21616a9e594ffc0adae28c72e299ec9b7cc7ed6e85384bc9aa\",\"rc\":\"rc/2\",\"seq\":2,\"sig\":\"0xf24559d6422837ea22736436b318501b74111f907bd82ada708dd0632946e010368ef91f3214d4b3bb59581c9c08962faf9b682a8188aa25b8678467d39c20831b\",\"signer\":\"0x4586abc8188dc0503f69a905d26cbd4abeacb838\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "equivalent_sigs": [
+    "0xf24559d6422837ea22736436b318501b74111f907bd82ada708dd0632946e010368ef91f3214d4b3bb59581c9c08962faf9b682a8188aa25b8678467d39c208300",
+    "0xf24559d6422837ea22736436b318501b74111f907bd82ada708dd0632946e010c97106e0cdeb2b4c44a6a7e363f769cf0b1374bc2dbff616076ada24fc9a20be1c",
+    "0xf24559d6422837ea22736436b318501b74111f907bd82ada708dd0632946e010c97106e0cdeb2b4c44a6a7e363f769cf0b1374bc2dbff616076ada24fc9a20be01"
+   ],
+   "expect": {
+    "status": "valid",
+    "why": ""
+   }
+  },
+  {
+   "name": "eip-cut-null",
+   "chain": "eip",
+   "alg": "eip191-secp256k1",
+   "rc": "rc/2",
+   "kind": "identity_cut",
+   "signer": "0x4586abc8188dc0503f69a905d26cbd4abeacb838",
+   "payload_type": "application/vnd.research-commons.identity_cut.v2+json",
+   "jcs": "{\"alg\":\"eip191-secp256k1\",\"body\":{\"grant\":\"86811c45c1bc2d21616a9e594ffc0adae28c72e299ec9b7cc7ed6e85384bc9aa\",\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\",\"last_good\":null,\"reason\":\"key_compromise\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"identity_cut\",\"prev\":\"6ddce7635f60ea4566d69ab689166f3d3d3e1adf51140d7757d6353bbad024e0\",\"rc\":\"rc/2\",\"seq\":3,\"signer\":\"0x4586abc8188dc0503f69a905d26cbd4abeacb838\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "signed_string": "DSSEv1 53 application/vnd.research-commons.identity_cut.v2+json 473 {\"alg\":\"eip191-secp256k1\",\"body\":{\"grant\":\"86811c45c1bc2d21616a9e594ffc0adae28c72e299ec9b7cc7ed6e85384bc9aa\",\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\",\"last_good\":null,\"reason\":\"key_compromise\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"identity_cut\",\"prev\":\"6ddce7635f60ea4566d69ab689166f3d3d3e1adf51140d7757d6353bbad024e0\",\"rc\":\"rc/2\",\"seq\":3,\"signer\":\"0x4586abc8188dc0503f69a905d26cbd4abeacb838\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "bytes": 541,
+   "id": "794338f72b29999e48e4f45362316e8b11ccc727474a835e270026e3eeab6111",
+   "sig": "0x238e7f70a94795b59c5a32adcdcf526d40f7e6c1a857846f8d080918fc6364e73634e091357016caecb72ab266b3056eb3c931cfec334e2a03b0f88fd4104a751b",
+   "line": "{\"alg\":\"eip191-secp256k1\",\"body\":{\"grant\":\"86811c45c1bc2d21616a9e594ffc0adae28c72e299ec9b7cc7ed6e85384bc9aa\",\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\",\"last_good\":null,\"reason\":\"key_compromise\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"identity_cut\",\"prev\":\"6ddce7635f60ea4566d69ab689166f3d3d3e1adf51140d7757d6353bbad024e0\",\"rc\":\"rc/2\",\"seq\":3,\"sig\":\"0x238e7f70a94795b59c5a32adcdcf526d40f7e6c1a857846f8d080918fc6364e73634e091357016caecb72ab266b3056eb3c931cfec334e2a03b0f88fd4104a751b\",\"signer\":\"0x4586abc8188dc0503f69a905d26cbd4abeacb838\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "equivalent_sigs": [
+    "0x238e7f70a94795b59c5a32adcdcf526d40f7e6c1a857846f8d080918fc6364e73634e091357016caecb72ab266b3056eb3c931cfec334e2a03b0f88fd4104a7500",
+    "0x238e7f70a94795b59c5a32adcdcf526d40f7e6c1a857846f8d080918fc6364e7c9cb1f6eca8fe9351348d54d994cfa9006e5ab16c3155211bc2165fcfc25f6cc1c",
+    "0x238e7f70a94795b59c5a32adcdcf526d40f7e6c1a857846f8d080918fc6364e7c9cb1f6eca8fe9351348d54d994cfa9006e5ab16c3155211bc2165fcfc25f6cc01"
+   ],
+   "expect": {
+    "status": "valid",
+    "why": ""
+   }
+  },
+  {
+   "name": "eip-revoke-key",
+   "chain": "eip",
+   "alg": "eip191-secp256k1",
+   "rc": "rc/1",
+   "kind": "revoke_key",
+   "signer": "0x4586abc8188dc0503f69a905d26cbd4abeacb838",
+   "payload_type": "application/vnd.research-commons.revoke_key.v1+json",
+   "jcs": "{\"alg\":\"eip191-secp256k1\",\"body\":{\"reason\":\"key_compromise\"},\"kind\":\"revoke_key\",\"prev\":\"794338f72b29999e48e4f45362316e8b11ccc727474a835e270026e3eeab6111\",\"rc\":\"rc/1\",\"seq\":4,\"signer\":\"0x4586abc8188dc0503f69a905d26cbd4abeacb838\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "signed_string": "DSSEv1 51 application/vnd.research-commons.revoke_key.v1+json 257 {\"alg\":\"eip191-secp256k1\",\"body\":{\"reason\":\"key_compromise\"},\"kind\":\"revoke_key\",\"prev\":\"794338f72b29999e48e4f45362316e8b11ccc727474a835e270026e3eeab6111\",\"rc\":\"rc/1\",\"seq\":4,\"signer\":\"0x4586abc8188dc0503f69a905d26cbd4abeacb838\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "bytes": 323,
+   "id": "d6a2f1a5b34e5b3151cba812bae704a493466dae55c37f31d9c8166477ed696d",
+   "sig": "0xd5196d91d153d57ec69df2df7e8e3e65afb05424ec802ba6cbca5c2c3f6f4cda517ceb8224bae8fa3a7b2183ed8d3032ccd00ac595f1fb04b5de76c26cce4fb71c",
+   "line": "{\"alg\":\"eip191-secp256k1\",\"body\":{\"reason\":\"key_compromise\"},\"kind\":\"revoke_key\",\"prev\":\"794338f72b29999e48e4f45362316e8b11ccc727474a835e270026e3eeab6111\",\"rc\":\"rc/1\",\"seq\":4,\"sig\":\"0xd5196d91d153d57ec69df2df7e8e3e65afb05424ec802ba6cbca5c2c3f6f4cda517ceb8224bae8fa3a7b2183ed8d3032ccd00ac595f1fb04b5de76c26cce4fb71c\",\"signer\":\"0x4586abc8188dc0503f69a905d26cbd4abeacb838\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "equivalent_sigs": [
+    "0xd5196d91d153d57ec69df2df7e8e3e65afb05424ec802ba6cbca5c2c3f6f4cda517ceb8224bae8fa3a7b2183ed8d3032ccd00ac595f1fb04b5de76c26cce4fb701",
+    "0xd5196d91d153d57ec69df2df7e8e3e65afb05424ec802ba6cbca5c2c3f6f4cdaae83147ddb451705c584de7c1272cfcbedded2211956a53709f3e7ca6367f18a1b",
+    "0xd5196d91d153d57ec69df2df7e8e3e65afb05424ec802ba6cbca5c2c3f6f4cdaae83147ddb451705c584de7c1272cfcbedded2211956a53709f3e7ca6367f18a00"
+   ],
+   "expect": {
+    "status": "valid",
+    "why": ""
+   }
+  }
+ ],
+ "negative": [
+  {
+   "name": "ed-neg-actor-tampered",
+   "chain": "ed",
+   "title": "x_actor_v1.grant changed after signing",
+   "of": "ed-authored",
+   "alg": "ed25519",
+   "signer": "ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c",
+   "delivered": "{\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c\",\"rc\":\"rc/2\",\"seq\":1,\"sig\":\"979fb4aca8779989d6084ac1b3cfd3c4f984c7654161349e8f1282026e1b29cb428cf8c380bfd8c7f5c53f80b4c9d68c1e3ac833c1477b0ce3690b6a39ea7b0f\",\"signer\":\"ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\"}}",
+   "changed_members": [
+    "x_actor_v1"
+   ],
+   "verified_string": "DSSEv1 49 application/vnd.research-commons.authored.v2+json 586 {\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c\",\"rc\":\"rc/2\",\"seq\":1,\"signer\":\"ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\"}}",
+   "sig": "979fb4aca8779989d6084ac1b3cfd3c4f984c7654161349e8f1282026e1b29cb428cf8c380bfd8c7f5c53f80b4c9d68c1e3ac833c1477b0ce3690b6a39ea7b0f",
+   "sig_verifies": false,
+   "sig_over": "DSSEv1 49 application/vnd.research-commons.authored.v2+json 586 {\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c\",\"rc\":\"rc/2\",\"seq\":1,\"signer\":\"ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\"}}",
+   "ed25519_step": "4",
+   "stock_ed25519_accepts": false,
+   "outcome": {
+    "result": "refused",
+    "class": "intrinsic",
+    "reason": "bad signature",
+    "detail_has": "ed25519 step 4"
+   }
+  },
+  {
+   "name": "ed-neg-actor-stripped",
+   "chain": "ed",
+   "title": "x_actor_v1 removed after signing (an act for an identity cannot be turned into a bare-key act)",
+   "of": "ed-authored",
+   "alg": "ed25519",
+   "signer": "ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c",
+   "delivered": "{\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c\",\"rc\":\"rc/2\",\"seq\":1,\"sig\":\"979fb4aca8779989d6084ac1b3cfd3c4f984c7654161349e8f1282026e1b29cb428cf8c380bfd8c7f5c53f80b4c9d68c1e3ac833c1477b0ce3690b6a39ea7b0f\",\"signer\":\"ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "changed_members": [
+    "x_actor_v1"
+   ],
+   "verified_string": "DSSEv1 49 application/vnd.research-commons.authored.v2+json 418 {\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c\",\"rc\":\"rc/2\",\"seq\":1,\"signer\":\"ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "sig": "979fb4aca8779989d6084ac1b3cfd3c4f984c7654161349e8f1282026e1b29cb428cf8c380bfd8c7f5c53f80b4c9d68c1e3ac833c1477b0ce3690b6a39ea7b0f",
+   "sig_verifies": false,
+   "sig_over": "DSSEv1 49 application/vnd.research-commons.authored.v2+json 586 {\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c\",\"rc\":\"rc/2\",\"seq\":1,\"signer\":\"ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\"}}",
+   "ed25519_step": "4",
+   "stock_ed25519_accepts": false,
+   "outcome": {
+    "result": "refused",
+    "class": "intrinsic",
+    "reason": "bad signature",
+    "detail_has": "ed25519 step 4"
+   }
+  },
+  {
+   "name": "ed-neg-v1-preimage",
+   "chain": "ed",
+   "title": "signature over the v1-typed PAE of an rc/2 envelope",
+   "of": "ed-authored",
+   "alg": "ed25519",
+   "signer": "ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c",
+   "delivered": "{\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c\",\"rc\":\"rc/2\",\"seq\":1,\"sig\":\"44eb755873fb80932c996acc6e3fa4a3dff70868da95f489d9e2d8732a46a15912b7837ed4fdb672c8e53816ce4e86de91a593ddcc6596cbec271408b7d75808\",\"signer\":\"ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\"}}",
+   "changed_members": [
+    "sig"
+   ],
+   "verified_string": "DSSEv1 49 application/vnd.research-commons.authored.v2+json 586 {\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c\",\"rc\":\"rc/2\",\"seq\":1,\"signer\":\"ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\"}}",
+   "sig": "44eb755873fb80932c996acc6e3fa4a3dff70868da95f489d9e2d8732a46a15912b7837ed4fdb672c8e53816ce4e86de91a593ddcc6596cbec271408b7d75808",
+   "sig_verifies": false,
+   "sig_over": "DSSEv1 49 application/vnd.research-commons.authored.v1+json 586 {\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c\",\"rc\":\"rc/2\",\"seq\":1,\"signer\":\"ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\"}}",
+   "ed25519_step": "4",
+   "stock_ed25519_accepts": false,
+   "outcome": {
+    "result": "refused",
+    "class": "intrinsic",
+    "reason": "bad signature",
+    "detail_has": "ed25519 step 4"
+   }
+  },
+  {
+   "name": "ed-neg-relabel-rc2-as-rc1",
+   "chain": "ed",
+   "title": "valid rc/2 line relabelled rc/1",
+   "of": "ed-authored",
+   "alg": "ed25519",
+   "signer": "ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c",
+   "delivered": "{\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c\",\"rc\":\"rc/1\",\"seq\":1,\"sig\":\"979fb4aca8779989d6084ac1b3cfd3c4f984c7654161349e8f1282026e1b29cb428cf8c380bfd8c7f5c53f80b4c9d68c1e3ac833c1477b0ce3690b6a39ea7b0f\",\"signer\":\"ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\"}}",
+   "changed_members": [
+    "rc"
+   ],
+   "verified_string": "DSSEv1 49 application/vnd.research-commons.authored.v1+json 586 {\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c\",\"rc\":\"rc/1\",\"seq\":1,\"signer\":\"ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\"}}",
+   "sig": "979fb4aca8779989d6084ac1b3cfd3c4f984c7654161349e8f1282026e1b29cb428cf8c380bfd8c7f5c53f80b4c9d68c1e3ac833c1477b0ce3690b6a39ea7b0f",
+   "sig_verifies": false,
+   "sig_over": "DSSEv1 49 application/vnd.research-commons.authored.v2+json 586 {\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c\",\"rc\":\"rc/2\",\"seq\":1,\"signer\":\"ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\"}}",
+   "ed25519_step": "4",
+   "stock_ed25519_accepts": false,
+   "outcome": {
+    "result": "refused",
+    "class": "intrinsic",
+    "reason": "bad signature",
+    "detail_has": "ed25519 step 4"
+   }
+  },
+  {
+   "name": "ed-neg-relabel-rc1-as-rc2",
+   "chain": "ed",
+   "title": "valid rc/1 line relabelled rc/2",
+   "of": "ed-worker-genesis",
+   "alg": "ed25519",
+   "signer": "ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c",
+   "delivered": "{\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:9999999999999999999999999999999999999999999999999999999999999999\",\"size\":4096},\"type\":\"dataset\"},\"kind\":\"authored\",\"prev\":null,\"rc\":\"rc/2\",\"seq\":0,\"sig\":\"d201a29fb79b69c4eaef2fed8631ee11e947e2b38b7a04682a69ad2c9099f22954d201f24eaaa50515f36ea708acaf4b78b77c80926bbe5de120d9f076414d06\",\"signer\":\"ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "changed_members": [
+    "rc"
+   ],
+   "verified_string": "DSSEv1 49 application/vnd.research-commons.authored.v2+json 312 {\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:9999999999999999999999999999999999999999999999999999999999999999\",\"size\":4096},\"type\":\"dataset\"},\"kind\":\"authored\",\"prev\":null,\"rc\":\"rc/2\",\"seq\":0,\"signer\":\"ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "sig": "d201a29fb79b69c4eaef2fed8631ee11e947e2b38b7a04682a69ad2c9099f22954d201f24eaaa50515f36ea708acaf4b78b77c80926bbe5de120d9f076414d06",
+   "sig_verifies": false,
+   "sig_over": "DSSEv1 49 application/vnd.research-commons.authored.v1+json 312 {\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:9999999999999999999999999999999999999999999999999999999999999999\",\"size\":4096},\"type\":\"dataset\"},\"kind\":\"authored\",\"prev\":null,\"rc\":\"rc/1\",\"seq\":0,\"signer\":\"ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "ed25519_step": "4",
+   "stock_ed25519_accepts": false,
+   "outcome": {
+    "result": "refused",
+    "class": "intrinsic",
+    "reason": "bad signature",
+    "detail_has": "ed25519 step 4"
+   }
+  },
+  {
+   "name": "ed-neg-rc1-with-actor",
+   "chain": "ed",
+   "title": "rc/1 line carrying x_actor_v1 (correctly signed; the actor is not read)",
+   "of": "ed-worker-genesis",
+   "alg": "ed25519",
+   "signer": "ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c",
+   "delivered": "{\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:9999999999999999999999999999999999999999999999999999999999999999\",\"size\":4096},\"type\":\"dataset\"},\"kind\":\"authored\",\"prev\":null,\"rc\":\"rc/1\",\"seq\":0,\"sig\":\"73d78153d7254ac57994bd807011b29ebf0cf12297321823f6b4dd94baaeb90c1da5ff071ccefcbf575e46013ade3629cafbda926b43f508b2dc32be9a86f204\",\"signer\":\"ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\"}}",
+   "changed_members": [
+    "sig",
+    "x_actor_v1"
+   ],
+   "verified_string": "DSSEv1 49 application/vnd.research-commons.authored.v1+json 480 {\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:9999999999999999999999999999999999999999999999999999999999999999\",\"size\":4096},\"type\":\"dataset\"},\"kind\":\"authored\",\"prev\":null,\"rc\":\"rc/1\",\"seq\":0,\"signer\":\"ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\"}}",
+   "sig": "73d78153d7254ac57994bd807011b29ebf0cf12297321823f6b4dd94baaeb90c1da5ff071ccefcbf575e46013ade3629cafbda926b43f508b2dc32be9a86f204",
+   "sig_verifies": true,
+   "outcome": {
+    "result": "read",
+    "status": "valid",
+    "why": "",
+    "actor_read": false
+   }
+  },
+  {
+   "name": "ed-neg-rc1-crit-identity",
+   "chain": "ed",
+   "title": "rc/1 line naming crit x_identity_v1 (correctly signed; this reader registers no rc/1 extension)",
+   "of": "ed-worker-genesis",
+   "alg": "ed25519",
+   "signer": "ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c",
+   "delivered": "{\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:9999999999999999999999999999999999999999999999999999999999999999\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":null,\"rc\":\"rc/1\",\"seq\":0,\"sig\":\"1cb005dffabe9eb60b078823c719571c88b96fbaa3c44eec7d1c0a4e9f264753ab49ad19b1af87aeff3ec86e83b50963c248157c65e718bd3e8ad43951eeed05\",\"signer\":\"ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "changed_members": [
+    "body",
+    "crit",
+    "sig"
+   ],
+   "verified_string": "DSSEv1 49 application/vnd.research-commons.authored.v1+json 356 {\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:9999999999999999999999999999999999999999999999999999999999999999\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":null,\"rc\":\"rc/1\",\"seq\":0,\"signer\":\"ed25519:ab2dddca40eb9e0298be48c1d5e8269ac9b18a44d1d6b2b31ec6919eda660a1c\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "sig": "1cb005dffabe9eb60b078823c719571c88b96fbaa3c44eec7d1c0a4e9f264753ab49ad19b1af87aeff3ec86e83b50963c248157c65e718bd3e8ad43951eeed05",
+   "sig_verifies": true,
+   "outcome": {
+    "result": "read",
+    "status": "unsupported",
+    "why": "crit x_identity_v1",
+    "actor_read": false
+   }
+  },
+  {
+   "name": "ed-neg-rc2-revoke-key",
+   "chain": "ed",
+   "title": "rc/2 revoke_key (correctly signed; raw key events stay rc/1 in this profile)",
+   "of": "ed-revoke-key",
+   "alg": "ed25519",
+   "signer": "ed25519:7803013dc64b2a56e43038545e7bcda9a3b7e51659bd3ed3a14061b499c96e11",
+   "delivered": "{\"alg\":\"ed25519\",\"body\":{\"reason\":\"key_compromise\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"revoke_key\",\"prev\":\"eab3ddb93d2cca5d1d6d4be2fe139379ba8e4a6b5e0d5df4f082d65833c4d842\",\"rc\":\"rc/2\",\"seq\":4,\"sig\":\"f4f875f5741a97b1c8400af52db5d4bcddef93af2d4148cf0304b2ed17f65835cf1fd7532c0adc8d069a8f2d74cdd3683b3e54c8202d89d02b96be54b85e6c03\",\"signer\":\"ed25519:7803013dc64b2a56e43038545e7bcda9a3b7e51659bd3ed3a14061b499c96e11\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "changed_members": [
+    "body",
+    "crit",
+    "rc",
+    "sig"
+   ],
+   "verified_string": "DSSEv1 51 application/vnd.research-commons.revoke_key.v2+json 322 {\"alg\":\"ed25519\",\"body\":{\"reason\":\"key_compromise\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"revoke_key\",\"prev\":\"eab3ddb93d2cca5d1d6d4be2fe139379ba8e4a6b5e0d5df4f082d65833c4d842\",\"rc\":\"rc/2\",\"seq\":4,\"signer\":\"ed25519:7803013dc64b2a56e43038545e7bcda9a3b7e51659bd3ed3a14061b499c96e11\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "sig": "f4f875f5741a97b1c8400af52db5d4bcddef93af2d4148cf0304b2ed17f65835cf1fd7532c0adc8d069a8f2d74cdd3683b3e54c8202d89d02b96be54b85e6c03",
+   "sig_verifies": true,
+   "outcome": {
+    "result": "read",
+    "status": "invalid",
+    "why": "raw key events stay rc/1 in this profile",
+    "actor_read": false
+   }
+  },
+  {
+   "name": "ed-neg-ed25519-ne1",
+   "chain": "ed",
+   "title": "wire-format Ed25519 case NE1 delivered as an rc/2 identity line",
+   "of": "ed-authored",
+   "alg": "ed25519",
+   "signer": "ed25519:c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa",
+   "source": "docs/DESIGN-notes-wire-format.vectors.json NE1",
+   "delivered": "{\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c\",\"rc\":\"rc/2\",\"seq\":1,\"sig\":\"c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a0000000000000000000000000000000000000000000000000000000000000000\",\"signer\":\"ed25519:c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\"}}",
+   "changed_members": [
+    "sig",
+    "signer"
+   ],
+   "verified_string": "DSSEv1 49 application/vnd.research-commons.authored.v2+json 586 {\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c\",\"rc\":\"rc/2\",\"seq\":1,\"signer\":\"ed25519:c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\"}}",
+   "sig": "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a0000000000000000000000000000000000000000000000000000000000000000",
+   "sig_verifies": false,
+   "ed25519_step": "3",
+   "stock_ed25519_accepts": false,
+   "outcome": {
+    "result": "refused",
+    "class": "intrinsic",
+    "reason": "bad signature",
+    "detail_has": "step 3 (not in the prime-order subgroup)"
+   }
+  },
+  {
+   "name": "ed-neg-ed25519-ne7",
+   "chain": "ed",
+   "title": "wire-format Ed25519 case NE7 delivered as an rc/2 identity line",
+   "of": "ed-authored",
+   "alg": "ed25519",
+   "signer": "ed25519:442aad9f089ad9e14647b1ef9099a1ff4798d78589e66f28eca69c11f582a623",
+   "source": "docs/DESIGN-notes-wire-format.vectors.json NE7",
+   "delivered": "{\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c\",\"rc\":\"rc/2\",\"seq\":1,\"sig\":\"e96f66be976d82e60150baecff9906684aebb1ef181f67a7189ac78ea23b6c0e547f7690a0e2ddcd04d87dbc3490dc19b3b3052f7ff0538cb68afb369ba3a514\",\"signer\":\"ed25519:442aad9f089ad9e14647b1ef9099a1ff4798d78589e66f28eca69c11f582a623\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\"}}",
+   "changed_members": [
+    "sig",
+    "signer"
+   ],
+   "verified_string": "DSSEv1 49 application/vnd.research-commons.authored.v2+json 586 {\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c\",\"rc\":\"rc/2\",\"seq\":1,\"signer\":\"ed25519:442aad9f089ad9e14647b1ef9099a1ff4798d78589e66f28eca69c11f582a623\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\"}}",
+   "sig": "e96f66be976d82e60150baecff9906684aebb1ef181f67a7189ac78ea23b6c0e547f7690a0e2ddcd04d87dbc3490dc19b3b3052f7ff0538cb68afb369ba3a514",
+   "sig_verifies": false,
+   "ed25519_step": "1",
+   "stock_ed25519_accepts": false,
+   "outcome": {
+    "result": "refused",
+    "class": "intrinsic",
+    "reason": "bad signature",
+    "detail_has": "step 1 (S >= L)"
+   }
+  },
+  {
+   "name": "ed-neg-ed25519-ne11",
+   "chain": "ed",
+   "title": "wire-format Ed25519 case NE11 delivered as an rc/2 identity line",
+   "of": "ed-authored",
+   "alg": "ed25519",
+   "signer": "ed25519:ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+   "source": "docs/DESIGN-notes-wire-format.vectors.json NE11",
+   "delivered": "{\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c\",\"rc\":\"rc/2\",\"seq\":1,\"sig\":\"a9d55260f765261eb9b84e106f665e00b867287a761990d7135963ee0a7d59dca5bb704786be79fc476f91d3f3f89b03984d8068dcf1bb7dfc6637b45450ac04\",\"signer\":\"ed25519:ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\"}}",
+   "changed_members": [
+    "sig",
+    "signer"
+   ],
+   "verified_string": "DSSEv1 49 application/vnd.research-commons.authored.v2+json 586 {\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c\",\"rc\":\"rc/2\",\"seq\":1,\"signer\":\"ed25519:ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\"}}",
+   "sig": "a9d55260f765261eb9b84e106f665e00b867287a761990d7135963ee0a7d59dca5bb704786be79fc476f91d3f3f89b03984d8068dcf1bb7dfc6637b45450ac04",
+   "sig_verifies": false,
+   "ed25519_step": "2",
+   "stock_ed25519_accepts": false,
+   "outcome": {
+    "result": "refused",
+    "class": "intrinsic",
+    "reason": "bad signature",
+    "detail_has": "step 2 (not a valid RFC 8032 point encoding)"
+   }
+  },
+  {
+   "name": "ed-neg-ed25519-identity-point",
+   "chain": "ed",
+   "title": "identity point as signer with the identity-point signature (a universal forgery for a verifier without the pinned pre-checks), delivered as an rc/2 identity line",
+   "of": "ed-authored",
+   "alg": "ed25519",
+   "signer": "ed25519:0100000000000000000000000000000000000000000000000000000000000000",
+   "source": "constructed here; not in the wire-format set",
+   "delivered": "{\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c\",\"rc\":\"rc/2\",\"seq\":1,\"sig\":\"01000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\",\"signer\":\"ed25519:0100000000000000000000000000000000000000000000000000000000000000\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\"}}",
+   "changed_members": [
+    "sig",
+    "signer"
+   ],
+   "verified_string": "DSSEv1 49 application/vnd.research-commons.authored.v2+json 586 {\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c\",\"rc\":\"rc/2\",\"seq\":1,\"signer\":\"ed25519:0100000000000000000000000000000000000000000000000000000000000000\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\"}}",
+   "sig": "01000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "sig_verifies": false,
+   "ed25519_step": "3",
+   "stock_ed25519_accepts": true,
+   "outcome": {
+    "result": "refused",
+    "class": "intrinsic",
+    "reason": "bad signature",
+    "detail_has": "step 3 (not in the prime-order subgroup)"
+   }
+  },
+  {
+   "name": "eip-neg-actor-tampered",
+   "chain": "eip",
+   "title": "x_actor_v1.grant changed after signing",
+   "of": "eip-authored",
+   "alg": "eip191-secp256k1",
+   "signer": "0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682",
+   "delivered": "{\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"3844ef7b3ee780bc3e4960eb3917f286be0b5dd954c49b5d13c026924770180e\",\"rc\":\"rc/2\",\"seq\":1,\"sig\":\"0x5e353fe3bc013ddbe1a1de60733536b32b9c5363bd907a61768189b30ee1554f218075a5667c8f39f467280bb705529dbf5ad721f0358c67704c76416acfca701b\",\"signer\":\"0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\",\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\"}}",
+   "changed_members": [
+    "x_actor_v1"
+   ],
+   "verified_string": "DSSEv1 49 application/vnd.research-commons.authored.v2+json 565 {\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"3844ef7b3ee780bc3e4960eb3917f286be0b5dd954c49b5d13c026924770180e\",\"rc\":\"rc/2\",\"seq\":1,\"signer\":\"0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\",\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\"}}",
+   "sig": "0x5e353fe3bc013ddbe1a1de60733536b32b9c5363bd907a61768189b30ee1554f218075a5667c8f39f467280bb705529dbf5ad721f0358c67704c76416acfca701b",
+   "sig_verifies": false,
+   "sig_over": "DSSEv1 49 application/vnd.research-commons.authored.v2+json 565 {\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"3844ef7b3ee780bc3e4960eb3917f286be0b5dd954c49b5d13c026924770180e\",\"rc\":\"rc/2\",\"seq\":1,\"signer\":\"0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"86811c45c1bc2d21616a9e594ffc0adae28c72e299ec9b7cc7ed6e85384bc9aa\",\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\"}}",
+   "outcome": {
+    "result": "refused",
+    "class": "intrinsic",
+    "reason": "bad signature",
+    "detail_has": "does not recover 0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682"
+   }
+  },
+  {
+   "name": "eip-neg-actor-stripped",
+   "chain": "eip",
+   "title": "x_actor_v1 removed after signing (an act for an identity cannot be turned into a bare-key act)",
+   "of": "eip-authored",
+   "alg": "eip191-secp256k1",
+   "signer": "0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682",
+   "delivered": "{\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"3844ef7b3ee780bc3e4960eb3917f286be0b5dd954c49b5d13c026924770180e\",\"rc\":\"rc/2\",\"seq\":1,\"sig\":\"0x5e353fe3bc013ddbe1a1de60733536b32b9c5363bd907a61768189b30ee1554f218075a5667c8f39f467280bb705529dbf5ad721f0358c67704c76416acfca701b\",\"signer\":\"0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "changed_members": [
+    "x_actor_v1"
+   ],
+   "verified_string": "DSSEv1 49 application/vnd.research-commons.authored.v2+json 397 {\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"3844ef7b3ee780bc3e4960eb3917f286be0b5dd954c49b5d13c026924770180e\",\"rc\":\"rc/2\",\"seq\":1,\"signer\":\"0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "sig": "0x5e353fe3bc013ddbe1a1de60733536b32b9c5363bd907a61768189b30ee1554f218075a5667c8f39f467280bb705529dbf5ad721f0358c67704c76416acfca701b",
+   "sig_verifies": false,
+   "sig_over": "DSSEv1 49 application/vnd.research-commons.authored.v2+json 565 {\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"3844ef7b3ee780bc3e4960eb3917f286be0b5dd954c49b5d13c026924770180e\",\"rc\":\"rc/2\",\"seq\":1,\"signer\":\"0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"86811c45c1bc2d21616a9e594ffc0adae28c72e299ec9b7cc7ed6e85384bc9aa\",\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\"}}",
+   "outcome": {
+    "result": "refused",
+    "class": "intrinsic",
+    "reason": "bad signature",
+    "detail_has": "does not recover 0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682"
+   }
+  },
+  {
+   "name": "eip-neg-v1-preimage",
+   "chain": "eip",
+   "title": "signature over the v1-typed PAE of an rc/2 envelope",
+   "of": "eip-authored",
+   "alg": "eip191-secp256k1",
+   "signer": "0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682",
+   "delivered": "{\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"3844ef7b3ee780bc3e4960eb3917f286be0b5dd954c49b5d13c026924770180e\",\"rc\":\"rc/2\",\"seq\":1,\"sig\":\"0x25175d147ed24372045c46f5d6cfefecb8b35eeb898ec4631c022929f897d2ea401071c1ff1ca4dca457a1e6e3fbdc2776613e6195a953de90984874580459371b\",\"signer\":\"0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"86811c45c1bc2d21616a9e594ffc0adae28c72e299ec9b7cc7ed6e85384bc9aa\",\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\"}}",
+   "changed_members": [
+    "sig"
+   ],
+   "verified_string": "DSSEv1 49 application/vnd.research-commons.authored.v2+json 565 {\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"3844ef7b3ee780bc3e4960eb3917f286be0b5dd954c49b5d13c026924770180e\",\"rc\":\"rc/2\",\"seq\":1,\"signer\":\"0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"86811c45c1bc2d21616a9e594ffc0adae28c72e299ec9b7cc7ed6e85384bc9aa\",\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\"}}",
+   "sig": "0x25175d147ed24372045c46f5d6cfefecb8b35eeb898ec4631c022929f897d2ea401071c1ff1ca4dca457a1e6e3fbdc2776613e6195a953de90984874580459371b",
+   "sig_verifies": false,
+   "sig_over": "DSSEv1 49 application/vnd.research-commons.authored.v1+json 565 {\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"3844ef7b3ee780bc3e4960eb3917f286be0b5dd954c49b5d13c026924770180e\",\"rc\":\"rc/2\",\"seq\":1,\"signer\":\"0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"86811c45c1bc2d21616a9e594ffc0adae28c72e299ec9b7cc7ed6e85384bc9aa\",\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\"}}",
+   "outcome": {
+    "result": "refused",
+    "class": "intrinsic",
+    "reason": "bad signature",
+    "detail_has": "does not recover 0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682"
+   }
+  },
+  {
+   "name": "eip-neg-relabel-rc2-as-rc1",
+   "chain": "eip",
+   "title": "valid rc/2 line relabelled rc/1",
+   "of": "eip-authored",
+   "alg": "eip191-secp256k1",
+   "signer": "0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682",
+   "delivered": "{\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"3844ef7b3ee780bc3e4960eb3917f286be0b5dd954c49b5d13c026924770180e\",\"rc\":\"rc/1\",\"seq\":1,\"sig\":\"0x5e353fe3bc013ddbe1a1de60733536b32b9c5363bd907a61768189b30ee1554f218075a5667c8f39f467280bb705529dbf5ad721f0358c67704c76416acfca701b\",\"signer\":\"0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"86811c45c1bc2d21616a9e594ffc0adae28c72e299ec9b7cc7ed6e85384bc9aa\",\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\"}}",
+   "changed_members": [
+    "rc"
+   ],
+   "verified_string": "DSSEv1 49 application/vnd.research-commons.authored.v1+json 565 {\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"3844ef7b3ee780bc3e4960eb3917f286be0b5dd954c49b5d13c026924770180e\",\"rc\":\"rc/1\",\"seq\":1,\"signer\":\"0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"86811c45c1bc2d21616a9e594ffc0adae28c72e299ec9b7cc7ed6e85384bc9aa\",\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\"}}",
+   "sig": "0x5e353fe3bc013ddbe1a1de60733536b32b9c5363bd907a61768189b30ee1554f218075a5667c8f39f467280bb705529dbf5ad721f0358c67704c76416acfca701b",
+   "sig_verifies": false,
+   "sig_over": "DSSEv1 49 application/vnd.research-commons.authored.v2+json 565 {\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"3844ef7b3ee780bc3e4960eb3917f286be0b5dd954c49b5d13c026924770180e\",\"rc\":\"rc/2\",\"seq\":1,\"signer\":\"0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"86811c45c1bc2d21616a9e594ffc0adae28c72e299ec9b7cc7ed6e85384bc9aa\",\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\"}}",
+   "outcome": {
+    "result": "refused",
+    "class": "intrinsic",
+    "reason": "bad signature",
+    "detail_has": "does not recover 0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682"
+   }
+  },
+  {
+   "name": "eip-neg-relabel-rc1-as-rc2",
+   "chain": "eip",
+   "title": "valid rc/1 line relabelled rc/2",
+   "of": "eip-worker-genesis",
+   "alg": "eip191-secp256k1",
+   "signer": "0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682",
+   "delivered": "{\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:9999999999999999999999999999999999999999999999999999999999999999\",\"size\":4096},\"type\":\"dataset\"},\"kind\":\"authored\",\"prev\":null,\"rc\":\"rc/2\",\"seq\":0,\"sig\":\"0x5281d6af29cee03dfad5813fcc6acf5760d482030b67670b40ce3a218a12cdd97c826c8bff7fbedfcde3775a3a08bbf05bfac59deea5b5513e1d2b054033426a1b\",\"signer\":\"0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "changed_members": [
+    "rc"
+   ],
+   "verified_string": "DSSEv1 49 application/vnd.research-commons.authored.v2+json 291 {\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:9999999999999999999999999999999999999999999999999999999999999999\",\"size\":4096},\"type\":\"dataset\"},\"kind\":\"authored\",\"prev\":null,\"rc\":\"rc/2\",\"seq\":0,\"signer\":\"0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "sig": "0x5281d6af29cee03dfad5813fcc6acf5760d482030b67670b40ce3a218a12cdd97c826c8bff7fbedfcde3775a3a08bbf05bfac59deea5b5513e1d2b054033426a1b",
+   "sig_verifies": false,
+   "sig_over": "DSSEv1 49 application/vnd.research-commons.authored.v1+json 291 {\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:9999999999999999999999999999999999999999999999999999999999999999\",\"size\":4096},\"type\":\"dataset\"},\"kind\":\"authored\",\"prev\":null,\"rc\":\"rc/1\",\"seq\":0,\"signer\":\"0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "outcome": {
+    "result": "refused",
+    "class": "intrinsic",
+    "reason": "bad signature",
+    "detail_has": "does not recover 0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682"
+   }
+  },
+  {
+   "name": "eip-neg-rc1-with-actor",
+   "chain": "eip",
+   "title": "rc/1 line carrying x_actor_v1 (correctly signed; the actor is not read)",
+   "of": "eip-worker-genesis",
+   "alg": "eip191-secp256k1",
+   "signer": "0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682",
+   "delivered": "{\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:9999999999999999999999999999999999999999999999999999999999999999\",\"size\":4096},\"type\":\"dataset\"},\"kind\":\"authored\",\"prev\":null,\"rc\":\"rc/1\",\"seq\":0,\"sig\":\"0x39c1ceaf9c1a85d9ad4f458cb1b4de4495713037ba29aed3497b19e1ceed491878df4f6cd382db8779a68960859d6fd80ed8c0a5f3c33c93d5890cb42dca313f1c\",\"signer\":\"0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"86811c45c1bc2d21616a9e594ffc0adae28c72e299ec9b7cc7ed6e85384bc9aa\",\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\"}}",
+   "changed_members": [
+    "sig",
+    "x_actor_v1"
+   ],
+   "verified_string": "DSSEv1 49 application/vnd.research-commons.authored.v1+json 459 {\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:9999999999999999999999999999999999999999999999999999999999999999\",\"size\":4096},\"type\":\"dataset\"},\"kind\":\"authored\",\"prev\":null,\"rc\":\"rc/1\",\"seq\":0,\"signer\":\"0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"86811c45c1bc2d21616a9e594ffc0adae28c72e299ec9b7cc7ed6e85384bc9aa\",\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\"}}",
+   "sig": "0x39c1ceaf9c1a85d9ad4f458cb1b4de4495713037ba29aed3497b19e1ceed491878df4f6cd382db8779a68960859d6fd80ed8c0a5f3c33c93d5890cb42dca313f1c",
+   "sig_verifies": true,
+   "outcome": {
+    "result": "read",
+    "status": "valid",
+    "why": "",
+    "actor_read": false
+   }
+  },
+  {
+   "name": "eip-neg-rc1-crit-identity",
+   "chain": "eip",
+   "title": "rc/1 line naming crit x_identity_v1 (correctly signed; this reader registers no rc/1 extension)",
+   "of": "eip-worker-genesis",
+   "alg": "eip191-secp256k1",
+   "signer": "0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682",
+   "delivered": "{\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:9999999999999999999999999999999999999999999999999999999999999999\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":null,\"rc\":\"rc/1\",\"seq\":0,\"sig\":\"0xfbf13775acd761a07521a4f878bd1cf1427a114db762bb92e9974d572142d1ec1f360052581f844b84ffc2561a5664096b4d438c3afd67356df57e9be64313971c\",\"signer\":\"0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "changed_members": [
+    "body",
+    "crit",
+    "sig"
+   ],
+   "verified_string": "DSSEv1 49 application/vnd.research-commons.authored.v1+json 335 {\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:9999999999999999999999999999999999999999999999999999999999999999\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":null,\"rc\":\"rc/1\",\"seq\":0,\"signer\":\"0xdd6a9c2f6b7b1989343d800912dce4af5e5a3682\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "sig": "0xfbf13775acd761a07521a4f878bd1cf1427a114db762bb92e9974d572142d1ec1f360052581f844b84ffc2561a5664096b4d438c3afd67356df57e9be64313971c",
+   "sig_verifies": true,
+   "outcome": {
+    "result": "read",
+    "status": "unsupported",
+    "why": "crit x_identity_v1",
+    "actor_read": false
+   }
+  },
+  {
+   "name": "eip-neg-rc2-revoke-key",
+   "chain": "eip",
+   "title": "rc/2 revoke_key (correctly signed; raw key events stay rc/1 in this profile)",
+   "of": "eip-revoke-key",
+   "alg": "eip191-secp256k1",
+   "signer": "0x4586abc8188dc0503f69a905d26cbd4abeacb838",
+   "delivered": "{\"alg\":\"eip191-secp256k1\",\"body\":{\"reason\":\"key_compromise\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"revoke_key\",\"prev\":\"794338f72b29999e48e4f45362316e8b11ccc727474a835e270026e3eeab6111\",\"rc\":\"rc/2\",\"seq\":4,\"sig\":\"0x8fd9a731da58f9f71464287190e22113ebccfb23d7c71db5314bfa1d4b70aeb96b79689240ffcc76c2d6669221f19db3f0f39fb0797678762a9c357dfe38300e1c\",\"signer\":\"0x4586abc8188dc0503f69a905d26cbd4abeacb838\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "changed_members": [
+    "body",
+    "crit",
+    "rc",
+    "sig"
+   ],
+   "verified_string": "DSSEv1 51 application/vnd.research-commons.revoke_key.v2+json 301 {\"alg\":\"eip191-secp256k1\",\"body\":{\"reason\":\"key_compromise\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"revoke_key\",\"prev\":\"794338f72b29999e48e4f45362316e8b11ccc727474a835e270026e3eeab6111\",\"rc\":\"rc/2\",\"seq\":4,\"signer\":\"0x4586abc8188dc0503f69a905d26cbd4abeacb838\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "sig": "0x8fd9a731da58f9f71464287190e22113ebccfb23d7c71db5314bfa1d4b70aeb96b79689240ffcc76c2d6669221f19db3f0f39fb0797678762a9c357dfe38300e1c",
+   "sig_verifies": true,
+   "outcome": {
+    "result": "read",
+    "status": "invalid",
+    "why": "raw key events stay rc/1 in this profile",
+    "actor_read": false
+   }
+  }
+ ]
+}
