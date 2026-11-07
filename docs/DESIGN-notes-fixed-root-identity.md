@@ -101,6 +101,9 @@ Reuse the existing wire rules, not a new JSON or cryptographic profile:
   with decimal byte lengths and JCS(envelope excluding `sig`) as payload.
 * Statement type: `application/vnd.research-commons.<kind>.v2+json` for `rc/2`;
   retain `.v1+json` for `rc/1`. Statement id is lowercase SHA-256 of that PAE.
+  Because the major is inside both the type and the payload, a line whose `rc` was
+  relabelled after signing (either direction) fails signature verification before
+  any body rule is read; no reader rule on `crit` or the actor is needed to refuse it.
 * **Edition id for `rc/2`** is SHA-256 of
   `PAE("application/vnd.research-commons.edition-body.v2+json", JCS(body))`.
   `rc/1` edition ids retain the `.v1+json` domain. A resolver must retain the major
