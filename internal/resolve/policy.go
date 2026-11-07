@@ -23,7 +23,9 @@ import (
 //     amendment or the key's latest. A pin that is missing or ineligible stays unmet and non-passing: nothing is
 //     substituted. A principal selection `{key: K}` follows K's eligible current claims only; when they disagree
 //     the disagreement is shown (a contested field, an unmet workflow selection), never settled by arrival. An
-//     `{identity: I}` principal is unknown: the identity profile is not active. A selection may change a
+//     `{identity: I}` principal is unknown: the identity profile is not active, unless an ActorEligibility hook
+//     is configured (WithActorEligibility; none is in any production reader), which then decides which claims
+//     are I's. A selection may change a
 //     recomputed grade because the declaration changed; it never adds a run, a comparison or a statement.
 //   - trust entries answer "does this reader trust key K for purpose P over content C" (package policy,
 //     Policy.Trusts). Corroboration status counts only evidence from keys trusted for `corroboration` over the

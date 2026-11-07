@@ -46,6 +46,10 @@ entry naming an identity parses; it is never treated as a key. A selection that 
 one trusts no key; an answer it would have decided reads `unknown (identity profile not active)`, which counts as
 not trusted.
 
+(Internally, trust is asked of a statement, so that a reader that one day evaluates identity actors can decide an
+`{identity: I}` entry per statement: only a statement found eligible for I is I's, and a bare statement by one of
+I's worker keys never is. This reader has no such evaluation, so none of this is reachable from the command line.)
+
 ## Selections
 
 A selection chooses which declaration supplies an answer the resolver otherwise derives from every claimant.

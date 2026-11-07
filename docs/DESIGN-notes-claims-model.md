@@ -450,6 +450,9 @@ policy may choose another unit once a profile defines one. What a reader "trusts
 for the purpose at hand (`attestation`, `corroboration` or `admission`; on the next-format line, `docs/READER-POLICY.md`): a purpose the
 policy does not configure reads `not configured`, never trusted, and the reader keeps its no-policy behaviour
 for it (here: every counted statement is counted).
+Where a policy trusts an identity rather than a key, the question is asked of the statement, not of its
+signing key: a statement counts for the entry only when the reader's actor evaluation finds it eligible for that
+identity, and a bare statement by one of the identity's worker keys never does (identity profile §5.3, §6).
 
 #### 5.3.3 Capture evidence
 
