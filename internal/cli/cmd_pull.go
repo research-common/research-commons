@@ -240,7 +240,7 @@ func pullCmd(c *Ctx) (*Obj, int, error) {
 	}
 	// Edition rules read content as `hub check` does: the package's blobs (by digest, only those whose bytes hash to
 	// their name) and, for a blob the package does not carry, the ones this store already holds.
-	ropts := []resolve.Option{resolve.WithContent(newPullContent(pkg, c.Store))}
+	ropts := []resolve.Option{resolve.WithContent(gate.NewMemoContent(newPullContent(pkg, c.Store), 0))}
 	for _, d := range ruleDialects {
 		ropts = append(ropts, resolve.WithDialect(d))
 	}

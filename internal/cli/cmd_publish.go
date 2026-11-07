@@ -599,7 +599,7 @@ func publishCmd(c *Ctx) (*Obj, int, error) {
 			return nil, 0, failed(err, "option --content", false, "check the file and run the command again")
 		}
 	}
-	opts = append(opts, resolve.WithContent(prepinContent{st: c.Store, digest: digest, file: p.content}))
+	opts = append(opts, resolve.WithContent(gate.NewMemoContent(prepinContent{st: c.Store, digest: digest, file: p.content}, 0)))
 	signer := p.key.Key.Signer()
 	wl := lockFor(c, signer)
 	defer wl.Unlock()

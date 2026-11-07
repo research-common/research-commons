@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"sync"
 
 	"github.com/research-common/research-commons/internal/resolve"
 	"github.com/research-common/research-commons/internal/store"
@@ -95,4 +96,55 @@ type collector struct{ data [][]byte }
 func (c *collector) Inspect(_ string, b []byte) ([]store.ScanFinding, error) {
 	c.data = append(c.data, b)
 	return nil, nil
+}
+
+// MemoContent remembers a content reader's answers for the length of one resolver run, so a blob an edition's
+// rules read once per rule and member is enumerated once (the scan of an archive is the cost: ScanUnits walks it
+// each call). The answer for a digest is a function of the blob's bytes and the scan limits, so remembering it
+// changes no result, only the work.
+//
+// Memory is bounded: the units kept (their member bytes) never exceed maxKept in total, the byte budget of one
+// scan (store.Limits.TotalBytes) when maxKept < 1. An answer that would pass the bound is returned and not kept
+// (its next call rescans, as before), and an answer that was not held is never kept. Units are shared between
+// callers: a reader of a unit must not modify its Data.
+type MemoContent struct {
+	inner   resolve.ContentReader
+	maxKept int64
+
+	mu   sync.Mutex
+	m    map[string][]resolve.ContentUnit
+	kept int64
+}
+
+// NewMemoContent wraps inner. maxKept < 1 means the default scan budget (store.DefaultLimits().TotalBytes).
+func NewMemoContent(inner resolve.ContentReader, maxKept int64) *MemoContent {
+	if maxKept < 1 {
+		maxKept = store.DefaultLimits().TotalBytes
+	}
+	return &MemoContent{inner: inner, maxKept: maxKept, m: map[string][]resolve.ContentUnit{}}
+}
+
+// Units is the wrapped reader's answer, from memory when this digest was answered before and kept.
+func (c *MemoContent) Units(digest string) ([]resolve.ContentUnit, bool) {
+	c.mu.Lock()
+	if us, ok := c.m[digest]; ok {
+		c.mu.Unlock()
+		return append([]resolve.ContentUnit(nil), us...), true
+	}
+	c.mu.Unlock()
+	us, held := c.inner.Units(digest)
+	if !held {
+		return nil, false
+	}
+	var size int64
+	for _, u := range us {
+		size += int64(len(u.Data)+len(u.Name)+len(u.Unscanned)) + 64
+	}
+	c.mu.Lock()
+	if _, ok := c.m[digest]; !ok && c.kept+size <= c.maxKept {
+		c.m[digest] = append([]resolve.ContentUnit(nil), us...)
+		c.kept += size
+	}
+	c.mu.Unlock()
+	return us, true
 }

@@ -130,7 +130,7 @@ func Check(dir string, cfg Config) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	pol.Resolver = append([]resolve.Option{resolve.WithContent(content)}, cfg.Resolver...)
+	pol.Resolver = append([]resolve.Option{resolve.WithContent(gate.NewMemoContent(content, 0))}, cfg.Resolver...)
 	rep, err := gate.HubCheck(pkg, held, pol, gate.Options{Overrides: cfg.Overrides, Audit: cfg.Base == ""})
 	if err != nil {
 		return nil, err
