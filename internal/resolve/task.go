@@ -537,7 +537,11 @@ func (r *Resolver) readiness(t *Task, b Binding) *Readiness {
 	tm := b.Terms
 	if tm.CountingUnit == CountIdentity {
 		rd.Token = ReadyUnknown
-		rd.Why = append(rd.Why, "counting unit identity: no identity profile is active in this reader, so no identity count exists")
+		if r.actors != nil {
+			rd.Why = append(rd.Why, "counting unit identity: an actor evaluator is configured, but identity counting needs the task consumer (eligible submissions deduplicated by identity), so no identity count exists")
+		} else {
+			rd.Why = append(rd.Why, "counting unit identity: no identity profile is active in this reader, so no identity count exists")
+		}
 		return rd
 	}
 	// pool: counted submissions passing every rubric criterion. undecided: counted submissions with no failing
