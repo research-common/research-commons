@@ -481,6 +481,18 @@ trust entries are refused; overlapping positive entries are additive only within
 explicit purpose/target intersection. Separate explicit pins and trust never authorize
 a missing/denied actor or silently turn one authority into another.
 
+Requirements on consumers: every consumer of trust asks one question of a **statement**, not of
+its signing key: "is this statement trusted for this purpose over this content". A `{key: K}` entry
+answers for the statement's signer. An `{identity: I}` entry answers only when actor evaluation
+finds the statement eligible for I (not denied, not unknown), so a bare statement by a worker key
+of I is never I's and a key entry never trusts an identity. An answer actor evaluation cannot
+decide reads unknown and is not counted, never trusted by default. A reader without actor
+evaluation answers unknown for every identity entry, as today. Selections follow the same rule: an
+`{identity: I}` selection follows only I's eligible claims, reads unknown while a claim that may be
+I's is undecided, and substitutes no key's claims. The trust question itself does no authority
+evaluation and no policy reading of its own: eligibility comes from the evaluator, trust from the
+policy, and neither stands in for the other.
+
 The policy syntax is concrete. A production selector/trust evaluator, admission UI,
 policy diff review and task contract integration are still required. Stricter admission
 may withhold a local passing view, but cannot rewrite transported signed evidence.

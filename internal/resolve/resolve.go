@@ -73,6 +73,9 @@ type Resolver struct {
 	origins OriginIndex
 	// policy is the reader's local policy (policy.go); nil when none is configured.
 	policy *policy.Policy
+	// actors is the identity evaluator's hook (policy.go); nil when none is configured, which is every production
+	// reader today: an identity principal then answers unknown.
+	actors policy.ActorEligibility
 	// exch is the reader's configuration for the research exchange (task.go, contract.go).
 	exch *exchConfig
 	// readTime is the reader's evaluation time for time-dependent answers (shelf-life age); nil when none is

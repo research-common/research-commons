@@ -355,8 +355,8 @@ func TestTypedOverride(t *testing.T) {
 // (a) a bad signature and (b) a trust floor; relaxing the floor admits (b), (a) stays intrinsic; no message
 // proposes a global force, each names its narrowest next step.
 func TestRefusalClassesAndNextSteps(t *testing.T) {
-	conformance.Partial(t, "C-core-113", "classes, next steps and per-object scope hold with a key-set trust floor (a policy hook); a trust floor over identities is pending the reader policy track")
-	conformance.Partial(t, "C-core-111", "a key-set trust floor as a reader-policy hook refuses, or admits and labels, with class reader policy: trust floor and that key's objects as scope; a trust floor over identities is pending the reader policy track")
+	conformance.Partial(t, "C-core-113", "classes, next steps and per-object scope hold with a key-set trust floor (a policy hook); a trust floor over identities is decided by the policy seam (policy.AdmitStatement, tested with a test-only actor evaluator); the real evaluator adapter is pending")
+	conformance.Partial(t, "C-core-111", "a key-set trust floor as a reader-policy hook refuses, or admits and labels, with class reader policy: trust floor and that key's objects as scope; a trust floor over identities is decided by the policy seam (policy.AdmitStatement, tested with a test-only actor evaluator); the real evaluator adapter is pending")
 	w := newWorld(t)
 	z := w.authored("Z", []byte("z"))
 	a := w.authored("A", []byte("a"))

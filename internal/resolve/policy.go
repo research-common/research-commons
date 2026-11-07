@@ -23,7 +23,9 @@ import (
 //     amendment or the key's latest. A pin that is missing or ineligible stays unmet and non-passing: nothing is
 //     substituted. A principal selection `{key: K}` follows K's eligible current claims only; when they disagree
 //     the disagreement is shown (a contested field, an unmet workflow selection), never settled by arrival. An
-//     `{identity: I}` principal is unknown: the identity profile is not active. A selection may change a
+//     `{identity: I}` principal is unknown: the identity profile is not active, unless an ActorEligibility hook
+//     is configured (WithActorEligibility; none is in any production reader), which then decides which claims
+//     are I's. A selection may change a
 //     recomputed grade because the declaration changed; it never adds a run, a comparison or a statement.
 //   - trust entries answer "does this reader trust key K for purpose P over content C" (package policy,
 //     Policy.Trusts). Corroboration status counts only evidence from keys trusted for `corroboration` over the
@@ -36,6 +38,35 @@ import (
 
 // WithPolicy sets the reader's local policy. A nil policy is no policy.
 func WithPolicy(p *policy.Policy) Option { return func(r *Resolver) { r.policy = p } }
+
+// ActorEligibility is the identity evaluator's hook (policy.ActorEligibility): whether one statement is
+// eligible to act for the identity its signed actor names. It is the whole of what the policy consumers ask of
+// an identity evaluator: trust (below), the selection of an `{identity: I}` principal's claims, and the task
+// identity count (which stays unknown until the task consumer exists).
+type ActorEligibility = policy.ActorEligibility
+
+// WithActorEligibility sets the identity evaluator the policy consumers ask. With none (the default, and
+// every production reader today) an `{identity: I}` principal answers unknown (identity profile not active),
+// exactly as before the hook existed. A nil evaluator is none.
+func WithActorEligibility(a ActorEligibility) Option { return func(r *Resolver) { r.actors = a } }
+
+// trusts is the one trust question every caller asks: does this reader trust the placed statement p for
+// purpose over content (policy.Policy.TrustsStatement). A key entry answers for the signer; an identity entry
+// only when the actor hook calls p eligible for that identity; a bare statement by a worker key is never an
+// identity's. With no hook it is Trusts over the signer.
+func (r *Resolver) trusts(p *Placed, purpose, content string) policy.Answer {
+	return r.policy.TrustsStatement(p.St, purpose, content, r.actors)
+}
+
+// trustsID is trusts for a statement named by id (a run or an evidence row carries its statement id). A
+// statement that is not held has no actor to ask about: the answer is about the signing key alone, never a
+// call to the hook with a statement it has not seen.
+func (r *Resolver) trustsID(id, signer, purpose, content string) policy.Answer {
+	if p, ok := r.byID[id]; ok {
+		return r.trusts(p, purpose, content)
+	}
+	return r.policy.Trusts(signer, purpose, content)
+}
 
 // PolicyDigest is the digest of the configured policy, "" when none is configured.
 func (r *Resolver) PolicyDigest() string {
@@ -52,7 +83,11 @@ const (
 	SelIneligible = "not met: statement ineligible"
 	SelNone       = "not met: no eligible current claim of the principal"
 	SelConflict   = "not met: the principal's current claims disagree"
-	SelIdentity   = "unknown (identity profile not active)"
+	// SelIdentity: an `{identity: I}` principal with no actor hook: nothing can be said, and no key is followed.
+	SelIdentity = "unknown (identity profile not active)"
+	// SelIdentityUnknown: with an actor hook, a claim on the content may act for the identity but the hook
+	// cannot establish it, or an eligible claim carries an amendment this seam does not evaluate.
+	SelIdentityUnknown = "unknown (identity eligibility not established)"
 )
 
 // FieldSelectionUnmet is a single-party field whose authorship-declaration selection is not met: no default,
@@ -109,6 +144,8 @@ func (r *Resolver) selection(content, role string) *Selected {
 			return s
 		}
 		s.State, s.Statements = SelMet, []*wire.Statement{p.St}
+	case sel.Principal.Key == "" && r.actors != nil:
+		r.followIdentity(s, sel.Principal.Identity, content, role)
 	case sel.Principal.Key == "":
 		s.State = SelIdentity
 		s.Why = "the policy names identity " + keylog.Short(sel.Principal.Identity) + "; no key's claims are followed in its place"
@@ -137,6 +174,66 @@ func (r *Resolver) ineligible(p *Placed, content, role string) string {
 		return "not a workflow declaration (type " + fmt.Sprintf("%q", str(p.St.Body, "type")) + ")"
 	case !p.Counts():
 		return "counts toward nothing: " + notCountedWhy(p)
+	}
+	return ""
+}
+
+// followIdentity resolves a principal selection `{identity: I}` through the actor hook. The candidates are the
+// evidence-ready statements of the role's kind on the content (verified, chained, understood; the bare-key
+// key-event exclusions are the evaluator's to apply, never a filter in front of identity evidence: profile
+// §4.1). The hook decides each: eligible for I is followed; denied, bare, or eligible for another identity is
+// not (a statement by a worker key is not I's: §5.3); unknown for I makes the selection unknown, never met
+// without it. An eligible claim that amends another needs the amendment DAG and its grant check, which this
+// seam does not evaluate: unknown, with no guess at which claim is current.
+func (r *Resolver) followIdentity(s *Selected, identity, content, role string) {
+	kind := "authored"
+	if role == policy.RoleObservation {
+		kind = "observed"
+	}
+	name := "following identity " + keylog.Short(identity)
+	var held []*wire.Statement
+	var undecided, amending []string
+	for _, p := range r.byKind[kind] {
+		if !p.EvidenceReady() || contentDigest(p.St.Body) != content || r.shapeIneligible(p, role) != "" {
+			continue
+		}
+		id, state, _ := r.actors.Eligible(p.St)
+		switch {
+		case id != identity:
+		case state == policy.ActorEligible:
+			held = append(held, p.St)
+			if m, ok := p.St.Body.Get(wire.IdentityCrit); ok {
+				if mo, ok := m.(*canon.Object); ok {
+					if _, ok := mo.Get("amends"); ok {
+						amending = append(amending, keylog.Short(p.St.ID))
+					}
+				}
+			}
+		case state == policy.ActorDenied:
+		default:
+			undecided = append(undecided, keylog.Short(p.St.ID))
+		}
+	}
+	slices.SortFunc(held, func(a, b *wire.Statement) int { return strings.Compare(a.ID, b.ID) })
+	slices.Sort(undecided)
+	slices.Sort(amending)
+	switch {
+	case len(undecided) > 0:
+		s.State, s.Why = SelIdentityUnknown, name+"; whether "+strings.Join(undecided, ", ")+" acts for it is not established; no other claim is substituted"
+	case len(amending) > 0:
+		s.State, s.Why = SelIdentityUnknown, name+"; "+strings.Join(amending, ", ")+" amends another claim, and amendment authority is not evaluated here; no claim is chosen"
+	case len(held) == 0:
+		s.State, s.Why = SelNone, name
+	default:
+		s.State, s.Statements = SelMet, held
+	}
+}
+
+// shapeIneligible says why p cannot supply role for the content by kind and declaration type alone: the
+// part of ineligible that is not about the signing key's own standing.
+func (r *Resolver) shapeIneligible(p *Placed, role string) string {
+	if role == policy.RoleWorkflow && str(p.St.Body, "type") != "workflow" {
+		return "not a workflow declaration (type " + fmt.Sprintf("%q", str(p.St.Body, "type")) + ")"
 	}
 	return ""
 }
@@ -337,7 +434,7 @@ func (r *Resolver) runTrust(g *Group) {
 		return
 	}
 	for i := range g.Runs {
-		g.Runs[i].Trust = "your trust in this key: " + r.policy.Trusts(g.Runs[i].Signer, policy.PurposeAttestation, g.Runs[i].Output).String()
+		g.Runs[i].Trust = "your trust in this key: " + r.trustsID(g.Runs[i].Statement, g.Runs[i].Signer, policy.PurposeAttestation, g.Runs[i].Output).String()
 	}
 }
 
@@ -357,7 +454,7 @@ func (r *Resolver) trustFilter(c *Corroboration, o *Observation) {
 		if e.Reader() || e.Key == "" {
 			continue
 		}
-		ans := r.policy.Trusts(e.Key, policy.PurposeCorroboration, o.Digest)
+		ans := r.trustsID(e.Statement, e.Key, policy.PurposeCorroboration, o.Digest)
 		if ans.Trusted() {
 			trusted[e.Key] = true
 			continue
@@ -370,6 +467,11 @@ func (r *Resolver) trustFilter(c *Corroboration, o *Observation) {
 			}
 			e.Cause += ans.String()
 		}
+	}
+	// a key is one of these, never both: with an actor hook one key can sign a statement eligible for a trusted
+	// identity and a bare one, and the line counts keys (the statements are listed with their own cause)
+	for k := range trusted {
+		delete(untrusted, k)
 	}
 	c.Trust = fmt.Sprintf("your trust in these keys: reader policy %s (%d trusted, %d not trusted for corroboration of this content; evidence from a key not trusted is shown and not counted)",
 		shortPolicy(r.policy.Digest), len(trusted), len(untrusted))

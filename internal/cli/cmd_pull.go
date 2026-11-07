@@ -141,12 +141,17 @@ func readHead(p string, n int) ([]byte, error) {
 type trustFloor struct {
 	p     *policy.Policy
 	floor policy.Floor
+	// actors is the identity evaluator's hook; nil in every production reader today, so an `{identity: I}`
+	// admission entry reads unknown (identity profile not active), as before the hook existed. The gate asks
+	// about a statement it has just read, before any resolver holds it, so the question is statement-level
+	// (policy.AdmitStatement), not a resolve.Placed one.
+	actors policy.ActorEligibility
 }
 
 func (f trustFloor) Label() bool { return f.floor == policy.FloorLabel }
 
 func (f trustFloor) CheckStatement(st *wire.Statement) *refusal.Refusal {
-	a := f.p.Admit(st.Signer, contentOf(st), policy.FloorRefuse)
+	a := f.p.AdmitStatement(st, contentOf(st), policy.FloorRefuse, f.actors)
 	if a.Admitted {
 		return nil
 	}
@@ -198,7 +203,7 @@ func pullCmd(c *Ctx) (*Obj, int, error) {
 		if v, _ := c.Flag("below-floor"); v == "refuse" {
 			floor = policy.FloorRefuse
 		}
-		pol.Hooks = append(append([]gate.StatementHook{}, pol.Hooks...), trustFloor{c.Policy.Reader, floor})
+		pol.Hooks = append(append([]gate.StatementHook{}, pol.Hooks...), trustFloor{p: c.Policy.Reader, floor: floor})
 		pol.Name += " + reader policy " + c.Policy.ReaderSource
 		pol.Digest = digestPair(pol.Digest, c.Policy.Reader.Digest)
 	}
