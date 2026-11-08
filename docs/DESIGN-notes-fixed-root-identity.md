@@ -437,9 +437,14 @@ evidence never changes their counting unit.
 The production reader already loads `reader-policy-v1` with key principals only; its user-facing
 specification is `docs/READER-POLICY.md` (provisional). This section stays the candidate profile's text,
 including what an `{identity: I}` principal would mean once the profile is active.
-(Open, decided with the consumer work: whether admitting `{identity: I}` principals needs a
-new `reader-policy` version string. The version is in the policy digest, so the answer
-changes digests; §2.1 bumps a major for the same kind of type change in signed statements.)
+`{identity: I}` principals need **no new `reader-policy` version** (decided 2026-11-08).
+`reader-policy-v1` already parses them and fixes their meaning: "statements eligible to act
+for I". What changes when the profile is activated is the reader's actor evaluator, not the
+policy. So an answer that consulted the evaluator cites it (evaluator version, and the
+evidence digest and receipt it answered from) beside the policy digest, and two readers with
+the same policy and different evaluators or evidence can be told apart. §2.1 is different:
+there a received statement's type changes, so the same received bytes would change meaning
+and a major is bumped. A local policy's text means the same in both readers.
 
 `fixed-root-identity-policy.schema.json` is a linked **candidate local policy**, not a
 received statement. It requires `version:"reader-policy-v1"`, `selections` and `trust`
@@ -490,7 +495,12 @@ answers for the statement's signer. An `{identity: I}` entry answers only when a
 finds the statement eligible for I (not denied, not unknown), so a bare statement by a worker key
 of I is never I's and a key entry never trusts an identity. An answer actor evaluation cannot
 decide reads unknown and is not counted, never trusted by default. A reader without actor
-evaluation answers unknown for every identity entry, as today. Selections follow the same rule: an
+evaluation answers unknown for every identity entry, as today. Counting follows the same
+split (decided 2026-11-08). A statement the evaluator binds to an identity counts by evidence
+readiness and actor eligibility. Its signer's bare-key status is shown beside it and is not
+applied as a filter (§4.1), so a denied or undecided actor is not counted under any unit (§5.3).
+A bare-key statement keeps the bare-key gate unchanged. This applies to corroboration, task
+submissions and exact pins alike. Selections follow the same rule: an
 `{identity: I}` selection follows only I's eligible claims, reads unknown while a claim that may be
 I's is undecided, and substitutes no key's claims. The trust question itself does no authority
 evaluation and no policy reading of its own: eligibility comes from the evaluator, trust from the

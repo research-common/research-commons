@@ -50,6 +50,10 @@ not trusted.
 `{identity: I}` entry per statement: only a statement found eligible for I is I's, and a bare statement by one of
 I's worker keys never is. This reader has no such evaluation, so none of this is reachable from the command line.)
 
+Activating identity evaluation will not change this policy's version: `reader-policy-v1` already fixes what an
+`{identity: I}` entry means, and what changes is the reader's evaluator. An answer that consults one cites it beside
+the policy digest, so two readers with the same policy and different evaluators can be told apart.
+
 ## Selections
 
 A selection chooses which declaration supplies an answer the resolver otherwise derives from every claimant.
