@@ -1,7 +1,7 @@
 # Design note: task contracts (`task-contract-v1`)
 
-**Date:** 2026-10-27, revised 2026-10-28 (revision 2) · **Status:** request for comments. Nothing here is
-decided or implemented.
+**Date:** 2026-10-27, revised 2026-10-28 (revision 2) and 2026-11-08 (revision 3) · **Status:** request for
+comments. Nothing here is decided or implemented.
 **Tracking issue:** #109
 **Builds on:** the claims-model note §8 (resources, editions) and §9 (research exchange), #69; the wire-format
 note §1.1, §5, §6; the bitcoin-time note §7, §8, §11; #3 (pre-registration), #65 (stochastic replication)
@@ -11,6 +11,18 @@ applies to decide readiness under a contract. It does not change the claims mode
 envelope, or any existing kind's meaning.
 **References:** invariants (I1–I15) and bare §9.x, §10 and §13 are the claims-model note's; other bare section
 numbers are this note's; any other note is named.
+
+**Revision 3 (changes since revision 2).** From the review of revision 2 on #108:
+
+- **A result's kind is read from the held record for its digest**, not from the submission's statement kind
+  (§5.1): a `submit` of another key's `observed` is an observation result. `results` and Q3 pins that no
+  submission could satisfy leave the contract unread (§6 Q2).
+- **A `fulfills` submission cannot be withdrawn, only superseded** (§5.1, amendments), and two guards are
+  added: `publish` warns when an amendment drops a `fulfills` the amended statement carried, and `explain`
+  names the amendment that broke a deadline run (new C-exch-15b).
+- **`grouping: {rule: "any"}`** forms one group of every counted submission, for tasks that collect rather
+  than compare (a census of k machines, a closed-period re-capture) (§3.1, §5.2; new C-exch-12a). Agreement
+  among observations under a model the reader applies needs a published comparator skill (§5.2).
 
 **Revision 2 (changes since the first draft).** From the observation-task review on #109:
 
@@ -54,7 +66,7 @@ numbers are this note's; any other note is named.
   methods, commit-reveal, credit definitions, grant withdrawal, counting units for corroboration, calendar
   deadlines, the coordinator under identities, refutation eligibility, rubric dialects, and counting by a
   referent member.
-- §7 lists the conformance impact: which exchange cases this grammar unblocks, and six new cases.
+- §7 lists the conformance impact: which exchange cases this grammar unblocks, and eight new cases.
 
 **Standards first.** As in the wire-format note §0: where a standard defines something this profile needs, it
 is adopted and profiled; where none fits, the note says so.
@@ -149,7 +161,7 @@ and duplicate-free in the key order of the wire-format note §1, as `controllers
 |---|---|---|
 | `k` | integer R, ≥ 1 | how many counting units a group needs |
 | `independence` | `"not-required"` · `"required"` · `"self-declared-accepted"` R | §5.4 |
-| `grouping` | object O: `{rule: "all-pairs"}` or `{rule: "reference", reference: key}` | how results group under a comparator (§5.2). Required when `comparator` or `test` is present; refused with neither (byte equality needs no rule) |
+| `grouping` | object O: `{rule: "all-pairs"}`, `{rule: "reference", reference: key}` or `{rule: "any"}` | how results group (§5.2). `all-pairs` or `reference` is required when `comparator` or `test` is present and refused with neither (byte equality needs no rule); `any` is allowed only with neither |
 | `comparator` | digest O | a comparator skill, as the execution note §1 `comparator` field names one |
 | `test` | digest O | a pinned statistical test for stochastic replication (#65); when present it is the comparator, and `comparator` must be absent |
 | `estimand` | string O | what `test` estimates, as prose. Present only with `test` |
@@ -196,9 +208,9 @@ holds in both: one place per role per major.
   extension to a contract is a new profile name. The departure is local to `contents.contract`; the edition
   statement around it follows the wire rules as usual. *Review: agreed (#109): a restriction a reader ignores
   is a weaker contract than the one signed.*
-- A malformed field (wrong type, an empty `eligible_issuers`, a `grouping` without a comparator, duplicate
-  rubric ids, a `reference` that is not a key) leaves the contract unread, naming the field. There is never a
-  partial reading.
+- A malformed field (wrong type, an empty `eligible_issuers`, an `all-pairs` or `reference` grouping without
+  a comparator, an `any` grouping with one, duplicate rubric ids, a `reference` that is not a key) leaves
+  the contract unread, naming the field. There is never a partial reading.
 - A reader that implements `task-contract-v1` implements `grant` (§4.1), the `refutes` binding (§4.2) and
   `fulfills` submissions (§5.1) as well. A reader that read the terms but not the grants, or counted only
   `submit`s, would report a task `not ready` where the honest answer is that it cannot tell.
@@ -324,6 +336,18 @@ them is read is §6 Q1).
   run that ends at the current claim, never the best bound of the whole chain: an amendment that adds
   `fulfills` late does not inherit the bound of an earlier statement that made no submission. The chain's
   bound shows the bytes existed; the deadline asks that the submission did.
+- **No withdrawal, only supersession.** Amendment is defined for `authored` only (claims-model note §4) and
+  `retracts` is display (§7), so an `observed` carrying `fulfills: E` cannot be withdrawn from `E`. This is
+  intended: an observer who carried `fulfills` in error can supersede it with a later submission of `E` in
+  the same log (§6 Q1 (c)), or sign `retracts`, which is shown beside the submission and does not change its
+  count; the beneficiary, who decides (§5.8), can reject it. A submission is never removed by a statement
+  that is itself not a submission. (A `withdraw` ends attempts, §9.1; it does not withdraw submissions.)
+- **Guards for the amendment rule.** Because an amendment replaces rather than patches, an `authored`
+  amended for another reason (a licence correction) that omits `fulfills` silently withdraws the submission,
+  and re-adding it later starts a new run that can turn `ok` into `not shown`. Two guards, as for withheld
+  content (C-core-76a): `publish` warns when an amendment drops or changes a `fulfills` the amended statement
+  carried, naming the edition; and when a deadline outcome is `not shown` for a submission whose earlier
+  chain had a bound at or below `h`, `explain` names the amendment that broke the run (C-exch-15b).
 - **`submit`-only fields.** A statement carrying `fulfills` has no `self_declared_independence`, so under
   `self-declared-accepted` it counts toward `k` only where its independence is established (§5.4).
 - Bound refutations (§4.2) are submissions on the refutation track and never enter what follows.
@@ -345,7 +369,16 @@ that carries `fulfills: E` from a key outside `eligible_issuers` is a valid `obs
 ### 5.2 Grouping
 
 - **No comparator, no test:** results group by byte equality of `result`. Equality is transitive, so no rule
-  is needed and none may be given.
+  is needed, and `all-pairs` or `reference` may not be given.
+- **`any`: collecting, not comparing.** With `grouping: {rule: "any"}` (and neither comparator nor test),
+  every counted submission is in one group, so `k` counts units and the pins (§6 Q3), the rubric, the
+  deadline and independence do the restricting. It is for tasks whose results are not expected to agree: a
+  census of `k` method-class captures from `k` different machines, or independent re-captures of a closed
+  period whose bytes differ because each carries its own request log. Under byte-equality grouping each of
+  those submissions is a group of one and `k ≥ 2` is unreachable, and settlement by review would hand the
+  beneficiary a count the reader can do. The distinct-results bound below does not apply, there are no
+  divergence reports, and identical bytes under a second key are still a copy (TC4): `independence:
+  required` is the term that keeps copies out, as for byte-equality groups.
 - **Comparator or test:** the contract's `grouping` decides. `all-pairs` forms the maximal sets in which every
   pair matches under the comparator; `reference` groups each result with the reference key's counted result
   and requires exactly one such result (none, or several, is `unchecked`, naming the count). A pair the
@@ -356,7 +389,11 @@ that carries `fulfills: E` from a key outside `eligible_issuers` is a valid `obs
   identical bytes under a second key are a copy, not a second observation (claims-model note §5.3.1); such a
   group counts keys holding one capture (TC4), and `independence: required` is the term that keeps copies
   out. A contract that wants observations to agree under an agreement model (claims-model note §5.3.2) names
-  that comparison as its `comparator`.
+  that comparison as its `comparator`, which is a published comparator skill (execution note §1) that
+  implements the model. The method-class and finality-aware models a reader applies to corroboration are
+  reader code with no digest, and v1 does not give them names a contract could cite: a name would bind the
+  contract to whatever each reader implements under it, where a digest binds it to one behaviour. A reader
+  may ship its models as comparator skills so that contracts can pin them.
 - **Bound on work.** All-pairs grouping is exponential in the number of distinct results. A reader declares a
   limit (the provisional reading uses 16 distinct results); above it, grouping is `unchecked` with the limit
   named, an operational limit under I8.
@@ -474,9 +511,21 @@ marks a lean an outside review on #109 agreed with; it records the review, and d
      `fulfills` observations as submissions (§5.1), that needs a declaration: (b) brings an optional
      `results`, `"derived"` · `"observed"` (absent: either), and `min_grade` without `results: "derived"`
      leaves the contract unread, naming the field (§3.3), so a quorum is never computed under a term that
-     cannot apply to its submissions. Under `results: "derived"`, an `observed` carrying `fulfills` is a
-     submission not counted, `not a derived result`; under `"observed"`, a `submit` or an `authored` is not
-     counted, `not an observation`. Neither is malformed (§5.1).
+     cannot apply to its submissions. **A result's kind is read from the held record for its digest**, as
+     Q3 reads pins, never from the submission's statement kind (a `submit` has no kind of its own): `derived`
+     when a held `authored` of the digest carries `provenance`; `observed` when a held `observed` of the
+     digest exists; `unchecked` (undecided, into the bracket, §5.6) when no statement for the digest is held,
+     or when held records give it both kinds (both named). A statement carrying `fulfills` is its own record.
+     So under `results: "observed"`, a `submit` whose `result` is another key's held `observed` is an
+     observation result and can count (that is what `submit` is for, §5.1). A result whose kind does not
+     match is not counted, `not a derived result` or `not an observation`, never malformed. An `authored`
+     with no `provenance` is neither kind: `min_grade` has nothing to grade on it.
+   - `results` and Q3 pins can contradict: `results: "observed"` with a `workflow` pin, or `results:
+     "derived"` with a `method_edition` pin. As for `min_grade` without `results: "derived"`, a term that can
+     apply to no submission leaves the contract unread, naming both fields, rather than failing every
+     submission. If Q12 (a) is adopted, a referent counting unit implies observation results, and the
+     contract must say so: `counting_unit: {referent: …}` without `results: "observed"` is unread, by the same
+     rule (a reader never infers a restriction the contract did not write).
    - The observation analogue of a grade is capture evidence (claims-model note §5.3.3). A
      `min_capture_evidence` beside `min_grade` reads well but waits: the declared levels are a closed set
      (wire-format note §5, `capture.evidence`), but the claims-model note gives them no order and the tool
@@ -606,7 +655,7 @@ specified; the implementation still has to meet it.
 | C-exch-09 | independence term unreadable; commit-reveal construction undefined | terms unblocked (§5.4); generator (b) waits on §6 Q4 |
 | C-exch-10 | eligible issuers unreadable | eligibility unblocked; the verifier is an attestation-note matter |
 | C-exch-11 | independence term unreadable | unblocked by `self-declared-accepted` (§5.4) |
-| C-exch-12, C-exch-14 | grouping rule unreadable | unblocked by `quorum.grouping` (§5.2) |
+| C-exch-12, C-exch-14 | grouping rule unreadable | unblocked by `quorum.grouping` (§5.2); collecting tasks pinned by C-exch-12a |
 | C-exch-13 | estimand and test unreadable | fields unblocked; the test itself is a comparison-dialect matter |
 | C-exch-15, C-exch-16 | a `fulfills` statement is displayed, never counted | display unchanged; the statement is also a submission of the edition it names (§5.1), pinned by C-exch-15a |
 | C-exch-17 | declared sampling unreadable | unblocked by `sampling` (§3.1) |
@@ -622,7 +671,9 @@ New cases, proposed with this note in `CONFORMANCE.md` (exchange profile, by sec
 | C-exch-03b | §4.1 grant scope: coordinator vs other signer, grant naming another edition, grant not carried to a later edition, grant published after the submission still counts, in every delivery order |
 | C-exch-07a | §4.3 deadline outcomes: `ok`, `unchecked` (tip below `h`; pending proof), `not shown` (bound above `h`; `local` only); `ts` before `h` never `ok`; no output says "missed" or "late"; a `fulfills` submission read from its own bound |
 | C-exch-08a | §5.6 bracket and §5.7 exit: `k` passing submissions plus one undecided elsewhere is `ready`, exit 0; `k−1` plus one undecided is `unchecked`, exit 3; `k−1` plus one failing is `not ready`, exit 0 |
-| C-exch-15a | §5.1 submissions: an `authored` or `observed` carrying `fulfills` is a submission whose result is its content digest; with a `submit` of the same digest it counts once; outside `eligible_issuers` it is not counted, never malformed; a `fulfills` naming no task edition is no submission; the statement's grade is the same with or without the task held |
+| C-exch-12a | §5.2 `any`: `k` method-class observations of different bytes carrying `fulfills` reach `ready` under `{rule: "any"}` and stay groups of one under byte equality; `any` with a comparator, and `all-pairs` without one, leave the contract unread |
+| C-exch-15a | §5.1 submissions: an `authored` or `observed` carrying `fulfills` is a submission whose result is its content digest; with a `submit` of the same digest it counts once; outside `eligible_issuers` it is not counted, never malformed; a `fulfills` naming no task edition is no submission; the statement's grade is the same with or without the task held; under `results: "observed"` a `submit` of another key's held `observed` counts, and one whose digest has no held record is undecided |
+| C-exch-15b | §5.1 amendments: an amendment that drops `fulfills` withdraws the submission and `publish` warns, naming the edition; re-adding it later gives `not shown` past `h` with `explain` naming the breaking amendment; an `observed` carrying `fulfills` stays a submission after its signer's `retracts`, shown beside it |
 | C-exch-18a | §4.2 binding: bound refutation listed and credited on its own track and never grouped; `task` without `edition` malformed; an unbound refutation of a submission is shown beside it but not listed in the task |
 
 Deduplication, evidence strength, inputs and methods, commit-reveal and counting by a referent member get
@@ -641,7 +692,7 @@ change, and the provisional reading keeps its own name, so no contract silently 
 | rubric over many submissions | edition `unchecked` if any counted submission has an unchecked criterion | the bracket (§5.6) |
 | malformed nested objects | a non-object `grouping` or `sampling` is read as absent | every malformed field leaves the contract unread (§3.3) |
 | duplicate rubric ids | accepted | malformed |
-| `grouping` without a comparator | accepted and unused | malformed |
+| `grouping` without a comparator | accepted and unused | malformed, except `{rule: "any"}`, which is allowed only without one (§5.2) |
 | `comparator` and `test` together; `estimand` without `test` | accepted (`test` wins) | malformed |
 | `eligible_issuers` order | any order, duplicates accepted | a set: sorted, duplicate-free |
 | what is a submission | `submit` only; a `fulfills` statement is a disclosure | `submit`, and an `authored` or `observed` carrying `fulfills` (§5.1) |
