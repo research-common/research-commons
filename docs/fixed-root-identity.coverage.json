@@ -1,5 +1,5 @@
 {
-  "status": "Scenario handles of the candidate fixed-root identity profile. Handle ID-NN is the registered conformance case C-id-NN (profile note §10); 'conformance' is that case's harness status (covers, partial or pending) and a test in internal/conformance keeps it equal to what the tests declare. The profile is not active, so no case is covered: tests check the rc/2 reader, the admission adapter and the reference model, not a consumer. Schema vectors are shape checks only.",
+  "status": "Scenario handles of the candidate fixed-root identity profile. Handle ID-NN is the registered conformance case C-id-NN (profile note §10); 'conformance' is that case's harness status (covers, partial or pending) and a test in internal/conformance keeps it equal to what the tests declare. The profile is not active: tests check the rc/2 reader, the admission adapter and the reference model, not a consumer, and a case is covered only when its whole required outcome is checked end to end at those layers with signed evidence (profile note §10). Schema vectors are shape checks only.",
   "scenarios": [
     {
       "handle": "ID-01",
@@ -42,10 +42,11 @@
       ],
       "isolated_tests": [
         "internal/identity:TestSliceGrantsAuthorizeExplicitActs",
-        "internal/wire:TestSignedIdentityPositiveVectors"
+        "internal/wire:TestSignedIdentityPositiveVectors",
+        "internal/identity:TestSignedVectorsGrantCoveredActIsEligible"
       ],
-      "conformance": "partial",
-      "remaining": "Bind the candidate signed bytes to authenticated lineage/scope inputs and evaluate complete authority."
+      "conformance": "covers",
+      "remaining": "Covered at the evaluator: the published signed rc/2 act (both algorithms) is eligible through Admit and the candidate actor evaluator, with I, G, D and the root lineage in its basis. No production reader wires the evaluator: the profile is not active."
     },
     {
       "handle": "ID-03",
@@ -158,7 +159,8 @@
       "scenario": "Cut prefix excludes descendants/siblings",
       "schema_vectors": [],
       "isolated_tests": [
-        "internal/identity:TestSliceCutAtExactLine"
+        "internal/identity:TestSliceCutAtExactLine",
+        "internal/identity:TestSignedVectorsCutsAndRetirement"
       ],
       "conformance": "partial",
       "remaining": "Set-based ancestry closure including merges; signed wire binding still required."
@@ -241,10 +243,11 @@
         "internal/identity:TestReviewCompromisedRootGrantDiesWithRevoke",
         "internal/identity:TestReviewMalformedRootKeyEventIsUnknown",
         "internal/identity:TestReviewUnplaceableTerminalIsUnknownNotRetired",
-        "internal/wire:TestSignedIdentityNegativeVectors"
+        "internal/wire:TestSignedIdentityNegativeVectors",
+        "internal/identity:TestRootTerminalEventPlacement"
       ],
-      "conformance": "partial",
-      "remaining": "Candidate uses raw rc/1 events; terminal identity evaluation and unknown ancestry remain to integrate."
+      "conformance": "covers",
+      "remaining": "Covered at the evaluator: the published root revoke_key retires I in both algorithms; placement by prev whatever the merges, the same event on a proved rival inception (no effect) and an unplaceable event (unknown) are checked with synthetic keys. No production reader wires the evaluator: the profile is not active."
     },
     {
       "handle": "ID-18",
@@ -544,7 +547,8 @@
         "internal/identity:TestSliceNegatives",
         "internal/identity:TestByteMutationsNeverCreateAuthority",
         "internal/wire:TestSignedIdentityVectorsReproduce",
-        "internal/wire:TestSignedIdentityNegativeVectors"
+        "internal/wire:TestSignedIdentityNegativeVectors",
+        "internal/identity:TestSignedVectorsNegativesNeverReachEligibility"
       ],
       "conformance": "partial",
       "remaining": "Concrete schema negatives and both algorithms tested; full production critical registry still disabled."

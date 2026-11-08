@@ -132,8 +132,26 @@ Otherwise: wire `Valid` → `Understood`; `Invalid` → per §3; `Unsupported` o
 
 Every rc/2 task kind is verified-`Unsupported`. No settlement or readiness can pass.
 
+## 8a. Actor evaluator (candidate, not wired)
+
+`Actors` (`actors.go`) implements the trust seam's `policy.ActorEligibility` over one admitted `Snapshot`
+(`NewActors(lines)` or `Snapshot.Actors()`). No production reader constructs it.
+
+- It answers by statement **id** from its own evidence, never from the caller's `*wire.Statement`: the default
+  reader retains an rc/2 line unverified with no actor. An unheld id is `unknown`.
+- Model `eligible` / `denied` / `unknown` map one to one. A `model_limit` reason is `unknown` whatever else the
+  walk found (no partial pass, and no definite denial either).
+- The identity is returned only for a **bound** actor: the named inception and grant are held and authenticated,
+  the grant is signed by the inception's key and names this identity and this signer as delegate. Otherwise `""`
+  (bare statements: `no_identity_actor`; an outsider's header: "no issuer-authenticated binding"), so an unproven
+  claim cannot stall the identity it names (profile §5.1). Whether a bound grant is in force is the model's answer.
+- `why` = the model's reasons (`code: detail`), then warnings (`warning code: detail`), so a `delegate_self_event`
+  travels with an eligible answer (profile §4.1).
+- `Context()` / `Evaluator()`: evaluator version, evidence digest and receipt. A trust answer that consulted the
+  evaluator cites it beside the policy digest (`policy.ActorEvaluator`, profile §6).
+
 ## 9. Not covered
 
-Consumer wiring (authorship, amendments, resources, tasks, policy, time); major-aware edition ids; blob
+Production consumer wiring (authorship, amendments, resources, tasks, policy, time; the actor evaluator exists, no reader wires it); major-aware edition ids; blob
 availability in the receipt; timestamp coherence as an identity input; a detached signing ceremony; devices.
-Scenario-level status: conformance cases `C-id-01` … `C-id-45` (profile note §10), mirrored in `docs/fixed-root-identity.coverage.json` (no case is covered while the profile is not active).
+Scenario-level status: conformance cases `C-id-01` … `C-id-45` (profile note §10), mirrored in `docs/fixed-root-identity.coverage.json` (a case is covered only when its whole outcome needs no consumer and is checked end to end with signed evidence; C-id-02 and C-id-17 are).
