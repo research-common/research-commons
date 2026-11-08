@@ -37,7 +37,7 @@ func countMember(v canon.Value, k string) int {
 // member, never inside a token. Every view command over every fixture ref carries it; a command that resolves
 // no status (status, fsck, gc, init) does not.
 func TestStatusScopeFooter(t *testing.T) {
-	conformance.Partial(t, "P-12", "the CLI half: every view command (show, verify, explain, list) over every fixture ref prints one status_scope footer, `within statements you hold`, beside authorship, counted state and the verify exit, and publish prints it beside a pre-pin state and a task edition's readiness; no CLI command prints a resource's current edition or a membership yet, so those views gain the footer when a command prints them (view.scoped)")
+	conformance.Partial(t, "P-12", "the CLI half: every view command (show, verify, explain, list) over every fixture ref prints one status_scope footer, `within statements you hold`, beside authorship, counted state and the verify exit, and publish prints it beside a pre-pin state and a task edition's readiness; show, verify and explain of a resource, an edition or an approval print it too (TestResourceSurfaceSweep)")
 	w := fixture(t)
 	const footer = "status scope: " + resolve.ScopeHeld + "\n"
 	for _, a := range sweepArgs(w) {

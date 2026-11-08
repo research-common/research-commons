@@ -24,7 +24,7 @@ var vocabulary = []Token{
 	{"sole author", "authorship", "one claimant unit of one key"},
 	{"derived", "authorship", "one derivation group of two or more keys; priority is not computed within it"},
 	{"default author", "authorship", "several claimant units; one is strictly earliest at a quality this reader verified"},
-	{"contested", "authorship", "several claimants (or several values of one field) and none is the default; every claimant is listed"},
+	{"contested", "authorship", "several claimants (or several values of one field) and none is the default; every claimant is listed. For an edition: authorized only if approvals a key event doubts are counted, or built on an edition that is; never current, authorizes nothing"},
 	// the scope of a view's statuses (claims §6 (1), I4): every status a view prints holds within it, never as a
 	// claim about statements the reader does not hold
 	{"within statements you hold", "scope", "every status of the view is computed from the statements this reader holds; nothing is claimed about statements it never received"},
@@ -60,7 +60,7 @@ var vocabulary = []Token{
 	{"bitcoin", "time", "an anchor whose proof this reader verified against block evidence it trusts"},
 	{"verified", "time", "the proof verified against the reader's chain view"},
 	{"verified-historical", "time", "verified against an old view at less than the settled depth; priority not computed from it"},
-	{"pending", "time", "only calendar attestations; a calendar's promise grants nothing"},
+	{"pending", "time", "only calendar attestations; a calendar's promise grants nothing. For an edition: approved by controllers of every predecessor, not yet enough for one predecessor's rule"},
 	{"insufficient-confirmations", "time", "below the reader's confirmation policy"},
 	{"missing-proof", "time", "the proof blob is not held here (never fetched)"},
 	{"invalid-proof", "time", "the proof does not commit to the covered statement"},
@@ -76,11 +76,11 @@ var vocabulary = []Token{
 	{"valid", "statement", "signature verified and every rule this reader implements passed"},
 	{"unknown kind", "statement", "a validly signed statement of a kind the format does not list; granted nothing"},
 	{"chained", "line", "the line reaches its log's first line through prev and merges"},
-	{"detached", "line", "a predecessor is not held; shown, attributed, counted toward nothing"},
+	{"detached", "line", "a predecessor is not held; shown, attributed, counted toward nothing. For an edition: every approval is on a detached line; shown, not evaluated"},
 	{"counted", "statement", "chained, verified, understood and not excluded by a key event"},
 	{"not counted", "statement", "held and shown, counted toward nothing (the reason is named)"},
 	{"retained", "line", "an unverified line kept and not placed"},
-	{"FORK", "line", "two lines of one key's log from one sequence point, not yet merged"},
+	{"FORK", "line", "two lines of one key's log from one sequence point, not yet merged; for a resource, two authorized editions with one predecessor and no merge: no edition is current"},
 	{"retracted", "label", "the author signed a retraction; display only, the bytes may still be served"},
 	{"held here", "bytes", "this store holds the blob's bytes and they hash correctly when read"},
 	{"not held here", "bytes", "this store does not hold the blob's bytes"},
@@ -147,6 +147,12 @@ var vocabulary = []Token{
 	{"failed: operational", "rerun", "a cap of this reader stopped the step (detail: the cap); could not check"},
 	{"timeout", "rerun", "the wall-time cap stopped the step; could not check"},
 	{"environment mismatch", "rerun", "the re-run's environment differs from the pin on a field environment_match names, or the pinned environment is not available here (detail: the fields); nothing compared"},
+	// what became of an edition proposal (claims-model note §8; wire-format note §3); `pending`, `detached` and
+	// `contested` are the rows above, read for an edition
+	{"edition", "edition", "an authorized edition of the resource: every predecessor's controllers approved this body under its rule"},
+	{"unauthorized", "edition", "some predecessor's controllers did not approve this body (nobody elevates themselves)"},
+	{"orphan", "edition", "a predecessor names nothing this reader holds as the genesis or an edition of the resource; never current"},
+	{"invalid", "edition", "authorized approvals, but the body cannot be an edition (a rule no controller set meets, or a merge that does not declare differing controllers and rule)"},
 	// task readiness (claims-model note §9.2, §9.3)
 	{"settled by review, not by counting", "readiness", "the task edition has no quorum predicate: its beneficiary's decisions settle it; nothing is counted"},
 	{"ready", "readiness", "the quorum is met by distinct signing keys under the edition's terms"},

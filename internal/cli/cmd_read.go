@@ -16,8 +16,8 @@ import (
 
 func init() {
 	ref := []Arg{{Name: "digest|id", Shape: ShapeRef}}
-	Register(&Command{Name: "show", Summary: "show a blob (authorship, grade, every disclosure) or a statement", Args: ref, Store: true, ReaderPolicy: true,
-		Help: "A digest shows the blob: authorship and every claimant, labels, whether the bytes are held here, the grade with the full disclosure set beside it, derivation groups, and every other statement about it. An id shows the statement.",
+	Register(&Command{Name: "show", Summary: "show a blob (authorship, grade, every disclosure), a statement, or a resource", Args: ref, Store: true, ReaderPolicy: true,
+		Help: "A digest shows the blob: authorship and every claimant, labels, whether the bytes are held here, the grade with the full disclosure set beside it, derivation groups, and every other statement about it. An id shows the statement. A resource's id is its genesis statement's id: show prints the genesis and the resource view beside it (controllers and rule, the current edition and the chain behind it by hash, every edition with its approvals, any FORK, the current edition's members and the receiver's check of a completeness claim). An edition id, or the statement id of one of its approvals, shows the resource pinned at that edition. An observation's statement shows its corroboration status.",
 		Run:  showCmd})
 	Register(&Command{Name: "verify", Summary: "check a blob or a statement from the statements held; exit per the exit table", Args: ref, Store: true, ReaderPolicy: true,
 		Flags:   rerunFlags,
@@ -26,7 +26,8 @@ func init() {
 		Help:    "Statement-only by default: verify reads the statements this store holds and runs nothing. With --rerun (a blob only) and --exec-policy <file>, the reader re-runs the derivation under its own execution policy and the re-run's token replaces the derivation cause; without a policy the re-run is unchecked and nothing runs. Exit 0 checked and passed, 1 a completed comparison disagreed, 3 could not check, 4 nothing to re-run, 5 environment mismatch.",
 		Run:     verifyCmd})
 	Register(&Command{Name: "explain", Summary: "the statements, policy, evaluator and time context behind every token shown", Args: ref, Store: true, ReaderPolicy: true,
-		Run: explainCmd})
+		Help: "Everything show prints, plus the statements behind it (hash and signer), the policy digest, the evaluator and the time context. For a resource (its genesis id, an edition id, or an approval's id) it adds each edition's reasoning: the rule and predecessor it was evaluated under, and each approval counted or not.",
+		Run:  explainCmd})
 	Register(&Command{Name: "list", Summary: "every blob a statement in this store names, one line of tokens each", Store: true, ReaderPolicy: true,
 		Run: listCmd})
 }
@@ -50,8 +51,26 @@ func showCmd(c *Ctx) (*Obj, int, error) {
 	if isDigest(ref) {
 		return v.scoped(v.showArtifact(ref)), ExitOK, nil
 	}
-	o, _ := v.showStatement(ref)
-	return v.scoped(o), ExitOK, nil
+	return v.scoped(v.showRef(ref, false)), ExitOK, nil
+}
+
+// showRef is show of an id: the statement it names, and the resource view beside it when the statement is a
+// genesis (the resource id) or an approval of an edition; an edition id, which names no statement, shows its
+// resource pinned at that edition (resource.go).
+func (v *view) showRef(ref string, full bool) *Obj {
+	o, held := v.showStatement(ref)
+	rr, ok := v.resourceOf(ref)
+	if !ok {
+		return o
+	}
+	if !held {
+		// an edition id: no statement, so the statement core's "no statement held" is not printed
+		o = newObj()
+	}
+	if rr.edition != nil {
+		o.set("pinned_edition", v.editionObj(rr.edition, full))
+	}
+	return o.set("resource_view", v.resourceObj(rr.res, full))
 }
 
 func (v *view) showArtifact(d string) *Obj {
@@ -133,6 +152,13 @@ func (v *view) showStatement(id string) (*Obj, bool) {
 	if d := contentOf(st); d != "" && st.Kind == "authored" {
 		o.set("artifact", v.artifactCore(v.r.Artifact(d)))
 	}
+	if st.Kind == "observed" {
+		// corroboration status is a disclosure beside the observation (claims §5.3.2, §13, I6): shown here and on
+		// verify and explain, from the one observation view, and never moves an exit
+		if ob, ok := v.r.Observation(id); ok && ob.Corroboration != nil {
+			o.set("corroboration", corroborationObj(ob.Corroboration, true))
+		}
+	}
 	return o, true
 }
 
@@ -207,10 +233,51 @@ func verifyCmd(c *Ctx) (*Obj, int, error) {
 			var why []string
 			code, why = ob.VerifyExit()
 			o.set("causes", observationCauses(why))
+			if ob.Corroboration != nil {
+				// shown beside the exit, never moving it (claims §13, I6)
+				o.set("corroboration", corroborationObj(ob.Corroboration, false))
+			}
 		}
+	}
+	if rr, ok := v.resourceOf(ref); ok {
+		if st == nil {
+			o, code = newObj(), ExitOK // an edition id names no statement: the edition is what is verified
+		}
+		code = v.verifyResource(o, rr, code)
 	}
 	o.set("exit", intV(int64(code))).set("exit_name", textV(ExitName(code)))
 	return v.scoped(o), code, nil
+}
+
+// verifyResource is verify of a resource or of one pinned edition (claims-model note §8, §13), after the
+// statement's own check (code). The resource: 0 with one current edition, 3 under an uncleared FORK (no edition
+// is current, C-core-84) or with a contested edition (§4.1). A pinned edition: 0 when it is an authorized
+// edition, 3 otherwise (pending, orphan, contested, …: not established as an edition from the statements held).
+// A completeness claim's check is shown beside it and never moves the exit (I6).
+func (v *view) verifyResource(o *Obj, rr resourceRef, code int) int {
+	causes := listV{}
+	if rr.edition != nil {
+		o.set("pinned_edition", v.editionObj(rr.edition, false))
+		if rr.edition.State != resolve.Authorized {
+			causes = append(causes, newObj().set("about", textV("edition")).set("state", tokV(tok(string(rr.edition.State)))))
+		}
+	} else {
+		res := rr.res
+		if res.Current == "" {
+			causes = append(causes, newObj().set("about", textV("current edition")).set("state", tokV(tok("FORK"))))
+		}
+		if len(res.Contested) > 0 {
+			causes = append(causes, newObj().set("about", textV("edition")).set("state", tokV(tok("contested"))))
+		}
+	}
+	o.set("resource_view", v.resourceObj(rr.res, false))
+	if len(causes) > 0 {
+		o.set("causes", causes)
+		if code == ExitOK {
+			code = ExitCouldNot
+		}
+	}
+	return code
 }
 
 // --- explain -----------------------------------------------------------------------------------------------
@@ -231,15 +298,22 @@ func explainCmd(c *Ctx) (*Obj, int, error) {
 		o.set("verify", newObj().set("causes", causes).set("exit", intV(int64(code))))
 		o.set("reasoning", texts(a.Explain...))
 	} else {
-		var held bool
-		o, held = v.showStatement(ref)
-		if p, ok := v.r.Statement(ref); held && ok {
+		o = v.showRef(ref, true)
+		if rr, ok := v.resourceOf(ref); ok {
+			inputs = append(inputs, v.resourceInputs(rr.res)...)
+		}
+		if p, ok := v.r.Statement(ref); ok {
 			st := p.St
 			inputs = append(inputs, ref)
 			if st.Prev != "" {
 				inputs = append(inputs, st.Prev)
 			}
 			inputs = append(inputs, st.Merges...)
+			if st.Kind == "observed" {
+				if ob, ok := v.r.Observation(ref); ok && ob.Corroboration != nil {
+					inputs = append(inputs, corroborationInputs(ob.Corroboration)...)
+				}
+			}
 			// showStatement prints the blob an authored names (its authorship and grade): the statements behind
 			// those tokens are inputs of this answer too (I14), or a rival claim would change it unlisted
 			if d := contentOf(st); d != "" && st.Kind == "authored" {
@@ -285,6 +359,12 @@ func evaluatorObj(b Build) *Obj {
 // leaving changes the grade, so it is an input, I14).
 func (v *view) answerInputs(a *resolve.Artifact) []string {
 	ids := artifactInputs(a)
+	for _, ob := range v.r.Observations(a.Digest) {
+		ids = append(ids, ob.Statement)
+		if ob.Corroboration != nil {
+			ids = append(ids, corroborationInputs(ob.Corroboration)...)
+		}
+	}
 	for _, u := range a.Units {
 		if u.Bound.Anchor != "" {
 			ids = append(ids, u.Bound.Anchor)

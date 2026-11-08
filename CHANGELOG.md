@@ -47,6 +47,19 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ### Added
 
+- `show`, `verify` and `explain` print **the resource view**. A resource's id is its genesis statement's id, so
+  `show <genesis id>` prints the genesis and, beside it, the resource: controllers and rule, the current edition and the
+  chain behind it by hash (`G → E1 → E2`), every edition with its state (`edition`, `pending`, `orphan`,
+  `unauthorized`, `invalid`, `contested`, `detached`) and one row per approval, any `FORK` and the merge that cleared
+  it, the current edition's members with their rule outcome, and the receiver's check of a completeness claim
+  (`ok`/`fail` naming each unlisted reading/`unchecked`, beside the declaration, never moving the exit). An edition id,
+  or the statement id of one of its approvals, shows the resource pinned at that edition. `verify` of a resource
+  exits 3 under an uncleared `FORK` or a contested edition; of a pinned edition, 3 unless it is an authorized edition.
+  `explain` adds each edition's reasoning and lists every statement the view read. New edition-state tokens in
+  `docs/CLI-OUTPUTS.md`: `edition`, `unauthorized`, `orphan`, `invalid`.
+- Every surface that prints a blob (`show`, `list`, `verify`, `explain`) now prints each observation of it with its
+  **corroboration status** (counts under the counting unit, always scoped); `show`/`explain` of the observation's
+  statement print the evidence behind it, and `verify` prints it beside the exit, which it never moves.
 - Candidate identity profile: signed `rc/2` test vectors for both algorithms (`docs/fixed-root-identity.signed-vectors.json`):
   inception, grant, cuts (`last_good` set and null), actor-bearing acts, an `rc/1` root `revoke_key`, and delivered
   negatives (tampered or stripped actor, `v1` preimage, `rc/1`↔`rc/2` relabels, an Ed25519 edge case as an identity

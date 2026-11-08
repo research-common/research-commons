@@ -32,6 +32,11 @@ func (v *view) artifactCore(a *resolve.Artifact) *Obj {
 		// the derived result's scoped summary over its inputs, declared beside computed (claims-model note §7)
 		o.set("inputs_summary", texts(a.Inputs.Lines()...))
 	}
+	if obs := v.observationsObj(a.Digest); len(obs) > 0 {
+		// each observation of the blob with its corroboration status, from the one observation view, so every
+		// surface that prints the blob prints the same status (C-core-134); a disclosure, never an exit (I6)
+		o.set("observations", obs)
+	}
 	return o
 }
 

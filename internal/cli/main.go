@@ -555,7 +555,7 @@ func outputsMarkdown() string {
 	for _, r := range ExitRows() {
 		b.WriteString("| " + r[0] + " | " + r[1] + " | " + r[2] + " |\n")
 	}
-	b.WriteString("\n## State tokens\n\nJSON members carrying tokens: `" + strings.Join(tokenKeys, "`, `") + "`.\n\n| token | kind | meaning |\n|---|---|---|\n")
+	b.WriteString("\n## State tokens\n\nA statement's `body` printed by `show` or `explain` is the signer's JSON, rendered inert: member names inside it\nare not token members, whatever they are called.\n\nJSON members carrying tokens: `" + strings.Join(tokenKeys, "`, `") + "`.\n\n| token | kind | meaning |\n|---|---|---|\n")
 	for _, t := range vocabulary {
 		b.WriteString("| `" + t.Word + "` | " + t.Kind + " | " + t.Meaning + " |\n")
 	}
