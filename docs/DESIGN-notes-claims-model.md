@@ -824,6 +824,11 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
   the method edition it pins is not held as authorized (whether it declares `system_keys` cannot be read).
   Corroboration status and capture evidence are disclosures (I6) shown beside it and never change the exit,
   so no exit rests on a capture level the reader did not verify (C-core-52).
+- **`verify` of a resource or an edition.** A resource (named by its genesis id): exit 0 with one current
+  edition, exit 3 under an uncleared `FORK` or with a `contested` edition. A pinned edition: exit 0 when it is an
+  edition of its resource, exit 3 otherwise (`pending`, `orphan`, `unauthorized`, `invalid`, `contested`,
+  `detached`), naming the state; never 1, because an edition not established from the statements held is not a
+  check that disagreed. A completeness claim's check is a disclosure beside it and never changes the exit (I6).
 - **`verify` of a derived artifact needs a comparison.** A derived artifact claims that its workflow on its
   inputs produced its bytes, so exit 0 needs a T0 or T1 comparison (a second run in its group, or the
   reader's own re-run inside `verify`), or, under `protocol` with a declared comparator, byte-identical

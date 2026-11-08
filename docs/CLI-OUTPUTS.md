@@ -24,6 +24,9 @@ Stability: the `--json` output may change between alpha releases. It carries no 
 
 ## State tokens
 
+A statement's `body` printed by `show` or `explain` is the signer's JSON, rendered inert: member names inside it
+are not token members, whatever they are called.
+
 JSON members carrying tokens: `authorship`, `role`, `state`, `grade`, `step`, `quality`, `time_state`, `status`, `line`, `counted`, `labels`, `bytes`, `causes`, `store_state`, `what`, `verdict`, `class`, `status_scope`.
 
 | token | kind | meaning |
