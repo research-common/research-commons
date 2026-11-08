@@ -52,6 +52,22 @@ type ActorEligibility interface {
 	Eligible(st *wire.Statement) (identity, state string, why []string)
 }
 
+// ActorEvaluator is optionally implemented by an ActorEligibility that can name itself: its evaluator identity
+// and the evidence it answers from (a digest or receipt). An answer that consulted it cites this text beside the
+// policy digest, so two readers with the same policy and different evaluators or evidence are told apart: the
+// meaning of `{identity: I}` is fixed by the policy, the answer by policy and evaluator together (identity
+// profile §6).
+type ActorEvaluator interface {
+	Evaluator() string
+}
+
+func evaluatorOf(a ActorEligibility) string {
+	if e, ok := a.(ActorEvaluator); ok {
+		return e.Evaluator()
+	}
+	return ""
+}
+
 // Answer is one trust answer with what it rests on.
 type Answer struct {
 	State                 TrustState
@@ -68,6 +84,9 @@ type Answer struct {
 	// Policy is the policy digest the answer comes from; "" when unconfigured (also when a policy is configured
 	// but names no principal for the purpose).
 	Policy string
+	// Evaluator is the actor evaluator the answer consulted (ActorEvaluator), cited beside Policy; "" when the
+	// hook was not consulted or does not name itself.
+	Evaluator string
 }
 
 // Trusted reports whether the answer admits the evidence for its purpose. Unconfigured is not Trusted: a caller
@@ -80,11 +99,15 @@ func (a Answer) String() string {
 	if a.Content != "" {
 		what += " of " + short(a.Content)
 	}
+	pol := short(a.Policy)
+	if a.Evaluator != "" {
+		pol += " and actor evaluator " + a.Evaluator
+	}
 	switch a.State {
 	case Unconfigured:
 		return "trust not configured"
 	case Trusted:
-		line := fmt.Sprintf("trusted for %s under reader policy %s", what, short(a.Policy))
+		line := fmt.Sprintf("trusted for %s under reader policy %s", what, pol)
 		if a.Principal.Identity != "" {
 			line += " as identity " + short(a.Principal.Identity)
 		}
@@ -92,9 +115,9 @@ func (a Answer) String() string {
 	case Unknown:
 		return fmt.Sprintf("trust for %s unknown under reader policy %s: the policy names an identity, and the identity profile is not active", what, short(a.Policy))
 	case UnknownActor:
-		return fmt.Sprintf("trust for %s unknown under reader policy %s: the policy names an identity, and whether this statement acts for it is not established%s", what, short(a.Policy), a.because())
+		return fmt.Sprintf("trust for %s unknown under reader policy %s: the policy names an identity, and whether this statement acts for it is not established%s", what, pol, a.because())
 	}
-	return fmt.Sprintf("not trusted for %s under reader policy %s%s", what, short(a.Policy), a.because())
+	return fmt.Sprintf("not trusted for %s under reader policy %s%s", what, pol, a.because())
 }
 
 func (a Answer) because() string {
@@ -157,9 +180,11 @@ func (p *Policy) TrustsStatement(st *wire.Statement, purpose, content string, ac
 		return a
 	}
 	id, state, why := actors.Eligible(st)
+	a.Evaluator = evaluatorOf(actors)
 	switch {
 	case state == ActorEligible && id != "":
 		b := p.TrustsPrincipal(Principal{Identity: id}, purpose, content)
+		b.Evaluator = a.Evaluator
 		b.Why = append([]string{"eligible for identity " + short(id)}, why...)
 		if b.State != Trusted {
 			b.Key, b.Why = st.Signer, append(b.Why, "no trust entry trusts that identity for this purpose over this content")
@@ -176,6 +201,20 @@ func (p *Policy) TrustsStatement(st *wire.Statement, purpose, content string, ac
 		a.Why = append([]string{"actor eligibility is unknown"}, why...)
 	}
 	return a
+}
+
+// NamesIdentity reports whether some `{identity: I}` trust entry names purpose over content: the only case in
+// which TrustsStatement consults an actor evaluator.
+func (p *Policy) NamesIdentity(purpose, content string) bool {
+	if p == nil {
+		return false
+	}
+	for _, t := range p.Trust {
+		if t.Principal.Identity != "" && slices.Contains(t.Purposes, purpose) && t.covers(content) {
+			return true
+		}
+	}
+	return false
 }
 
 // Configures reports whether trust is configured for purpose: a policy is configured and at least one of its
