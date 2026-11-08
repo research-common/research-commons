@@ -484,19 +484,21 @@
       ],
       "isolated_tests": [
         "internal/wire:TestFixedRootCandidateVectors",
-        "internal/resolve:TestActorIdentityCountStaysUnknown"
+        "internal/resolve:TestActorIdentityCount"
       ],
       "conformance": "partial",
-      "remaining": "Mandatory counting unit checked; the seam leaves identity counting unknown with or without an evaluator. Authenticated principal deduplication and unresolved vote behavior need the task consumer."
+      "remaining": "Mandatory counting unit checked. Through the resolver with a test-only evaluator: eligible submissions deduplicated by identity, bare submissions never identity votes, denied and undecided actors named and not counted. The real evaluator over rc/2 task statements needs rc/2 task kinds (read unsupported today) and a registered task-contract profile with typed identity issuers."
     },
     {
       "handle": "ID-35",
       "case": "C-id-35",
       "scenario": "Key counting cannot bypass actor authority",
       "schema_vectors": [],
-      "isolated_tests": [],
-      "conformance": "pending",
-      "remaining": "Pending: no test. Needs the task consumer (key counting after actor authority); not built while the profile is not active. Task consumer integration, not a schema property."
+      "isolated_tests": [
+        "internal/resolve:TestActorIdentityCount"
+      ],
+      "conformance": "partial",
+      "remaining": "Through the resolver with a test-only evaluator: an identity submission with denied or undecided actor authority is not counted for its key; bare-key submissions keep the bare-key gate. The real evaluator over rc/2 task statements needs rc/2 task kinds (read unsupported today)."
     },
     {
       "handle": "ID-36",

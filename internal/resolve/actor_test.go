@@ -7,6 +7,7 @@ import (
 
 	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/conformance"
+	"github.com/research-common/research-commons/internal/keylog"
 	"github.com/research-common/research-commons/internal/policy"
 	"github.com/research-common/research-commons/internal/wire"
 )
@@ -264,24 +265,73 @@ func TestActorIdentitySelection(t *testing.T) {
 	has(t, a.Render(), "selected by the reader's policy")
 }
 
-// TestActorIdentityCountStaysUnknown: with a hook the identity counting unit is still unknown (the task consumer
-// that deduplicates eligible submissions by identity is not built), and the answer says why, differently from
-// the no-hook text.
-func TestActorIdentityCountStaysUnknown(t *testing.T) {
-	conformance.Partial(t, "C-id-34", "identity counting stays unknown with or without an actor evaluator; deduplicating eligible submissions by identity needs the task consumer")
+// TestActorIdentityCount: identity profile §5.3 through the resolver with a test-only evaluator. Under counting unit
+// identity, eligible submissions are deduplicated by the identity they act for (two delegates of I count once);
+// bare submissions never become identity votes; denied or undecided actors are not counted and the answer names
+// them. Under key counting an identity submission with denied authority is not counted for its key either. With
+// no evaluator identity counting stays unknown, as before; a contract listing key issuers cannot be read for
+// identities.
+func TestActorIdentityCount(t *testing.T) {
+	conformance.Partial(t, "C-id-34", "identity counting through the resolver with a test-only evaluator: eligible submissions deduplicated by identity, bare and unresolved ones named and not counted; the real evaluator over rc/2 task statements needs rc/2 task kinds (read unsupported today) and a registered task-contract profile")
+	conformance.Partial(t, "C-id-35", "key counting through the resolver with a test-only evaluator: an identity submission with denied or undecided authority is not counted for its key; the real evaluator over rc/2 task statements needs rc/2 task kinds")
 	w := newWorld(t)
 	g := w.task("G", "R")
-	e1 := w.taskEdition("E1", "R", g, []string{g}, w.contract("R", "counting_unit", "identity", "quorum", quorum(1, IndependenceNotRequired)))
-	w.submit("S", "A", g, e1, "X")
+	e1 := w.taskEdition("E1", "R", g, []string{g}, w.contract("R", "counting_unit", "identity", "quorum", quorum(2, IndependenceNotRequired)))
+	w.submit("SA", "A", g, e1, "X")  // A for I
+	w.submit("SB", "BB", g, e1, "X") // BB for I: the same identity, one vote
+	w.submit("SC", "C", g, e1, "X")  // C bare
+	w.submit("SD", "D", g, e1, "X")  // D for I, denied
+	w.submit("SQ", "Q", g, e1, "X")  // Q for I, undecided
 	off := readinessOf(t, taskView(t, w, g), w.ed(e1))
-	on := readinessOf(t, taskView(t, w, g, WithActorEligibility(&actorFake{})), w.ed(e1))
-	if off.Token != ReadyUnknown || on.Token != ReadyUnknown {
-		t.Fatalf("identity counting: %s / %s", off.Token, on.Token)
+	if off.Token != ReadyUnknown || !slices.ContainsFunc(off.Why, func(s string) bool { return strings.Contains(s, "no identity profile is active") }) {
+		t.Fatalf("no evaluator: %s %v", off.Token, off.Why)
 	}
-	if !slices.ContainsFunc(off.Why, func(s string) bool { return strings.Contains(s, "no identity profile is active") }) ||
-		!slices.ContainsFunc(on.Why, func(s string) bool { return strings.Contains(s, "needs the task consumer") }) ||
-		slices.ContainsFunc(on.Why, func(s string) bool { return strings.Contains(s, "profile is active") }) {
-		t.Fatalf("why: off %v on %v", off.Why, on.Why)
+	fake := &actorFake{}
+	for n, st := range map[string]string{"SA": policy.ActorEligible, "SB": policy.ActorEligible, "SD": policy.ActorDenied, "SQ": policy.ActorUnknown} {
+		fake.set(w.ids, n, st)
+	}
+	tk := taskView(t, w, g, WithActorEligibility(fake))
+	on := readinessOf(t, tk, w.ed(e1))
+	if on.Token != NotReady || on.N != 1 || on.Unit != CountedAsIdentities {
+		t.Fatalf("identity counting: %s %d %q\n%s", on.Token, on.N, on.Unit, tk.Render())
+	}
+	has(t, tk.Render(), "(1 of 2, "+CountedAsIdentities+")")
+	for name, why := range map[string]string{"SC": "not an identity vote", "SD": "not eligible for identity", "SQ": "is not established"} {
+		if !slices.ContainsFunc(on.Reports, func(s string) bool { return strings.Contains(s, keylog.Short(w.ids[name])) && strings.Contains(s, why) }) {
+			t.Errorf("%s: no report %q in %v", name, why, on.Reports)
+		}
+	}
+	// a second identity reaches the quorum
+	w2 := strings.Repeat("cd", 32)
+	fake.rows[w.ids["SC"]] = actorRow{w2, policy.ActorEligible}
+	if rd := readinessOf(t, taskView(t, w, g, WithActorEligibility(fake)), w.ed(e1)); rd.Token != Ready || rd.N != 2 {
+		t.Fatalf("two identities: %s %d", rd.Token, rd.N)
+	}
+	delete(fake.rows, w.ids["SC"])
+
+	// key counting: an identity submission is counted for its key only after actor authority passed
+	k := w.task("K", "R")
+	ek := w.taskEdition("EK", "R", k, []string{k}, w.contract("R", "counting_unit", "key", "quorum", quorum(3, IndependenceNotRequired)))
+	for _, n := range []string{"A", "BB", "C", "D", "Q"} {
+		w.submit("K"+n, n, k, ek, "X")
+	}
+	keyOff := readinessOf(t, taskView(t, w, k), w.ed(ek))
+	for n, st := range map[string]string{"KA": policy.ActorEligible, "KBB": policy.ActorEligible, "KD": policy.ActorDenied, "KQ": policy.ActorUnknown} {
+		fake.set(w.ids, n, st)
+	}
+	keyOn := readinessOf(t, taskView(t, w, k, WithActorEligibility(fake)), w.ed(ek))
+	if keyOff.Token != Ready || keyOff.N != 5 || keyOn.Token != Ready || keyOn.N != 3 || keyOn.Unit != CountedAs {
+		t.Fatalf("key counting: without %s %d, with %s %d %q", keyOff.Token, keyOff.N, keyOn.Token, keyOn.N, keyOn.Unit)
+	}
+
+	// a contract listing key issuers: identity issuers cannot be checked
+	h := w.task("H", "R")
+	eh := w.taskEdition("EH", "R", h, []string{h}, w.contract("R", "counting_unit", "identity", "eligible_issuers", []string{w.signer("A")}, "quorum", quorum(1, IndependenceNotRequired)))
+	w.submit("HA", "A", h, eh, "X")
+	fake.set(w.ids, "HA", policy.ActorEligible)
+	if rd := readinessOf(t, taskView(t, w, h, WithActorEligibility(fake)), w.ed(eh)); rd.Token != ReadyUnknown ||
+		!slices.ContainsFunc(rd.Why, func(s string) bool { return strings.Contains(s, "task-contract profile") }) {
+		t.Fatalf("key-listed issuers under identity counting: %s %v", rd.Token, rd.Why)
 	}
 }
 
