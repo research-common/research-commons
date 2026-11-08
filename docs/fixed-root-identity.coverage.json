@@ -1,5 +1,5 @@
 {
-  "status": "Scenario handles of the candidate fixed-root identity profile. Handle ID-NN is the registered conformance case C-id-NN (profile note §10); 'conformance' is that case's harness status (covers, partial or pending) and a test in internal/conformance keeps it equal to what the tests declare. The profile is not active, so no case is covered: tests check the rc/2 reader, the admission adapter and the reference model, not a consumer. Schema vectors are shape checks only.",
+  "status": "Scenario handles of the candidate fixed-root identity profile. Handle ID-NN is the registered conformance case C-id-NN (profile note §10); 'conformance' is that case's harness status (covers, partial or pending) and a test in internal/conformance keeps it equal to what the tests declare. The profile is not active: tests check the rc/2 reader, the admission adapter and the reference model, not a consumer, and a case is covered only when its whole required outcome is checked end to end at those layers with signed evidence (profile note §10). Schema vectors are shape checks only.",
   "scenarios": [
     {
       "handle": "ID-01",
@@ -42,10 +42,11 @@
       ],
       "isolated_tests": [
         "internal/identity:TestSliceGrantsAuthorizeExplicitActs",
-        "internal/wire:TestSignedIdentityPositiveVectors"
+        "internal/wire:TestSignedIdentityPositiveVectors",
+        "internal/identity:TestSignedVectorsGrantCoveredActIsEligible"
       ],
-      "conformance": "partial",
-      "remaining": "Bind the candidate signed bytes to authenticated lineage/scope inputs and evaluate complete authority."
+      "conformance": "covers",
+      "remaining": "Covered at the evaluator: the published signed rc/2 act (both algorithms) is eligible through Admit and the candidate actor evaluator, with I, G, D and the root lineage in its basis. No production reader wires the evaluator: the profile is not active."
     },
     {
       "handle": "ID-03",
@@ -147,10 +148,11 @@
       ],
       "isolated_tests": [
         "internal/keylog:TestFixedRootCandidateOldReaderMixedHistory",
-        "internal/identity:TestSliceWorkerSelfRevocation"
+        "internal/identity:TestSliceWorkerSelfRevocation",
+        "internal/resolve:TestActorCountGate"
       ],
       "conformance": "partial",
-      "remaining": "Raw events stay rc/1 and are seen by old keylog; identity history exception requires model/consumer integration."
+      "remaining": "Raw events stay rc/1 and are seen by old keylog; identity history exception requires model/consumer integration. The resolver counts an identity-context statement by actor eligibility with its key's bare-key status shown beside it (D-1108-2), through a test-only evaluator; no production reader wires the real one."
     },
     {
       "handle": "ID-11",
@@ -158,7 +160,8 @@
       "scenario": "Cut prefix excludes descendants/siblings",
       "schema_vectors": [],
       "isolated_tests": [
-        "internal/identity:TestSliceCutAtExactLine"
+        "internal/identity:TestSliceCutAtExactLine",
+        "internal/identity:TestSignedVectorsCutsAndRetirement"
       ],
       "conformance": "partial",
       "remaining": "Set-based ancestry closure including merges; signed wire binding still required."
@@ -241,10 +244,11 @@
         "internal/identity:TestReviewCompromisedRootGrantDiesWithRevoke",
         "internal/identity:TestReviewMalformedRootKeyEventIsUnknown",
         "internal/identity:TestReviewUnplaceableTerminalIsUnknownNotRetired",
-        "internal/wire:TestSignedIdentityNegativeVectors"
+        "internal/wire:TestSignedIdentityNegativeVectors",
+        "internal/identity:TestRootTerminalEventPlacement"
       ],
-      "conformance": "partial",
-      "remaining": "Candidate uses raw rc/1 events; terminal identity evaluation and unknown ancestry remain to integrate."
+      "conformance": "covers",
+      "remaining": "Covered at the evaluator: the published root revoke_key retires I in both algorithms; placement by prev whatever the merges, the same event on a proved rival inception (no effect) and an unplaceable event (unknown) are checked with synthetic keys. No production reader wires the evaluator: the profile is not active."
     },
     {
       "handle": "ID-18",
@@ -480,19 +484,21 @@
       ],
       "isolated_tests": [
         "internal/wire:TestFixedRootCandidateVectors",
-        "internal/resolve:TestActorIdentityCountStaysUnknown"
+        "internal/resolve:TestActorIdentityCount"
       ],
       "conformance": "partial",
-      "remaining": "Mandatory counting unit checked; the seam leaves identity counting unknown with or without an evaluator. Authenticated principal deduplication and unresolved vote behavior need the task consumer."
+      "remaining": "Mandatory counting unit checked. Through the resolver with a test-only evaluator: eligible submissions deduplicated by identity, bare submissions never identity votes, denied and undecided actors named and not counted. The real evaluator over rc/2 task statements needs rc/2 task kinds (read unsupported today) and a registered task-contract profile with typed identity issuers."
     },
     {
       "handle": "ID-35",
       "case": "C-id-35",
       "scenario": "Key counting cannot bypass actor authority",
       "schema_vectors": [],
-      "isolated_tests": [],
-      "conformance": "pending",
-      "remaining": "Pending: no test. Needs the task consumer (key counting after actor authority); not built while the profile is not active. Task consumer integration, not a schema property."
+      "isolated_tests": [
+        "internal/resolve:TestActorIdentityCount"
+      ],
+      "conformance": "partial",
+      "remaining": "Through the resolver with a test-only evaluator: an identity submission with denied or undecided actor authority is not counted for its key; bare-key submissions keep the bare-key gate. The real evaluator over rc/2 task statements needs rc/2 task kinds (read unsupported today)."
     },
     {
       "handle": "ID-36",
@@ -544,7 +550,8 @@
         "internal/identity:TestSliceNegatives",
         "internal/identity:TestByteMutationsNeverCreateAuthority",
         "internal/wire:TestSignedIdentityVectorsReproduce",
-        "internal/wire:TestSignedIdentityNegativeVectors"
+        "internal/wire:TestSignedIdentityNegativeVectors",
+        "internal/identity:TestSignedVectorsNegativesNeverReachEligibility"
       ],
       "conformance": "partial",
       "remaining": "Concrete schema negatives and both algorithms tested; full production critical registry still disabled."

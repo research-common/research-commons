@@ -172,8 +172,8 @@ func (r *Resolver) ineligible(p *Placed, content, role string) string {
 		return "about another blob"
 	case role == policy.RoleWorkflow && str(p.St.Body, "type") != "workflow":
 		return "not a workflow declaration (type " + fmt.Sprintf("%q", str(p.St.Body, "type")) + ")"
-	case !p.Counts():
-		return "counts toward nothing: " + notCountedWhy(p)
+	case !r.gate(p).Counts:
+		return "counts toward nothing: " + r.gate(p).Why
 	}
 	return ""
 }

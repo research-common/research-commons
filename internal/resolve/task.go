@@ -1,6 +1,7 @@
 package resolve
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -125,6 +126,10 @@ const (
 // independence (§9.3).
 const CountedAs = "counted as: distinct signing keys"
 
+// CountedAsIdentities is the label under counting unit identity: distinct identities the actor evaluator found
+// eligible, which are no more people than keys are.
+const CountedAsIdentities = "counted as: distinct eligible identities (not people; independence unknown)"
+
 // Binding is where a lifecycle statement binds.
 type Binding struct {
 	Edition string
@@ -149,9 +154,12 @@ type Attempt struct {
 // Submission is one `submit` naming the task.
 type Submission struct {
 	Statement, Signer, Result, Edition string
-	// Counts is the bare-key gate (key events, chained, understood); Why when not.
-	Counts bool
-	Why    string
+	// Counts is the counting gate (actorgate.go): the bare-key gate (key events, chained, understood) for a
+	// bare-key submission, actor eligibility for one the actor evaluator binds to Identity. Why says why not, or,
+	// for a counted identity submission, the signer's bare-key status shown beside it.
+	Counts   bool
+	Why      string
+	Identity string
 	// Eligible: the edition's terms admit the signer as an issuer; Granted names the coordinator grant that
 	// admits it under a coordinator ("" when the edition names none or the signer holds no counting grant).
 	Eligible bool
@@ -197,8 +205,10 @@ type Decision struct {
 type Readiness struct {
 	Edition string
 	Token   string
-	// N is the count behind the token (distinct signing keys in the best group); K the quorum.
+	// N is the count behind the token (distinct signing keys in the best group, or distinct eligible identities
+	// under counting unit identity); K the quorum. Unit is the label of N.
 	N, K int
+	Unit string
 	// Check is the rubric check over the counted submissions: ok, fail or unchecked ("" with no rubric). An
 	// unchecked criterion never lets the check pass (§13, I4).
 	Check Outcome
@@ -361,10 +371,9 @@ var submissionFields = []string{"task", "edition", "result", "salt", "self_decla
 func (r *Resolver) submissions(t *Task, ps []*Placed, bind func(string) Binding) {
 	for _, p := range ps {
 		b := p.St.Body
-		s := &Submission{Statement: p.St.ID, Signer: p.St.Signer, Result: str(b, "result"), Edition: str(b, "edition"), Counts: p.Counts()}
-		if !s.Counts {
-			s.Why = notCountedWhy(p)
-		}
+		g := r.gate(p) // bare-key: Counts; identity-context: actor eligibility (actorgate.go)
+		s := &Submission{Statement: p.St.ID, Signer: p.St.Signer, Result: str(b, "result"), Edition: str(b, "edition"), Counts: g.Counts,
+			Identity: g.Identity, Why: g.Why}
 		_, s.Salted = b.Get("salt")
 		if v, ok := b.Get("self_declared_independence"); ok {
 			s.SelfDeclared = bool(v.(canon.Bool))
@@ -535,14 +544,20 @@ func (r *Resolver) readiness(t *Task, b Binding) *Readiness {
 		return rd
 	}
 	tm := b.Terms
-	if tm.CountingUnit == CountIdentity {
-		rd.Token = ReadyUnknown
-		if r.actors != nil {
-			rd.Why = append(rd.Why, "counting unit identity: an actor evaluator is configured, but identity counting needs the task consumer (eligible submissions deduplicated by identity), so no identity count exists")
-		} else {
+	byIdentity := tm.CountingUnit == CountIdentity
+	if byIdentity {
+		switch {
+		case r.actors == nil:
+			rd.Token = ReadyUnknown
 			rd.Why = append(rd.Why, "counting unit identity: no identity profile is active in this reader, so no identity count exists")
+			return rd
+		case !tm.AnyIssuer:
+			// the provisional contract reads eligible_issuers as keys; typed identity issuers need a registered
+			// task-contract profile (identity profile §5.3), so no identity can be checked against the list
+			rd.Token = ReadyUnknown
+			rd.Why = append(rd.Why, "counting unit identity: eligible_issuers names keys in this contract reading, and typed identity issuers need a task-contract profile, so no identity count exists")
+			return rd
 		}
-		return rd
 	}
 	// pool: counted submissions passing every rubric criterion. undecided: counted submissions with no failing
 	// criterion and at least one unchecked one. They are left out of the count; they can make a short count
@@ -556,6 +571,9 @@ func (r *Resolver) readiness(t *Task, b Binding) *Readiness {
 		switch {
 		case !s.Counts:
 			rd.Reports = append(rd.Reports, fmt.Sprintf("submission %s admissible, not counted: %s", keylog.Short(s.Statement), s.Why))
+		case byIdentity && s.Identity == "":
+			// identity profile §5.3: bare submissions do not turn into identity votes
+			rd.Reports = append(rd.Reports, fmt.Sprintf("submission %s admissible, not counted: a bare-key submission is not an identity vote (counting unit identity)", keylog.Short(s.Statement)))
 		case !s.Eligible:
 			rd.Reports = append(rd.Reports, fmt.Sprintf("submission %s admissible, not counted: %s is not an eligible issuer", keylog.Short(s.Statement), shortKey(s.Signer)))
 		case tm.Coordinator != "" && s.Granted == "":
@@ -602,7 +620,10 @@ func (r *Resolver) readiness(t *Task, b Binding) *Readiness {
 		}
 		return rd
 	}
-	rd.K = q.K
+	rd.K, rd.Unit = q.K, CountedAs
+	if byIdentity {
+		rd.Unit = CountedAsIdentities
+	}
 	groups, notes, unchecked := r.quorumGroups(q, pool, r.exch.maxGroup)
 	rd.Reports = append(rd.Reports, notes...)
 	var counter Counter = KeyCounter{}
@@ -610,7 +631,13 @@ func (r *Resolver) readiness(t *Task, b Binding) *Readiness {
 		var ev []Evidence
 		for _, s := range g {
 			if only == nil || only(s) {
-				ev = append(ev, Evidence{Key: s.Signer, Statement: s.Statement, Via: "submit"})
+				// the counting unit: the key (after actor authority passed: the gate), or the eligible identity,
+				// deduplicated by the same distinct-value counter (identity profile §5.3)
+				unit := s.Signer
+				if byIdentity {
+					unit = "identity:" + s.Identity
+				}
+				ev = append(ev, Evidence{Key: unit, Statement: s.Statement, Via: "submit"})
 			}
 		}
 		n, _, _ := counter.Count("", ev)
@@ -912,6 +939,11 @@ func (t *Task) Render() string {
 			keylog.Short(s.Edition))
 		if !s.Counts {
 			fmt.Fprintf(&b, "; counts toward nothing: %s", s.Why)
+		} else if s.Identity != "" {
+			fmt.Fprintf(&b, "; acts for identity %s", keylog.Short(s.Identity))
+			if s.Why != "" {
+				fmt.Fprintf(&b, " (%s)", s.Why)
+			}
 		}
 		b.WriteString("\n")
 		if s.Granted != "" {
@@ -975,7 +1007,7 @@ func (t *Task) Render() string {
 	for _, rd := range t.Readiness {
 		fmt.Fprintf(&b, "  readiness of %s: %s", keylog.Short(rd.Edition), rd.Token)
 		if rd.Token == Ready || rd.Token == NotReady {
-			fmt.Fprintf(&b, " (%d of %d, %s)", rd.N, rd.K, CountedAs)
+			fmt.Fprintf(&b, " (%d of %d, %s)", rd.N, rd.K, cmp.Or(rd.Unit, CountedAs))
 		}
 		if rd.SelfDeclared {
 			b.WriteString(" (independence self-declared)")

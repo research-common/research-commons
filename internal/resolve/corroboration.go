@@ -247,9 +247,10 @@ func (r *Resolver) corroborate(o *Observation, st *wire.Statement, full bool) *C
 			e.Cohort = "hand-picked"
 		}
 		e.Comparison = r.comparisonData(e.Result, o.Digest)
+		g := r.gate(p) // bare-key: Counts; identity-context: actor eligibility (actorgate.go)
 		switch {
-		case !p.Counts():
-			e.Cause = "counts toward nothing: " + notCountedWhy(p)
+		case !g.Counts:
+			e.Cause = "counts toward nothing: " + g.Why
 		case c.Unchecked:
 			e.Cause = "not applied: " + c.Why
 		case o.Class == "method" && r.incomparableInput(o, e.Result):
@@ -257,7 +258,10 @@ func (r *Resolver) corroborate(o *Observation, st *wire.Statement, full bool) *C
 		default:
 			e.Counted = e.Verdict != "inconclusive"
 		}
-		if full && p.Counts() {
+		if g.Counts && g.Why != "" && e.Cause == "" {
+			e.Cause = g.Why
+		}
+		if full && g.Counts {
 			r.corroborationDetail(&e, o)
 		}
 		c.Evidence = append(c.Evidence, e)
@@ -300,7 +304,7 @@ func (r *Resolver) corroborate(o *Observation, st *wire.Statement, full bool) *C
 func (r *Resolver) symmetric(c *Corroboration, o *Observation, st *wire.Statement) {
 	for _, p := range r.byKind["corroborates"] {
 		b := p.St.Body
-		if !p.Counts() || str(b, "of") == st.ID || str(b, "verdict") != "contradicts" {
+		if !r.gate(p).Counts || str(b, "of") == st.ID || str(b, "verdict") != "contradicts" {
 			continue
 		}
 		of, ok := r.byID[str(b, "of")]
@@ -321,7 +325,7 @@ func (r *Resolver) symmetric(c *Corroboration, o *Observation, st *wire.Statemen
 func (r *Resolver) recaptures(c *Corroboration, o *Observation, st *wire.Statement) {
 	myCapture := string(canon.Encode(object(st.Body, "capture")))
 	for _, q := range r.byKind["observed"] {
-		if !q.Counts() || q.St.ID == st.ID || !sameReferent(st, q.St) {
+		if !r.gate(q).Counts || q.St.ID == st.ID || !sameReferent(st, q.St) {
 			continue
 		}
 		e := Evidence{Key: q.St.Signer, Statement: q.St.ID, Model: o.Class + " (" + o.Class + " class model)", Origins: r.originsOf(q.St.ID),
