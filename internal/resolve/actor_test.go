@@ -113,7 +113,10 @@ func TestActorTrustSeam(t *testing.T) {
 	}
 	other := obsView(t, w, x, WithPolicy(pol(t, nil, []*canon.Object{trustIdentity([]string{"attestation"}, X)})), WithActorEligibility(fake))
 	has(t, other.Render(), "your trust in these keys: not configured (every counted statement is counted)")
-	wantStatus(t, other, obsView(t, w, x).Corroboration.Status())
+	// what is counted is the counting gate's (D-1108-2): with an evaluator, the denied and undecided identity
+	// statements count toward nothing whatever the trust policy, exactly as with no policy at all
+	wantStatus(t, other, obsView(t, w, x, WithActorEligibility(fake)).Corroboration.Status())
+	wantStatus(t, other, "corroborated 1 within statements you hold")
 
 	// a key entry still decides by the signer, and the hook is never asked when a key entry matches
 	fake.calls = nil
@@ -122,8 +125,17 @@ func TestActorTrustSeam(t *testing.T) {
 	if e := evidenceOf(t, ko, bare); !e.Counted {
 		t.Fatalf("a bare statement by a trusted KEY is counted by key trust: %+v", e)
 	}
-	if slices.Contains(fake.calls, bare) || slices.Contains(fake.calls, w.ids["S1"]) {
-		t.Fatalf("hook asked about a key-trusted statement: %v", fake.calls)
+	// the trust question itself never asks the hook when a key entry matches (the counting gate asks about every
+	// evidence-ready statement: D-1108-2)
+	fake.calls = nil
+	for _, id := range []string{bare, w.ids["S1"]} {
+		pl, _ := w.store(nil).Statement(id)
+		if a := k.TrustsStatement(pl.St, policy.PurposeCorroboration, X, fake); !a.Trusted() || a.Evaluator != "" {
+			t.Fatalf("key-trusted %s: %+v", id[:12], a)
+		}
+	}
+	if len(fake.calls) != 0 {
+		t.Fatalf("trust question asked the hook about a key-trusted statement: %d calls", len(fake.calls))
 	}
 
 	// the A5 run line asks the same question
@@ -167,8 +179,13 @@ func TestActorHookAbsentIsToday(t *testing.T) {
 			t.Errorf("%s: a hook that no identity entry reaches moved the view:\n%s\nvs\n%s", name, got, want)
 		}
 	}
-	if len(boom.calls) != 0 {
-		t.Fatalf("hook asked with no identity entry naming the purpose: %v", boom.calls)
+	// The trust question never asks the hook without an identity entry (policy.TestTrustsStatementThroughActors).
+	// The counting gate does ask (D-1108-2, profile §5.3: key counting never bypasses actor authority, whatever
+	// the policy), and an answer binding no identity leaves every bare-key statement exactly where Counts put it.
+	for _, id := range boom.calls {
+		if p, ok := w.store(nil).Statement(id); !ok || !p.EvidenceReady() {
+			t.Fatalf("hook asked about %s, which is not evidence-ready", id)
+		}
 	}
 }
 
@@ -265,5 +282,52 @@ func TestActorIdentityCountStaysUnknown(t *testing.T) {
 		!slices.ContainsFunc(on.Why, func(s string) bool { return strings.Contains(s, "needs the task consumer") }) ||
 		slices.ContainsFunc(on.Why, func(s string) bool { return strings.Contains(s, "profile is active") }) {
 		t.Fatalf("why: off %v on %v", off.Why, on.Why)
+	}
+}
+
+// TestActorCountGate: R5SEAM-F1 / D-1108-2. With an actor evaluator, a statement it binds to an identity counts by
+// evidence readiness and actor eligibility, not by its key's bare-key status: an eligible identity corroboration
+// by a key that has since revoked itself counts, with the bare-key status shown beside it; a denied or undecided
+// identity statement counts toward nothing whatever the trust policy; bare statements (no identity) keep the
+// bare-key gate exactly. With no evaluator, the view is what it was.
+func TestActorCountGate(t *testing.T) {
+	conformance.Partial(t, "C-id-10", "the resolver's counting gate through a test-only evaluator: an eligible identity corroboration by a self-revoked worker key counts, its bare-key status shown beside it; a bare corroboration after the same self-revoke does not count; the warning text is the real evaluator's (internal/identity)")
+	w, x := hotReading(t)
+	// S1 revokes itself after its corroboration (hard, last_good before it: the corroboration falls outside), then
+	// signs another one
+	w.sign("S1rev", "S1", "revoke_key", obj("reason", "key_compromise", "last_good", w.ids["R1"]))
+	late := w.corroborates("S1late", "S1", x, w.result("R1late", "S2", "v1l", "W", "X", "d"), "supports")
+	base := obsView(t, w, x)
+	if e := evidenceOf(t, base, w.ids["S1"]); e.Counted {
+		t.Fatalf("precondition: the hard self-revoke leaves S1 counted: %+v", e)
+	}
+	fake := &actorFake{}
+	fake.set(w.ids, "S1", policy.ActorEligible)
+	fake.set(w.ids, "S1late", policy.ActorDenied)
+	o := obsView(t, w, x, WithActorEligibility(fake))
+	e := evidenceOf(t, o, w.ids["S1"])
+	if !e.Counted || !strings.Contains(e.Cause, "acts for identity "+actorI[:12]+"; its key's bare-key status, shown and not applied:") {
+		t.Fatalf("eligible identity corroboration by a self-revoked key: %+v", e)
+	}
+	if e := evidenceOf(t, o, late); e.Counted || !strings.Contains(e.Cause, "not eligible for identity") {
+		t.Fatalf("denied identity corroboration: %+v", e)
+	}
+	// S2 and C3 have no row: bare statements, exactly as without the hook
+	for _, n := range []string{"S2", "C3"} {
+		if a, b := evidenceOf(t, o, w.ids[n]), evidenceOf(t, base, w.ids[n]); a.Counted != b.Counted || a.Cause != b.Cause {
+			t.Fatalf("%s moved: %+v vs %+v", n, a, b)
+		}
+	}
+	if o.Corroboration.Corroborated != base.Corroboration.Corroborated+1 {
+		t.Fatalf("corroborated %d, without the evaluator %d", o.Corroboration.Corroborated, base.Corroboration.Corroborated)
+	}
+	// undecided: counted nowhere, and never as the key either
+	fake.set(w.ids, "S1", policy.ActorUnknown)
+	if e := evidenceOf(t, obsView(t, w, x, WithActorEligibility(fake)), w.ids["S1"]); e.Counted || !strings.Contains(e.Cause, "is not established") {
+		t.Fatalf("undecided identity corroboration: %+v", e)
+	}
+	// no evaluator: identical to today
+	if got := obsView(t, w, x, WithActorEligibility(nil)).Render(); got != base.Render() {
+		t.Fatalf("a nil evaluator moved the view")
 	}
 }

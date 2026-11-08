@@ -149,9 +149,12 @@ type Attempt struct {
 // Submission is one `submit` naming the task.
 type Submission struct {
 	Statement, Signer, Result, Edition string
-	// Counts is the bare-key gate (key events, chained, understood); Why when not.
-	Counts bool
-	Why    string
+	// Counts is the counting gate (actorgate.go): the bare-key gate (key events, chained, understood) for a
+	// bare-key submission, actor eligibility for one the actor evaluator binds to Identity. Why says why not, or,
+	// for a counted identity submission, the signer's bare-key status shown beside it.
+	Counts   bool
+	Why      string
+	Identity string
 	// Eligible: the edition's terms admit the signer as an issuer; Granted names the coordinator grant that
 	// admits it under a coordinator ("" when the edition names none or the signer holds no counting grant).
 	Eligible bool
@@ -361,10 +364,9 @@ var submissionFields = []string{"task", "edition", "result", "salt", "self_decla
 func (r *Resolver) submissions(t *Task, ps []*Placed, bind func(string) Binding) {
 	for _, p := range ps {
 		b := p.St.Body
-		s := &Submission{Statement: p.St.ID, Signer: p.St.Signer, Result: str(b, "result"), Edition: str(b, "edition"), Counts: p.Counts()}
-		if !s.Counts {
-			s.Why = notCountedWhy(p)
-		}
+		g := r.gate(p) // bare-key: Counts; identity-context: actor eligibility (actorgate.go)
+		s := &Submission{Statement: p.St.ID, Signer: p.St.Signer, Result: str(b, "result"), Edition: str(b, "edition"), Counts: g.Counts,
+			Identity: g.Identity, Why: g.Why}
 		_, s.Salted = b.Get("salt")
 		if v, ok := b.Get("self_declared_independence"); ok {
 			s.SelfDeclared = bool(v.(canon.Bool))
@@ -912,6 +914,11 @@ func (t *Task) Render() string {
 			keylog.Short(s.Edition))
 		if !s.Counts {
 			fmt.Fprintf(&b, "; counts toward nothing: %s", s.Why)
+		} else if s.Identity != "" {
+			fmt.Fprintf(&b, "; acts for identity %s", keylog.Short(s.Identity))
+			if s.Why != "" {
+				fmt.Fprintf(&b, " (%s)", s.Why)
+			}
 		}
 		b.WriteString("\n")
 		if s.Granted != "" {

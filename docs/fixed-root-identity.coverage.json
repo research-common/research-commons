@@ -148,10 +148,11 @@
       ],
       "isolated_tests": [
         "internal/keylog:TestFixedRootCandidateOldReaderMixedHistory",
-        "internal/identity:TestSliceWorkerSelfRevocation"
+        "internal/identity:TestSliceWorkerSelfRevocation",
+        "internal/resolve:TestActorCountGate"
       ],
       "conformance": "partial",
-      "remaining": "Raw events stay rc/1 and are seen by old keylog; identity history exception requires model/consumer integration."
+      "remaining": "Raw events stay rc/1 and are seen by old keylog; identity history exception requires model/consumer integration. The resolver counts an identity-context statement by actor eligibility with its key's bare-key status shown beside it (D-1108-2), through a test-only evaluator; no production reader wires the real one."
     },
     {
       "handle": "ID-11",
