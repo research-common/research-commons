@@ -60,6 +60,12 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 - Every surface that prints a blob (`show`, `list`, `verify`, `explain`) now prints each observation of it with its
   **corroboration status** (counts under the counting unit, always scoped); `show`/`explain` of the observation's
   statement print the evidence behind it, and `verify` prints it beside the exit, which it never moves.
+- Candidate identity profile: an actor evaluator over admitted identity evidence (not wired into any command; the
+  profile stays inactive). With one configured, identity-context statements count for corroboration, task submissions
+  and exact pins by actor eligibility, with the signer's bare-key status shown beside them; identity counting
+  deduplicates eligible identities and never turns a bare submission into an identity vote; trust answers cite the
+  evaluator beside the policy digest. Without one, every output is unchanged. The signed `rc/2` vectors now run end to
+  end through it in both algorithms.
 - Candidate identity profile: signed `rc/2` test vectors for both algorithms (`docs/fixed-root-identity.signed-vectors.json`):
   inception, grant, cuts (`last_good` set and null), actor-bearing acts, an `rc/1` root `revoke_key`, and delivered
   negatives (tampered or stripped actor, `v1` preimage, `rc/1`↔`rc/2` relabels, an Ed25519 edge case as an identity

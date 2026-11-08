@@ -354,7 +354,10 @@ to individually eligible A may still select A.
 Conversely, an outsider's self-signed I header with an invented/missing G must not stall
 I globally. First establish issuer-authenticated binding of this signer, kind and
 subject scope before propagating its uncertainty. Unsupported/unproven affiliation
-remains unresolved for that candidate only. Later real grant delivery can change the
+remains unresolved for that candidate only. Binding means an authenticated grant,
+signed by I's pinned root key, that names I and this signer as delegate. A bound actor's
+denial or uncertainty is I's to report; an unbound actor's is the candidate's alone. Scope
+is evaluated after binding and does not unbind. Later real grant delivery can change the
 answer; this is not a completeness assertion. The same relevance boundary applies to
 unresolved resource predecessors/approvals and task decisions. A cut authenticated by
 the pinned root is relevant even when its prefix dependency is missing, and reads unknown
@@ -406,7 +409,10 @@ invent a universal mapping for third-party/nested legacy contracts. Task integra
 must register a concrete contract profile, its requirements/evidence grammar and
 legacy alias rejection. The schema's `example-unimplemented-contract-v1` example is
 structurally illustrative and cannot settle a task. No legacy task contract is
-implicitly upgraded or assigned new roles by this candidate.
+implicitly upgraded or assigned new roles by this candidate. In particular, a contract
+whose `eligible_issuers` lists keys does not make identity counting read "any identity a
+listed key acts for": until a contract profile types its subjects, identity counting under
+it is `unknown`, naming the missing profile.
 
 | Operation | Additional role/continuity rule |
 |---|---|
@@ -536,7 +542,9 @@ predecessors and merges 256 each; the inherited JSON depth/PAE limits above. A f
 reader additionally uses evaluation caps of 100,000 distinct statement dependencies,
 100,000 ancestry edges on one path, and 1,000,000 dependency/edge inspections per
 query. Account work deterministically; on a cap, return unknown/non-passing and the cap,
-not a partial grant/prefix. The identity model enforces these three caps (injectable for
+not a partial grant/prefix. A cap hit is `unknown` even when a denial was found before it
+(a stopped walk has not shown its answer complete); the denial found is still listed
+beside it, never hidden. The identity model enforces these three caps (injectable for
 tests, defaulting to the numbers above); the syntax-only harness does not. Accounting,
 identical for the same evidence and limits whatever the delivery order:
 
