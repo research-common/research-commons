@@ -289,7 +289,7 @@ func (v *view) membershipObj(res *resolve.Resource, e *resolve.Edition) *Obj {
 		if key == "" {
 			continue
 		}
-		row := newObj().set("member", refV(key)).set("by", textV(by)).set("role", peerV(bodyString(mo, "role")))
+		row := newObj().set("member", refV(key)).set("by", textV(by)).set("member_role", peerV(bodyString(mo, "role")))
 		if m, ok := v.r.Membership(res.ID, key); ok && m.Listed {
 			row.set("state", tokV(tok(string(m.Outcome))))
 			if m.Endorsed {
@@ -308,7 +308,7 @@ func (v *view) membershipObj(res *resolve.Resource, e *resolve.Edition) *Obj {
 func completenessObj(c *resolve.Completeness, full bool) *Obj {
 	o := newObj().set("labels", tokens("completeness claim")).set("state", tokV(tok(string(c.Outcome))))
 	if c.Scoped {
-		o.set("class", peerV(c.Class)).set("source", peerV(c.Source)).set("from", peerV(c.From)).set("to", peerV(c.To))
+		o.set("reading_class", peerV(c.Class)).set("source", peerV(c.Source)).set("from", peerV(c.From)).set("to", peerV(c.To))
 		if c.Timescale != "" {
 			o.set("timescale", peerV(c.Timescale))
 		}

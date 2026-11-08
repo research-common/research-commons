@@ -233,6 +233,10 @@ func verifyCmd(c *Ctx) (*Obj, int, error) {
 			var why []string
 			code, why = ob.VerifyExit()
 			o.set("causes", observationCauses(why))
+			if ob.Corroboration != nil {
+				// shown beside the exit, never moving it (claims §13, I6)
+				o.set("corroboration", corroborationObj(ob.Corroboration, false))
+			}
 		}
 	}
 	if rr, ok := v.resourceOf(ref); ok {

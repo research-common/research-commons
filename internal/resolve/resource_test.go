@@ -317,7 +317,7 @@ func TestGenesisID(t *testing.T) {
 // orphan and never current.
 func TestEditionsAndPin(t *testing.T) {
 	conformance.Covers(t, "C-core-78")
-	conformance.Partial(t, "C-core-79", "explain lists G → E1 → E2 by hash: the chain is in the view (Predecessors); the explain surface is not built")
+	conformance.Partial(t, "C-core-79", "the resolver half: the chain is in the view (Predecessors); explain prints it in internal/cli TestResourceChain")
 	w := newWorld(t)
 	g := w.genesis("G", "A", 0, "A")
 	e1 := w.edition("E1", "A", g, []string{g}, []string{"a"})
@@ -388,7 +388,7 @@ func TestNoSelfElevation(t *testing.T) {
 
 // TestKOfNDifferentBodies: C-core-82. 2-of-3; A approves body X, B approves body Y differing by one field.
 func TestKOfNDifferentBodies(t *testing.T) {
-	conformance.Partial(t, "C-core-82", "explain surface; the view shows one approval per body")
+	conformance.Partial(t, "C-core-82", "the resolver half: one approval per body; explain prints it in internal/cli TestResourceOneApprovalPerBody")
 	w := newWorld(t)
 	g := w.genesis("G", "A", 2, "A", "B", "C")
 	x := w.edition("X", "A", g, []string{g}, []string{"a"})

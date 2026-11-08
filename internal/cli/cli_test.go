@@ -185,7 +185,7 @@ func TestExitTwo(t *testing.T) {
 // TestClosedVocabulary: C-core-132. Every surface over the fixture set prints only tokens of the table, and
 // every exit is in the exit table; every token constant of the layers below is documented in the table.
 func TestClosedVocabulary(t *testing.T) {
-	conformance.Partial(t, "C-core-132", "every CLI surface (show, verify, explain, list, status, hub check, pull, gc, fsck) over the fixture set prints only table tokens and table exits, and the table is the docs' source; a rule evaluation's ok/fail/unchecked reaches the CLI only inside the gate's intended_for label detail, not yet as its own typed member")
+	conformance.Partial(t, "C-core-132", "every CLI surface (show, verify, explain, list, status, hub check, pull, gc, fsck) over the fixture set prints only table tokens and table exits, and the table is the docs' source; a rule evaluation's ok/fail/unchecked is a typed state member on the resource view (membership rows, the completeness check) and the pre-pin check; on the gate it is still inside the intended_for label detail")
 	w := fixture(t)
 	for _, a := range sweepArgs(w) {
 		r := w.run(append(a, "--json")...)
@@ -264,7 +264,7 @@ func TestOutputsDoc(t *testing.T) {
 // TestOneAnswer: C-core-134, C-core-135, C-core-66. show, list, verify and explain give the same authorship,
 // grade and disclosure tokens for each blob, and every one prints the full disclosure set beside the grade.
 func TestOneAnswer(t *testing.T) {
-	conformance.Partial(t, "C-core-134", "authorship, grade, disclosures and labels agree across show, list, verify and explain; corroboration status has no CLI surface yet (the observation view is not wired to a command)")
+	conformance.Partial(t, "C-core-134", "authorship, grade, disclosures and labels agree across show, list, verify and explain; corroboration status on every surface is TestCorroborationOnEverySurface")
 	conformance.Partial(t, "C-core-135", "listing exits 0 and verify exits 3, both showing contested; push is not built")
 	conformance.Partial(t, "C-core-66", "show, list, verify and explain print the full disclosure set beside every grade; the hub CI summary is the gate's surface")
 	w := fixture(t)
