@@ -163,6 +163,19 @@ func everyView(r *Resolver, digests []string) string {
 			if s, ok := r.Series(id, ""); ok {
 				b.WriteString(s.Render())
 			}
+			if _, rf := r.EndorseSeries(id, "", RequireDeclaredNotAfterComputed{}); rf != nil {
+				b.WriteString("endorse: " + rf.Error() + "\n")
+			}
+			if a, err := r.Admit(id, res.Current, obj("statement", id, "role", "member")); err == nil {
+				b.WriteString(a.Render())
+			} else {
+				b.WriteString("admit: " + err.Error() + "\n")
+			}
+			if pp, err := r.CheckIntendedFor(obj("content", contentOf("X"), "type", "dataset"), id, res.Current); err == nil {
+				fmt.Fprintf(&b, "prepin %s %s %v %s %s\n", pp.Resource, pp.Edition, pp.Evals, pp.Outcome, canon.Encode(pp.Body))
+			} else {
+				b.WriteString("prepin: " + err.Error() + "\n")
+			}
 			if c, ok := r.Completeness(id, ""); ok {
 				b.WriteString(c.Render())
 			}
@@ -180,6 +193,17 @@ func everyView(r *Resolver, digests []string) string {
 			b.WriteString(pr.Display + "\n")
 		}
 		b.WriteString(r.Credit(p.St.Signer, &CreditRule{Name: "all"}).Render())
+		if rep, err := r.Reputation(p.St.Signer, ReputationRule{Name: "all", From: "2026-01-01T00:00:00Z", To: "2027-01-01T00:00:00Z", Describe: "everything"}); err == nil {
+			b.WriteString(rep.String() + "\n")
+		}
+		if p.St.Body == nil {
+			continue
+		}
+		if pv := provenance(p.St.Body); pv != nil {
+			if gr := r.Group(pv); gr != nil {
+				fmt.Fprintf(&b, "group %s derivers=%v outputs=%v %v\n", gr.Token, gr.Derivers, gr.Outputs, gr.Explain)
+			}
+		}
 	}
 	for _, d := range digests {
 		b.WriteString(r.Artifact(d).Render())
@@ -197,7 +221,8 @@ func everyView(r *Resolver, digests []string) string {
 // withdraw_approval, intent, submit, decide: verified and unsupported), authenticated-invalid rc/2 lines and a
 // tampered one, are delivered with an rc/1 resource and observation corpus. Every view answers without a panic,
 // with and without an evaluator, in sampled orders; no rc/2 kind the slice does not implement is evaluable, and no
-// rc/2 actor line counts without an evaluator.
+// rc/2 actor line counts without an evaluator. The same bytes through the unchanged reader: every view answers,
+// and every rc/2 line stays unverified, undecoded and unsupported (C-id-36).
 func TestDualViewsSurviveCandidateBytes(t *testing.T) {
 	conformance.Partial(t, "C-id-36", "every resolver view on the signed vectors + rc/2 resource/task/invalid lines under the dual reader without a panic, unimplemented rc/2 kinds non-passing; the unchanged reader's half is TestUnchangedReaderStackOnCandidateBytes")
 	vec, err := conformance.LoadSignedIdentityVectors()
@@ -237,6 +262,41 @@ func TestDualViewsSurviveCandidateBytes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// the unchanged reader on the same bytes: every view answers, and no rc/2 line is verified, evaluable or counted
+	t.Run("unchanged reader", func(t *testing.T) {
+		var first string
+		for _, o := range append([][]int{nil}, sampleOrders(len(lines), 0xd0a2, 4)...) {
+			in := lines
+			if o != nil {
+				in = make([][]byte, len(o))
+				for i, j := range o {
+					in[i] = lines[j]
+				}
+			}
+			s := keylog.NewStore()
+			deliverAll(s, in)
+			r := New(s, WithActorEligibility(actors)) // an evaluator is never asked about an unverified line
+			got := everyView(r, digests)
+			if first == "" {
+				first = got
+			} else if got != first {
+				t.Fatalf("order changed an answer: %s", firstDiff(first, got))
+			}
+			for _, p := range r.byID {
+				if p.St.RC == "rc/2" && (p.St.Verified || p.Evaluable || p.Counts() || p.IdentityContext() || p.St.Body != nil) {
+					t.Fatalf("unchanged reader read an rc/2 %s: %+v", p.St.Kind, p)
+				}
+			}
+			for _, k := range s.Keys() {
+				v := s.Log(k).View()
+				for _, st := range v.Retained {
+					if st.RC == "rc/2" && (st.Verified || st.Status != wire.Unsupported) {
+						t.Fatalf("retained rc/2 line: %+v", st)
+					}
+				}
+			}
+		}
+	})
 	for _, tc := range []struct {
 		name string
 		opts []Option
@@ -288,5 +348,30 @@ func TestDualViewsSurviveCandidateBytes(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestDualNoKeyFallbackSelection: D-1108b-3 on the reader's selections. With no evaluator, a `{key: K}` selection
+// never follows K's rc/2 actor claim (it is I's or nobody's, never K's), an exact pin to that statement is not met
+// (it counts toward nothing, with the hook-absent text), and an `{identity: I}` selection reads the hook-absent
+// answer. A `{key: MM}` selection follows MM's marker-only rc/2 claim like any key claim.
+func TestDualNoKeyFallbackSelection(t *testing.T) {
+	conformance.Partial(t, "C-id-31", "under the dual reader with no evaluator: a key selection never follows the key's rc/2 actor claim, an exact pin to it is not met, an identity selection reads the hook-absent answer; a marker-only rc/2 claim is followed by key")
+	w, _ := dualFallbackWorld(t)
+	read := func(sel *canon.Object, x string) *Artifact {
+		return dualResolver(t, w, WithPolicy(pol(t, []*canon.Object{sel}, nil))).Artifact(dig(x))
+	}
+	if a := read(keySel(dig("Y"), policy.RoleAuthorship, w.signer("K")), "Y"); a.Selection == nil || a.Selection.Met() {
+		t.Fatalf("a key selection followed K's actor claim:\n%s", a.Render())
+	}
+	a := read(pinSel(dig("Y"), policy.RoleAuthorship, w.ids["K:authored"]), "Y")
+	if a.Selection == nil || a.Selection.Met() || !strings.Contains(a.Selection.Why, "unknown (identity profile not active)") {
+		t.Fatalf("an exact pin to K's actor claim: %+v\n%s", a.Selection, a.Render())
+	}
+	if a := read(identitySel(dig("Y"), policy.RoleAuthorship), "Y"); a.Selection == nil || a.Selection.State != SelIdentity {
+		t.Fatalf("identity selection without an evaluator: %+v", a.Selection)
+	}
+	if a := read(keySel(dig("V"), policy.RoleAuthorship, w.signer("MM")), "V"); !a.Selection.Met() {
+		t.Fatalf("a key selection did not follow MM's marker-only claim: %+v\n%s", a.Selection, a.Render())
 	}
 }

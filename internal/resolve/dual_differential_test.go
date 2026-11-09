@@ -26,8 +26,19 @@ import (
 // The whole resolve suite can also be rerun under the dual store with RC_TEST_DUAL_READER=1 (dual_helpers_test.go),
 // which covers every remaining resolver test's assertion; that rerun costs one more suite run (~100 s).
 
-func TestDualDifferentialLegacyGoldens(t *testing.T) {
-	conformance.Partial(t, "C-id-01", "(a) legacy goldens under the dual store; (b) and (c) in the sibling tests")
+// TestDualDifferential: C-id-01 end to end. Every corpus below is resolved under the default store and the dual
+// store, and every answer is compared: ids, statuses and refusals at the wire and key-log layers, and every
+// resolver view (statements, key logs, artifacts and verify, observations and corroboration, resources,
+// membership, series, completeness, recorded membership, pre-registration, credit, reputation, tasks).
+func TestDualDifferential(t *testing.T) {
+	conformance.Covers(t, "C-id-01")
+	t.Run("legacy goldens", dualDifferentialLegacyGoldens)
+	t.Run("property fixtures", dualDifferentialPropertyFixtures)
+	t.Run("tasks", dualDifferentialTasks)
+	t.Run("wire vectors", dualDifferentialWireVectors)
+}
+
+func dualDifferentialLegacyGoldens(t *testing.T) {
 	for _, c := range identityLegacyCases(t) {
 		t.Run(c.name, func(t *testing.T) {
 			want, err := os.ReadFile(filepath.Join("testdata", "identity_legacy_baseline", c.name+".golden"))
@@ -55,8 +66,7 @@ func TestDualDifferentialLegacyGoldens(t *testing.T) {
 	}
 }
 
-func TestDualDifferentialPropertyFixtures(t *testing.T) {
-	conformance.Partial(t, "C-id-01", "(b) every view on the P-01 fixture seeds under both stores; (a) and (c) in the sibling tests")
+func dualDifferentialPropertyFixtures(t *testing.T) {
 	fixture.Check(t, propBaseSeed, propSeeds, fixture.Extended, func(f fixture.Fixture) string {
 		pw := concretize(t, f)
 		for _, o := range append([][]int{nil}, sampleOrders(len(pw.lines), f.Seed, 2)...) {
@@ -82,8 +92,49 @@ func TestDualDifferentialPropertyFixtures(t *testing.T) {
 	})
 }
 
-func TestDualDifferentialWireVectors(t *testing.T) {
-	conformance.Partial(t, "C-id-01", "(c) the wire-format vectors corpus through both stores and the resolver; (a) and (b) in the sibling tests")
+// dualDifferentialTasks: the task view (the property fixtures build no task): a task with a contract, two
+// submissions, intents, a progress heartbeat, a decision citing both and a rival decision by a non-beneficiary,
+// resolved under both stores with the provisional contract reader: the same task, readiness and decisions.
+func dualDifferentialTasks(t *testing.T) {
+	w := newWorld(t)
+	g := w.task("G", "R")
+	e := w.taskEdition("E", "R", g, []string{g}, w.contract("R", "quorum", quorum(2, "none")))
+	w.life("I1", "A", "intent", g, e)
+	w.life("P1", "A", "progress", g, e, "note", "half")
+	s1 := w.submit("S1", "A", g, e, "X")
+	s2 := w.submit("S2", "BB", g, e, "Y")
+	w.decide("D", "R", g, e, "accept", []string{s1, s2})
+	w.decide("DQ", "Q", g, e, "reject", []string{s1})
+	for _, o := range append([][]int{nil}, sampleOrders(len(w.lines), 0x7a5c, 4)...) {
+		var lines [][]byte
+		if o == nil {
+			lines = w.lines
+		} else {
+			for _, j := range o {
+				lines = append(lines, w.lines[j])
+			}
+		}
+		var out []string
+		for _, s := range []*keylog.Store{keylog.NewStore(), dualStore()} {
+			if n := deliverAll(s, lines); n != 0 {
+				t.Fatalf("%d lines refused", n)
+			}
+			tk, ok := New(s, WithContractReader(ProvisionalContract{})).Task(g)
+			if !ok {
+				t.Fatal("task not resolved")
+			}
+			out = append(out, tk.Render())
+		}
+		if out[0] != out[1] {
+			t.Fatalf("the dual reader changed the task view: %s", firstDiff(out[0], out[1]))
+		}
+		if !strings.Contains(out[0], "accept") {
+			t.Fatalf("the fixture did not reach a decision:\n%s", out[0])
+		}
+	}
+}
+
+func dualDifferentialWireVectors(t *testing.T) {
 	v, err := conformance.LoadVectors()
 	if err != nil {
 		t.Fatal(err)
