@@ -127,7 +127,7 @@ claim that the remaining positive grant is complete (§5).
 | Signed body and envelope | Upgraded interpretation |
 |---|---|
 | `rc/1`, no identity marker or actor | Existing `key(K)` semantics. |
-| `rc/2`, understood marker, no actor | `key(K)` on an identity-aware body; may fill only a key slot. It carries no `amends` (that requires an actor). Open, decided with the claim consumer: whether it amends the same key's `rc/1` `authored` of the same digest through same-key ancestry (§5.1 "bare-key amendment rules do not change") or stands beside it. |
+| `rc/2`, understood marker, no actor | `key(K)` on an identity-aware body; may fill only a key slot. It carries no `amends` (that requires an actor). An `authored`/`observed` of this shape is a `key(K)` claim and follows bare-key amendment rules unchanged: it amends the same key's earlier claim of the same digest (either major) through same-key ancestry, exactly as `rc/1` does, because the subject is `key(K)` under both majors and one key never contests itself. |
 | `rc/2`, understood marker and one actor I/G | Exactly I/G, subject to authority checks; never a key fallback. |
 | Actor without body marker or without critical declaration | Invalid candidate even if correctly signed. |
 | Marker present but unknown critical feature/profile | Unsupported/non-passing, not bare-key interpretation. |
@@ -343,7 +343,11 @@ membership. Amendments name a nonempty, sorted, duplicate-free
 I, have the same content digest and appropriate claim kind. The new grant must permit
 amendment of that content. Replacement is of the complete claim fields, not a patch.
 Same-key ancestry alone does not amend an identity-context claim. Bare-key amendment
-rules do not change.
+rules do not change (§2.3: an `rc/2` marker-only claim is a bare-key claim). An amendment
+naming a target that is not one of I's claims of the same kind on the same blob (another
+principal, another blob, another kind, or a claim not eligible for I) applies to nothing,
+and the amending statement is not itself a claim of I. Under `amend:"own"` (§3) a target
+must also be signed by the acting key.
 
 Maximal eligible nodes in this explicit DAG are candidate current claims. Concurrent
 cross-key amendments remain concurrent/contested; no cross-key sequence, arrival-time,

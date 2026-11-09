@@ -192,9 +192,9 @@ func TestActorHookAbsentIsToday(t *testing.T) {
 
 // TestActorIdentitySelection: a principal selection `{identity: I}` follows I's eligible claims through the
 // hook, exactly as `{key: K}` follows K's; a bare statement by the same worker key is not followed; an
-// undecided claim makes the selection unknown rather than met without it; an eligible claim that amends
-// another is unknown (amendment authority is not evaluated here); with no hook it stays unknown (identity
-// profile not active) and no key's claims are followed in its place.
+// undecided claim makes the selection unknown rather than met without it; an eligible claim that explicitly
+// amends another eligible claim of I replaces it (amendments_test.go has the §5.1 cases); with no hook it stays
+// unknown (identity profile not active) and no key's claims are followed in its place.
 func TestActorIdentitySelection(t *testing.T) {
 	conformance.Partial(t, "C-id-31", "principal-following selection of an identity through a test-only actor evaluator (its eligible claims only, never a bare worker-key statement, unknown when undecided), following explicit amendments; exact pins to identity-context statements and the real evaluator adapter remain")
 	conformance.Partial(t, "C-id-32", "an undecided or denied claim is never substituted (unknown / not met); the production preflight (exit 2) and the real evaluator adapter remain")
