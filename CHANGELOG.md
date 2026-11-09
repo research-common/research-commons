@@ -47,6 +47,22 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ### Added
 
+- `commons explain <ref> --since <file>`: given an earlier `explain --json` of the same ref, prints what changed
+  since then, each change with its cause: a statement added or removed (a `rotate_key` / `revoke_key` named as a key
+  event), an input's status, log line or counted state, the hub policy, the reader policy (each entry that differs),
+  the time policy, the evaluator, or the time context, plus whether the rest of the answer changed. Nothing is
+  cached between runs; the file is the only memory. A file that is not an explain output of that ref is exit 2.
+  To make this possible `explain` now also prints `explained` (the ref), each input's `counted` state, the in-force
+  key events of every input's signer among its statements, and the reader policy document beside its digest.
+- Reader policy trust targets now follow references: a `corroborates`, `refutes` or `retracts` (its `of`) and a
+  `describes` of a statement are judged by the referenced statement's content when it is held. When it is not, an
+  answer that depends on that content reads `unknown (target reference not resolved)` instead of `not trusted`. At
+  `pull` the trust floor looks for the reference in the package and in this store; the unknown answer is refused
+  under `--below-floor refuse` and labelled by default. New: `policy.Target`, `policy.ResolveTarget`,
+  `policy.TrustsTarget`, `policy.AdmitTarget`.
+- `commons list` now prints the resources this store holds beside the blobs: one line per resource with its id,
+  its current edition (or `FORK` and its tips) and how many controllers the current authority has. In `--json` this
+  is a new `resources` array; the `blobs` array is unchanged.
 - `show`, `verify` and `explain` print **the resource view**. A resource's id is its genesis statement's id, so
   `show <genesis id>` prints the genesis and, beside it, the resource: controllers and rule, the current edition and the
   chain behind it by hash (`G → E1 → E2`), every edition with its state (`edition`, `pending`, `orphan`,

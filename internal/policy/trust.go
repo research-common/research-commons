@@ -114,6 +114,8 @@ func (a Answer) String() string {
 		return line
 	case Unknown:
 		return fmt.Sprintf("trust for %s unknown under reader policy %s: the policy names an identity, and the identity profile is not active", what, short(a.Policy))
+	case UnknownTarget:
+		return fmt.Sprintf("trust for %s unknown under reader policy %s: the target is not resolved%s", what, pol, a.because())
 	case UnknownActor:
 		return fmt.Sprintf("trust for %s unknown under reader policy %s: the policy names an identity, and whether this statement acts for it is not established%s", what, pol, a.because())
 	}
