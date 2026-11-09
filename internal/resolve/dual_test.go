@@ -135,7 +135,9 @@ func TestDualNoKeyFallback(t *testing.T) {
 	}
 
 	// the unchanged reader: every rc/2 line retained or placed unverified, never evaluable
-	old := w.store(nil)
+	plain := keylog.NewStore() // explicitly the default store: w.store follows RC_TEST_DUAL_READER
+	deliverAll(plain, w.lines)
+	old := New(plain)
 	for n, id := range w.ids {
 		if p, ok := old.Statement(id); ok && p.St.RC == "rc/2" && (p.Evaluable || p.Counts() || p.IdentityContext()) {
 			t.Fatalf("unchanged reader evaluated %s", n)
