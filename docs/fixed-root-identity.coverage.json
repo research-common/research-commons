@@ -295,10 +295,11 @@
         "absent-amend-not-default-false"
       ],
       "isolated_tests": [
-        "internal/identity:TestSliceNegatives"
+        "internal/identity:TestSliceNegatives",
+        "internal/identity:TestAmendFalsePublishesButCannotAmend"
       ],
-      "conformance": "partial",
-      "remaining": "Mandatory Boolean syntax checked; grant breadth and amendment authorization require model."
+      "conformance": "covers",
+      "remaining": "Covered at the evaluator over signed evidence (EIP-191 root, Ed25519 worker): amend:false publishes in scope, an act carrying amends (own record or another delegate's) is denied by scope, a missing amend is an invalid grant. No production reader wires the evaluator: the profile is not active."
     },
     {
       "handle": "ID-21",
@@ -309,19 +310,22 @@
         "amendment-with-no-identity-actor"
       ],
       "isolated_tests": [
-        "internal/wire:TestFixedRootCandidateVectors"
+        "internal/wire:TestFixedRootCandidateVectors",
+        "internal/resolve:TestIdentityClaimsGroupByExplicitAmendment"
       ],
       "conformance": "partial",
-      "remaining": "Amendment reference syntax checked; DAG and conflict/current-state behavior not implemented here."
+      "remaining": "The amendment DAG, concurrent cross-key amendments (contested, no tiebreak) and reconciliation run in the resolver behind the actor hook with a test-only evaluator; the same over signed rc/2 evidence needs the dual-major reader."
     },
     {
       "handle": "ID-22",
       "case": "C-id-22",
       "scenario": "Wrong principal/content or missing amendment target",
       "schema_vectors": [],
-      "isolated_tests": [],
-      "conformance": "pending",
-      "remaining": "Pending: no test. Needs the claim consumer (amendment target resolution); not built while the profile is not active. Operation-specific dependency resolution and noninterference."
+      "isolated_tests": [
+        "internal/resolve:TestIdentityAmendmentTargets"
+      ],
+      "conformance": "partial",
+      "remaining": "Wrong principal, wrong content, an ineligible target and a missing target run in the resolver behind the actor hook with a test-only evaluator; the same over signed rc/2 evidence needs the dual-major reader."
     },
     {
       "handle": "ID-23",
@@ -648,10 +652,11 @@
         "claim-explicit-amendment-shape"
       ],
       "isolated_tests": [
-        "internal/identitymodel:TestAuthenticatedIssuerBoundaryAndNoninterference"
+        "internal/identitymodel:TestAuthenticatedIssuerBoundaryAndNoninterference",
+        "internal/resolve:TestIdentityAmendmentTargets"
       ],
       "conformance": "partial",
-      "remaining": "Syntax permits explicit missing targets; authenticated issuer/scope uncertainty boundary needs model/integration."
+      "remaining": "Outsider half at the model; an authorized amendment naming a missing target makes I's current view unknown (an exact pin still selects the eligible target) and an unbound outsider changes nothing in the resolver behind the actor hook with a test-only evaluator; signed rc/2 end to end needs the dual-major reader."
     },
     {
       "handle": "ID-45",
@@ -665,10 +670,11 @@
       "isolated_tests": [
         "internal/identitymodel:TestAmendPermissionIsExplicitAndIdentityWideWithinContentScope",
         "internal/identitymodel:TestAmendOwnIsTheActingKeysOwnRecords",
-        "internal/identity:TestAmendOwnSignedEvidence"
+        "internal/identity:TestAmendOwnSignedEvidence",
+        "internal/resolve:TestIdentityClaimsGroupByExplicitAmendment"
       ],
       "conformance": "partial",
-      "remaining": "Mandatory amend Boolean and explicit targets checked; breadth/competing claims and issuer UI acknowledgment remain."
+      "remaining": "Grant breadth at the model (amend:true identity-wide; amend:\"own\" only the acting key's records of the identity, over signed evidence); the resolver applies an eligible cross-key amendment with a test-only evaluator. Issuer UI acknowledgment and signed rc/2 end to end through the dual-major reader remain."
     }
   ]
 }

@@ -80,6 +80,12 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   records of the identity, within the grant's content targets (a record by another delegate, or for another identity,
   is a scope denial; a rotated successor key does not inherit it). Any other `amend` token still reads unsupported.
   The schema, a vector and the evaluator (version `fixed-root-model-3`) follow. Not wired into any command.
+- Candidate identity profile: with an actor evaluator configured (no command configures one), a reader policy that
+  follows an identity reads that identity's claims through explicit amendments only: same-key history amends
+  nothing, two concurrent amendments are both current and the fields they disagree on are contested (no sequence,
+  arrival or timestamp tiebreak), an amendment naming both reconciles them, an amendment naming another principal's
+  claim or another blob applies to nothing, and an authorized amendment naming a target not held makes the
+  selection `unknown (identity eligibility not established)` (an exact pin to an eligible claim still selects it).
 - Candidate identity profile: an actor evaluator over admitted identity evidence (not wired into any command; the
   profile stays inactive). With one configured, identity-context statements count for corroboration, task submissions
   and exact pins by actor eligibility, with the signer's bare-key status shown beside them; identity counting

@@ -572,8 +572,46 @@ func TestAmendOwnSignedEvidence(t *testing.T) {
 	if r := w.expect(s, "A1", identitymodel.Eligible, ""); hasWarning(r, "unsupported_sibling_grant") {
 		t.Fatalf("A1: %+v", r.Warnings)
 	}
+	// A target outside a cut's last_good prefix: the own-mode scope reads only the target's signer and actor, so
+	// the act stays in scope, but the target is not eligible for I, which is what the claim consumer reads to
+	// apply nothing (§5.1: S must be held and eligible for I).
+	w.sign(stmt{name: "C1", by: "R", parent: "G9", kind: "identity_cut", body: cutBody(w, "G1", "A1")})
+	amend("OwnCut", "Missing", 1, "A2")
+	s = w.admit()
+	w.expect(s, "A2", identitymodel.Denied, "cut_excluded")
+	w.expect(s, "OwnCut", identitymodel.Eligible, "")
 	// Under amend:false on the same content the same act is a scope denial: own is a grant of its own.
 	w2 := base(t)
 	w2.sign(stmt{name: "A9", by: "K1", parent: "A2", kind: "authored", body: withField(authoredBody(1), wire.IdentityCrit, obj("amends", []string{w2.ids["A1"]})), actor: [2]string{"I", "G1"}})
 	w2.expect(w2.admit(), "A9", identitymodel.Denied, "scope_excluded")
+}
+
+// TestAmendFalsePublishesButCannotAmend: C-id-20 over signed evidence of both algorithms (EIP-191 root, Ed25519
+// worker). Under a grant with amend:false, K publishes authored in scope (eligible), and the same key's act on the
+// same content that carries amends reads denied by scope, whether it names K's own record or another delegate's.
+// A missing amend is no grant at all (invalid), never amend:false by default.
+func TestAmendFalsePublishesButCannotAmend(t *testing.T) {
+	conformance.Covers(t, "C-id-20")
+	w := base(t) // G2: K2 may publish authored on content 0x2, amend:false
+	w.sign(stmt{name: "B3", by: "K2", parent: "B2", kind: "authored", body: withField(authoredBody(2), wire.IdentityCrit, obj("amends", []string{w.ids["B1"]})), actor: [2]string{"I", "G2"}})
+	w.sign(stmt{name: "B4", by: "K2", parent: "B3", kind: "authored", body: withField(authoredBody(2), wire.IdentityCrit, obj("amends", []string{w.ids["A1"]})), actor: [2]string{"I", "G2"}})
+	w.sign(stmt{name: "B5", by: "K2", parent: "B4", kind: "authored", body: authoredBody(2), actor: [2]string{"I", "G2"}})
+	s := w.admit()
+	for _, n := range []string{"B1", "B5"} {
+		w.expect(s, n, identitymodel.Eligible, "")
+	}
+	for _, n := range []string{"B3", "B4"} {
+		r := w.expect(s, n, identitymodel.Denied, "scope_excluded")
+		for _, x := range r.Reasons {
+			if x.Status == identitymodel.Denied && x.Code != "scope_excluded" {
+				t.Fatalf("%s: denied for %s, not scope", n, x.Code)
+			}
+		}
+	}
+	w2 := base(t)
+	w2.sign(stmt{name: "G9", by: "R", parent: "G2", kind: "identity_grant", body: w2.grantBody("K2",
+		obj("kind", "authored", "targets", obj("contents", []string{digest(2)})))})
+	if st, _ := w2.admit().Status(w2.ids["G9"]); st != wire.Invalid {
+		t.Fatalf("grant without amend read %s, want invalid", st)
+	}
 }

@@ -86,7 +86,8 @@ const (
 	// SelIdentity: an `{identity: I}` principal with no actor hook: nothing can be said, and no key is followed.
 	SelIdentity = "unknown (identity profile not active)"
 	// SelIdentityUnknown: with an actor hook, a claim on the content may act for the identity but the hook
-	// cannot establish it, or an eligible claim carries an amendment this seam does not evaluate.
+	// cannot establish it, or an authorized amendment of the identity's claims names a target that cannot be
+	// established (identity profile §5.1).
 	SelIdentityUnknown = "unknown (identity eligibility not established)"
 )
 
@@ -178,21 +179,24 @@ func (r *Resolver) ineligible(p *Placed, content, role string) string {
 	return ""
 }
 
-// followIdentity resolves a principal selection `{identity: I}` through the actor hook. The candidates are the
-// evidence-ready statements of the role's kind on the content (verified, chained, understood; the bare-key
-// key-event exclusions are the evaluator's to apply, never a filter in front of identity evidence: profile
-// §4.1). The hook decides each: eligible for I is followed; denied, bare, or eligible for another identity is
-// not (a statement by a worker key is not I's: §5.3); unknown for I makes the selection unknown, never met
-// without it. An eligible claim that amends another needs the amendment DAG and its grant check, which this
-// seam does not evaluate: unknown, with no guess at which claim is current.
+// followIdentity resolves a principal selection `{identity: I}` through the actor hook (identity profile §5.1).
+// The candidates are the evidence-ready statements of the role's kind on the content (verified, chained,
+// understood; the bare-key key-event exclusions are the evaluator's to apply, never a filter in front of
+// identity evidence: profile §4.1). The hook decides each: eligible for I is a node of I's claim graph; denied,
+// bare, or eligible for another identity is not (a statement by a worker key is not I's: §5.3; an outsider's
+// unbound header names no one's identity and changes nothing); unknown for I makes the selection unknown, never
+// met without it. Identity claims group only by the explicit I: same-key ancestry does not amend them, only an
+// explicit `amends` does (amendments.go). The maximal nodes of that graph are I's current claims; two of them
+// are both current (concurrent amendments: no sequence, arrival or timestamp tiebreak), and an authorized
+// amendment whose target cannot be established makes the selection unknown.
 func (r *Resolver) followIdentity(s *Selected, identity, content, role string) {
 	kind := "authored"
 	if role == policy.RoleObservation {
 		kind = "observed"
 	}
 	name := "following identity " + keylog.Short(identity)
-	var held []*wire.Statement
-	var undecided, amending []string
+	var nodes []*Placed
+	var undecided []string
 	for _, p := range r.byKind[kind] {
 		if !p.EvidenceReady() || contentDigest(p.St.Body) != content || r.shapeIneligible(p, role) != "" {
 			continue
@@ -201,31 +205,32 @@ func (r *Resolver) followIdentity(s *Selected, identity, content, role string) {
 		switch {
 		case id != identity:
 		case state == policy.ActorEligible:
-			held = append(held, p.St)
-			if m, ok := p.St.Body.Get(wire.IdentityCrit); ok {
-				if mo, ok := m.(*canon.Object); ok {
-					if _, ok := mo.Get("amends"); ok {
-						amending = append(amending, keylog.Short(p.St.ID))
-					}
-				}
-			}
+			nodes = append(nodes, p)
 		case state == policy.ActorDenied:
 		default:
 			undecided = append(undecided, keylog.Short(p.St.ID))
 		}
 	}
-	slices.SortFunc(held, func(a, b *wire.Statement) int { return strings.Compare(a.ID, b.ID) })
 	slices.Sort(undecided)
-	slices.Sort(amending)
-	switch {
-	case len(undecided) > 0:
+	if len(undecided) > 0 {
 		s.State, s.Why = SelIdentityUnknown, name+"; whether "+strings.Join(undecided, ", ")+" acts for it is not established; no other claim is substituted"
-	case len(amending) > 0:
-		s.State, s.Why = SelIdentityUnknown, name+"; "+strings.Join(amending, ", ")+" amends another claim, and amendment authority is not evaluated here; no claim is chosen"
-	case len(held) == 0:
-		s.State, s.Why = SelNone, name
+		return
+	}
+	g := r.identityClaims(identity, kind, content, nodes)
+	notes := append([]string{name}, g.denied...)
+	switch {
+	case len(g.unresolved) > 0:
+		s.State, s.Why = SelIdentityUnknown, strings.Join(append(notes, g.unresolved...), "; ")+"; no claim is chosen"
+	case len(g.current) == 0:
+		s.State, s.Why = SelNone, strings.Join(notes, "; ")
 	default:
-		s.State, s.Statements = SelMet, held
+		if len(g.current) > 1 {
+			notes = append(notes, fmt.Sprintf("%d current claims (%s), none preferred: no sequence, arrival or timestamp tiebreak", len(g.current), shorts(ids_(g.current))))
+		}
+		s.State, s.Statements = SelMet, g.current
+		if len(notes) > 1 {
+			s.Why = strings.Join(notes, "; ")
+		}
 	}
 }
 
