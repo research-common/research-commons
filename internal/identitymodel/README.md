@@ -141,8 +141,11 @@ entries for a kind are allowed; their explicit matching scopes form a union.
 
 Only authored/observed accept the amendment permission. `Amend: true` is
 identity-wide within the content scope, **not** restricted to one delegate or
-previous grant. This model checks permission to attempt amendment, not the
-amendment DAG, target eligibility, same-principal rule or current-state selection.
+previous grant. `AmendOwn: true` (the `own` mode) is narrower: every target in
+`Operation.Amends` must be an authenticated record of the same identity signed by the
+exact acting key; an entry with `Amend: true` covering the content answers first without
+reading the targets. This model checks permission to attempt amendment, not the
+amendment DAG, target eligibility, digest/kind match or current-state selection.
 Root administration and raw key events are never delegated operations.
 
 ## Structured answers, not application authorization

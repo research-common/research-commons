@@ -199,7 +199,7 @@ entries to manufacture broader authority.
 
 | `kind` | Exact target dispatch | Allowed `targets` | Extra required fields |
 |---|---|---|---|
-| `authored`, `observed` | `body.content.digest` | `{any_content:true}` or `{contents:[digest,…]}` | `amend:true` or `amend:false` |
+| `authored`, `observed` | `body.content.digest` | `{any_content:true}` or `{contents:[digest,…]}` | `amend:true`, `amend:false` or `amend:"own"` |
 | `holds` | `body.content.digest` | Same content choices | None |
 | `reproduced`, `corroborates`, `refutes`, `retracts` | `body.of` | `{any_statement:true}` or `{statements:[id,…]}` | None |
 | `edition`, `withdraw_approval` | `body.resource` | `{resources:[id,…]}` only | None |
@@ -211,12 +211,12 @@ is admitted. `describes` and genesis remain raw-key statements. A permission for
 kind does not authorize another. A target mentioned incidentally elsewhere in a body
 does not satisfy scope. A permission has three extension points a later version of this
 profile may use: a new `kind`, a new target mode (a token key of `targets`), and a new
-`amend` mode (a token in place of the boolean). Each makes the grant unsupported and
-non-passing, not broader. Shapes that are malformed rather than new stay invalid: a
+`amend` mode (a token in place of the boolean; `fixed-root-v1` defines one, `own`, below). Each
+unknown one makes the grant unsupported and non-passing, not broader. Shapes that are malformed rather than new stay invalid: a
 missing `amend` (absence is not a mode), a value that is neither a boolean nor a token,
 two target modes, a known mode on the wrong kind, and `any_resource` / `any_task`, which
-this profile excludes for good. The schema describes `fixed-root-v1` itself and rejects
-all three extensions; the reader's unsupported reading is what lets a later version add
+this profile excludes for good. The schema describes `fixed-root-v1` itself (including
+`amend:"own"`) and rejects all three extensions; the reader's unsupported reading is what lets a later version add
 one without older readers denying acts they cannot judge. That uncertainty is confined to the one grant: grants only
 accumulate and never restrict each other, and every permission kind in `fixed-root-v1`
 is a leaf operation, so no grant can carry a power over another grant, a cut, or the
@@ -233,14 +233,21 @@ UI must disclose and require acknowledgment of this breadth, especially with
 `any_content:true`. `amend:false` prevents explicit supersession, but another new claim
 may still conflict with the principal's other claims. No implicit expiry, renewal,
 sequence budget, same-grant-only amendment right, or timestamp-based scope is provided.
-A narrower amend mode (for example one limited to the actor's own key, so a capture agent
-can correct its own records without being able to rewrite everything the identity signed)
-is a leaf under the invariant above, so a later version can add it as an `amend` token.
-Its semantics need the claim consumer and are settled with it. Until then `amend` has the
-two values above, and an older reader reads a grant with a later mode as unsupported:
-acts under it read unknown, and the identity's other grants are unaffected. Issuers who
-want corrections to degrade that way should put the narrower mode on its own grant,
-beside an ordinary `amend:false` grant for everyday acts.
+`amend:"own"` is the narrower mode, so a capture agent can correct its own records without
+being able to rewrite everything the identity signed. **An act by K for I under a grant
+carrying `amend:"own"` may name a target S only if: S's actor identity is I, and S was
+signed by K (the exact key; a rotated successor needs its own grant and doesn't inherit);
+every §5.1 condition holds: S is held and eligible for I, has the same content digest and
+claim kind, and the amending grant's content targets cover S. Which of I's grants carried S
+doesn't matter.** A target signed by another key, or naming another identity (or none), is
+a scope denial of the act; a target the reader does not hold leaves the act unknown (§5.1,
+missing target). A grant entry without `amends` under `amend:"own"` publishes exactly as under
+`amend:false`. Where another entry of the same grant carries `amend:true` for the content,
+that entry authorizes the act and the targets' signers do not matter. `amend:"own"` is a
+leaf under the invariant above. Any other `amend` token is a later version's: this reader
+reads a grant with one as unsupported, acts under it read unknown, and the identity's other
+grants are unaffected. Issuers who want a later mode to degrade that way should put it on
+its own grant, beside an ordinary `amend:false` grant for everyday acts.
 
 Root vocabulary on the pinned I lineage is closed for authority evaluation:
 

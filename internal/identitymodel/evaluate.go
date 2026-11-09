@@ -130,7 +130,16 @@ func (s *Snapshot) evaluateWithin(e *evaluation, statement ID) Result {
 				e.reasons(checkPermissions(grant.Permissions, g.ID))
 			}
 			if st.Operation != nil && g.Validity == Understood {
-				_, reasons := scopeAllows(grant.Permissions, *st.Operation, st.Signer)
+				lookup := func(id ID) (Fact, bool) {
+					f, ok := e.w.b.read(s, id)
+					if ok {
+						e.basis[id] = true
+					} else {
+						e.result.Dependencies = append(e.result.Dependencies, Dependency{id, statement, "amendment target"})
+					}
+					return f, ok
+				}
+				_, reasons := scopeAllows(grant.Permissions, *st.Operation, st.Signer, a.Identity, lookup)
 				for i := range reasons {
 					reasons[i].Statement, reasons[i].Related = statement, g.ID
 				}

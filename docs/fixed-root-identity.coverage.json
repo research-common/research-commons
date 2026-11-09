@@ -659,10 +659,13 @@
       "scenario": "Identity-wide amendment breadth",
       "schema_vectors": [
         "claim-explicit-amendment-shape",
-        "absent-amend-not-default-false"
+        "absent-amend-not-default-false",
+        "permission-amend-own"
       ],
       "isolated_tests": [
-        "internal/identitymodel:TestAmendPermissionIsExplicitAndIdentityWideWithinContentScope"
+        "internal/identitymodel:TestAmendPermissionIsExplicitAndIdentityWideWithinContentScope",
+        "internal/identitymodel:TestAmendOwnIsTheActingKeysOwnRecords",
+        "internal/identity:TestAmendOwnSignedEvidence"
       ],
       "conformance": "partial",
       "remaining": "Mandatory amend Boolean and explicit targets checked; breadth/competing claims and issuer UI acknowledgment remain."

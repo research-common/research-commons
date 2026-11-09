@@ -1758,6 +1758,43 @@
       }
     },
     {
+      "name": "permission-amend-own",
+      "mode": "draft",
+      "accept": true,
+      "scenarios": [
+        "ID-45"
+      ],
+      "value": {
+        "rc": "rc/2",
+        "kind": "identity_grant",
+        "signer": "ed25519:204bd6d468d5522c44f8d2431294b176cce83db66607ebeba27747f3e9fb8c98",
+        "alg": "ed25519",
+        "seq": 1,
+        "prev": "03d1cec1b8f41f46052c921b744e99a59ba5199734d5b13ecdffcdf0daff5220",
+        "ts": "2026-10-21T00:00:00Z",
+        "crit": [
+          "x_identity_v1"
+        ],
+        "body": {
+          "identity": "d0dce07f9b81da1cf542693be01fed5e6867bd7542e23efc27a34cc5c99557f1",
+          "delegate": {
+            "key": "ed25519:49c7dbf3ef744f79422f9318bf14c7a760928d0f4950e5c8f84e1e608f77afa0",
+            "inception": "03d1cec1b8f41f46052c921b744e99a59ba5199734d5b13ecdffcdf0daff5220"
+          },
+          "permissions": [
+            {
+              "kind": "authored",
+              "targets": {
+                "any_content": true
+              },
+              "amend": "own"
+            }
+          ],
+          "x_identity_v1": {}
+        }
+      }
+    },
+    {
       "name": "two-target-modes",
       "mode": "draft",
       "accept": false,
