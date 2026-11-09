@@ -216,7 +216,7 @@ func everyView(r *Resolver, digests []string) string {
 	return b.String()
 }
 
-// TestDualViewsSurviveCandidateBytes: the profile §2.4 integration blocker under the dual reader. Every signed
+// TestDualViewsSurviveCandidateBytes: the profile §2.4 mixed-reader safety check (formerly its integration blocker). Every signed
 // identity vector line (both chains), and rc/2 resource and task kinds with identity controllers (genesis, edition,
 // withdraw_approval, intent, submit, decide: verified and unsupported), authenticated-invalid rc/2 lines and a
 // tampered one, are delivered with an rc/1 resource and observation corpus. Every view answers without a panic,

@@ -12,7 +12,7 @@ import (
 )
 
 func TestFixedRootCandidateOldReaderMixedHistory(t *testing.T) {
-	conformance.Partial(t, "C-id-01", "old-reader keylog ids and linkage on a mixed log only; the legacy differential corpus with the dual-major reader on (every resolver answer unchanged) is not built")
+	conformance.Partial(t, "C-id-01", "old-reader keylog ids and linkage on a mixed log; the full differential under the dual-major reader is internal/resolve:TestDualDifferential")
 	if wire.Major != 1 {
 		t.Fatal("test targets the unchanged rc/1 reader")
 	}
