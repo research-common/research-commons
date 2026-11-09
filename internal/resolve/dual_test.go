@@ -22,7 +22,7 @@ func dualFallbackWorld(t *testing.T) (*world, map[string]string) {
 	w := newWorld(t)
 	o := w.observed("O", "C", "X", "exact-bytes", chainRef(3))
 	res := w.result("R", "A", "R", "W", "X")
-	w.authored("K0", "K", "K0")  // K's seq-0 line: the delegate inception its grant names
+	w.authored("K0", "K", "K0")   // K's seq-0 line: the delegate inception its grant names
 	w.authored("MM0", "MM", "M0") // MM is secp256k1: both algorithms act on rc/2
 	i, g := w.identityOf("I", "IR", "K")
 	act := [2]string{i, g["K"]}
