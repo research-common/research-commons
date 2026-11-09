@@ -144,14 +144,18 @@ type trustFloor struct {
 	// actors is the identity evaluator's hook; nil in every production reader today, so an `{identity: I}`
 	// admission entry reads unknown (identity profile not active), as before the hook existed. The gate asks
 	// about a statement it has just read, before any resolver holds it, so the question is statement-level
-	// (policy.AdmitStatement), not a resolve.Placed one.
+	// (policy.AdmitTarget over policy.ResolveTarget), not a resolve.Placed one.
 	actors policy.ActorEligibility
+	// held finds a statement the package or this store holds, so a statement that reaches its content through a
+	// reference (a corroborates, refutes or retracts `of`; a describes of a statement) is judged by that content,
+	// and one whose reference is held by neither reads unknown (identity profile §6; policy.ResolveTarget).
+	held func(id string) (*wire.Statement, bool)
 }
 
 func (f trustFloor) Label() bool { return f.floor == policy.FloorLabel }
 
 func (f trustFloor) CheckStatement(st *wire.Statement) *refusal.Refusal {
-	a := f.p.AdmitStatement(st, contentOf(st), policy.FloorRefuse, f.actors)
+	a := f.p.AdmitTarget(st, policy.ResolveTarget(st, f.held), policy.FloorRefuse, f.actors)
 	if a.Admitted {
 		return nil
 	}
@@ -198,15 +202,6 @@ func pullCmd(c *Ctx) (*Obj, int, error) {
 	format := c.state.(pullState).format
 	pol := *c.Policy.Hub
 	pol.Name = "pull into this store: " + c.Policy.Source
-	if c.Policy.Reader != nil {
-		floor := policy.FloorLabel
-		if v, _ := c.Flag("below-floor"); v == "refuse" {
-			floor = policy.FloorRefuse
-		}
-		pol.Hooks = append(append([]gate.StatementHook{}, pol.Hooks...), trustFloor{p: c.Policy.Reader, floor: floor})
-		pol.Name += " + reader policy " + c.Policy.ReaderSource
-		pol.Digest = digestPair(pol.Digest, c.Policy.Reader.Digest)
-	}
 	var opt gate.Options
 	if v, ok := c.Flag("override"); ok {
 		o, _ := parseOverride(v)
@@ -242,6 +237,15 @@ func pullCmd(c *Ctx) (*Obj, int, error) {
 			kept = append(kept, ob)
 		}
 		pkg.Objects = kept
+	}
+	if c.Policy.Reader != nil {
+		floor := policy.FloorLabel
+		if v, _ := c.Flag("below-floor"); v == "refuse" {
+			floor = policy.FloorRefuse
+		}
+		pol.Hooks = append(append([]gate.StatementHook{}, pol.Hooks...), trustFloor{p: c.Policy.Reader, floor: floor, held: heldStatements(pkg, c.Store)})
+		pol.Name += " + reader policy " + c.Policy.ReaderSource
+		pol.Digest = digestPair(pol.Digest, c.Policy.Reader.Digest)
 	}
 	// Edition rules read content as `hub check` does: the package's blobs (by digest, only those whose bytes hash to
 	// their name) and, for a blob the package does not carry, the ones this store already holds.
@@ -367,4 +371,32 @@ func dropUnchangedControlPlane(rep *gate.Report, pkg gate.Package, root string) 
 		kept = append(kept, r)
 	}
 	rep.Results = kept
+}
+
+// heldStatements finds a statement by id among the package's statement files and this store's statements: a line
+// counts only when it verifies and hashes to the id it is filed under, so a reference names exactly the statement
+// its signer pointed at, whatever path it arrived under. Built lazily: a pull whose floor follows no reference
+// reads nothing more.
+func heldStatements(pkg gate.Package, st *store.Store) func(string) (*wire.Statement, bool) {
+	var pkgLines map[string][]byte
+	var storeLines map[string][]byte
+	return func(id string) (*wire.Statement, bool) {
+		if pkgLines == nil {
+			pkgLines = map[string][]byte{}
+			for _, o := range pkg.Objects {
+				if o.Mode == gate.Regular && strings.HasPrefix(o.Path, "statements/") {
+					pkgLines[o.Path[strings.LastIndexByte(o.Path, '/')+1:]] = o.Data
+				}
+			}
+			storeLines, _ = st.Statements()
+		}
+		for _, m := range []map[string][]byte{pkgLines, storeLines} {
+			if l, ok := m[id]; ok {
+				if s, err := wire.Read(l); err == nil && s.ID == id {
+					return s, true
+				}
+			}
+		}
+		return nil, false
+	}
 }

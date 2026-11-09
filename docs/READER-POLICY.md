@@ -99,7 +99,14 @@ A trust entry trusts one principal for a set of purposes over a content target.
 `{"any_content": true}` or `{"contents": [...]}` (a nonempty sorted set of at most 256 content digests). A target
 applies to the content being judged (the observation's blob for corroboration, the run's output for attestation,
 the content a statement names for admission), never to an incidental digest. A statement that names no content
-is covered only by `any_content`.
+is covered only by `any_content`. A statement that reaches its content through a reference (a `corroborates`,
+`refutes` or `retracts` names the statement it is about in `of`; a `describes` may be about a statement) is judged by
+the referenced statement's content, one hop, when that statement is held (at `pull`: in the package or this store).
+When it is not held, the content is unknown, not absent: an answer that depends on it (a `contents` entry for the
+purpose could match the signer) reads `unknown (target reference not resolved)`, which is neither trusted nor a
+refusal of the signer. At the trust floor it is refused under `--below-floor refuse` and labelled by default, like any
+answer that is not `trusted`. An `any_content` entry, and a signer no entry names, answer the same whatever the
+content.
 
 | purpose | where it is read | effect |
 |---|---|---|

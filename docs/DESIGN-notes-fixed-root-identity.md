@@ -478,7 +478,10 @@ Each trust entry has one typed `principal`, a sorted nonempty set of `purposes` 
 `attestation`, `corroboration`, `admission`, and explicit content `targets` (the same
 content target union as grants). A purpose matches only itself. Targets apply to the
 content being judged, not an incidental digest; unresolved target references remain
-unknown. Trust admits otherwise eligible evidence for the named purpose, not signature
+unknown. (Production reader: a statement whose content is reached through `of`, or a
+`describes` of a statement, is judged by the referenced statement's content, one hop; an
+unheld reference reads `unknown (target reference not resolved)` whenever a `contents`
+entry for the purpose could match, never trusted and never not trusted.) Trust admits otherwise eligible evidence for the named purpose, not signature
 validity, authorship, independent-person status, successful reproduction or time quality.
 Trust is configured per purpose. A purpose that no trust entry names is unconfigured:
 the reader keeps its documented default for it (for corroboration, every counted

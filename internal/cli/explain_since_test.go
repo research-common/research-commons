@@ -297,3 +297,64 @@ func TestExplainSinceRefuses(t *testing.T) {
 		t.Fatal("a refused --since changed the store")
 	}
 }
+
+// TestPullTrustFloorUnresolvedTarget: R5SEAM-F2 at the pull trust floor. A corroborates reaches its content through
+// `of`; with a `contents` admission entry for its signer, it is admitted when the observation it names is in the
+// package (the content is covered), and when the observation is in neither the package nor the store it reads
+// unknown (target reference not resolved): refused under --below-floor refuse and labelled by default, never
+// admitted as trusted and never refused as "not trusted".
+func TestPullTrustFloorUnresolvedTarget(t *testing.T) {
+	src := newWorld(t)
+	src.blob("sole", []byte("sole"))
+	src.authored("A:sole", "K5", "sole")
+	ob := src.sign("O", "K5", "observed", obj("content", canon.Value(content("sole")), "class", "exact-bytes",
+		"referent", canon.Value(obj("chain_id", "bip122:000000000019d6689c085ae165831e93", "block_hash", strings.Repeat("a1", 32), "depth", 3)),
+		"capture", canon.Value(obj("at", "2026-10-16T00:00:00Z", "evidence", "self-asserted"))))
+	cid := src.sign("C", "K6", "corroborates", obj("of", ob, "result", src.ids["A:sole"], "verdict", "supports", "model", "M",
+		"cohort", canon.Value(obj("rule", "every station in R"))))
+	es := []string{
+		`{"principal":{"key":"` + src.signer("K5") + `"},"purposes":["admission"],"targets":{"any_content":true}}`,
+		`{"principal":{"key":"` + src.signer("K6") + `"},"purposes":["admission"],"targets":{"contents":["` + dig("sole") + `"]}}`,
+	}
+	slices.SortFunc(es, canon.CompareKeys)
+	pf := filepath.Join(t.TempDir(), "p.json")
+	os.WriteFile(pf, []byte(`{"version":"reader-policy-v1","selections":[],"trust":[`+strings.Join(es, ",")+`]}`), 0o644)
+	cPath := "statements/" + strings.ReplaceAll(src.signer("K6"), ":", "-") + "/" + cid
+	oPath := "statements/" + strings.ReplaceAll(src.signer("K5"), ":", "-") + "/" + ob
+
+	// the observation travels with it: the content is covered, admitted unlabelled
+	full := t.TempDir()
+	copyData(t, src.root, full)
+	// (the report lists only objects with a verdict other than plain admitted)
+	r := newWorld(t).run("pull", full, "--policy", pf, "--below-floor", "refuse", "--json")
+	if r.code != ExitOK || objectRow(t, jsonOf(t, r), cPath) != nil {
+		t.Fatalf("resolved: %d %s", r.code, r.stdout)
+	}
+	// the observation in neither package nor store: unknown, refused or labelled
+	part := t.TempDir()
+	copyData(t, src.root, part)
+	os.Remove(filepath.Join(part, oPath))
+	r = newWorld(t).run("pull", part, "--policy", pf, "--below-floor", "refuse", "--json")
+	c := objectRow(t, jsonOf(t, r), cPath)
+	if c == nil || c.Members["verdict"] != canon.String("refused") || !strings.Contains(stringMember(c, "detail"), "target is not resolved") ||
+		strings.Contains(stringMember(c, "detail"), "not trusted") {
+		t.Fatalf("unresolved, refuse: %s", r.stdout)
+	}
+	r = newWorld(t).run("pull", part, "--policy", pf, "--json")
+	c = objectRow(t, jsonOf(t, r), cPath)
+	if c == nil || !strings.Contains(string(canon.Encode(c)), "target is not resolved") || c.Members["verdict"] == canon.String("refused") {
+		t.Fatalf("unresolved, label: %s", r.stdout)
+	}
+	// the observation already in the receiving store resolves the reference
+	dst := newWorld(t)
+	seed := t.TempDir()
+	copyData(t, src.root, seed)
+	os.Remove(filepath.Join(seed, cPath))
+	if r := dst.run("pull", seed, "--policy", pf, "--json"); r.code != ExitOK {
+		t.Fatalf("seed: %s", r.stdout)
+	}
+	r = dst.run("pull", part, "--policy", pf, "--below-floor", "refuse", "--json")
+	if c := objectRow(t, jsonOf(t, r), cPath); r.code != ExitOK || c != nil && c.Members["verdict"] == canon.String("refused") {
+		t.Fatalf("held in the store: %s", r.stdout)
+	}
+}

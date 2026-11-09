@@ -54,6 +54,12 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   cached between runs; the file is the only memory. A file that is not an explain output of that ref is exit 2.
   To make this possible `explain` now also prints `explained` (the ref), each input's `counted` state, the in-force
   key events of every input's signer among its statements, and the reader policy document beside its digest.
+- Reader policy trust targets now follow references: a `corroborates`, `refutes` or `retracts` (its `of`) and a
+  `describes` of a statement are judged by the referenced statement's content when it is held. When it is not, an
+  answer that depends on that content reads `unknown (target reference not resolved)` instead of `not trusted`. At
+  `pull` the trust floor looks for the reference in the package and in this store; the unknown answer is refused
+  under `--below-floor refuse` and labelled by default. New: `policy.Target`, `policy.ResolveTarget`,
+  `policy.TrustsTarget`, `policy.AdmitTarget`.
 - `commons list` now prints the resources this store holds beside the blobs: one line per resource with its id,
   its current edition (or `FORK` and its tips) and how many controllers the current authority has. In `--json` this
   is a new `resources` array; the `blobs` array is unchanged.

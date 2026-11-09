@@ -469,10 +469,11 @@
       "isolated_tests": [
         "internal/wire:TestFixedRootCandidateVectors",
         "internal/policy:TestTrustsStatementThroughActors",
-        "internal/resolve:TestActorTrustSeam"
+        "internal/resolve:TestActorTrustSeam",
+        "internal/policy:TestTargetReference"
       ],
       "conformance": "partial",
-      "remaining": "Closed local policy syntax checked; through the seam (policy.TrustsStatement, the resolver's one trust question) an identity entry trusts only statements a test-only evaluator calls eligible for I, never a bare worker-key statement, with purposes and content targets separate. The real evaluator adapter and the received-policy-injection half remain."
+      "remaining": "Closed local policy syntax checked; through the seam (policy.TrustsStatement, the resolver's one trust question) an identity entry trusts only statements a test-only evaluator calls eligible for I, never a bare worker-key statement, with purposes and content targets separate. Targets apply to the content being judged: a reference (corroborates/refutes/retracts `of`, describes of a statement) is followed one hop, and an unresolved one reads unknown, never trusted or not trusted (policy.TrustsTarget; the pull trust floor). The real evaluator adapter and the received-policy-injection half remain."
     },
     {
       "handle": "ID-34",
