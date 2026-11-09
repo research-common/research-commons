@@ -47,6 +47,13 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ### Added
 
+- `commons explain <ref> --since <file>`: given an earlier `explain --json` of the same ref, prints what changed
+  since then, each change with its cause: a statement added or removed (a `rotate_key` / `revoke_key` named as a key
+  event), an input's status, log line or counted state, the hub policy, the reader policy (each entry that differs),
+  the time policy, the evaluator, or the time context, plus whether the rest of the answer changed. Nothing is
+  cached between runs; the file is the only memory. A file that is not an explain output of that ref is exit 2.
+  To make this possible `explain` now also prints `explained` (the ref), each input's `counted` state, the in-force
+  key events of every input's signer among its statements, and the reader policy document beside its digest.
 - `commons list` now prints the resources this store holds beside the blobs: one line per resource with its id,
   its current edition (or `FORK` and its tips) and how many controllers the current authority has. In `--json` this
   is a new `resources` array; the `blobs` array is unchanged.

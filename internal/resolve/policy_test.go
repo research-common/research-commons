@@ -353,7 +353,7 @@ func TestRunAttestationTrust(t *testing.T) {
 // (default) and a trust difference (corroboration status).
 func TestPolicyDifferenceExplained(t *testing.T) {
 	conformance.Covers(t, "P-11") // resolver views here; the CLI prints both policy digests on explain (cli TestReaderPolicy)
-	conformance.Partial(t, "P-08", "a policy change between two runs is named by policy.Diff and cited in explain; statement, evaluator, time and execution-context causes and the CLI diff surface remain")
+	conformance.Partial(t, "P-08", "a policy change between two runs is named by policy.Diff and cited in explain; the CLI diff surface over the other causes is internal/cli.TestExplainSinceNamesEveryDifference")
 	w := groupWorld(t, "bytes", "", map[string]string{"A": "r~1", "BB": "r~2"})
 	q := w.workflow("Q", "W", "protocol", "K")
 	cmp := WithComparator(newFakeComparator("r~1", "r~2"))
@@ -436,7 +436,8 @@ func TestPolicyPermutationProperty(t *testing.T) {
 // policy change that stops trusting C3 moves the result, the contradicting statement is still listed, and the
 // change names its cause: the new policy digest, beside the statement it no longer counts.
 func TestPolicyChangeNamesItsCause(t *testing.T) {
-	conformance.Partial(t, "C-core-06", "(c) a reader policy change; (a) a corroboration and (b) a revocation moving the status, each naming its cause, need the explain diff surface")
+	// C-core-06 (c) at the resolver; the whole case, (a) to (c) with explain --since naming each cause, is
+	// internal/cli.TestExplainSinceNamesTheCause
 	w, x := hotReading(t)
 	all := []*canon.Object{trustKey(w.signer("S1"), []string{"corroboration"}), trustKey(w.signer("S2"), []string{"corroboration"}), trustKey(w.signer("C3"), []string{"corroboration"})}
 	before := pol(t, nil, all)

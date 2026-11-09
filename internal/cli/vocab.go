@@ -167,6 +167,20 @@ var vocabulary = []Token{
 	{"quarantined", "recovery", "a journal record failed to decode or verify and was moved aside; nothing from it installed"},
 	{"replaced statement", "recovery", "a corrupt stored copy was quarantined and the verified line installed"},
 	{"removed temporary", "recovery", "a stale temporary file was removed"},
+	// explain --since: each change between a saved explain and the answer now, with its cause (claims §13, I14, I5)
+	{"answer changed", "since", "something explain prints beyond its causes (a token, a count, a view) differs from the saved explain"},
+	{"answer unchanged", "since", "everything explain prints beyond its causes is as in the saved explain"},
+	{"statement added", "since", "a statement is an input of the answer now and was not in the saved explain (its id)"},
+	{"statement removed", "since", "a statement of the saved explain is no longer an input of the answer (its id)"},
+	{"key event", "since", "a rotate_key or revoke_key of an input's signer arrived (its id and kind): it decides which of that key's lines count"},
+	{"status changed", "since", "an input's statement status differs (its id, before and after)"},
+	{"line changed", "since", "an input's place in its signer's log differs, e.g. detached to chained (its id, before and after)"},
+	{"counted changed", "since", "whether an input counts differs (its id, before and after); a key event or a missing predecessor is the usual cause"},
+	{"policy changed", "since", "the hub policy digest differs (before and after)"},
+	{"reader policy changed", "since", "the reader policy digest differs; each entry one side has and the other lacks is named"},
+	{"time policy changed", "since", "the time policy fingerprint differs"},
+	{"evaluator changed", "since", "the tool version, commit or time verifier differs"},
+	{"time context changed", "since", "the time context of the answer differs (a read time it depends on, or the clock no longer read)"},
 }
 
 // IsToken reports whether s is a word of the closed vocabulary.
@@ -189,7 +203,7 @@ func tok(s string) string {
 // tokenKeys are the JSON member names whose values are state tokens (a string, or an array of strings). Every
 // surface puts tokens in these members only, so a consumer (and the C-core-132 sweep) finds them by name.
 var tokenKeys = []string{"authorship", "role", "state", "grade", "step", "quality", "time_state", "status", "line",
-	"counted", "labels", "bytes", "causes", "store_state", "what", "verdict", "class", "status_scope"}
+	"counted", "labels", "bytes", "causes", "store_state", "what", "verdict", "class", "status_scope", "change", "answer"}
 
 // IsTokenKey reports whether a JSON member of that name carries tokens.
 func IsTokenKey(k string) bool { return slices.Contains(tokenKeys, k) }

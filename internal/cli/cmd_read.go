@@ -26,8 +26,12 @@ func init() {
 		Help:    "Statement-only by default: verify reads the statements this store holds and runs nothing. With --rerun (a blob only) and --exec-policy <file>, the reader re-runs the derivation under its own execution policy and the re-run's token replaces the derivation cause; without a policy the re-run is unchecked and nothing runs. Exit 0 checked and passed, 1 a completed comparison disagreed, 3 could not check, 4 nothing to re-run, 5 environment mismatch.",
 		Run:     verifyCmd})
 	Register(&Command{Name: "explain", Summary: "the statements, policy, evaluator and time context behind every token shown", Args: ref, Store: true, ReaderPolicy: true,
-		Help: "Everything show prints, plus the statements behind it (hash and signer), the policy digest, the evaluator and the time context. For a resource (its genesis id, an edition id, or an approval's id) it adds each edition's reasoning: the rule and predecessor it was evaluated under, and each approval counted or not.",
-		Run:  explainCmd})
+		Flags:   []Flag{sinceFlag},
+		Prepare: prepareSince,
+		Before:  sinceBefore,
+		Help: "Everything show prints, plus the statements behind it (hash, signer, status, log line, counted or not; the key events of their signers are among them), the policy digests (and the reader policy document), the evaluator and the time context. For a resource (its genesis id, an edition id, or an approval's id) it adds each edition's reasoning: the rule and predecessor it was evaluated under, and each approval counted or not. " +
+			"With --since <file>, an earlier explain --json of the same ref, it also prints what changed since then, each change with its cause: a statement added or removed (a key event named as one), a statement's status, log line or counted state, the hub, reader (each entry that differs) or time policy, the evaluator, or the time context; and whether the rest of the answer changed. Nothing is cached between runs: the file is the only memory. A file that is not an explain output of this ref is exit 2; otherwise the exit is explain's own.",
+		Run: explainCmd})
 	Register(&Command{Name: "list", Summary: "every blob a statement in this store names, and every resource, one line of tokens each", Store: true, ReaderPolicy: true,
 		Help: "One line per blob a held authored or holds statement names (authorship, grade, disclosures), then one line per resource this store holds a genesis for: its id (the genesis id), its current edition (or FORK and the tips), and how many controllers the current authority has. show <resource id> prints the full resource view.",
 		Run:  listCmd})
@@ -322,6 +326,7 @@ func explainCmd(c *Ctx) (*Obj, int, error) {
 			}
 		}
 	}
+	inputs = append(inputs, v.keyEventInputs(inputs)...)
 	slices.Sort(inputs)
 	inputs = slices.Compact(inputs)
 	in := listV{}
@@ -330,14 +335,24 @@ func explainCmd(c *Ctx) (*Obj, int, error) {
 		if p, ok := v.r.Statement(id); ok {
 			e.set("signer", refV(p.St.Signer)).set("kind", peerV(p.St.Kind)).set("status", tokV(tok(string(p.St.Status)))).
 				set("line", tokV(tok(v.lineState(id))))
+			if p.Counts() {
+				e.set("counted", tokV(tok("counted")))
+			} else {
+				e.set("counted", tokV(tok("not counted")))
+			}
 		} else {
 			e.set("status", tokV(tok("no statement held")))
 		}
 		in = append(in, e)
 	}
 	o.set("statements", in)
+	rp := c.Policy.readerObj()
+	if c.Policy.Reader != nil {
+		// the document itself, so a later explain --since can name each entry that differs (policy.Diff)
+		rp.set("document", peerV(string(c.Policy.Reader.Canonical)))
+	}
 	o.set("policy", newObj().set("source", textV(c.Policy.Source)).set("digest", refV(c.Policy.Digest)).
-		set("time_policy_fingerprint", refV(v.timeV.Policy.Fingerprint())).set("reader_policy", c.Policy.readerObj()))
+		set("time_policy_fingerprint", refV(v.timeV.Policy.Fingerprint())).set("reader_policy", rp))
 	o.set("evaluator", evaluatorObj(c.Env.Build))
 	tc := "none: this answer does not depend on the reader's clock (no shelf life, finality or freshness is evaluated, and no chain backend is configured)"
 	if isDigest(ref) {
@@ -346,7 +361,33 @@ func explainCmd(c *Ctx) (*Obj, int, error) {
 		}
 	}
 	o.set("time_context", textV(tc))
+	o.set("explained", refV(ref))
+	if saved, ok := c.Prep.(*canon.Object); ok {
+		path, _ := c.Flag("since")
+		o.set("since", sinceObj(path, saved, o))
+	}
 	return v.scoped(o), ExitOK, nil
+}
+
+// keyEventInputs is the rotate_key and revoke_key statements in force in the log of every signer of the given
+// inputs: a key event decides whether its signer's other lines count (claims-model note §4.1), so it is an input of
+// every answer that reads one of them (I14), and explain --since names its arrival as a key event.
+func (v *view) keyEventInputs(ids []string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, id := range ids {
+		p, ok := v.r.Statement(id)
+		if !ok || seen[p.St.Signer] {
+			continue
+		}
+		seen[p.St.Signer] = true
+		for _, ev := range v.logs.Log(p.St.Signer).View().KeyState().Events {
+			if ev.InForce {
+				out = append(out, ev.St.ID)
+			}
+		}
+	}
+	return out
 }
 
 func evaluatorObj(b Build) *Obj {

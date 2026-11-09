@@ -90,7 +90,7 @@ takes `--json`, which prints one JSON object (an RFC 9457 problem-details object
 | `fetch` | obtain blobs from the locations a `holds` statement names, verified by full hash |
 | `list` / `show` | the blobs, resources and statements the store holds (`list`: one line each), with authorship, grade and disclosures; an observation's corroboration status; for a resource (its genesis id), an edition id or an approval id, the resource view: controllers and rule, current edition and the chain behind it, every edition with its approvals, any `FORK`, members, and the check of a completeness claim |
 | `verify` | check a blob or statement from the statements held; `--rerun` re-runs a derivation under your policy |
-| `explain` | the statements, policy, evaluator and time context behind every token shown |
+| `explain` | the statements, policy, evaluator and time context behind every token shown; `--since <file>` names what changed since an earlier `explain --json`, and why |
 | `fsck` | re-hash blobs, re-read statements, resolve references, check the journal |
 | `status` | recovery state, unfinished operations, the durability declaration (`--limits` for scan limits) |
 | `gc` | list (default) or delete unreferenced blobs outside the grace window |
