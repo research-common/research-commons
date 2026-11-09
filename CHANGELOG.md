@@ -47,6 +47,9 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ### Added
 
+- `commons list` now prints the resources this store holds beside the blobs: one line per resource with its id,
+  its current edition (or `FORK` and its tips) and how many controllers the current authority has. In `--json` this
+  is a new `resources` array; the `blobs` array is unchanged.
 - `show`, `verify` and `explain` print **the resource view**. A resource's id is its genesis statement's id, so
   `show <genesis id>` prints the genesis and, beside it, the resource: controllers and rule, the current edition and the
   chain behind it by hash (`G → E1 → E2`), every edition with its state (`edition`, `pending`, `orphan`,

@@ -28,8 +28,9 @@ func init() {
 	Register(&Command{Name: "explain", Summary: "the statements, policy, evaluator and time context behind every token shown", Args: ref, Store: true, ReaderPolicy: true,
 		Help: "Everything show prints, plus the statements behind it (hash and signer), the policy digest, the evaluator and the time context. For a resource (its genesis id, an edition id, or an approval's id) it adds each edition's reasoning: the rule and predecessor it was evaluated under, and each approval counted or not.",
 		Run:  explainCmd})
-	Register(&Command{Name: "list", Summary: "every blob a statement in this store names, one line of tokens each", Store: true, ReaderPolicy: true,
-		Run: listCmd})
+	Register(&Command{Name: "list", Summary: "every blob a statement in this store names, and every resource, one line of tokens each", Store: true, ReaderPolicy: true,
+		Help: "One line per blob a held authored or holds statement names (authorship, grade, disclosures), then one line per resource this store holds a genesis for: its id (the genesis id), its current edition (or FORK and the tips), and how many controllers the current authority has. show <resource id> prints the full resource view.",
+		Run:  listCmd})
 }
 
 func viewOf(c *Ctx) (*view, error) {
@@ -420,5 +421,33 @@ func listCmd(c *Ctx) (*Obj, int, error) {
 	for _, d := range ds {
 		l = append(l, v.artifactCore(v.r.Artifact(d)))
 	}
-	return v.scoped(newObj().set("blobs", l).set("count", intV(int64(len(ds))))), ExitOK, nil
+	return v.scoped(newObj().set("blobs", l).set("count", intV(int64(len(ds)))).set("resources", v.resourceRows())), ExitOK, nil
+}
+
+// resourceRows is list's line per held resource, by genesis id: the resource, its current edition (the genesis
+// itself when no edition is authorized yet) or FORK with its tips, and the size of the current authority.
+func (v *view) resourceRows() listV {
+	l := listV{}
+	for _, g := range v.geneses() {
+		res, ok := v.r.Resource(g)
+		if !ok {
+			continue
+		}
+		row := rowObj().set("resource", refV(res.ID))
+		if res.Current != "" {
+			row.set("current", refV(res.Current))
+			if res.Current == res.ID {
+				row.set("current_is", textV("the genesis: no edition is authorized yet"))
+			}
+			ctl, _ := v.authorityOf(res)
+			row.set("controllers", intV(int64(len(ctl))))
+		} else {
+			row.set("state", tokV(tok("FORK"))).set("tips", refs(res.Tips...))
+		}
+		if len(res.Contested) > 0 {
+			row.set("contested", intV(int64(len(res.Contested))))
+		}
+		l = append(l, row)
+	}
+	return l
 }
