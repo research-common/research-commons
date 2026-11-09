@@ -32,6 +32,11 @@ func (r *Resolver) gate(p *Placed) countGate {
 		return countGate{Counts: p.Counts(), Why: whyNot(p)}
 	}
 	id, state, why := r.actors.Eligible(p.St)
+	if id == "" && p.IdentityContext() {
+		// A signed actor the evaluator binds to no identity: not the key's evidence either (never a key fallback).
+		return countGate{Why: "names identity " + keylog.Short(p.St.Actor.Identity) + ", and the actor evaluator binds it to no identity (" +
+			strings.Join(why, "; ") + "); never counted as its key"}
+	}
 	if id == "" {
 		return countGate{Counts: p.Counts(), Why: whyNot(p)}
 	}
@@ -43,8 +48,8 @@ func (r *Resolver) gate(p *Placed) countGate {
 	switch {
 	case state == policy.ActorEligible:
 		g.Counts = true
-		if !p.Counts() {
-			g.Why = "acts for identity " + keylog.Short(id) + "; its key's bare-key status, shown and not applied: " + notCountedWhy(p)
+		if !p.keyEventsClear() {
+			g.Why = "acts for identity " + keylog.Short(id) + "; its key's bare-key status, shown and not applied: " + keyStatusWhy(p)
 		}
 	case state == policy.ActorDenied:
 		g.Why = "not eligible for identity " + keylog.Short(id) + because

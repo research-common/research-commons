@@ -157,7 +157,7 @@ func TestUnsupportedMajorAuthorship(t *testing.T) {
 			w := newWorld(t)
 			good := w.authored("good", "A", "X", "licence", "CC0-1.0")
 			before := w.store(nil).Artifact(dig("X"))
-			id := signDraft(w, "other-major", "BB", wire.Draft{RC: "rc/2", Kind: "authored", Body: obj("content", contentOf("X"), "provenance", 1)})
+			id := signDraft(w, "other-major", "BB", wire.Draft{RC: otherMajorRC(), Kind: "authored", Body: obj("content", contentOf("X"), "provenance", 1)})
 			if chained {
 				w.sign("vouch", "BB", "holds", obj("content", contentOf("other")))
 			}

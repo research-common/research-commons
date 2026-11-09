@@ -108,14 +108,14 @@ func (f fakeComparator) Compare(_, a, b string) (string, string) {
 // store delivers the world's lines in order (all, when nil) and builds a resolver.
 func (w *world) store(order []int, opts ...Option) *Resolver {
 	w.t.Helper()
-	s := keylog.NewStore()
+	s := newTestStore()
 	if order == nil {
 		for i := range w.lines {
 			order = append(order, i)
 		}
 	}
 	for _, i := range order {
-		st, err := wire.Read(w.lines[i])
+		st, err := s.Read(w.lines[i])
 		if err != nil {
 			w.t.Fatalf("line %d: %v", i, err)
 		}

@@ -192,6 +192,9 @@ func (r *Resolver) Resource(id string) (*Resource, bool) {
 			a.Counted, a.Why = false, "detached"
 		case !p.EvidenceReady():
 			a.Counted, a.Why = false, string(p.St.Status)
+		case p.IdentityContext():
+			// unreachable while rc/2 editions read unsupported; an identity approval is never its key's
+			a.Counted, a.Why = false, notCountedWhy(p)
 		case len(p.After) > 0:
 			a.Counted, a.Why = false, p.After[0]
 		case len(p.Doubted) > 0:
