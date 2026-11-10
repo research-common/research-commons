@@ -370,7 +370,7 @@ var kinds = map[string][]field{
 		opt("evaluations", list(digest())), opt("supersedes", id())),
 	// grant: a task coordinator's grant (task-contracts note §4.1). It counts only when its signer is the
 	// coordinator of the edition it names, and only for that edition: the resolver's question, not the schema's.
-	"grant": with(taskRef, req("grantee", key()), opt("note", text())),
+	"grant":             with(taskRef, req("grantee", key()), opt("note", text())),
 	"withdraw_approval": {req("resource", id()), req("edition", id())},
 	"rotate_key":        {req("successor", key())},
 	"revoke_key": {req("reason", pattern(reToken, "a reason token ([a-z][a-z0-9_]{0,63})")),
