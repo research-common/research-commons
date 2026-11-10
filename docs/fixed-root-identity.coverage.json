@@ -347,10 +347,11 @@
         "mixed-approval-identity-context"
       ],
       "isolated_tests": [
-        "internal/wire:TestFixedRootCandidateSharedEdition"
+        "internal/wire:TestFixedRootCandidateSharedEdition",
+        "internal/resolve:TestTypedControllerSlotsSharedBody"
       ],
-      "conformance": "partial",
-      "remaining": "Real synthetic signatures show distinct statement ids and same v2 body id; threshold evaluation remains."
+      "conformance": "covers",
+      "remaining": "Covered by internal/resolve:TestTypedControllerSlotsSharedBody: approvals of one rc/2 body by two delegates under different grants and a raw key are one edition in the v2 id domain; each counts once for the subject its signature names, through the actor evaluator over signed rc/2 evidence behind the candidate dual-major reader (not active)."
     },
     {
       "handle": "ID-25",
@@ -360,10 +361,12 @@
         "duplicate-subject-in-controller-set"
       ],
       "isolated_tests": [
-        "internal/wire:TestFixedRootCandidateVectors"
+        "internal/wire:TestFixedRootCandidateVectors",
+        "internal/wire:TestCandidateResourceKindsRead",
+        "internal/resolve:TestTypedControllerSlotsSharedBody"
       ],
-      "conformance": "partial",
-      "remaining": "Typed/duplicate-subject syntax checked; effective subject deduplication remains."
+      "conformance": "covers",
+      "remaining": "Covered by internal/resolve:TestTypedControllerSlotsSharedBody: two delegates of I fill one identity slot of a 2-of-{I, key} rule; the raw key fills the second. Typed, sorted, duplicate-free subjects are read by the candidate rc/2 reader (internal/wire:TestCandidateResourceKindsRead)."
     },
     {
       "handle": "ID-26",
@@ -373,10 +376,11 @@
         "genesis-untyped-carrier-controllers"
       ],
       "isolated_tests": [
-        "internal/identity:TestSliceNegatives"
+        "internal/identity:TestSliceNegatives",
+        "internal/resolve:TestTypedControllerSlotsNoFallback"
       ],
-      "conformance": "partial",
-      "remaining": "Carrier-key mapping is rejected; typed identity slot needs authenticated I/G, never root signature fallback."
+      "conformance": "covers",
+      "remaining": "Covered by internal/resolve:TestTypedControllerSlotsNoFallback: an identity approval under a grant without `edition`, or under a grant for another resource, fills no slot (not even its signer's listed key slot); a root's raw signature is key(root)'s word and never fills I's slot. Identity half in internal/identity."
     },
     {
       "handle": "ID-27",
@@ -388,10 +392,11 @@
         "subject-is-not-key-or-identity"
       ],
       "isolated_tests": [
-        "internal/wire:TestFixedRootCandidateSharedEdition"
+        "internal/wire:TestFixedRootCandidateSharedEdition",
+        "internal/resolve:TestTypedControllerSlotsRawAndIdentity"
       ],
-      "conformance": "partial",
-      "remaining": "Distinct signature contexts and shared body tested; one subject per approval and effective slot counting remain."
+      "conformance": "covers",
+      "remaining": "Covered by internal/resolve:TestTypedControllerSlotsRawAndIdentity: one key's raw approval and its identity approval of one body fill two slots, one each; either alone fills only its own."
     },
     {
       "handle": "ID-28",
@@ -404,28 +409,34 @@
         "typed-controller-change-incomplete"
       ],
       "isolated_tests": [
-        "internal/wire:TestFixedRootCandidateVectors"
+        "internal/wire:TestFixedRootCandidateVectors",
+        "internal/wire:TestCandidateResourceKindsRead",
+        "internal/resolve:TestTypedControllerChangesAndMerges"
       ],
-      "conformance": "partial",
-      "remaining": "Reject untyped/duplicate/partial/unsatisfiable authority shapes; predecessor/merge authority evaluation remains. Supersedes obsolete carrier-mapping wording."
+      "conformance": "covers",
+      "remaining": "Covered by internal/resolve:TestTypedControllerChangesAndMerges (an rc/1 key-only resource adopts typed controllers only through an edition its rc/1 controllers authorize; successors are evaluated under the change; a merge of predecessors with different authority must declare both; rc/1 and rc/2 approvals of the same bytes are two editions) and internal/wire:TestCandidateResourceKindsRead (partial, untyped and duplicate shapes refused)."
     },
     {
       "handle": "ID-29",
       "case": "C-id-29",
       "scenario": "Key-and-grant-local withdrawal / reapproval",
       "schema_vectors": [],
-      "isolated_tests": [],
-      "conformance": "pending",
-      "remaining": "Pending: no test. Needs the resource consumer (approval withdrawal ordering); not built while the profile is not active. Consumer ordering and cross-delegate exclusion tests required."
+      "isolated_tests": [
+        "internal/resolve:TestTypedControllerWithdrawalIsKeyAndGrantLocal"
+      ],
+      "conformance": "covers",
+      "remaining": "Covered by internal/resolve:TestTypedControllerWithdrawalIsKeyAndGrantLocal: another delegate's withdrawal and the same key's withdrawal under a new grant take nothing back; the key's withdrawal under the approving grant does, and the edition is pending again."
     },
     {
       "handle": "ID-30",
       "case": "C-id-30",
       "scenario": "Cut removes required resource approval",
       "schema_vectors": [],
-      "isolated_tests": [],
-      "conformance": "pending",
-      "remaining": "Pending: no test. Needs the resource consumer (contested propagation to dependants); not built while the profile is not active. Propagate contested/unresolved authority to affected resource descendants."
+      "isolated_tests": [
+        "internal/resolve:TestTypedControllerCutContests"
+      ],
+      "conformance": "partial",
+      "remaining": "A signed grant-history cut whose last_good excludes a required approval, and an unsupported root event, make the edition and its dependants contested (verify exit 3) in internal/resolve:TestTypedControllerCutContests. Open: the resource's current pointer then names the last authorized node beside the contested list, as a key revocation's does; whether that is the older-tip fallback the profile forbids is unsettled."
     },
     {
       "handle": "ID-31",
