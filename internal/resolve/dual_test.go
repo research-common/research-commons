@@ -220,10 +220,11 @@ func everyView(r *Resolver, digests []string) string {
 
 // TestDualViewsSurviveCandidateBytes: the profile §2.4 mixed-reader safety check (formerly its integration blocker). Every signed
 // identity vector line (both chains), and rc/2 resource and task kinds with identity controllers (genesis, edition,
-// withdraw_approval, intent, submit, decide: verified and unsupported), authenticated-invalid rc/2 lines and a
-// tampered one, are delivered with an rc/1 resource and observation corpus. Every view answers without a panic,
-// with and without an evaluator, in sampled orders; no rc/2 kind the slice does not implement is evaluable, and no
-// rc/2 actor line counts without an evaluator. The same bytes through the unchanged reader: every view answers,
+// withdraw_approval: verified and read since the typed-controller slice; intent, submit, decide: verified and
+// unsupported), authenticated-invalid rc/2 lines and a tampered one, are delivered with an rc/1 resource and
+// observation corpus. Every view answers without a panic, with and without an evaluator, in sampled orders; no rc/2
+// kind the slice does not implement is evaluable, no rc/2 actor line counts without an evaluator, and no
+// identity-context approval fills a slot its grant does not cover (K's grant carries no `edition`). The same bytes through the unchanged reader: every view answers,
 // and every rc/2 line stays unverified, undecoded and unsupported (C-id-36).
 func TestDualViewsSurviveCandidateBytes(t *testing.T) {
 	conformance.Partial(t, "C-id-36", "every resolver view on the signed vectors + rc/2 resource/task/invalid lines under the dual reader without a panic, unimplemented rc/2 kinds non-passing; the unchanged reader's half is TestUnchangedReaderStackOnCandidateBytes")
@@ -235,7 +236,7 @@ func TestDualViewsSurviveCandidateBytes(t *testing.T) {
 	g := w.genesis("G", "A", 0, "A", "BB")
 	w.edition("E1", "A", g, []string{g}, []string{"x"})
 	act := [2]string{ids["I"], ids["G"]}
-	// rc/2 kinds the slice reads unsupported, with identity controllers and actors
+	// rc/2 resource kinds (read) and task kinds (unsupported), with identity controllers and actors
 	gen := w.signRC2("rc2:genesis", "K", "genesis", obj("type", "collection", "name", "n", "controllers", canon.Array{obj("identity", ids["I"])},
 		"rule", obj("any_one", true)), rc2MarkerOnly, [2]string{})
 	w.signRC2("rc2:edition", "K", "edition", obj("resource", g, "predecessors", []string{g}, "contents", obj("members", canon.Array{})), rc2Actor, act)
@@ -329,15 +330,14 @@ func TestDualViewsSurviveCandidateBytes(t *testing.T) {
 						continue
 					}
 					switch {
-					case p.Evaluable && (p.St.Kind == "genesis" || p.St.Kind == "edition" || p.St.Kind == "withdraw_approval" ||
-						p.St.Kind == "intent" || p.St.Kind == "submit" || p.St.Kind == "decide"):
+					case p.Evaluable && (p.St.Kind == "intent" || p.St.Kind == "submit" || p.St.Kind == "decide"):
 						t.Fatalf("unimplemented rc/2 %s is evaluable", p.St.Kind)
 					case tc.opts == nil && p.IdentityContext() && p.Counts():
 						t.Fatalf("rc/2 actor %s counts without an evaluator", p.St.Kind)
 					}
 				}
-				for n, want := range map[string]wire.Status{"rc2:genesis": wire.Unsupported, "rc2:edition": wire.Unsupported,
-					"rc2:edition-own": wire.Unsupported, "rc2:withdraw": wire.Unsupported, "rc2:intent": wire.Unsupported,
+				for n, want := range map[string]wire.Status{"rc2:genesis": wire.Valid, "rc2:edition": wire.Valid,
+					"rc2:edition-own": wire.Valid, "rc2:withdraw": wire.Valid, "rc2:intent": wire.Unsupported,
 					"rc2:submit": wire.Unsupported, "rc2:decide": wire.Unsupported, "rc2:bad-body": wire.Invalid,
 					"rc2:describes-actor": wire.Invalid, "K:authored": wire.Valid} {
 					p, ok := r.Statement(w.ids[n])
@@ -345,8 +345,25 @@ func TestDualViewsSurviveCandidateBytes(t *testing.T) {
 						t.Fatalf("fixture %s did not reach verified %s: %+v", n, want, p)
 					}
 				}
-				if _, ok := r.Resource(gen); ok {
-					t.Fatal("an rc/2 genesis resolved a resource")
+				// The rc/2 genesis resolves (typed identity controller); K's identity approvals of either resource fill
+				// no slot: without an evaluator they are no one's word, and with one K's grant carries no `edition`.
+				for _, rid := range []string{gen, g} {
+					res, ok := r.Resource(rid)
+					if !ok {
+						t.Fatalf("resource %s did not resolve", rid)
+					}
+					for _, e := range res.Editions {
+						for _, a := range e.Approvals {
+							if a.Statement == w.ids["rc2:edition"] || a.Statement == w.ids["rc2:edition-own"] {
+								if a.Counted || a.Subject.Key != "" {
+									t.Fatalf("an identity approval counted or fell back to its key: %+v", a)
+								}
+							}
+						}
+					}
+				}
+				if res, _ := r.Resource(gen); res.Current != gen || len(res.GenesisControllers) != 1 || res.GenesisControllers[0].Identity != ids["I"] {
+					t.Fatalf("rc/2 genesis authority: current %s controllers %+v", res.Current, res.GenesisControllers)
 				}
 			}
 		})

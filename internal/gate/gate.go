@@ -844,7 +844,7 @@ func resolverChecks(r *Result, res *resolve.Resolver, pol *Policy) {
 		if !ok || rs.Type != "series" {
 			return
 		}
-		s, rf := res.EndorseSeries(string(resID), resolve.EditionID(st.Body), pol.Freeze)
+		s, rf := res.EndorseSeries(string(resID), resolve.EditionIDOf(st), pol.Freeze)
 		if s == nil {
 			r.label(LabelSeriesUnknown, "edition not authorized in the evaluated set; freeze policy not applicable")
 			return
@@ -880,7 +880,7 @@ func completenessCheck(r *Result, res *resolve.Resolver) {
 	if resolve.Selection(st.Body) != "completeness" {
 		return // no claim: the knob has nothing to say
 	}
-	c, ok := res.Completeness(string(resID), resolve.EditionID(st.Body))
+	c, ok := res.Completeness(string(resID), resolve.EditionIDOf(st))
 	if !ok {
 		r.label(LabelCompleteness, "edition not authorized in the evaluated set; completeness policy not applicable")
 		return

@@ -70,7 +70,7 @@ func (r *Resolver) methodDecl(ed string) methodDecl {
 		// resource included, so it names at most one resource.
 		r.edResource = map[string]string{}
 		for _, p := range r.byKind["edition"] {
-			r.edResource[EditionID(p.St.Body)] = str(p.St.Body, "resource")
+			r.edResource[EditionIDOf(p.St)] = str(p.St.Body, "resource")
 		}
 	}
 	res := r.edResource[ed]

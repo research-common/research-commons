@@ -5,11 +5,13 @@ import (
 	"encoding/hex"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/dag"
 	"github.com/research-common/research-commons/internal/keylog"
+	"github.com/research-common/research-commons/internal/policy"
 	"github.com/research-common/research-commons/internal/wire"
 )
 
@@ -54,6 +56,62 @@ func EditionID(body *canon.Object) string {
 	return hex.EncodeToString(h[:])
 }
 
+// EditionIDOf is the id of the edition an edition statement approves, in the domain of the statement's own major
+// (identity profile §2.2): an rc/1 approval's is EditionID, a candidate rc/2 approval's is hashed under the v2
+// edition-body type, so an rc/1 and an rc/2 approval of the same body bytes approve two different editions.
+func EditionIDOf(st *wire.Statement) string {
+	if major := majorOf(st); major != 1 {
+		h := sha256.Sum256(wire.PAE(wire.EditionBodyType(major), canon.Encode(st.Body)))
+		return hex.EncodeToString(h[:])
+	}
+	return EditionID(st.Body)
+}
+
+// majorOf is the format major of a statement's rc ("rc/2" is 2); 1 when it does not parse, which no statement a
+// reader evaluates can be (the reader refuses an rc that does not).
+func majorOf(st *wire.Statement) int {
+	if st == nil || !strings.HasPrefix(st.RC, "rc/") {
+		return 1
+	}
+	n, err := strconv.Atoi(st.RC[len("rc/"):])
+	if err != nil || n < 1 {
+		return 1
+	}
+	return n
+}
+
+// Controller is one controller subject of a resource: a key, or (candidate rc/2 only) an identity. Exactly one of
+// Key and Identity is set. An rc/1 resource only ever has key controllers.
+type Controller struct {
+	Key, Identity string
+}
+
+// String is the subject as one word: the key itself for a key (as rc/1 always printed it), identity:<id> for an
+// identity.
+func (c Controller) String() string {
+	if c.Identity != "" {
+		return "identity:" + c.Identity
+	}
+	return c.Key
+}
+
+// short is the display alias: shortKey for a key, identity:<12 hex> for an identity.
+func (c Controller) short() string {
+	if c.Identity != "" {
+		return "identity:" + keylog.Short(c.Identity)
+	}
+	return shortKey(c.Key)
+}
+
+// order is the controller set order: the JCS text of the tagged subject (identity profile §3), which for key
+// subjects alone is the key order rc/1 has always used.
+func (c Controller) order() string {
+	if c.Identity != "" {
+		return `{"identity":"` + c.Identity + `"}`
+	}
+	return `{"key":"` + c.Key + `"}`
+}
+
 // EditionState is what became of a proposal.
 type EditionState string
 
@@ -82,6 +140,13 @@ const (
 type Approval struct {
 	Statement string
 	Signer    string
+	// Subject is the effective subject the approval fills a slot for (identity profile §5.2): key(Signer) for a
+	// bare-key approval, identity(I) for an identity-context approval the actor evaluator binds to I. Zero for an
+	// identity-context approval no evaluator binds: it is no subject's word, and never its key's.
+	Subject Controller
+	// Grant is the grant an identity-context approval acts under; "" for a bare-key approval. Withdrawal is
+	// key-and-grant-local (§5.2).
+	Grant string
 	// Counted is false when the line is detached, not valid, after a key event of its signer, or doubted by one.
 	Counted bool
 	// Doubted is true when the line is not counted only because a key event doubts it (§4.1): an edition that
@@ -103,9 +168,11 @@ type Edition struct {
 	// Explain is one line per reason, citing the rule and the predecessor it was evaluated under.
 	Explain []string
 	// Controllers and K are the edition's own authority: what its successors are evaluated under. Set for
-	// Authorized editions only. K is the number of distinct controllers the rule needs (1 for any_one).
-	Controllers []string
+	// Authorized editions only. K is the number of distinct controller subjects the rule needs (1 for any_one).
+	Controllers []Controller
 	K           int
+	// Major is the format major of the edition's approvals (its id domain); 0 for an uninterpreted body.
+	Major int
 	// Members, as the edition lists them; nil when absent or the body is not understood.
 	Members canon.Array
 }
@@ -132,15 +199,20 @@ type Resource struct {
 	RevokedControllers map[string]string
 	// Contested lists the contested editions by id. A resource with one does not pass verify.
 	Contested []string
+	// GenesisControllers and GenesisK are the genesis's authority: what its first editions are evaluated under.
+	GenesisControllers []Controller
+	GenesisK           int
 }
 
 // authority is a node's controllers and rule.
 type authority struct {
-	controllers []string
+	controllers []Controller
 	k           int
 }
 
-func (a authority) has(key string) bool { return slices.Contains(a.controllers, key) }
+func (a authority) has(c Controller) bool {
+	return c != (Controller{}) && slices.Contains(a.controllers, c)
+}
 
 func (a authority) describe() string {
 	rule := "any one"
@@ -149,7 +221,7 @@ func (a authority) describe() string {
 	}
 	short := make([]string, len(a.controllers))
 	for i, c := range a.controllers {
-		short[i] = shortKey(c)
+		short[i] = c.short()
 	}
 	return rule + " of {" + strings.Join(short, ",") + "}"
 }
@@ -163,7 +235,8 @@ func (r *Resolver) Resource(id string) (*Resource, bool) {
 	}
 	res := &Resource{ID: id, Genesis: g, RevokedControllers: map[string]string{}}
 	res.Type, res.Name, res.ForkedFrom = str(g.St.Body, "type"), str(g.St.Body, "name"), str(g.St.Body, "forked_from")
-	genAuth, _ := authorityOf(g.St.Body)
+	genAuth, _ := authorityOf(g.St.Body, majorOf(g.St))
+	res.GenesisControllers, res.GenesisK = genAuth.controllers, genAuth.k
 
 	// Group approvals by raw body. A string resource field associates retained evidence for display only;
 	// unsupported bodies have not passed the kind's schema and must not supply members or predecessor links.
@@ -174,7 +247,7 @@ func (r *Resolver) Resource(id string) (*Resource, bool) {
 		if str(p.St.Body, "resource") != id {
 			continue
 		}
-		eid := EditionID(p.St.Body)
+		eid := EditionIDOf(p.St)
 		e, ok := props[eid]
 		if !ok {
 			e = &Edition{ID: eid, Resource: id, Body: p.St.Body}
@@ -184,29 +257,19 @@ func (r *Resolver) Resource(id string) (*Resource, bool) {
 		// but no approval counts until it is evaluable and its signer's key events let it count.
 		if p.St.Verified && p.St.Status == wire.Valid {
 			understood[eid] = true
+			e.Major = majorOf(p.St)
 		}
 		alias[p.St.ID] = eid
-		a := Approval{Statement: p.St.ID, Signer: p.St.Signer, Counted: true}
-		switch {
-		case !p.Chained:
-			a.Counted, a.Why = false, "detached"
-		case !p.EvidenceReady():
-			a.Counted, a.Why = false, string(p.St.Status)
-		case p.IdentityContext():
-			// unreachable while rc/2 editions read unsupported; an identity approval is never its key's
-			a.Counted, a.Why = false, notCountedWhy(p)
-		case len(p.After) > 0:
-			a.Counted, a.Why = false, p.After[0]
-		case len(p.Doubted) > 0:
-			a.Counted, a.Doubted, a.Why = false, true, strings.Join(p.Doubted, "; ")
-		}
-		e.Approvals = append(e.Approvals, a)
+		e.Approvals = append(e.Approvals, r.approval(p))
 	}
 	// Predecessors are edition ids (or the genesis id) as written: a statement id names no edition (§3).
 	for _, e := range props {
 		slices.SortFunc(e.Approvals, func(a, b Approval) int {
 			return strings.Compare(a.Signer+a.Statement, b.Signer+b.Statement)
 		})
+		if !understood[e.ID] {
+			e.Major = 0
+		}
 		if !understood[e.ID] {
 			continue
 		}
@@ -267,8 +330,10 @@ func (r *Resolver) Resource(id string) (*Resource, bool) {
 		cur := auth[res.Current]
 		usable := 0
 		for _, c := range cur.controllers {
-			if ev, revoked := r.retiredKey(c); revoked {
-				res.RevokedControllers[c] = ev
+			// An identity controller's usability is its root's and grants' (identity profile §4), not a key
+			// event's: it is counted usable here, and NoController never reads it as lost.
+			if ev, revoked := r.retiredKey(c.Key); c.Key != "" && revoked {
+				res.RevokedControllers[c.Key] = ev
 			} else {
 				usable++
 			}
@@ -283,19 +348,21 @@ func (r *Resolver) Resource(id string) (*Resource, bool) {
 // lends its would-be authority, and the proposal is contested with it (C-core-143e).
 func (r *Resolver) evaluate(e *Edition, auth, contested map[string]authority, props map[string]*Edition, alias map[string]string) bool {
 	e.Explain = nil
-	counted, doubted := map[string]bool{}, map[string]bool{}
+	// Slots are effective subjects (identity profile §5.2): two delegates of one identity fill its one slot, and a
+	// key's raw approval and its identity approval are two subjects' words, neither filling the other's slot.
+	counted, doubted := map[Controller]bool{}, map[Controller]bool{}
 	for _, a := range e.Approvals {
 		switch {
 		case a.Counted:
-			counted[a.Signer] = true
+			counted[a.Subject] = true
 		case a.Doubted:
-			doubted[a.Signer] = true
+			doubted[a.Subject] = true
 		}
 	}
 	if len(counted) == 0 && len(doubted) == 0 {
 		e.State = Detached
 		for _, a := range e.Approvals {
-			e.Explain = append(e.Explain, fmt.Sprintf("approval %s by %s not counted: %s", keylog.Short(a.Statement), shortKey(a.Signer), a.Why))
+			e.Explain = append(e.Explain, fmt.Sprintf("approval %s by %s not counted: %s", keylog.Short(a.Statement), a.by(), a.Why))
 		}
 		if !allDetached(e.Approvals) {
 			e.State = Unauthorized
@@ -363,7 +430,7 @@ func (r *Resolver) evaluate(e *Edition, auth, contested map[string]authority, pr
 		e.State = state
 		return false
 	}
-	own, err := successorAuthority(e.Body, preds)
+	own, err := successorAuthority(e.Body, e.Major, preds)
 	if err != "" {
 		e.State = Invalid
 		e.Explain = append(e.Explain, err)
@@ -373,7 +440,7 @@ func (r *Resolver) evaluate(e *Edition, auth, contested map[string]authority, pr
 	if state == Contested {
 		for _, a := range e.Approvals {
 			if a.Doubted {
-				e.Explain = append(e.Explain, fmt.Sprintf("approval %s by %s doubted: %s", keylog.Short(a.Statement), shortKey(a.Signer), a.Why))
+				e.Explain = append(e.Explain, fmt.Sprintf("approval %s by %s doubted: %s", keylog.Short(a.Statement), a.by(), a.Why))
 			}
 		}
 		contested[e.ID] = own
@@ -384,6 +451,66 @@ func (r *Resolver) evaluate(e *Edition, auth, contested map[string]authority, pr
 	return true
 }
 
+// approval reads one edition statement as an approval: whose word it is (its effective subject) and whether it
+// counts. A bare-key approval (every rc/1 line, and a marker-only rc/2 line) is key(signer)'s, under the bare-key
+// gate exactly as before. An identity-context approval is identity(I)'s only when the actor evaluator binds it to
+// I (identity profile §5.2), through the counting gate: eligible counts; unknown, or denied by a grant-history cut
+// that removes it, is doubted (an edition that needs it is contested, never authorized and never silently
+// unauthorized); any other denial counts toward nothing. It never fills its key's slot, whatever the answer, and
+// with no evaluator (every production reader) it counts toward nothing with the hook-absent text.
+func (r *Resolver) approval(p *Placed) Approval {
+	a := Approval{Statement: p.St.ID, Signer: p.St.Signer, Counted: true, Subject: Controller{Key: p.St.Signer}}
+	switch {
+	case !p.Chained:
+		a.Counted, a.Why = false, "detached"
+	case !p.EvidenceReady():
+		a.Counted, a.Why = false, string(p.St.Status)
+	case p.IdentityContext():
+		a.Subject, a.Grant = Controller{}, p.St.Actor.Grant
+		g := r.gate(p)
+		if g.Identity == "" {
+			a.Counted, a.Why = false, g.Why
+			break
+		}
+		a.Subject = Controller{Identity: g.Identity}
+		switch {
+		case g.Counts:
+		case g.State == policy.ActorDenied && !cutExcluded(g.Reasons):
+			a.Counted, a.Why = false, g.Why
+		default:
+			a.Counted, a.Doubted, a.Why = false, true, g.Why
+		}
+	case len(p.After) > 0:
+		a.Counted, a.Why = false, p.After[0]
+	case len(p.Doubted) > 0:
+		a.Counted, a.Doubted, a.Why = false, true, strings.Join(p.Doubted, "; ")
+	}
+	return a
+}
+
+// cutExcluded reports whether an evaluator's denial rests on a grant-history cut that leaves the statement out
+// (identity profile §4, §5.2: a cut that removes a required approval makes the edition contested, as a hard
+// revocation's last_good does for a key, claims-model note §4.1).
+func cutExcluded(reasons []string) bool {
+	for _, x := range reasons {
+		if x == "cut_excluded" || strings.HasPrefix(x, "cut_excluded:") {
+			return true
+		}
+	}
+	return false
+}
+
+// by is who an approval is from, for display: its signer, and the identity it acts for when it acts for one.
+func (a Approval) by() string {
+	if a.Subject.Identity != "" {
+		return shortKey(a.Signer) + " for " + a.Subject.short()
+	}
+	if a.Grant != "" {
+		return shortKey(a.Signer) + " (identity context, bound to no identity)"
+	}
+	return shortKey(a.Signer)
+}
+
 // withdraw applies the controllers' withdraw_approval statements to e, a tip of the resolved graph (§8,
 // C-core-85b). An approval is withdrawn when its signer has a counting withdrawal of e that no later approval
 // of e by the same key follows in that key's log. When the approvals left no longer satisfy some predecessor's
@@ -392,48 +519,76 @@ func (r *Resolver) withdraw(e *Edition, resource string, auth map[string]authori
 	if e.State != Authorized {
 		return false
 	}
+	// A withdrawal is key-and-grant-local (identity profile §5.2): it takes back the approvals its signer made in
+	// the same context, a bare-key withdrawal the key's bare-key approvals and an identity withdrawal the key's
+	// approvals under the same grant. One delegate never withdraws another's approval, and a new grant never
+	// cancels an approval made under another. An identity withdrawal counts only through the actor evaluator.
+	type ctx struct{ signer, grant string }
 	var ws []*Placed
+	wctx := map[string]ctx{}
 	for _, p := range r.byKind["withdraw_approval"] {
-		if p.Counts() && str(p.St.Body, "edition") == e.ID && str(p.St.Body, "resource") == resource {
-			ws = append(ws, p)
+		if str(p.St.Body, "edition") != e.ID || str(p.St.Body, "resource") != resource {
+			continue
 		}
+		switch {
+		case p.IdentityContext():
+			if g := r.gate(p); g.Identity == "" || !g.Counts {
+				continue
+			}
+			wctx[p.St.ID] = ctx{p.St.Signer, p.St.Actor.Grant}
+		case p.Counts():
+			wctx[p.St.ID] = ctx{p.St.Signer, ""}
+		default:
+			continue
+		}
+		ws = append(ws, p)
 	}
 	if len(ws) == 0 {
 		return false
 	}
-	withdrawn := map[string]string{} // signer -> withdrawal id
+	withdrawn := map[ctx]string{} // signer and grant -> withdrawal id
 	for _, w := range ws {
-		followed := false
+		c := wctx[w.St.ID]
+		followed, signed := false, false
 		for _, a := range e.Approvals {
-			if a.Counted && a.Signer == w.St.Signer && r.precedes(a.Signer, w.St.ID, a.Statement) {
+			if !a.Counted || a.Signer != c.signer || a.Grant != c.grant {
+				continue
+			}
+			signed = true
+			if r.precedes(a.Signer, w.St.ID, a.Statement) {
 				followed = true
 			}
 		}
-		signed := false
-		for _, a := range e.Approvals {
-			signed = signed || (a.Counted && a.Signer == w.St.Signer)
-		}
 		if signed && !followed {
-			if prev, ok := withdrawn[w.St.Signer]; !ok || w.St.ID < prev {
-				withdrawn[w.St.Signer] = w.St.ID
+			if prev, ok := withdrawn[c]; !ok || w.St.ID < prev {
+				withdrawn[c] = w.St.ID
 			}
 		}
 	}
 	if len(withdrawn) == 0 {
 		return false
 	}
-	left := map[string]bool{}
+	left := map[Controller]bool{}
 	for i, a := range e.Approvals {
-		if w, ok := withdrawn[a.Signer]; ok && a.Counted {
+		if w, ok := withdrawn[ctx{a.Signer, a.Grant}]; ok && a.Counted {
 			e.Approvals[i].Withdrawn = w
 			continue
 		}
 		if a.Counted {
-			left[a.Signer] = true
+			left[a.Subject] = true
 		}
 	}
-	for _, s := range sortedKeys(withdrawn) {
-		e.Explain = append(e.Explain, fmt.Sprintf("approval by %s withdrawn by %s", shortKey(s), keylog.Short(withdrawn[s])))
+	order := make([]ctx, 0, len(withdrawn))
+	for c := range withdrawn {
+		order = append(order, c)
+	}
+	slices.SortFunc(order, func(a, b ctx) int { return strings.Compare(a.signer+"|"+a.grant, b.signer+"|"+b.grant) })
+	for _, c := range order {
+		by := shortKey(c.signer)
+		if c.grant != "" {
+			by += " under grant " + keylog.Short(c.grant)
+		}
+		e.Explain = append(e.Explain, fmt.Sprintf("approval by %s withdrawn by %s", by, keylog.Short(withdrawn[c])))
 	}
 	for _, p := range e.Predecessors {
 		pa := auth[p]
@@ -455,7 +610,7 @@ func (r *Resolver) withdraw(e *Edition, resource string, auth map[string]authori
 
 // successorAuthority is what an authorized edition's successors are evaluated under: its own `controllers` and
 // `rule` when it declares them (a controller change), each inherited from its predecessors when they agree.
-func successorAuthority(body *canon.Object, preds []authority) (authority, string) {
+func successorAuthority(body *canon.Object, major int, preds []authority) (authority, string) {
 	contents, _ := body.Get("contents")
 	c, _ := contents.(*canon.Object)
 	inherit := func() (authority, bool) {
@@ -474,7 +629,7 @@ func successorAuthority(body *canon.Object, preds []authority) (authority, strin
 	}
 	out := base
 	if hasCtrl {
-		out.controllers = keys(c, "controllers")
+		out.controllers = controllersOf(c, major)
 	}
 	if hasRule {
 		out.k = ruleK(c.Members["rule"].(*canon.Object))
@@ -485,8 +640,8 @@ func successorAuthority(body *canon.Object, preds []authority) (authority, strin
 	return out, ""
 }
 
-func authorityOf(body *canon.Object) (authority, bool) {
-	a := authority{controllers: keys(body, "controllers")}
+func authorityOf(body *canon.Object, major int) (authority, bool) {
+	a := authority{controllers: controllersOf(body, major)}
 	rule, ok := body.Get("rule")
 	if !ok {
 		return a, false
@@ -581,7 +736,7 @@ func (res *Resource) Render() string {
 			case !a.Counted:
 				note = "not counted: " + a.Why
 			}
-			fmt.Fprintf(&b, "    approval %s by %s (%s)\n", keylog.Short(a.Statement), shortKey(a.Signer), note)
+			fmt.Fprintf(&b, "    approval %s by %s (%s)\n", keylog.Short(a.Statement), a.by(), note)
 		}
 		for _, x := range e.Explain {
 			fmt.Fprintf(&b, "    %s\n", x)
@@ -616,9 +771,34 @@ func ids(o *canon.Object, k string) []string {
 	return out
 }
 
-func keys(o *canon.Object, k string) []string {
-	out := ids(o, k)
-	slices.Sort(out) // the schema already refused an unsorted set; sorted here so comparisons are plain
+// controllersOf reads o's `controllers`: a set of keys in rc/1, of typed subjects ({key: K} or {identity: I}) in
+// the candidate rc/2 (identity profile §2.1). The schema of the body's major already checked the shape; sorted
+// here by the profile's subject order so comparisons are plain (for keys alone, the key order rc/1 has always
+// used).
+func controllersOf(o *canon.Object, major int) []Controller {
+	v, ok := o.Get("controllers")
+	if !ok {
+		return nil
+	}
+	var out []Controller
+	for _, x := range v.(canon.Array) {
+		switch y := x.(type) {
+		case canon.String:
+			if major == 1 {
+				out = append(out, Controller{Key: string(y)})
+			}
+		case *canon.Object:
+			if major == 1 {
+				continue
+			}
+			if k, ok := y.Get("key"); ok {
+				out = append(out, Controller{Key: string(k.(canon.String))})
+			} else if i, ok := y.Get("identity"); ok {
+				out = append(out, Controller{Identity: string(i.(canon.String))})
+			}
+		}
+	}
+	slices.SortFunc(out, func(a, b Controller) int { return strings.Compare(a.order(), b.order()) })
 	return out
 }
 
@@ -631,10 +811,15 @@ func sortedKeys[V any](m map[string]V) []string {
 	return out
 }
 
-func signers(m map[string]bool) string {
+func signers(m map[Controller]bool) string {
+	cs := make([]Controller, 0, len(m))
+	for c := range m {
+		cs = append(cs, c)
+	}
+	slices.SortFunc(cs, func(a, b Controller) int { return strings.Compare(a.order(), b.order()) })
 	var s []string
-	for _, k := range sortedKeys(m) {
-		s = append(s, shortKey(k))
+	for _, c := range cs {
+		s = append(s, c.short())
 	}
 	return strings.Join(s, ",")
 }
