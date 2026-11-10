@@ -308,7 +308,7 @@ func (r *Resolver) selectDefaults(a *Artifact) {
 			for _, c := range u.Claims {
 				for _, st := range c.current {
 					if !chosen[st.ID] {
-						add(st, c.Signer)
+						add(st, st.Signer)
 					}
 				}
 			}

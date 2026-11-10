@@ -92,7 +92,7 @@ func TestPropertyUnverifiedEvidenceNeverPasses(t *testing.T) {
 			case "verifies only the earlier anchor":
 				// the earliest verified claim wins against an unverified rival (C-btc-01 (b)): the control for a
 				// partial verifier, which must not make the unverified rival the default
-				if a.State != Priority || a.Default.Claims[0].Signer == "" || !strings.Contains(a.Render(), "bound no anchor") && !strings.Contains(a.Render(), "local") {
+				if a.State != Priority || a.Default.Claims[0].Subject.ID == "" || !strings.Contains(a.Render(), "bound no anchor") && !strings.Contains(a.Render(), "local") {
 					t.Fatalf("%s: %s", name, a.Render())
 				}
 				if !strings.Contains(a.Default.Bound.String(), "bitcoin") {

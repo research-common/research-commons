@@ -374,7 +374,7 @@ func TestNTimeDoesNotOrder(t *testing.T) {
 		t.Fatal("fixture: nTime did not decrease")
 	}
 	everyOrder(t, w, "X", v, func(a *resolveArtifact) {
-		if a.Default == nil || a.Default.Claims[0].Signer != w.signer("A") {
+		if a.Default == nil || a.Default.Claims[0].Subject.ID != w.signer("A") {
 			t.Fatalf("%s", a.Render())
 		}
 		has(t, a.Render(), "later claimant")

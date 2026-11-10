@@ -260,7 +260,7 @@ func (v *view) workflowDecl(wf string) (signer, mode, comparator string, match [
 			}
 		}
 	}
-	return cl.Signer, s("replication"), s("comparator"), match, ""
+	return p.St.Signer, s("replication"), s("comparator"), match, ""
 }
 
 func (v *view) readBlob(d string) ([]byte, bool) {

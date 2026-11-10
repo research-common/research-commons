@@ -40,6 +40,9 @@ type Obj struct {
 	// inline renders the object on one line of the human surface ("k: v · k: v"), for reports that print one
 	// line per object (hub template H-50). Only scalar and all-scalar-list members are inlined.
 	inline bool
+	// surface marks a member printed on one surface only ('j' JSON, 'h' human): the JSON shape of a value may
+	// change in the alpha (CLI-OUTPUTS "Stability") while the human line it was printed as stays the same.
+	surface map[string]byte
 }
 
 func (tokV) isValue()  {}
@@ -60,6 +63,9 @@ func rowObj() *Obj { return &Obj{vals: map[string]value{}, inline: true} }
 func inlineText(o *Obj) string {
 	var parts []string
 	for _, k := range o.keys {
+		if o.surface[k] == 'j' {
+			continue
+		}
 		label := strings.ReplaceAll(k, "_", " ")
 		v := o.vals[k]
 		if s, ok := scalar(v); ok {
@@ -91,6 +97,23 @@ func (o *Obj) set(k string, v value) *Obj {
 	}
 	o.vals[k] = v
 	return o
+}
+
+// setJSON adds a member printed on the JSON surface only.
+func (o *Obj) setJSON(k string, v value) *Obj { return o.only(k, v, 'j') }
+
+// setHuman adds a member printed on the human surface only. Its tokens must also be on the JSON surface.
+func (o *Obj) setHuman(k string, v value) *Obj { return o.only(k, v, 'h') }
+
+func (o *Obj) only(k string, v value, s byte) *Obj {
+	if v == nil {
+		return o
+	}
+	if o.surface == nil {
+		o.surface = map[string]byte{}
+	}
+	o.surface[k] = s
+	return o.set(k, v)
 }
 
 func (o *Obj) get(k string) value { return o.vals[k] }
@@ -146,6 +169,9 @@ func toCanon(v value) canon.Value {
 	case *Obj:
 		o := &canon.Object{Members: map[string]canon.Value{}}
 		for _, k := range x.keys {
+			if x.surface[k] == 'h' {
+				continue
+			}
 			o.Keys = append(o.Keys, k)
 			o.Members[k] = toCanon(x.vals[k])
 		}
@@ -257,6 +283,9 @@ func human(o *Obj) string {
 
 func writeObj(b *strings.Builder, o *Obj, ind string) {
 	for _, k := range o.keys {
+		if o.surface[k] == 'j' {
+			continue
+		}
 		writeMember(b, k, o.vals[k], ind)
 	}
 }

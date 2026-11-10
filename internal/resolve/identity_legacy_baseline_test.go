@@ -219,7 +219,7 @@ func identityLegacySnapshot(c identityLegacyCase, r *Resolver) string {
 		exit, why := a.VerifyExit()
 		fmt.Fprintf(&b, "artifact %s state=%q verify=%d why=%q explain=%q holders=%q\n", c.blob, a.State, exit, why, a.Explain, a.Holders)
 		for _, claim := range a.Claims {
-			fmt.Fprintf(&b, "  claim signer=%s statements=%q current=%q\n", claim.Signer, claim.Statements, claim.Current)
+			fmt.Fprintf(&b, "  claim signer=%s statements=%q current=%q\n", claim.Subject.ID, claim.Statements, claim.Current)
 			for _, id := range sortedKeys(claim.Amends) {
 				fmt.Fprintf(&b, "    %s amends=%q\n", id, claim.Amends[id])
 			}

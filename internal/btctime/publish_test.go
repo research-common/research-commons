@@ -106,7 +106,7 @@ func TestStampBeforeTransport(t *testing.T) {
 	}
 	v := w.chain(30).fresh(w.blobs)
 	everyOrder(t, w, "X", v, func(a *resolveArtifact) {
-		if a.Default == nil || a.Default.Claims[0].Signer != w.signer("A") {
+		if a.Default == nil || a.Default.Claims[0].Subject.ID != w.signer("A") {
 			t.Fatalf("%s", a.Render())
 		}
 		has(t, a.Render(), "later claimant "+shortKey(w.signer("CC")))
