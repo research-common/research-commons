@@ -340,7 +340,7 @@ func TestSliceNegatives(t *testing.T) {
 	conformance.Partial(t, "C-id-05", "wrong delegate key and stranger-issued grant at the adapter; the profile is not active: no dual-major reader or consumer reads this answer")
 	conformance.Partial(t, "C-id-07", "missing grant and ancestry read unknown at the adapter; the profile is not active: no dual-major reader or consumer reads this answer")
 	conformance.Partial(t, "C-id-20", "amend:false denies an amending act at the adapter; publish under the same grant and any amendment consumer are not built")
-	conformance.Partial(t, "C-id-26", "identity half (missing grant, no key fallback); filling resource slots needs the resource consumer")
+	conformance.Partial(t, "C-id-26", "identity half (missing grant, no key fallback); resource slots are internal/resolve TestTypedControllerSlotsNoFallback")
 	conformance.Partial(t, "C-id-41", "actor without critical marker at the adapter; mixed controller semantics need the resource consumer, the profile is not active: no dual-major reader or consumer reads this answer")
 	t.Run("stranger-issued grant naming I", func(t *testing.T) {
 		w := base(t)
