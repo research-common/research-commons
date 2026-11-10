@@ -24,7 +24,7 @@ func signOpaqueObservationInput(w *world, mode, name, by, kind string, body *can
 	key := w.key(by)
 	d := wire.Draft{Kind: kind, Body: body}
 	if mode == "major" {
-		d.RC = "rc/2"
+		d.RC = otherMajorRC()
 	} else {
 		w.keys[by] = unknownAlgorithmKey{key}
 	}
@@ -458,7 +458,7 @@ func TestOpaqueObservationNoAssociation(t *testing.T) {
 		key := w.key("A")
 		d := wire.Draft{Kind: "observed", Body: opaqueObservedBody()}
 		if major {
-			d.RC = "rc/2"
+			d.RC = otherMajorRC()
 		} else {
 			w.keys["A"] = unknownAlgorithmKey{key}
 		}

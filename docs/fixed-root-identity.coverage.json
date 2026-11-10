@@ -9,10 +9,12 @@
         "rc1-is-not-this-profile"
       ],
       "isolated_tests": [
-        "internal/keylog:TestFixedRootCandidateOldReaderMixedHistory"
+        "internal/keylog:TestFixedRootCandidateOldReaderMixedHistory",
+        "internal/wire:TestDualReaderRC1IsRead",
+        "internal/resolve:TestDualDifferential"
       ],
-      "conformance": "partial",
-      "remaining": "Full legacy resolver differential corpus; current test proves selected wire/linkage/id behavior only."
+      "conformance": "covers",
+      "remaining": "Covered by internal/resolve:TestDualDifferential: legacy goldens, the P-01 property fixtures, a task corpus and the wire-format vectors read under the default store and the dual-major store with the same ids, statuses, refusals and every resolver answer. The dual reader is a candidate store option; no production caller wires it."
     },
     {
       "handle": "ID-02",
@@ -435,7 +437,8 @@
       ],
       "isolated_tests": [
         "internal/wire:TestFixedRootCandidateVectors",
-        "internal/resolve:TestActorIdentitySelection"
+        "internal/resolve:TestActorIdentitySelection",
+        "internal/resolve:TestDualNoKeyFallbackSelection"
       ],
       "conformance": "partial",
       "remaining": "Policy syntax tested. Principal-following selection of an identity now runs through the actor-eligibility seam with a test-only evaluator (eligible claims only; a bare worker-key statement is never I's; undecided or amending claims read unknown). Exact pins to identity-context statements, the amendment DAG, and the real evaluator adapter remain."
@@ -521,10 +524,14 @@
         "internal/wire:TestFixedRootCandidateLegacyUnmarkedActorIsNotSafe",
         "internal/identity:TestSliceNegatives",
         "internal/identity:TestUnchangedReaderStackOnCandidateBytes",
-        "internal/wire:TestSignedIdentityPositiveVectors"
+        "internal/wire:TestSignedIdentityPositiveVectors",
+        "internal/wire:TestDualReaderRC2IsIdentityReader",
+        "internal/keylog:TestStoreWithDualReader",
+        "internal/resolve:TestDualNoKeyFallback",
+        "internal/resolve:TestDualViewsSurviveCandidateBytes"
       ],
       "conformance": "partial",
-      "remaining": "Actual wire/keylog tested, including unknown-major unverified retention; full unsupported-body/resource hardening remains a blocker."
+      "remaining": "Unchanged reader: wire/keylog retain rc/2 unverified, and every resolver view answers without a panic on the signed vectors plus rc/2 resource/task/invalid lines (internal/resolve:TestDualViewsSurviveCandidateBytes). Dual-major reader built as a candidate store option; under it rc/2 resource/task kinds stay unsupported and an actor line never counts as its key. Remaining: a production reader that wires it (pull, gates, CLI views) and the critical registry."
     },
     {
       "handle": "ID-37",

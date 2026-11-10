@@ -161,14 +161,14 @@ func (w *world) controllers(names ...string) []string {
 // resolve delivers lines (all of them when order is nil) in the given order and resolves resource id.
 func (w *world) resolve(id string, order []int) (*Resource, *Resolver) {
 	w.t.Helper()
-	s := keylog.NewStore()
+	s := newTestStore()
 	if order == nil {
 		for i := range w.lines {
 			order = append(order, i)
 		}
 	}
 	for _, i := range order {
-		st, err := wire.Read(w.lines[i])
+		st, err := s.Read(w.lines[i])
 		if err != nil {
 			w.t.Fatalf("line %d: %v", i, err)
 		}

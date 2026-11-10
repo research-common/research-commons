@@ -176,9 +176,9 @@ func concretize(t *testing.T, f fixture.Fixture) *propWorld {
 // storeOf delivers lines, in the order and multiplicity given, into one fresh store.
 func storeOf(t *testing.T, lines [][]byte) *keylog.Store {
 	t.Helper()
-	s := keylog.NewStore()
+	s := newTestStore()
 	for _, ln := range lines {
-		st, err := wire.Read(ln)
+		st, err := s.Read(ln)
 		if err != nil {
 			t.Fatalf("delivered line refused: %v", err)
 		}

@@ -212,7 +212,7 @@ func TestUnsupportedUnverifiedEdition(t *testing.T) {
 			d := wire.Draft{Kind: "edition", Body: obj("resource", g, "contents", false, "predecessors", 1)}
 			key := w.key("BB")
 			if major {
-				d.RC = "rc/2"
+				d.RC = otherMajorRC()
 			} else {
 				w.keys["BB"] = unknownAlgorithmKey{key}
 			}

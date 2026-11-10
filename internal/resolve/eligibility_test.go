@@ -80,7 +80,7 @@ func TestPlacedEvidenceEligibilityUnverified(t *testing.T) {
 				key := w.key(by)
 				draft := wire.Draft{Kind: "authored", Body: obj("content", contentOf("X"), "provenance", false)}
 				if major {
-					draft.RC = "rc/2"
+					draft.RC = otherMajorRC()
 				} else {
 					w.keys[by] = unknownAlgorithmKey{key}
 				}

@@ -162,15 +162,34 @@ line, unchanged original ids, a second independent key's log, and both candidate
 signature algorithms. An old reader even retains a bad-signature unknown-major line;
 therefore its retention is not proof of `rc/2` authenticity.
 
-**Integration blocker:** wire/keylog compatibility is not whole-reader safety. The
-baseline resource resolver contains unsupported-body inspection before its evaluation
-guard; `rc/2` bodies may be absent in the old parsed representation. Unsupported-input
-hardening is required before any full mixed-reader/resource safety claim. Do not run
-this candidate's resource vectors through an unhardened production resolver and infer
-that retain-as-unsupported implies panic freedom. Also, a malicious signer can create
-nonconforming `rc/1` bytes with an unmarked envelope actor that an old reader ignores;
-this proposal does not retroactively repair old readers. No conforming candidate
-writer emits that combination.
+**Mixed-reader safety (formerly the integration blocker):** wire/keylog compatibility
+is not by itself whole-reader safety: `rc/2` bodies are absent in the old parsed
+representation, and a view that inspected an unsupported body before its evaluation
+guard could fail. Every resolver view is now exercised on the signed candidate lines
+(both chains, `rc/2` resource and task kinds with identity controllers,
+authenticated-invalid and tampered lines) through the unchanged reader and through the
+candidate dual-major reader, in sampled delivery orders, with and without an actor
+evaluator: no view panics, and every `rc/2` line stays unverified and undecoded under the
+unchanged reader. This is a test result over those corpora, not a proof for every
+possible input. Also, a malicious signer can create nonconforming `rc/1` bytes with an
+unmarked envelope actor that an old reader ignores; this proposal does not
+retroactively repair old readers. No conforming candidate writer emits that combination.
+
+**Dual-major reader (candidate, opt-in).** A reader that understands this profile
+dispatches each line by its `rc` major and nothing else. `rc/1` goes through the
+unchanged `rc/1` reader: the same refusals, statuses and ids; an `rc/1` envelope actor
+is not read, and an `rc/1` `crit` naming the identity marker is unsupported. `rc/2` goes
+through the candidate reader (verify first; marker and actor read; a verified line that
+breaks a candidate rule is held as invalid). Any other major stays an unknown major.
+Under it, a corpus of `rc/1` statements only gives the same ids, statuses and every
+resolver answer as the unchanged reader (C-id-01). An `rc/2` line carrying an actor is
+never its signing key's evidence: with no actor evaluator it counts toward nothing and
+reads `unknown (identity profile not active)`; an evaluator that binds it to no identity
+leaves it uncounted as well (§2.3, "never a key fallback"). An `rc/2` line with the
+marker and no actor is a `key(K)` statement and keeps the bare-key gate. `rc/2` kinds this
+slice does not implement (genesis, edition, withdraw_approval, task kinds) stay verified
+and unsupported, so they resolve no resource and count toward nothing. Nothing in a
+production reader uses this dispatch yet.
 
 ## 3. Administrative vocabulary and permissions
 
@@ -737,8 +756,9 @@ correctly re-signed malformed body is rejected despite the recognized marker.
 
 This candidate is useful input to an authority model and wire integration, not a
 claim that all 45 semantic scenarios pass. Still required: independent review of this
-major transition/domain choice; unsupported-input hardening; dual-major authenticated
-reader and critical registry; typed snapshot binding to the pure model; all claim,
+major transition/domain choice; wiring the candidate dual-major reader into a production
+reader (pull, gates, views) and the critical registry (the reader itself, its `rc/1`
+differential and resolver-wide mixed-input tests exist, §2.4); typed snapshot binding to the pure model; all claim,
 resource, time and task consumers; concrete task-contract profile; policy evaluation;
 transport/explanations and snapshot digest; deterministic evaluation caps; differential
 and full end-to-end signed authority tests; detached signing packages/connectors and

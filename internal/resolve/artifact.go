@@ -766,6 +766,22 @@ func provenance(b *canon.Object) *Provenance {
 }
 
 func notCountedWhy(p *Placed) string {
+	if p.Chained && p.EvidenceReady() && p.IdentityContext() {
+		return identityFallbackWhy(p)
+	}
+	return keyStatusWhy(p)
+}
+
+// identityFallbackWhy is why an identity-context statement counts toward nothing where no actor evaluator answers
+// for it (no evaluator is configured, or this consumer does not ask one): the identity profile's hook-absent answer.
+// It is never counted as its key's evidence (profile §2.3).
+func identityFallbackWhy(p *Placed) string {
+	return "unknown (identity profile not active): signed for identity " + keylog.Short(p.St.Actor.Identity) +
+		" under grant " + keylog.Short(p.St.Actor.Grant) + "; never counted as its key's evidence"
+}
+
+// keyStatusWhy is the bare-key status of a statement that does not survive the legacy gate.
+func keyStatusWhy(p *Placed) string {
 	switch {
 	case !p.Chained:
 		return "detached"

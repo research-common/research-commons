@@ -30,9 +30,34 @@ import (
 type Store struct {
 	logs  map[string]*Log
 	owner map[string]string // statement id -> signer, over every log
+	// read is the wire reader every Add uses; nil is wire.Read (every production store).
+	read wire.LineReader
 }
 
-func NewStore() *Store { return &Store{logs: map[string]*Log{}, owner: map[string]string{}} }
+// StoreOption configures a Store.
+type StoreOption func(*Store)
+
+// WithReader makes every Add read lines with r instead of wire.Read. It exists for the CANDIDATE dual-major
+// reader (wire.DualReader, fixed-root identity profile §2.4): no production store sets it. A nil r is wire.Read.
+func WithReader(r wire.LineReader) StoreOption { return func(s *Store) { s.read = r } }
+
+// NewStore returns an empty store. With no option every line is read by wire.Read, exactly as before options
+// existed.
+func NewStore(opts ...StoreOption) *Store {
+	s := &Store{logs: map[string]*Log{}, owner: map[string]string{}}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
+}
+
+// Read reads one line with this store's reader: what Add would read, without delivering it.
+func (s *Store) Read(line []byte) (*wire.Statement, error) {
+	if s.read == nil {
+		return wire.Read(line)
+	}
+	return s.read.Read(line)
+}
 
 // Log returns the log named for key, creating it empty.
 func (s *Store) Log(key string) *Log {
@@ -68,13 +93,13 @@ type Log struct {
 	retained map[string]*wire.Statement
 }
 
-// Add delivers one stored line to this log. It returns a refusal when the line is refused: by wire.Read
-// (parse, envelope, schema, signature), by the ownership rule, or by a log-relative rule that the lines held
-// right now already decide. A line refused by Read or by ownership is not kept. A line refused by a
+// Add delivers one stored line to this log. It returns a refusal when the line is refused: by the store's
+// reader (wire.Read unless WithReader set another: parse, envelope, schema, signature), by the ownership rule,
+// or by a log-relative rule that the lines held right now already decide. A line refused by Read or by ownership is not kept. A line refused by a
 // log-relative rule is kept, so that a later delivery order reaches the same view (View lists it under
 // Refused). A duplicate by id is a no-op (§7, "Ordering"; C-core-10).
 func (l *Log) Add(line []byte) (*wire.Statement, error) {
-	st, err := wire.Read(line)
+	st, err := l.store.Read(line)
 	if err != nil {
 		return nil, err
 	}
