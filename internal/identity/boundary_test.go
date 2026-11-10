@@ -120,7 +120,7 @@ func TestByteMutationsNeverCreateAuthority(t *testing.T) {
 // The unchanged reader stack (keylog + resolve) on the full slice, including rc/2 resource/task kinds and
 // authenticated-invalid controls: retained unverified, never evaluated, no panic in any view.
 func TestUnchangedReaderStackOnCandidateBytes(t *testing.T) {
-	conformance.Partial(t, "C-id-36", "keylog and resolve views on the slice only; unsupported-body hardening across every view and a dual-major reader are not built")
+	conformance.Partial(t, "C-id-36", "keylog and resolve views on the slice only; the dual-major reader and every-view hardening are tested in internal/wire, internal/keylog and internal/resolve (dual_test.go)")
 	w := base(t)
 	w.sign(stmt{name: "Cbad", by: "R", parent: "G2", kind: "identity_cut", body: obj("identity", "zz", "grant", 7, "last_good", "x", "reason", "BAD")})
 	w.sign(stmt{name: "Gen", by: "K1", parent: "A2", kind: "genesis", body: obj("type", "collection", "name", "n",
