@@ -130,7 +130,40 @@ func (s *Snapshot) evaluateWithin(e *evaluation, statement ID) Result {
 				e.reasons(checkPermissions(grant.Permissions, g.ID))
 			}
 			if st.Operation != nil && g.Validity == Understood {
-				_, reasons := scopeAllows(grant.Permissions, *st.Operation, st.Signer)
+				lookup := func(id ID) (Fact, bool) {
+					f, ok := e.w.b.read(s, id)
+					if ok {
+						e.basis[id] = true
+					} else {
+						e.result.Dependencies = append(e.result.Dependencies, Dependency{id, statement, "amendment target"})
+					}
+					return f, ok
+				}
+				judge := func(id ID) Status {
+					m, ok := e.w.targets[id]
+					if !ok {
+						sub := evaluation{
+							result: Result{Status: Eligible, Statement: id, EvidenceDigest: s.digest,
+								EvaluatorVersion: EvaluatorVersion, Freshness: NotEstablished},
+							basis: map[ID]bool{}, cuts: map[ID]bool{}, w: e.w,
+						}
+						r := s.evaluateWithin(&sub, id)
+						m = targetMemo{status: r.Status, basis: r.Basis, cuts: r.RelevantCuts, dependencies: r.Dependencies}
+						if e.w.targets == nil {
+							e.w.targets = map[ID]targetMemo{}
+						}
+						e.w.targets[id] = m
+					}
+					for _, b := range m.basis {
+						e.basis[b] = true
+					}
+					for _, c := range m.cuts {
+						e.cuts[c] = true
+					}
+					e.result.Dependencies = append(e.result.Dependencies, m.dependencies...)
+					return m.status
+				}
+				_, reasons := scopeAllows(grant.Permissions, *st.Operation, st.Signer, a.Identity, lookup, judge)
 				for i := range reasons {
 					reasons[i].Statement, reasons[i].Related = statement, g.ID
 				}

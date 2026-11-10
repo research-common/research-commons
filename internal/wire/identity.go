@@ -460,6 +460,9 @@ var (
 	forbiddenModes = map[string]bool{"any_resource": true, "any_task": true}
 )
 
+// AmendOwn is the `amend` mode of fixed-root-v1 that limits amendment to the acting key's own records (profile §3).
+const AmendOwn = "own"
+
 // permission checks one entry. It returns what this reader does not know when the entry uses an extension point
 // of the profile (§3): an unknown kind, an unknown target mode, or an unknown `amend` mode. The grant is then
 // Unsupported, never broader, and that uncertainty stays with the one grant. It returns a reason when the entry
@@ -499,12 +502,15 @@ func permission(v canon.Value, p string) (unsupported, why string) {
 		switch x := av.(type) {
 		case canon.Bool:
 		case canon.String:
-			// A later version of the profile may add an amend mode (a token): unsupported here, never broader.
-			// A missing amend stays invalid: absence is not a mode (and never defaults to false).
+			// "own" is fixed-root-v1's one amend mode (§3): the acting key may amend only its own records for the
+			// identity. A later version of the profile may add another mode (a token): unsupported here, never
+			// broader. A missing amend stays invalid: absence is not a mode (and never defaults to false).
 			if !reToken.MatchString(string(x)) {
 				return "", p + ".amend is not a boolean or a mode token"
 			}
-			amendMode = "amend mode " + string(x)
+			if string(x) != AmendOwn {
+				amendMode = "amend mode " + string(x)
+			}
 		default:
 			if !ok {
 				return "", p + ".amend is required"

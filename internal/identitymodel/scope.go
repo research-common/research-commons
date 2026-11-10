@@ -53,12 +53,20 @@ type Permission struct {
 	Mode    TargetMode
 	Targets []ID
 	Amend   bool // Only authored/observed; identity-wide within these content targets.
+	// AmendOwn is the `own` amend mode: only authored/observed, never together with Amend. An amendment under it
+	// may name only records of the same identity signed by the exact acting key (a rotated successor does not
+	// inherit), within these content targets.
+	AmendOwn bool
 }
 
 type Operation struct {
 	Kind   Kind
 	Target Target
 	Amend  bool // Adapter attests an explicit amendment; target resolution is downstream.
+	// Amends are the exact amendment targets the act names (sorted). The model reads them only for an `own`
+	// amend permission, whose scope depends on each target's signer and actor; every other §5.1 condition
+	// (target eligibility, digest, kind, current state) belongs to the claim consumer.
+	Amends []ID
 }
 
 func targetType(k Kind) TargetType {
@@ -93,8 +101,11 @@ func checkPermissions(ps []Permission, grant ID) []Reason {
 			add("unsupported_permission", Unknown, string(p.Kind))
 			continue
 		}
-		if p.Amend && p.Kind != Authored && p.Kind != Observed {
+		if (p.Amend || p.AmendOwn) && p.Kind != Authored && p.Kind != Observed {
 			add("invalid_amend_permission", Denied, string(p.Kind))
+		}
+		if p.Amend && p.AmendOwn {
+			add("invalid_amend_permission", Denied, string(p.Kind)+": two amend modes")
 		}
 		valid := false
 		switch p.Mode {
@@ -114,7 +125,7 @@ func checkPermissions(ps []Permission, grant ID) []Reason {
 			}
 		}
 		// Length-prefixing avoids collisions even for abstract IDs containing separators.
-		key := permissionKey{Kind: p.Kind, Mode: p.Mode, Amend: p.Amend, Targets: modelKey(p.Targets)}
+		key := permissionKey{Kind: p.Kind, Mode: p.Mode, Amend: p.Amend, AmendOwn: p.AmendOwn, Targets: modelKey(p.Targets)}
 		if seen[key] {
 			add("duplicate_permission", Denied, string(p.Kind))
 		}
@@ -124,13 +135,27 @@ func checkPermissions(ps []Permission, grant ID) []Reason {
 }
 
 type permissionKey struct {
-	Kind    Kind
-	Mode    TargetMode
-	Amend   bool
-	Targets string
+	Kind     Kind
+	Mode     TargetMode
+	Amend    bool
+	AmendOwn bool
+	Targets  string
 }
 
-func scopeAllows(ps []Permission, op Operation, signer Key) (bool, []Reason) {
+// lookupFact reads one fact for the scope check, accounting for it in the evaluation budget; ok is false when the
+// fact is not held.
+type lookupFact func(ID) (Fact, bool)
+
+// judgeTarget evaluates an amendment target's own eligibility inside the same evaluation (one shared budget), so
+// an `own` amendment of a record that is not eligible for the identity (for example one outside a cut's last_good
+// prefix) is itself not eligible: #148, "every §5.1 condition holds: S is held and eligible for I".
+type judgeTarget func(ID) Status
+
+// scopeAllows reports whether some permission entry of the grant covers op by signer acting for identity. An
+// entry with full authority for op (amend:true for an amendment) is matched first, without reading anything;
+// an `own` amend entry is consulted only when none does, and only then are the amendment targets read
+// (lookup), so a missing target never makes an act unknown that another entry already authorizes.
+func scopeAllows(ps []Permission, op Operation, signer Key, identity ID, lookup lookupFact, judge judgeTarget) (bool, []Reason) {
 	domain := targetType(op.Kind)
 	if domain == NoTarget {
 		return false, []Reason{{Code: "unsupported_operation", Status: Unknown, Detail: string(op.Kind)}}
@@ -140,26 +165,89 @@ func scopeAllows(ps []Permission, op Operation, signer Key) (bool, []Reason) {
 		(op.Amend && op.Kind != Authored && op.Kind != Observed) {
 		return false, []Reason{{Code: "invalid_operation_target", Status: Denied}}
 	}
+	var own []Permission
 	for _, p := range ps {
-		if p.Kind != op.Kind || (op.Amend && !p.Amend) {
+		if p.Kind != op.Kind || !covers(p, domain, op.Target) {
 			continue
 		}
-		switch p.Mode {
-		case AnyTarget:
-			if domain == ContentTarget || domain == StatementTarget {
-				return true, nil
+		if !op.Amend || p.Amend {
+			return true, nil
+		}
+		if p.AmendOwn {
+			own = append(own, p)
+		}
+	}
+	if len(own) == 0 {
+		return false, []Reason{{Code: "scope_excluded", Status: Denied, Detail: string(op.Kind)}}
+	}
+	// Every own entry asks the same question of the same targets; the answer does not depend on which entry.
+	status, detail := ownTargets(op, signer, identity, lookup, judge)
+	switch status {
+	case Eligible:
+		return true, nil
+	case Unknown:
+		return false, []Reason{{Code: "amend_own_unresolved", Status: Unknown, Detail: detail}}
+	}
+	return false, []Reason{{Code: "scope_excluded", Status: Denied, Detail: string(op.Kind) + ": amend own: " + detail}}
+}
+
+func covers(p Permission, domain TargetType, t Target) bool {
+	switch p.Mode {
+	case AnyTarget:
+		return domain == ContentTarget || domain == StatementTarget
+	case OwnLog:
+		return domain == LogTarget
+	case ExactTargets:
+		for _, id := range p.Targets {
+			if id == t.ID {
+				return true
 			}
-		case OwnLog:
-			if domain == LogTarget {
-				return true, nil
+		}
+	}
+	return false
+}
+
+// ownTargets is the `own` amend mode's scope over the named targets: each must be an authenticated record whose
+// signer is exactly the acting key, whose declared actor names this identity, and which is itself eligible for it
+// (judge: a nested evaluation under the same budget). One target outside that is a definite denial, whatever the
+// others are; otherwise a target this evidence cannot read (not held, not authenticated, or authenticated bytes
+// this reader does not interpret) or whose own eligibility is undecided leaves the answer unknown. Statement ids
+// cover the amends list, so targets cannot form a cycle; the shared budget bounds a long chain of amendments.
+func ownTargets(op Operation, signer Key, identity ID, lookup lookupFact, judge judgeTarget) (Status, string) {
+	if len(op.Amends) == 0 {
+		return Denied, "no amendment target named"
+	}
+	status, detail := Eligible, ""
+	for _, id := range op.Amends {
+		f, held := lookup(id)
+		switch {
+		case !held:
+			if status == Eligible {
+				status, detail = Unknown, "target "+string(id)+" not held"
 			}
-		case ExactTargets:
-			for _, id := range p.Targets {
-				if id == op.Target.ID {
-					return true, nil
+		case f.Authentication != Authenticated:
+			if status == Eligible {
+				status, detail = Unknown, "target "+string(id)+" not authenticated"
+			}
+		case f.Signer != signer:
+			return Denied, "target " + string(id) + " signed by another key"
+		case f.Actor == nil && f.Validity != Understood:
+			// Authenticated bytes this reader does not interpret: whose record it is cannot be read.
+			if status == Eligible {
+				status, detail = Unknown, "target "+string(id)+" not interpreted"
+			}
+		case f.Actor == nil || f.Actor.Identity != identity:
+			return Denied, "target " + string(id) + " is not a record of this identity"
+		default:
+			switch judge(id) {
+			case Denied:
+				return Denied, "target " + string(id) + " is not eligible for this identity"
+			case Unknown:
+				if status == Eligible {
+					status, detail = Unknown, "whether target "+string(id)+" is eligible for this identity is not established"
 				}
 			}
 		}
 	}
-	return false, []Reason{{Code: "scope_excluded", Status: Denied, Detail: string(op.Kind)}}
+	return status, detail
 }

@@ -127,7 +127,7 @@ claim that the remaining positive grant is complete (§5).
 | Signed body and envelope | Upgraded interpretation |
 |---|---|
 | `rc/1`, no identity marker or actor | Existing `key(K)` semantics. |
-| `rc/2`, understood marker, no actor | `key(K)` on an identity-aware body; may fill only a key slot. It carries no `amends` (that requires an actor). Open, decided with the claim consumer: whether it amends the same key's `rc/1` `authored` of the same digest through same-key ancestry (§5.1 "bare-key amendment rules do not change") or stands beside it. |
+| `rc/2`, understood marker, no actor | `key(K)` on an identity-aware body; may fill only a key slot. It carries no `amends` (that requires an actor). An `authored`/`observed` of this shape is a `key(K)` claim and follows bare-key amendment rules unchanged: it amends the same key's earlier claim of the same digest (either major) through same-key ancestry, exactly as `rc/1` does, because the subject is `key(K)` under both majors and one key never contests itself. |
 | `rc/2`, understood marker and one actor I/G | Exactly I/G, subject to authority checks; never a key fallback. |
 | Actor without body marker or without critical declaration | Invalid candidate even if correctly signed. |
 | Marker present but unknown critical feature/profile | Unsupported/non-passing, not bare-key interpretation. |
@@ -199,7 +199,7 @@ entries to manufacture broader authority.
 
 | `kind` | Exact target dispatch | Allowed `targets` | Extra required fields |
 |---|---|---|---|
-| `authored`, `observed` | `body.content.digest` | `{any_content:true}` or `{contents:[digest,…]}` | `amend:true` or `amend:false` |
+| `authored`, `observed` | `body.content.digest` | `{any_content:true}` or `{contents:[digest,…]}` | `amend:true`, `amend:false` or `amend:"own"` |
 | `holds` | `body.content.digest` | Same content choices | None |
 | `reproduced`, `corroborates`, `refutes`, `retracts` | `body.of` | `{any_statement:true}` or `{statements:[id,…]}` | None |
 | `edition`, `withdraw_approval` | `body.resource` | `{resources:[id,…]}` only | None |
@@ -211,12 +211,12 @@ is admitted. `describes` and genesis remain raw-key statements. A permission for
 kind does not authorize another. A target mentioned incidentally elsewhere in a body
 does not satisfy scope. A permission has three extension points a later version of this
 profile may use: a new `kind`, a new target mode (a token key of `targets`), and a new
-`amend` mode (a token in place of the boolean). Each makes the grant unsupported and
-non-passing, not broader. Shapes that are malformed rather than new stay invalid: a
+`amend` mode (a token in place of the boolean; `fixed-root-v1` defines one, `own`, below). Each
+unknown one makes the grant unsupported and non-passing, not broader. Shapes that are malformed rather than new stay invalid: a
 missing `amend` (absence is not a mode), a value that is neither a boolean nor a token,
 two target modes, a known mode on the wrong kind, and `any_resource` / `any_task`, which
-this profile excludes for good. The schema describes `fixed-root-v1` itself and rejects
-all three extensions; the reader's unsupported reading is what lets a later version add
+this profile excludes for good. The schema describes `fixed-root-v1` itself (including
+`amend:"own"`) and rejects all three extensions; the reader's unsupported reading is what lets a later version add
 one without older readers denying acts they cannot judge. That uncertainty is confined to the one grant: grants only
 accumulate and never restrict each other, and every permission kind in `fixed-root-v1`
 is a leaf operation, so no grant can carry a power over another grant, a cut, or the
@@ -233,14 +233,23 @@ UI must disclose and require acknowledgment of this breadth, especially with
 `any_content:true`. `amend:false` prevents explicit supersession, but another new claim
 may still conflict with the principal's other claims. No implicit expiry, renewal,
 sequence budget, same-grant-only amendment right, or timestamp-based scope is provided.
-A narrower amend mode (for example one limited to the actor's own key, so a capture agent
-can correct its own records without being able to rewrite everything the identity signed)
-is a leaf under the invariant above, so a later version can add it as an `amend` token.
-Its semantics need the claim consumer and are settled with it. Until then `amend` has the
-two values above, and an older reader reads a grant with a later mode as unsupported:
-acts under it read unknown, and the identity's other grants are unaffected. Issuers who
-want corrections to degrade that way should put the narrower mode on its own grant,
-beside an ordinary `amend:false` grant for everyday acts.
+`amend:"own"` is the narrower mode, so a capture agent can correct its own records without
+being able to rewrite everything the identity signed. **An act by K for I under a grant
+carrying `amend:"own"` may name a target S only if: S's actor identity is I, and S was
+signed by K (the exact key; a rotated successor needs its own grant and doesn't inherit);
+every §5.1 condition holds: S is held and eligible for I, has the same content digest and
+claim kind, and the amending grant's content targets cover S. Which of I's grants carried S
+doesn't matter.** A target signed by another key, naming another identity (or none), or
+itself not eligible for I (for example outside a cut's `last_good` prefix) is a scope denial
+of the act; the target's eligibility is evaluated inside the act's evaluation, under the same
+caps (§7). A target the reader does not hold, or whose eligibility is undecided, leaves the
+act unknown (§5.1, missing target). A grant entry without `amends` under `amend:"own"` publishes exactly as under
+`amend:false`. Where another entry of the same grant carries `amend:true` for the content,
+that entry authorizes the act and the targets' signers do not matter. `amend:"own"` is a
+leaf under the invariant above. Any other `amend` token is a later version's: this reader
+reads a grant with one as unsupported, acts under it read unknown, and the identity's other
+grants are unaffected. Issuers who want a later mode to degrade that way should put it on
+its own grant, beside an ordinary `amend:false` grant for everyday acts.
 
 Root vocabulary on the pinned I lineage is closed for authority evaluation:
 
@@ -336,7 +345,11 @@ membership. Amendments name a nonempty, sorted, duplicate-free
 I, have the same content digest and appropriate claim kind. The new grant must permit
 amendment of that content. Replacement is of the complete claim fields, not a patch.
 Same-key ancestry alone does not amend an identity-context claim. Bare-key amendment
-rules do not change.
+rules do not change (§2.3: an `rc/2` marker-only claim is a bare-key claim). An amendment
+naming a target that is not one of I's claims of the same kind on the same blob (another
+principal, another blob, another kind, or a claim not eligible for I) applies to nothing,
+and the amending statement is not itself a claim of I. Under `amend:"own"` (§3) a target
+must also be signed by the acting key.
 
 Maximal eligible nodes in this explicit DAG are candidate current claims. Concurrent
 cross-key amendments remain concurrent/contested; no cross-key sequence, arrival-time,
@@ -765,7 +778,7 @@ a scenario.
 | C-id-19 | §3 (handle ID-19) | Closed permissions and exact targets | Permissions are closed: kind and target must match one complete entry; an incidental target, a merged pair of entries or an unknown kind never widens scope; an unknown kind affects its own grant only. |
 | C-id-20 | §3, §5.1 (handle ID-20) | Publish without amend permission | A grant with `amend:false` lets K publish `authored` in scope but an act carrying `amends` reads `denied` (scope). |
 | C-id-21 | §5.1 (handle ID-21) | Explicit cross-key concurrent amendments | Two eligible cross-key amendments of one claim with no amendment between them: the claim view is `contested`, both listed; no sequence, arrival or timestamp tiebreak. |
-| C-id-22 | §5.1 (handle ID-22) | Wrong principal/content or missing amendment target | An amendment naming a target of another principal, another content digest, or a missing target: no amendment applies; missing target makes the current view `unknown`, wrong principal/content is `denied`. |
+| C-id-22 | §5.1 (handle ID-22) | Wrong principal/content or missing amendment target | An amendment naming a target of another principal, another content digest, or a missing target: no amendment applies; missing target makes the current view `unknown`; wrong principal/content: the amending act is not a claim of I (under `amend:"own"`, a target not signed by the acting key or not I's is a scope denial of the act). |
 | C-id-23 | §4, §4.1 (handle ID-23) | Cut preserves claim but loses anchor | A cut that excludes K's anchor but preserves the claim: claim authority survives; the time bound from that anchor is lost and reported separately. |
 | C-id-24 | §2.2, §5.2 (handle ID-24) | Per-signature actors, one edition body | Approvals of one rc/2 edition by different signers with different actors share one edition id; each counts once for the subject its signature names. |
 | C-id-25 | §5.2 (handle ID-25) | Two delegates of one I count once | Two delegates of I approving one edition fill one identity slot, not two. |

@@ -266,8 +266,15 @@ func operation(st *wire.Statement) *identitymodel.Operation {
 		op.Target = identitymodel.Target{Type: identitymodel.LogTarget, Key: identitymodel.Key(st.Signer)}
 	}
 	if st.RC == "rc/2" {
-		if _, ok := object(st.Body, wire.IdentityCrit).Get("amends"); ok {
+		if av, ok := object(st.Body, wire.IdentityCrit).Get("amends"); ok {
 			op.Amend = true
+			if a, ok := av.(canon.Array); ok {
+				for _, e := range a {
+					if s, ok := e.(canon.String); ok {
+						op.Amends = append(op.Amends, identitymodel.ID(s))
+					}
+				}
+			}
 		}
 	}
 	return op
@@ -327,8 +334,11 @@ func permission(v canon.Value) (identitymodel.Permission, bool) {
 		return identitymodel.Permission{}, false // an unknown kind already made the grant Unsupported
 	}
 	p := identitymodel.Permission{Kind: identitymodel.Kind(kind)}
-	if b, ok := field(o, "amend").(canon.Bool); ok {
-		p.Amend = bool(b)
+	switch v := field(o, "amend").(type) {
+	case canon.Bool:
+		p.Amend = bool(v)
+	case canon.String:
+		p.AmendOwn = string(v) == wire.AmendOwn // any other token already made the grant Unsupported
 	}
 	if domain == "log" {
 		p.Mode = identitymodel.OwnLog

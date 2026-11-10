@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -480,7 +481,8 @@ func TestReviewUnplaceableTerminalIsUnknownNotRetired(t *testing.T) {
 }
 
 // The two-grant pattern a later amend mode relies on (profile §3): an agent holds an ordinary grant for its
-// captures and a second grant carrying an amend mode this reader does not know. The reader reads the second grant
+// captures and a second grant carrying an amend mode this reader does not know (`own` is known; any other token,
+// here "same_grant", is not). The reader reads the second grant
 // as unsupported: acts under it read unknown (never denied, never eligible), and every act under the first grant
 // stays eligible, with a warning naming the grant it could not read. Shapes that are malformed rather than merely
 // unknown stay invalid: a missing amend, a non-token amend, a forbidden resource/task wildcard.
@@ -488,7 +490,7 @@ func TestUnknownAmendModeLosesOnlyItsOwnGrant(t *testing.T) {
 	conformance.Partial(t, "C-id-19", "unknown amend and target modes are confined to their grant at the adapter; consumers are not built")
 	w := base(t)
 	w.sign(stmt{name: "G9", by: "R", parent: "G2", kind: "identity_grant", body: w.grantBody("K2",
-		obj("kind", "authored", "targets", obj("any_content", true), "amend", "own"))})
+		obj("kind", "authored", "targets", obj("any_content", true), "amend", "same_grant"))})
 	w.sign(stmt{name: "B9", by: "K2", parent: "B2", kind: "authored", body: withField(authoredBody(2), wire.IdentityCrit, obj("amends", []string{w.ids["B1"]})), actor: [2]string{"I", "G9"}})
 	s := w.admit()
 	if st, v := s.Status(w.ids["G9"]); st != wire.Unsupported || !v {
@@ -517,5 +519,102 @@ func TestUnknownAmendModeLosesOnlyItsOwnGrant(t *testing.T) {
 		if st, _ := w.admit().Status(w.ids["G8"]); st != wire.Invalid {
 			t.Fatalf("%s: read %s, want invalid", name, st)
 		}
+	}
+}
+
+// TestAmendOwnSignedEvidence: the `own` amend mode (profile §3) over real signed lines. K1 holds an ordinary grant
+// (G1) and an own-amend grant (G9); an amendment under G9 may name K1's own record for I whichever of I's grants
+// carried it, and nothing else: another delegate's record of I, K1's record for another identity J, and content
+// outside G9's targets are scope denials; a target the evidence does not hold is unknown. Whether the target is
+// itself eligible for I (a cut), has the same digest and kind, and is current is the claim consumer's (resolver).
+func TestAmendOwnSignedEvidence(t *testing.T) {
+	conformance.Partial(t, "C-id-45", "the own amend mode over signed evidence at the adapter and model; target eligibility and current state are the resolver's")
+	w := base(t)
+	w.keys["RJ"] = key("root-j", false)
+	w.sign(stmt{name: "G9", by: "R", parent: "G2", kind: "identity_grant", body: w.grantBody("K1",
+		obj("kind", "authored", "targets", obj("contents", []string{digest(1), digest(2)}), "amend", wire.AmendOwn))})
+	// J: another identity that also grants K1.
+	w.sign(stmt{name: "J", by: "RJ", kind: "identity_inception", body: obj("profile", "fixed-root-v1")})
+	w.sign(stmt{name: "GJ", by: "RJ", parent: "J", kind: "identity_grant", body: obj("identity", w.ids["J"],
+		"delegate", obj("key", w.signer("K1"), "inception", w.ids["K1.0"]), "permissions", canon.Array{authoredAny()})})
+	w.sign(stmt{name: "AJ", by: "K1", parent: "A2", kind: "authored", body: authoredBody(1), actor: [2]string{"J", "GJ"}})
+	amend := func(name, parent string, content byte, targets ...string) {
+		var ids []string
+		for _, n := range targets {
+			if id, ok := w.ids[n]; ok {
+				ids = append(ids, id)
+			} else {
+				ids = append(ids, strings.Repeat("e", 64)) // never signed: not held
+			}
+		}
+		slices.Sort(ids)
+		w.sign(stmt{name: name, by: "K1", parent: parent, kind: "authored",
+			body: withField(authoredBody(content), wire.IdentityCrit, obj("amends", ids)), actor: [2]string{"I", "G9"}})
+	}
+	amend("Own", "AJ", 1, "A1")        // K1's record for I, carried by G1: eligible
+	amend("Other", "AJ", 2, "B1")      // K2's record of I
+	amend("ForJ", "AJ", 1, "AJ")       // K1's record for J
+	amend("Outside", "AJ", 4, "A2")    // content 0x4 is outside G9's targets
+	amend("Missing", "AJ", 1, "ghost") // a target nobody holds
+	s := w.admit()
+	if st, v := s.Status(w.ids["G9"]); st != wire.Valid || !v {
+		t.Fatalf("G9 read %s verified=%v, want verified valid", st, v)
+	}
+	w.expect(s, "Own", identitymodel.Eligible, "")
+	for _, n := range []string{"Other", "ForJ", "Outside"} {
+		r := w.expect(s, n, identitymodel.Denied, "scope_excluded")
+		if n != "Outside" && !strings.Contains(fmt.Sprint(r.Reasons), "amend own") {
+			t.Fatalf("%s: %+v", n, r.Reasons)
+		}
+	}
+	w.expect(s, "Missing", identitymodel.Unknown, "amend_own_unresolved")
+	// The grant is understood, so its sibling G1 carries no unsupported-sibling warning.
+	if r := w.expect(s, "A1", identitymodel.Eligible, ""); hasWarning(r, "unsupported_sibling_grant") {
+		t.Fatalf("A1: %+v", r.Warnings)
+	}
+	// A target outside a cut's last_good prefix is not eligible for I, so under the own mode the amending act is
+	// not eligible either (#148: "S is held and eligible for I"): the scope check evaluates the target, nested,
+	// under the same budget, and the cut is listed as relevant to the act.
+	w.sign(stmt{name: "C1", by: "R", parent: "G9", kind: "identity_cut", body: cutBody(w, "G1", "A1")})
+	amend("OwnCut", "Missing", 1, "A2")
+	s = w.admit()
+	w.expect(s, "A2", identitymodel.Denied, "cut_excluded")
+	r := w.expect(s, "OwnCut", identitymodel.Denied, "scope_excluded")
+	if !strings.Contains(fmt.Sprint(r.Reasons), "not eligible for this identity") || !slices.Contains(r.RelevantCuts, identitymodel.ID(w.ids["C1"])) {
+		t.Fatalf("OwnCut: %+v cuts %v", r.Reasons, r.RelevantCuts)
+	}
+	// Under amend:false on the same content the same act is a scope denial: own is a grant of its own.
+	w2 := base(t)
+	w2.sign(stmt{name: "A9", by: "K1", parent: "A2", kind: "authored", body: withField(authoredBody(1), wire.IdentityCrit, obj("amends", []string{w2.ids["A1"]})), actor: [2]string{"I", "G1"}})
+	w2.expect(w2.admit(), "A9", identitymodel.Denied, "scope_excluded")
+}
+
+// TestAmendFalsePublishesButCannotAmend: C-id-20 over signed evidence of both algorithms (EIP-191 root, Ed25519
+// worker). Under a grant with amend:false, K publishes authored in scope (eligible), and the same key's act on the
+// same content that carries amends reads denied by scope, whether it names K's own record or another delegate's.
+// A missing amend is no grant at all (invalid), never amend:false by default.
+func TestAmendFalsePublishesButCannotAmend(t *testing.T) {
+	conformance.Covers(t, "C-id-20")
+	w := base(t) // G2: K2 may publish authored on content 0x2, amend:false
+	w.sign(stmt{name: "B3", by: "K2", parent: "B2", kind: "authored", body: withField(authoredBody(2), wire.IdentityCrit, obj("amends", []string{w.ids["B1"]})), actor: [2]string{"I", "G2"}})
+	w.sign(stmt{name: "B4", by: "K2", parent: "B3", kind: "authored", body: withField(authoredBody(2), wire.IdentityCrit, obj("amends", []string{w.ids["A1"]})), actor: [2]string{"I", "G2"}})
+	w.sign(stmt{name: "B5", by: "K2", parent: "B4", kind: "authored", body: authoredBody(2), actor: [2]string{"I", "G2"}})
+	s := w.admit()
+	for _, n := range []string{"B1", "B5"} {
+		w.expect(s, n, identitymodel.Eligible, "")
+	}
+	for _, n := range []string{"B3", "B4"} {
+		r := w.expect(s, n, identitymodel.Denied, "scope_excluded")
+		for _, x := range r.Reasons {
+			if x.Status == identitymodel.Denied && x.Code != "scope_excluded" {
+				t.Fatalf("%s: denied for %s, not scope", n, x.Code)
+			}
+		}
+	}
+	w2 := base(t)
+	w2.sign(stmt{name: "G9", by: "R", parent: "G2", kind: "identity_grant", body: w2.grantBody("K2",
+		obj("kind", "authored", "targets", obj("contents", []string{digest(2)})))})
+	if st, _ := w2.admit().Status(w2.ids["G9"]); st != wire.Invalid {
+		t.Fatalf("grant without amend read %s, want invalid", st)
 	}
 }

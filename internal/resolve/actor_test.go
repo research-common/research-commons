@@ -192,11 +192,11 @@ func TestActorHookAbsentIsToday(t *testing.T) {
 
 // TestActorIdentitySelection: a principal selection `{identity: I}` follows I's eligible claims through the
 // hook, exactly as `{key: K}` follows K's; a bare statement by the same worker key is not followed; an
-// undecided claim makes the selection unknown rather than met without it; an eligible claim that amends
-// another is unknown (amendment authority is not evaluated here); with no hook it stays unknown (identity
-// profile not active) and no key's claims are followed in its place.
+// undecided claim makes the selection unknown rather than met without it; an eligible claim that explicitly
+// amends another eligible claim of I replaces it (amendments_test.go has the §5.1 cases); with no hook it stays
+// unknown (identity profile not active) and no key's claims are followed in its place.
 func TestActorIdentitySelection(t *testing.T) {
-	conformance.Partial(t, "C-id-31", "principal-following selection of an identity through a test-only actor evaluator (its eligible claims only, never a bare worker-key statement, unknown when undecided); exact pins to identity-context statements, amendment DAG and the real evaluator adapter remain")
+	conformance.Partial(t, "C-id-31", "principal-following selection of an identity through a test-only actor evaluator (its eligible claims only, never a bare worker-key statement, unknown when undecided), following explicit amendments; exact pins to identity-context statements and the real evaluator adapter remain")
 	conformance.Partial(t, "C-id-32", "an undecided or denied claim is never substituted (unknown / not met); the production preflight (exit 2) and the real evaluator adapter remain")
 	w := newWorld(t)
 	w.authored("A1", "A", "X", "licence", "CC0-1.0")
@@ -240,17 +240,16 @@ func TestActorIdentitySelection(t *testing.T) {
 		t.Fatalf("verify %d %v", code, why)
 	}
 
-	// an eligible claim that amends another: unknown, never guessed
+	// an eligible claim that explicitly amends another eligible claim of I: the amendment is current
 	w2 := newWorld(t)
 	w2.authored("B1", "BB", "X", "licence", "MIT")
-	am := w2.authored("B2", "BB", "X", "licence", "Apache-2.0", wire.IdentityCrit, canon.Value(obj("amends", []string{w2.ids["B1"]})))
+	w2.authored("B2", "BB", "X", "licence", "Apache-2.0", wire.IdentityCrit, canon.Value(obj("amends", []string{w2.ids["B1"]})))
 	h := &actorFake{}
 	h.set(w2.ids, "B1", policy.ActorEligible)
 	h.set(w2.ids, "B2", policy.ActorEligible)
-	_ = am
 	am2 := w2.store(nil, WithPolicy(sel), WithActorEligibility(h)).Artifact(dig("X"))
-	wantField(t, am2, "licence", FieldSelectionUnmet, "")
-	has(t, am2.Render(), "amendment authority is not evaluated here")
+	wantField(t, am2, "licence", FieldDefault, `"Apache-2.0"`)
+	hasNot(t, am2.Render(), "amendment authority is not evaluated here")
 
 	// the workflow role follows the same way: an identity's eligible workflow declaration supplies the mode
 	gw := groupWorld(t, "bytes", "", map[string]string{"A": "X"})

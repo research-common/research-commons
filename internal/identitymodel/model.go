@@ -145,7 +145,7 @@ const (
 )
 
 const (
-	EvaluatorVersion = "fixed-root-model-2"
+	EvaluatorVersion = "fixed-root-model-3"
 	NotEstablished   = "not_established"
 	// MaxDelegateSelfEvents bounds how many of a delegate's own raw key events one
 	// evaluation examines for warnings. Warnings carry no authority, so the limit
@@ -266,6 +266,8 @@ func copyFact(f Fact) Fact {
 	}
 	if f.Operation != nil {
 		v := *f.Operation
+		v.Amends = append([]ID(nil), v.Amends...)
+		slices.Sort(v.Amends)
 		f.Operation = &v
 	}
 	return f

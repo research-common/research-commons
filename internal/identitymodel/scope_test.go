@@ -1,6 +1,9 @@
 package identitymodel
 
 import (
+	"fmt"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/research-common/research-commons/internal/conformance"
@@ -116,5 +119,104 @@ func TestGrantEligibilityDoesNotPretendToImplementRoles(t *testing.T) {
 		})
 		mutate(fs, "A", func(f *Fact) { f.Operation = &op })
 		requireStatus(t, snapshot(t, fs), "A", Eligible, "")
+	}
+}
+
+// TestAmendOwnIsTheActingKeysOwnRecords: the `own` amend mode (profile §3). An amendment under it may name only
+// records of the same identity signed by the exact acting key; another key's record, a record for another
+// identity, or a bare record is a definite scope denial; an unheld or unauthenticated target leaves it unknown;
+// content outside the entry's targets is denied before any target is read. amend:true on another entry of the
+// grant answers first, without reading targets.
+func TestAmendOwnIsTheActingKeysOwnRecords(t *testing.T) {
+	conformance.Partial(t, "C-id-45", "the own amend mode at the model: only the acting key's records of the identity, within the content targets")
+	own := Permission{Kind: Authored, Mode: ExactTargets, Targets: []ID{"content-a"}, AmendOwn: true}
+	setup := func(amends ...ID) []Fact {
+		fs := fixture()
+		mutate(fs, "G", func(f *Fact) { f.Grant.Permissions = []Permission{own} })
+		mutate(fs, "B", func(f *Fact) { f.Operation.Amend = true; f.Operation.Amends = amends })
+		return fs
+	}
+	// A is K's record for I: eligible.
+	requireStatus(t, snapshot(t, setup("A")), "B", Eligible, "")
+	// No target named: an own permission covers nothing.
+	requireStatus(t, snapshot(t, setup()), "B", Denied, "scope_excluded")
+	// Another key's record of I.
+	fs := setup("A", "O")
+	o := line("O", "K2", 0, "", Data)
+	o.Actor, o.Binding = &Actor{Identity: "I", Grant: "G2"}, BoundIdentityContext
+	o.Operation = &Operation{Kind: Authored, Target: Target{Type: ContentTarget, ID: "content-a"}}
+	r := requireStatus(t, snapshot(t, append(fs, o)), "B", Denied, "scope_excluded")
+	if !strings.Contains(fmt.Sprint(r.Reasons), "signed by another key") {
+		t.Fatalf("reason: %+v", r.Reasons)
+	}
+	// K's record for another identity J, and K's bare record.
+	fs = setup("A")
+	mutate(fs, "A", func(f *Fact) { f.Actor.Identity = "J" })
+	requireStatus(t, snapshot(t, fs), "B", Denied, "scope_excluded")
+	fs = setup("A")
+	mutate(fs, "A", func(f *Fact) { f.Actor, f.Binding = nil, NoIdentityContext })
+	requireStatus(t, snapshot(t, fs), "B", Denied, "scope_excluded")
+	// A target the evidence does not hold, or holds unauthenticated: unknown, never a pass.
+	r = requireStatus(t, snapshot(t, setup("A", "missing")), "B", Unknown, "amend_own_unresolved")
+	if !slices.ContainsFunc(r.Dependencies, func(d Dependency) bool { return d.ID == "missing" && d.Purpose == "amendment target" }) {
+		t.Fatalf("dependency: %+v", r.Dependencies)
+	}
+	fs = setup("A", "U")
+	u := line("U", "K", 0, "", Data)
+	u.Authentication = Unproven
+	requireStatus(t, snapshot(t, append(fs, u)), "B", Unknown, "amend_own_unresolved")
+	// A definite denial wins over an unresolved sibling target.
+	fs = setup("missing", "O")
+	requireStatus(t, snapshot(t, append(fs, o)), "B", Denied, "scope_excluded")
+	// Content outside the entry's targets: denied, whatever the targets are.
+	fs = setup("A")
+	mutate(fs, "B", func(f *Fact) { f.Operation.Target.ID = "content-b" })
+	requireStatus(t, snapshot(t, fs), "B", Denied, "scope_excluded")
+	// amend:true on another entry authorizes the act without reading the targets.
+	fs = setup("O-not-held")
+	mutate(fs, "G", func(f *Fact) {
+		f.Grant.Permissions = append(f.Grant.Permissions, Permission{Kind: Authored, Mode: AnyTarget, Amend: true})
+	})
+	requireStatus(t, snapshot(t, fs), "B", Eligible, "")
+	// A non-amending act is ordinary publication under an own entry.
+	fs = setup()
+	mutate(fs, "B", func(f *Fact) { f.Operation.Amend = false })
+	requireStatus(t, snapshot(t, fs), "B", Eligible, "")
+	// The target's own eligibility is evaluated nested, under the act's caps: a chain B -> X -> A of own
+	// amendments is eligible when every link is, and an ineligible link anywhere below denies the act.
+	fs = setup("X")
+	mutate(fs, "X", func(f *Fact) { f.Operation.Amend = true; f.Operation.Amends = []ID{"A"} })
+	requireStatus(t, snapshot(t, fs), "B", Eligible, "")
+	fs = setup("X")
+	mutate(fs, "X", func(f *Fact) { f.Operation.Amend = true; f.Operation.Amends = []ID{"A"} })
+	mutate(fs, "A", func(f *Fact) { f.Operation.Target.ID = "content-z" }) // outside the grant: A is denied
+	r = requireStatus(t, snapshot(t, fs), "B", Denied, "scope_excluded")
+	if !strings.Contains(fmt.Sprint(r.Reasons), "not eligible for this identity") {
+		t.Fatalf("nested denial reason: %+v", r.Reasons)
+	}
+	// A link whose own eligibility is undecided (its target is not held) leaves the act unknown, naming it.
+	fs = setup("X")
+	mutate(fs, "X", func(f *Fact) { f.Operation.Amend = true; f.Operation.Amends = []ID{"missing"} })
+	r = requireStatus(t, snapshot(t, fs), "B", Unknown, "amend_own_unresolved")
+	if !strings.Contains(fmt.Sprint(r.Reasons), "eligible for this identity is not established") {
+		t.Fatalf("nested unknown reason: %+v", r.Reasons)
+	}
+	// The nested walk shares the act's budget: a cap reached inside it is the act's model_limit, never a pass.
+	fs = setup("X")
+	mutate(fs, "X", func(f *Fact) { f.Operation.Amend = true; f.Operation.Amends = []ID{"A"} })
+	// B's own evidence takes 28 inspections and the nested walk of X (with A) another 61 (89 in all): a cap of 60
+	// is reached only inside the nested walk.
+	if r := snapshot(t, fs).EvaluateWith("B", Limits{Inspections: 60}); r.Status != Unknown ||
+		!slices.ContainsFunc(r.Reasons, func(x Reason) bool { return x.Code == "model_limit" }) {
+		t.Fatalf("nested cap: %+v", r)
+	}
+	// Shape: own on another kind, or both modes on one entry, is an invalid permission.
+	for _, p := range []Permission{
+		{Kind: Holds, Mode: AnyTarget, AmendOwn: true},
+		{Kind: Authored, Mode: AnyTarget, Amend: true, AmendOwn: true},
+	} {
+		fs := setup("A")
+		mutate(fs, "G", func(f *Fact) { f.Grant.Permissions = []Permission{own, p} })
+		requireStatus(t, snapshot(t, fs), "B", Denied, "invalid_amend_permission")
 	}
 }

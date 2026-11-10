@@ -196,7 +196,14 @@
               "$ref": "#/$defs/contentTargets"
             },
             "amend": {
-              "type": "boolean"
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "const": "own"
+                }
+              ]
             }
           },
           "required": [
