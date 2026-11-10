@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/research-common/research-commons/internal/canon"
+	"github.com/research-common/research-commons/internal/keylog"
 	"github.com/research-common/research-commons/internal/rctime"
 )
 
@@ -81,9 +82,19 @@ type Terms struct {
 	CountingUnit string
 	// Coordinator is the key whose signed grants are the only exclusion that counts (§9.1); "" for none.
 	Coordinator string
-	// Deadline is the contract's deadline as written (a time value); "" for none. It is a term of this edition,
-	// never a lease: no intent expires by it (C-exch-02).
+	// Deadline is the provisional reading's deadline as written (a time value); "" for none. It is displayed and
+	// never evaluated. It is a term of this edition, never a lease: no intent expires by it (C-exch-02).
 	Deadline string
+	// DeadlineHeight is a task-contract-v1 deadline (HasDeadline): the last block height at which a counted
+	// submission must be shown to exist, evaluated against verified bounds only (task-contracts note §4.3).
+	DeadlineHeight int64
+	HasDeadline    bool
+	// Question is the task's question as prose (task-contract-v1): displayed, never evaluated.
+	Question string
+	// Results restricts counting to one kind of result (task-contract-v1, "" for either); Pins are its exact
+	// pins (nil for none).
+	Results string
+	Pins    *Pins
 	// Rubric lists the acceptance criteria (§9.2 checks); each evaluation is ok, fail or unchecked.
 	Rubric []Criterion
 	// Quorum is the quorum predicate; nil means the task is settled by review, not by counting (§9.2).
@@ -109,6 +120,8 @@ type Quorum struct {
 	// is the comparator (overlapping confidence intervals are not equivalence).
 	Comparator     string
 	Estimand, Test string
+	// MinGrade is task-contract-v1's weakest grade a derived result may have and still count ("" for none).
+	MinGrade string
 }
 
 // comparator is what result pairs are compared under: the pinned test when there is one.
@@ -150,7 +163,11 @@ func (t *Terms) describe() []string {
 	if t.Provisional {
 		label += " (PROVISIONAL reading: contract grammar pending)"
 	}
-	out := []string{label, "beneficiary " + shortKey(t.Beneficiary)}
+	out := []string{label}
+	if t.Question != "" {
+		out = append(out, fmt.Sprintf("question %q (displayed, never evaluated)", t.Question))
+	}
+	out = append(out, "beneficiary "+shortKey(t.Beneficiary))
 	switch {
 	case t.AnyIssuer:
 		out = append(out, "eligible issuers: any key")
@@ -172,6 +189,29 @@ func (t *Terms) describe() []string {
 	if t.Deadline != "" {
 		out = append(out, "deadline "+t.Deadline)
 	}
+	if t.HasDeadline {
+		out = append(out, fmt.Sprintf("deadline bitcoin height %d (met only by a verified bound at or below it; ts meets nothing)", t.DeadlineHeight))
+	}
+	if t.Results != "" {
+		out = append(out, "results: "+t.Results+" only (the kind is read from the held record for each result)")
+	}
+	if p := t.Pins; p != nil {
+		var ps []string
+		if p.Workflow != "" {
+			ps = append(ps, "workflow "+shortDigest(p.Workflow))
+		}
+		if p.MethodEdition != "" {
+			ps = append(ps, "method edition "+keylog.Short(p.MethodEdition))
+		}
+		if len(p.Inputs) > 0 {
+			in := make([]string, len(p.Inputs))
+			for i, d := range p.Inputs {
+				in[i] = shortDigest(d)
+			}
+			ps = append(ps, "inputs "+strings.Join(in, ","))
+		}
+		out = append(out, "pins: "+strings.Join(ps, "; "))
+	}
 	for _, c := range t.Rubric {
 		out = append(out, fmt.Sprintf("rubric criterion %s: %q", c.ID, c.Text))
 	}
@@ -180,9 +220,18 @@ func (t *Terms) describe() []string {
 		if q.comparator() != "" {
 			s += ", " + q.comparatorName()
 		}
+		if q.MinGrade != "" {
+			s += ", min grade " + q.MinGrade
+		}
 		switch q.Grouping {
 		case "":
-			s += ", grouping undeclared"
+			if t.Provisional || q.comparator() != "" {
+				s += ", grouping undeclared"
+			} else {
+				s += ", grouping by byte equality"
+			}
+		case GroupAny:
+			s += ", grouping any (collecting: every counted submission in one group)"
 		case GroupReference:
 			s += ", grouping reference-based (" + shortKey(q.Reference) + ")"
 		default:
@@ -419,6 +468,9 @@ func optString(o *canon.Object, k string) (string, bool) {
 
 // reKeyForm is the key shape of wire §5 (`key`): ed25519: + 64 lowercase hex, or 0x + 40 lowercase hex.
 var reKeyForm = regexp.MustCompile(`^(0x[0-9a-f]{40}|ed25519:[0-9a-f]{64})$`)
+
+// reIDForm is the statement and edition id shape of wire §5 (`id`): 64 lowercase hex.
+var reIDForm = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 // keyMember reads a key member; absent is ok unless required. A present non-key is malformed.
 func keyMember(o *canon.Object, k string, required bool) (string, bool) {

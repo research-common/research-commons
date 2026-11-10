@@ -922,7 +922,7 @@ func (v *view) readinessWith(c *Ctx, sts []signed, task, edition string) (*Obj, 
 	for _, s := range sts {
 		add(s.line)
 	}
-	r := resolve.New(logs, resolve.WithContractReader(resolve.ProvisionalContract{}))
+	r := resolve.New(logs, resolve.WithContractReader(resolve.ContractProfiles{}))
 	t, ok := r.Task(task)
 	if !ok {
 		return nil, "not held", "the task does not resolve"
