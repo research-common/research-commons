@@ -139,7 +139,23 @@ func (s *Snapshot) evaluateWithin(e *evaluation, statement ID) Result {
 					}
 					return f, ok
 				}
-				_, reasons := scopeAllows(grant.Permissions, *st.Operation, st.Signer, a.Identity, lookup)
+				judge := func(id ID) Status {
+					sub := evaluation{
+						result: Result{Status: Eligible, Statement: id, EvidenceDigest: s.digest,
+							EvaluatorVersion: EvaluatorVersion, Freshness: NotEstablished},
+						basis: map[ID]bool{}, cuts: map[ID]bool{}, w: e.w,
+					}
+					r := s.evaluateWithin(&sub, id)
+					for b := range sub.basis {
+						e.basis[b] = true
+					}
+					for c := range sub.cuts {
+						e.cuts[c] = true
+					}
+					e.result.Dependencies = append(e.result.Dependencies, r.Dependencies...)
+					return r.Status
+				}
+				_, reasons := scopeAllows(grant.Permissions, *st.Operation, st.Signer, a.Identity, lookup, judge)
 				for i := range reasons {
 					reasons[i].Statement, reasons[i].Related = statement, g.ID
 				}

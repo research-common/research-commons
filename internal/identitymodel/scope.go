@@ -146,11 +146,16 @@ type permissionKey struct {
 // fact is not held.
 type lookupFact func(ID) (Fact, bool)
 
+// judgeTarget evaluates an amendment target's own eligibility inside the same evaluation (one shared budget), so
+// an `own` amendment of a record that is not eligible for the identity (for example one outside a cut's last_good
+// prefix) is itself not eligible: #148, "every §5.1 condition holds: S is held and eligible for I".
+type judgeTarget func(ID) Status
+
 // scopeAllows reports whether some permission entry of the grant covers op by signer acting for identity. An
 // entry with full authority for op (amend:true for an amendment) is matched first, without reading anything;
 // an `own` amend entry is consulted only when none does, and only then are the amendment targets read
 // (lookup), so a missing target never makes an act unknown that another entry already authorizes.
-func scopeAllows(ps []Permission, op Operation, signer Key, identity ID, lookup lookupFact) (bool, []Reason) {
+func scopeAllows(ps []Permission, op Operation, signer Key, identity ID, lookup lookupFact, judge judgeTarget) (bool, []Reason) {
 	domain := targetType(op.Kind)
 	if domain == NoTarget {
 		return false, []Reason{{Code: "unsupported_operation", Status: Unknown, Detail: string(op.Kind)}}
@@ -176,7 +181,7 @@ func scopeAllows(ps []Permission, op Operation, signer Key, identity ID, lookup 
 		return false, []Reason{{Code: "scope_excluded", Status: Denied, Detail: string(op.Kind)}}
 	}
 	// Every own entry asks the same question of the same targets; the answer does not depend on which entry.
-	status, detail := ownTargets(op, signer, identity, lookup)
+	status, detail := ownTargets(op, signer, identity, lookup, judge)
 	switch status {
 	case Eligible:
 		return true, nil
@@ -203,10 +208,12 @@ func covers(p Permission, domain TargetType, t Target) bool {
 }
 
 // ownTargets is the `own` amend mode's scope over the named targets: each must be an authenticated record whose
-// signer is exactly the acting key and whose declared actor names this identity. One target outside that is a
-// definite denial, whatever the others are; otherwise a target this evidence cannot read (not held, not
-// authenticated, or authenticated bytes this reader does not interpret) leaves the answer unknown.
-func ownTargets(op Operation, signer Key, identity ID, lookup lookupFact) (Status, string) {
+// signer is exactly the acting key, whose declared actor names this identity, and which is itself eligible for it
+// (judge: a nested evaluation under the same budget). One target outside that is a definite denial, whatever the
+// others are; otherwise a target this evidence cannot read (not held, not authenticated, or authenticated bytes
+// this reader does not interpret) or whose own eligibility is undecided leaves the answer unknown. Statement ids
+// cover the amends list, so targets cannot form a cycle; the shared budget bounds a long chain of amendments.
+func ownTargets(op Operation, signer Key, identity ID, lookup lookupFact, judge judgeTarget) (Status, string) {
 	if len(op.Amends) == 0 {
 		return Denied, "no amendment target named"
 	}
@@ -231,6 +238,15 @@ func ownTargets(op Operation, signer Key, identity ID, lookup lookupFact) (Statu
 			}
 		case f.Actor == nil || f.Actor.Identity != identity:
 			return Denied, "target " + string(id) + " is not a record of this identity"
+		default:
+			switch judge(id) {
+			case Denied:
+				return Denied, "target " + string(id) + " is not eligible for this identity"
+			case Unknown:
+				if status == Eligible {
+					status, detail = Unknown, "whether target "+string(id)+" is eligible for this identity is not established"
+				}
+			}
 		}
 	}
 	return status, detail

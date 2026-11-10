@@ -124,9 +124,9 @@ Otherwise: wire `Valid` → `Understood`; `Invalid` → per §3; `Unsupported` o
   mode on the wrong kind, `any_resource` / `any_task`).
 - `amend:"own"` is understood (profile §3): the adapter passes it as `Permission.AmendOwn` and the act's exact
   `amends` targets as `Operation.Amends`; the model's scope check requires every target to be an authenticated
-  record of the same identity signed by the exact acting key (`scope_excluded` otherwise; `amend_own_unresolved`,
-  unknown, for a target not held or not interpreted). Target eligibility, digest, kind and current state are the
-  claim consumer's.
+  record of the same identity signed by the exact acting key and itself eligible for the identity, evaluated
+  nested under the same caps (`scope_excluded` otherwise; `amend_own_unresolved`, unknown, for a target not held,
+  not interpreted, or whose eligibility is undecided). Digest, kind and current state are the claim consumer's.
 - Inception profile: any token reads; only `fixed-root-v1` maps to `FixedRoot`; anything else is `unknown`.
 - Root vocabulary on the pinned lineage: rc/2 inception, grant, cut; rc/1 `rotate_key` / `revoke_key`
   (terminal); bare `describes` / `anchors` → `Inert`; everything else → `unknown`.

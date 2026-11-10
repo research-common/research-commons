@@ -239,9 +239,11 @@ carrying `amend:"own"` may name a target S only if: S's actor identity is I, and
 signed by K (the exact key; a rotated successor needs its own grant and doesn't inherit);
 every §5.1 condition holds: S is held and eligible for I, has the same content digest and
 claim kind, and the amending grant's content targets cover S. Which of I's grants carried S
-doesn't matter.** A target signed by another key, or naming another identity (or none), is
-a scope denial of the act; a target the reader does not hold leaves the act unknown (§5.1,
-missing target). A grant entry without `amends` under `amend:"own"` publishes exactly as under
+doesn't matter.** A target signed by another key, naming another identity (or none), or
+itself not eligible for I (for example outside a cut's `last_good` prefix) is a scope denial
+of the act; the target's eligibility is evaluated inside the act's evaluation, under the same
+caps (§7). A target the reader does not hold, or whose eligibility is undecided, leaves the
+act unknown (§5.1, missing target). A grant entry without `amends` under `amend:"own"` publishes exactly as under
 `amend:false`. Where another entry of the same grant carries `amend:true` for the content,
 that entry authorizes the act and the targets' signers do not matter. `amend:"own"` is a
 leaf under the invariant above. Any other `amend` token is a later version's: this reader

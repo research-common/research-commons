@@ -77,8 +77,8 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   **corroboration status** (counts under the counting unit, always scoped); `show`/`explain` of the observation's
   statement print the evidence behind it, and `verify` prints it beside the exit, which it never moves.
 - Candidate identity profile: grants may carry `amend:"own"`, an amendment right limited to the acting key's own
-  records of the identity, within the grant's content targets (a record by another delegate, or for another identity,
-  is a scope denial; a rotated successor key does not inherit it). Any other `amend` token still reads unsupported.
+  records of the identity, within the grant's content targets (a record by another delegate, for another identity, or
+  not itself eligible for the identity, such as one a cut excludes, is a scope denial; a rotated successor key does not inherit it). Any other `amend` token still reads unsupported.
   The schema, a vector and the evaluator (version `fixed-root-model-3`) follow. Not wired into any command.
 - Candidate identity profile: with an actor evaluator configured (no command configures one), a reader policy that
   follows an identity reads that identity's claims through explicit amendments only: same-key history amends

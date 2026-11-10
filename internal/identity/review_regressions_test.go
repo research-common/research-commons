@@ -572,14 +572,17 @@ func TestAmendOwnSignedEvidence(t *testing.T) {
 	if r := w.expect(s, "A1", identitymodel.Eligible, ""); hasWarning(r, "unsupported_sibling_grant") {
 		t.Fatalf("A1: %+v", r.Warnings)
 	}
-	// A target outside a cut's last_good prefix: the own-mode scope reads only the target's signer and actor, so
-	// the act stays in scope, but the target is not eligible for I, which is what the claim consumer reads to
-	// apply nothing (§5.1: S must be held and eligible for I).
+	// A target outside a cut's last_good prefix is not eligible for I, so under the own mode the amending act is
+	// not eligible either (#148: "S is held and eligible for I"): the scope check evaluates the target, nested,
+	// under the same budget, and the cut is listed as relevant to the act.
 	w.sign(stmt{name: "C1", by: "R", parent: "G9", kind: "identity_cut", body: cutBody(w, "G1", "A1")})
 	amend("OwnCut", "Missing", 1, "A2")
 	s = w.admit()
 	w.expect(s, "A2", identitymodel.Denied, "cut_excluded")
-	w.expect(s, "OwnCut", identitymodel.Eligible, "")
+	r := w.expect(s, "OwnCut", identitymodel.Denied, "scope_excluded")
+	if !strings.Contains(fmt.Sprint(r.Reasons), "not eligible for this identity") || !slices.Contains(r.RelevantCuts, identitymodel.ID(w.ids["C1"])) {
+		t.Fatalf("OwnCut: %+v cuts %v", r.Reasons, r.RelevantCuts)
+	}
 	// Under amend:false on the same content the same act is a scope denial: own is a grant of its own.
 	w2 := base(t)
 	w2.sign(stmt{name: "A9", by: "K1", parent: "A2", kind: "authored", body: withField(authoredBody(1), wire.IdentityCrit, obj("amends", []string{w2.ids["A1"]})), actor: [2]string{"I", "G1"}})
