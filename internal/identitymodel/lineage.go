@@ -83,6 +83,15 @@ type walker struct {
 	s        *Snapshot
 	b        *budget
 	lineages map[lineageKey]*lineageMemo
+	// targets memoizes nested amendment-target evaluations within one evaluation, so a DAG of `own` amendments
+	// is evaluated once per target, not once per path; the shared budget still bounds the whole walk.
+	targets map[ID]targetMemo
+}
+
+type targetMemo struct {
+	status       Status
+	basis, cuts  []ID
+	dependencies []Dependency
 }
 
 func (w *walker) memo(key Key, pin ID) *lineageMemo {

@@ -182,6 +182,34 @@ func TestAmendOwnIsTheActingKeysOwnRecords(t *testing.T) {
 	fs = setup()
 	mutate(fs, "B", func(f *Fact) { f.Operation.Amend = false })
 	requireStatus(t, snapshot(t, fs), "B", Eligible, "")
+	// The target's own eligibility is evaluated nested, under the act's caps: a chain B -> X -> A of own
+	// amendments is eligible when every link is, and an ineligible link anywhere below denies the act.
+	fs = setup("X")
+	mutate(fs, "X", func(f *Fact) { f.Operation.Amend = true; f.Operation.Amends = []ID{"A"} })
+	requireStatus(t, snapshot(t, fs), "B", Eligible, "")
+	fs = setup("X")
+	mutate(fs, "X", func(f *Fact) { f.Operation.Amend = true; f.Operation.Amends = []ID{"A"} })
+	mutate(fs, "A", func(f *Fact) { f.Operation.Target.ID = "content-z" }) // outside the grant: A is denied
+	r = requireStatus(t, snapshot(t, fs), "B", Denied, "scope_excluded")
+	if !strings.Contains(fmt.Sprint(r.Reasons), "not eligible for this identity") {
+		t.Fatalf("nested denial reason: %+v", r.Reasons)
+	}
+	// A link whose own eligibility is undecided (its target is not held) leaves the act unknown, naming it.
+	fs = setup("X")
+	mutate(fs, "X", func(f *Fact) { f.Operation.Amend = true; f.Operation.Amends = []ID{"missing"} })
+	r = requireStatus(t, snapshot(t, fs), "B", Unknown, "amend_own_unresolved")
+	if !strings.Contains(fmt.Sprint(r.Reasons), "eligible for this identity is not established") {
+		t.Fatalf("nested unknown reason: %+v", r.Reasons)
+	}
+	// The nested walk shares the act's budget: a cap reached inside it is the act's model_limit, never a pass.
+	fs = setup("X")
+	mutate(fs, "X", func(f *Fact) { f.Operation.Amend = true; f.Operation.Amends = []ID{"A"} })
+	// B's own evidence takes 28 inspections and the nested walk of X (with A) another 61 (89 in all): a cap of 60
+	// is reached only inside the nested walk.
+	if r := snapshot(t, fs).EvaluateWith("B", Limits{Inspections: 60}); r.Status != Unknown ||
+		!slices.ContainsFunc(r.Reasons, func(x Reason) bool { return x.Code == "model_limit" }) {
+		t.Fatalf("nested cap: %+v", r)
+	}
 	// Shape: own on another kind, or both modes on one entry, is an invalid permission.
 	for _, p := range []Permission{
 		{Kind: Holds, Mode: AnyTarget, AmendOwn: true},
