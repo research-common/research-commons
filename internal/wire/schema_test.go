@@ -57,6 +57,8 @@ func minimal(kind string) *canon.Object {
 		return body("task", tID, "edition", tID2, "submissions", arr(s(tID)), "verdict", "accept")
 	case "withdraw_approval":
 		return body("resource", tID, "edition", tID2)
+	case "grant":
+		return body("task", tID, "edition", tID2, "grantee", tKey)
 	case "rotate_key":
 		return body("successor", tKey)
 	case "revoke_key":
@@ -199,6 +201,11 @@ func TestSchemaRules(t *testing.T) {
 		{"selection unknown", "edition", setField(m("edition"), "contents", body("selection", "manual")), "one of"},
 		{"cohort hand_picked false", "corroborates", setField(m("corroborates"), "cohort", body("hand_picked", canon.Bool(false))), "is not true"},
 		{"verdict unknown", "decide", setField(m("decide"), "verdict", s("maybe")), "one of"},
+		{"refutes task without edition", "refutes", setField(m("refutes"), "task", s(tID)), "body.edition is missing"},
+		{"refutes edition without task", "refutes", setField(m("refutes"), "edition", s(tID2)), "body.task is missing"},
+		{"refutes task not an id", "refutes", setField(setField(m("refutes"), "task", s(tDig)), "edition", s(tID2)), "statement id"},
+		{"grant grantee not a key", "grant", setField(m("grant"), "grantee", s(tID)), "is not a key"},
+		{"grant edition not an id", "grant", setField(m("grant"), "edition", s("e1")), "statement id"},
 		{"anchors proof as an object (first draft)", "anchors", setField(m("anchors"), "proof", body("scheme", "ots", "digest", tDig)), "content digest"},
 		{"anchors covered as a digest", "anchors", setField(m("anchors"), "covered", s(tDig)), "statement id"},
 		{"anchors without proof_format", "anchors", body("covered", tID, "proof", tDig), "proof_format is missing"},
@@ -224,6 +231,32 @@ func TestSchemaRules(t *testing.T) {
 			refused(t, err, refusal.Intrinsic, refusal.MalformedStatement, c.detail)
 		})
 	}
+}
+
+// TestTaskKindsBindings: the task-contracts note's wire additions. `grant` is a known kind with its fields;
+// `refutes` takes `task` and `edition` together or not at all (§4.2), and a bound one is valid; `submit.salt`
+// is still parsed (a signed line keeps its meaning) and is a string field only: no rule reads its value.
+func TestTaskKindsBindings(t *testing.T) {
+	for _, b := range []*canon.Object{
+		setField(setField(minimal("refutes"), "task", s(tID)), "edition", s(tID2)),
+		minimal("refutes"),
+	} {
+		if st, err := readBody(t, "refutes", b); err != nil || st.Status != Valid {
+			t.Fatalf("refutes %v: %v %+v", b.Keys, err, st)
+		}
+	}
+	g, err := readBody(t, "grant", setField(minimal("grant"), "note", s("seat 1")))
+	if err != nil || g.Status != Valid || !g.Verified {
+		t.Fatalf("grant: %v %+v", err, g)
+	}
+	for _, salt := range []string{"", "n0nce", strings.Repeat("z", 200)} {
+		st, err := readBody(t, "submit", setField(minimal("submit"), "salt", s(salt)))
+		if err != nil || st.Status != Valid {
+			t.Fatalf("submit with salt %q: %v", salt, err)
+		}
+	}
+	_, err = readBody(t, "submit", setField(minimal("submit"), "salt", canon.Int(1)))
+	refused(t, err, refusal.Intrinsic, refusal.MalformedStatement, "body.salt")
 }
 
 // TestSchemaSystemKeys: C-core-32a. edition.contents.system_keys is a non-empty sorted, duplicate-free set of

@@ -401,7 +401,7 @@ func preparePublish(c *Ctx) *Problem {
 // wireKind reports whether kind is a statement kind wire-format note §5 lists (the writer signs no other).
 func wireKind(kind string) bool {
 	return slices.Contains([]string{"authored", "observed", "holds", "describes", "reproduced", "corroborates", "refutes", "retracts",
-		"anchors", "genesis", "edition", "intent", "withdraw", "progress", "submit", "decide", "withdraw_approval", "rotate_key", "revoke_key"}, kind)
+		"anchors", "genesis", "edition", "intent", "withdraw", "progress", "submit", "decide", "grant", "withdraw_approval", "rotate_key", "revoke_key"}, kind)
 }
 
 func preparePublishTask(c *Ctx) *Problem {

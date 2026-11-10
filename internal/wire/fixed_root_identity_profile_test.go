@@ -673,6 +673,9 @@ func TestFixedRootCandidateBaseSchemaIsNotBypassed(t *testing.T) {
 		if kind == "rotate_key" || kind == "revoke_key" {
 			continue
 		} // deliberately rc/1 only
+		if kind == "grant" {
+			continue
+		} // added to rc/1 by the task-contracts note after the candidate profile; the profile does not list it yet
 		t.Run(kind, func(t *testing.T) {
 			b := minimal(kind)
 			if kind == "genesis" {
