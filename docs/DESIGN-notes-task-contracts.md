@@ -1,7 +1,7 @@
 # Design note: task contracts (`task-contract-v1`)
 
-**Date:** 2026-10-27, revised 2026-10-28 (revision 2) and 2026-11-08 (revision 3) · **Status:** request for
-comments. Nothing here is decided or implemented.
+**Date:** 2026-10-27, revised 2026-10-28 (revision 2) and 2026-11-08 (revision 3); accepted 2026-11-10 ·
+**Status:** accepted. The profile is decided; the reference implementation is in progress.
 **Tracking issue:** #109
 **Builds on:** the claims-model note §8 (resources, editions) and §9 (research exchange), #69; the wire-format
 note §1.1, §5, §6; the bitcoin-time note §7, §8, §11; #3 (pre-registration), #65 (stochastic replication)
@@ -11,6 +11,13 @@ applies to decide readiness under a contract. It does not change the claims mode
 envelope, or any existing kind's meaning.
 **References:** invariants (I1–I15) and bare §9.x, §10 and §13 are the claims-model note's; other bare section
 numbers are this note's; any other note is named.
+
+**Acceptance (2026-11-10).** The review of revision 3 on #108 raised nothing further, and every lean in §6
+is adopted as written: §6 now records decisions. Three of them add fields, which join `task-contract-v1`
+because they are added at acceptance (§3.1): `results` and `quorum.min_grade` (Q2), and `pins` (Q3). Q4 (a)
+retires `submit.salt`: the wire field stays parseable and inert (wire-format note §5). The new `grant` kind and
+the `refutes` binding get their rows in the wire-format note §5, and the claims-model note §4, §9.5 and §13 gain
+the lines this note asked for.
 
 **Revision 3 (changes since revision 2).** From the review of revision 2 on #108:
 
@@ -39,7 +46,7 @@ numbers are this note's; any other note is named.
 - **New Q12**, counting by a referent member (one per instrument), with the format gap it depends on (§6 Q12).
 - **Q8 display:** an approximate date may be shown beside a height, labelled as an estimate, never used for
   ordering (§4.3).
-- Leans the review agreed with are marked *Review: agreed* (§3.3, §6 Q1, Q4, Q8, Q10). Nothing is decided.
+- Leans the review agreed with are marked *Review: agreed* (§3.3, §6 Q1, Q4, Q8, Q10).
 
 ## 0. Summary
 
@@ -62,7 +69,7 @@ numbers are this note's; any other note is named.
   one put in. Ready if the first reaches the quorum, not ready if the second does not, `unknown` or `unchecked`
   otherwise. This replaces "any unchecked criterion anywhere makes the task unchecked", which lets any
   eligible issuer hold a ready task at exit 3.
-- Twelve questions stay open (§6), each with options and a lean: deduplication, evidence strength, inputs and
+- Twelve questions were open in review and are decided (§6): deduplication, evidence strength, inputs and
   methods, commit-reveal, credit definitions, grant withdrawal, counting units for corroboration, calendar
   deadlines, the coordinator under identities, refutation eligibility, rubric dialects, and counting by a
   referent member.
@@ -153,6 +160,8 @@ and duplicate-free in the key order of the wire-format note §1, as `controllers
 | `deadline` | object O, `{height: integer}` | the last block height at which a counted submission must be shown to exist (§4.3) | no deadline |
 | `rubric` | list O of {`id` string R, `text` string O}; `id`s unique | acceptance criteria, each evaluated per submission (§5.5) | no rubric check |
 | `quorum` | object O (below) | the counting predicate | settled by review, not by counting (§9.2, C-exch-06) |
+| `results` | `"derived"` · `"observed"` O | which kind of result counts (§6 Q2): read from the held record for each result's digest | either kind counts |
+| `pins` | object O (below) | the inputs and methods a result must show it used (§6 Q3) | no pin check |
 | `sampling` | object O, the wire-format note §5 `sampling` shape: `n` integer R, `unit` string R, `groups` list of {`name` R, `n` R} O, names unique | the declared design the departure check compares delivered `sampling` with (§9.4) | no departure check |
 
 `quorum` fields:
@@ -165,15 +174,23 @@ and duplicate-free in the key order of the wire-format note §1, as `controllers
 | `comparator` | digest O | a comparator skill, as the execution note §1 `comparator` field names one |
 | `test` | digest O | a pinned statistical test for stochastic replication (#65); when present it is the comparator, and `comparator` must be absent |
 | `estimand` | string O | what `test` estimates, as prose. Present only with `test` |
+| `min_grade` | `"T0"` · `"T1"` · `"T2"` O | the weakest grade (claims-model note §7) the reader's own grade of a result may have and still count; `unchecked` while ungraded. Present only with `results: "derived"` (§6 Q2) |
+
+`pins` fields (at least one member):
+
+| Field | Type | Meaning |
+|---|---|---|
+| `workflow` | digest O | a derived result's `provenance.workflow` must equal it |
+| `method_edition` | edition id O | an observation's `referent.method_edition` must equal it |
+| `inputs` | list of digest O, a set, non-empty | `provenance.inputs` (derived) or `referent.inputs` (observation) must include every member |
 
 `sampling` is deliberately the same shape as the wire-format note §5 disclosure, so the departure check compares like
 with like. The contract reads `n`, `unit` and `groups`; `window` and `dispersion` are disclosure fields with no
 contract meaning, and a contract carrying them is unread (§3.3), not silently trimmed.
 
-Not in the table, on purpose: required inputs and methods, deduplication, evidence strength and the
-`results` declaration it needs (§6, Q1–Q3). A
-field added before this note is accepted joins `task-contract-v1`; one added after is `task-contract-v2`. A
-profile never changes meaning under a fixed name.
+Not in the table, on purpose: deduplication, which has one rule (§6 Q1) and so no field. `results`,
+`min_grade` and `pins` were added at acceptance (§6 Q2, Q3) and are part of `task-contract-v1`; a field added
+after acceptance is `task-contract-v2`. A profile never changes meaning under a fixed name.
 
 ### 3.2 Role fields in `rc/1` and `rc/2`
 
@@ -209,8 +226,11 @@ holds in both: one place per role per major.
   statement around it follows the wire rules as usual. *Review: agreed (#109): a restriction a reader ignores
   is a weaker contract than the one signed.*
 - A malformed field (wrong type, an empty `eligible_issuers`, an `all-pairs` or `reference` grouping without
-  a comparator, an `any` grouping with one, duplicate rubric ids, a `reference` that is not a key) leaves
-  the contract unread, naming the field. There is never a partial reading.
+  a comparator, an `any` grouping with one, duplicate rubric ids, a `reference` that is not a key, an empty
+  `pins`) leaves the contract unread, naming the field. There is never a partial reading.
+- Terms that can apply to no submission leave the contract unread, naming both fields: `min_grade` without
+  `results: "derived"`; `results: "observed"` with a `pins.workflow`; `results: "derived"` with a
+  `pins.method_edition` (§6 Q2).
 - A reader that implements `task-contract-v1` implements `grant` (§4.1), the `refutes` binding (§4.2) and
   `fulfills` submissions (§5.1) as well. A reader that read the terms but not the grants, or counted only
   `submit`s, would report a task `not ready` where the honest answer is that it cannot tell.
@@ -358,7 +378,9 @@ A submission of `E`, with `E`'s terms read, counts toward `E`'s quorum when all 
 2. its signer is an eligible issuer (`eligible_issuers` contains it, or `any_issuer`);
 3. if `E` names a coordinator, a counting grant (§4.1) names the signer for `E`;
 4. every rubric criterion is `ok` for it (§5.5);
-5. if `E` has a deadline, its deadline outcome is `ok` (§4.3).
+5. if `E` has a deadline, its deadline outcome is `ok` (§4.3);
+6. if `E` declares `results`, `min_grade` or `pins`, each is `ok` for it (§6 Q2, Q3);
+7. it is its unit's current submission of `E` (§6 Q1).
 
 A condition that is `unchecked` makes the submission **undecided**; a condition that is `fail` or `not shown`
 makes it **not counted**. Both are listed with the reason. Every submission stays admissible (TC3): one
@@ -407,8 +429,8 @@ key` the unit is the signing key: a key that submits the same result twice count
 of the two submissions (a `submit` of `D` and an `authored` of `D` carrying `fulfills` are one result). With
 `identity` the count needs an identity profile; with none active, readiness is `unknown`, naming the missing
 profile, never a key count presented as an identity count. Every count is displayed with its unit (`2 keys`),
-because keys are not people (TC4). How a unit that submits **different** results counts is open (§6, Q1);
-counting by a member of an observation's referent, such as an instrument, is open too (§6, Q12).
+because keys are not people (TC4). A unit that submits **different** results counts by its current submission only (§6 Q1);
+counting by a member of an observation's referent, such as an instrument, is not in v1 (§6 Q12).
 
 ### 5.4 Independence
 
@@ -470,7 +492,7 @@ The claims-model note §13 defines `verify` exits; for a task it reads:
 
 `not ready` exits 0: it is a completed check whose answer is "not yet", not "checked and wrong". Exit 1 stays
 reserved for a comparison that ran and disagreed (§13); a divergent submission is reported, and the task
-check is not itself a comparison. A §13 line saying so is proposed with this note's acceptance.
+check is not itself a comparison. The claims-model note §13 says so.
 
 ### 5.8 Settlement
 
@@ -482,8 +504,9 @@ Nothing in this profile makes a decision from readiness automatically.
 
 ## 6. Open questions
 
-Each question lists options and a lean. A lean is a proposal for review, not a decision. *Review: agreed*
-marks a lean an outside review on #109 agreed with; it records the review, and decides nothing.
+Each question lists the options considered and the decision. The decisions are the leans of revision 3,
+adopted unchanged at acceptance (2026-11-10). *Review: agreed* marks one an outside review on #109 agreed with
+before acceptance.
 
 1. **Deduplication.** §9.3 asks the predicate to state it. What happens when one counting unit submits several
    results to one edition?
@@ -494,7 +517,7 @@ marks a lean an outside review on #109 agreed with; it records the review, and d
    order (wire-format note §7), whatever the kinds (a `submit`, or an `authored` or `observed` carrying
    `fulfills`, §5.1), as a key's current `holds` is read; branches of an uncleared fork that disagree count in
    none and are shown.
-   **Lean: (c).** It uses the one order a key's own statements have, never `ts`, closes the hedge, and gives an
+   **Decided: (c).** It uses the one order a key's own statements have, never `ts`, closes the hedge, and gives an
    honest correction a way to replace an error: a corrected export carrying `fulfills` supersedes the
    erroneous one by being later in the same log. A `dedup` field is not needed while there is one rule.
    *Review: agreed (#109).*
@@ -503,7 +526,7 @@ marks a lean an outside review on #109 agreed with; it records the review, and d
    (b) `quorum.min_grade`, `"T0"`/`"T1"`/`"T2"`: a submission counts only if the reader's own grade of its
    result (claims-model note §7) is at least that, `unchecked` while ungraded;
    (c) weights per evidence class.
-   **Lean: (b), as an optional field, for derived results only.** It reuses the grades the reader already
+   **Decided: (b), as an optional field, for derived results only.** It reuses the grades the reader already
    computes. (c) is rejected: a weighted sum hides why a quorum was reached.
    Grades rank derivation, and observations are not a tier (claims-model note §7), so `min_grade` cannot
    apply to an observation submission (§5.1): read literally, it would fail every one. Under (b), therefore:
@@ -552,7 +575,7 @@ marks a lean an outside review on #109 agreed with; it records the review, and d
    pins only `workflow` fails every observation submission, one that pins only `method_edition` fails every
    derived result, and one that pins both checks each result against the pin for its kind;
    (c) an expression in a rule dialect (claims-model note §8).
-   **Lean: (b).** Exact pins check without a dialect, and "under method edition M, on scenario edition S" is
+   **Decided: (b).** Exact pins check without a dialect, and "under method edition M, on scenario edition S" is
    then an exact pin for a benchmark batch. Ranges (a harness commit in a range, an environment within a
    family) are (c), when the rule-dialect note exists. The environment record is not pinned under (b):
    which environment fields must match is the workflow author's `environment_match` (execution note §1), not
@@ -565,11 +588,11 @@ marks a lean an outside review on #109 agreed with; it records the review, and d
    (b) define `submit.salt`: a prior `submit` carries `result = sha256(result bytes ‖ salt)`, the reveal carries
    the plain digest and the salt;
    (c) drop commit-reveal from tasks.
-   **Lean: (a).** It needs no new construction, and its cautions (possession by T, never independence;
+   **Decided: (a).** It needs no new construction, and its cautions (possession by T, never independence;
    a nonce for low-entropy content) are already written. Under (a), a commitment that itself carries
    `fulfills` is the submission (§5.1) and needs no `submit`; its own bound is the one the deadline reads.
    Sub-question, for a `submit` that names an earlier commitment: may the commitment's bound, rather than the
-   submission's, meet the deadline? Leaning yes, when the submission names that commitment: the plan of
+   submission's, meet the deadline? Decided: yes, when the submission names that commitment: the plan of
    "commit before the deadline, reveal after" is the use the mechanism exists for. Under every option the
    match shows possession by T only (C-exch-09 (b), C-btc-19). *Review: agreed (#109), the sub-question
    included: the withheld-availability commitment is the held-out-pool pattern, and its bound meeting the
@@ -583,37 +606,37 @@ marks a lean an outside review on #109 agreed with; it records the review, and d
    `accept`.
    (a) these, with §9.5 amended to name refutation;
    (b) leave definitions to readers.
-   **Lean: (a)**, with denominators still the reader's choice and no default projection.
+   **Decided: (a)**, with denominators still the reader's choice and no default projection.
 6. **Grant withdrawal.**
    (a) none: a grant lasts for its edition; to exclude a grantee the controllers publish a new edition and the
    coordinator re-grants;
    (b) `grant` with `withdrawn: true`, the coordinator's current grant read by its own log order. Sound, because
    one key orders it, but **retroactive**: a withdrawn grant counts toward nothing, including for submissions
    made while it stood, since no cross-key time order exists to say "made while it stood".
-   **Lean: (a)** for v1. (b) is coherent, and the retroactivity would have to be stated where users read.
+   **Decided: (a)** for v1. (b) is coherent, and the retroactivity would have to be stated where users read.
 7. **Counting unit for corroboration.** Should a reader's corroboration counts (claims-model note §5.3.2) follow the task's
-   `counting_unit`? **Lean: no.** Corroboration is a reader-side projection with no contract behind it; its unit
+   `counting_unit`? **Decided: no.** Corroboration is a reader-side projection with no contract behind it; its unit
    is reader policy. Tasks count by their contract.
 8. **Calendar deadlines.**
    (a) none in v1: heights only;
    (b) `{at: ts}` compared with the bound block's `nTime` plus a reader-declared margin, labelled
    miner-reported;
    (c) `{at: ts}` evaluated by a later time-conversion profile, `unchecked` until one exists.
-   **Lean: (a).** (b) makes `nTime` an ordering key, which the bitcoin-time note rules out. (c) would let a
+   **Decided: (a).** (b) makes `nTime` an ordering key, which the bitcoin-time note rules out. (c) would let a
    contract be written that no reader can ever check, which is worse than not offering it. Display is
    separate: an approximate date may be shown beside a height, labelled as an estimate from the bound block's
    `nTime` (miner-reported), never used for ordering (§4.3). *Review: agreed (#109), with the display ask
    that §4.3 now answers.*
 9. **The coordinator under identities.** Under `rc/2`, is the coordinator a typed subject, and does it move
-   into `task_roles`? **Lean:** a key in the contract for v1; an identity coordinator, and identity grantees,
+   into `task_roles`? **Decided:** a key in the contract for v1; an identity coordinator, and identity grantees,
    wait for the identity profile to be accepted and are a v2 question.
-10. **Who may refute a task.** Should `eligible_issuers` limit bound refutations? **Lean: no.** A refutation
+10. **Who may refute a task.** Should `eligible_issuers` limit bound refutations? **Decided: no.** A refutation
     never counts toward a quorum, and the contract's author should not be able to choose who may criticise the
     results it accepts. *Review: agreed (#109).*
 11. **Rubric dialects.** Criteria are prose with ids, and the evaluator is the reader's.
     (a) keep it so;
     (b) let a criterion carry `dialect` and `expr`, as edition rules do (claims-model note §8).
-    **Lean: (a) now, (b) when the rule-dialect note exists.** An evaluator that understands nothing yields
+    **Decided: (a) now, (b) when the rule-dialect note exists.** An evaluator that understands nothing yields
     `unchecked`, so prose criteria are honest, if unhelpful to automation.
 12. **Counting by a referent member.** An observation quorum may count instruments, not signers: "at most one
     per `system.machine_ref` per routing era". One key can run several machines and one machine can be
@@ -629,14 +652,14 @@ marks a lean an outside review on #109 agreed with; it records the review, and d
     endorsed member per instrument per era", claims-model note §8), and v1 says so explicitly: a contract
     that needs it either counts by `key` and says in its `question` what it cannot enforce, or has no
     `quorum` and is settled by review (§5.6), where the beneficiary applies the rule.
-    **Lean: (b) for v1.** (a) depends on a gap in the format: claims-model note §5.3.1 says a method edition
+    **Decided: (b) for v1.** (a) depends on a gap in the format: claims-model note §5.3.1 says a method edition
     declares the members of the measured system an observation under it must pin, but no wire field carries
     that declaration (the `edition` contents in wire-format note §5 have no member for it), and the reference
     implementation meets C-core-32 only in part for that reason. A unit read from members the method has not
     declared would key on something one observer pins and another omits, or spells differently. Once a method
     edition can declare its system members, (a) reads well, with "missing member → undecided" and a contract
     allowed to name only a declared member (any other leaves it unread, §3.3). The field is proposed in #112
-    (`edition.contents.system_keys`, C-core-32a – 32d); the lean is revisited when it is accepted and built.
+    (`edition.contents.system_keys`, C-core-32a – 32d), now accepted; (a) is a candidate for `task-contract-v2`.
 
 ## 7. Conformance impact
 
@@ -663,7 +686,7 @@ specified; the implementation still has to meet it.
 | C-exch-19, C-exch-20 | counts named, not defined | waits on §6 Q5 |
 | C-btc-19 | no term needed | unchanged; §5.4 and §6 Q4 restate it |
 
-New cases, proposed with this note in `CONFORMANCE.md` (exchange profile, by section):
+New cases, added with this note to `CONFORMANCE.md` (exchange profile, by section):
 
 | id | pins |
 |---|---|
@@ -676,13 +699,21 @@ New cases, proposed with this note in `CONFORMANCE.md` (exchange profile, by sec
 | C-exch-15b | §5.1 amendments: an amendment that drops `fulfills` withdraws the submission and `publish` warns, naming the edition; re-adding it later gives `not shown` past `h` with `explain` naming the breaking amendment; an `observed` carrying `fulfills` stays a submission after its signer's `retracts`, shown beside it |
 | C-exch-18a | §4.2 binding: bound refutation listed and credited on its own track and never grouped; `task` without `edition` malformed; an unbound refutation of a submission is shown beside it but not listed in the task |
 
-Deduplication, evidence strength, inputs and methods, commit-reveal and counting by a referent member get
-cases when their questions are answered.
+With the §6 decisions, four more cases pin the fields and rules added at acceptance:
+
+| id | pins |
+|---|---|
+| C-exch-08b | §6 Q2: `results` and `min_grade`; a result's kind read from the held record for its digest; terms that can apply to no submission leave the contract unread |
+| C-exch-08c | §6 Q3: `pins` per result kind, `ok` / `fail` / `unchecked`; a pinned member the referent leaves `unpinned` is `unchecked` |
+| C-exch-09a | §6 Q4: the commitment is an `authored` with availability withheld; its bound meets the deadline for a `submit` that names it; possession by T only; `submit.salt` is inert |
+| C-exch-12b | §6 Q1: a unit counts by its current submission in its own log order, whatever the kinds; disagreeing branches of an uncleared fork count in none |
+
+Counting by a referent member (§6 Q12) is not in v1 and has no case.
 
 ## 8. Relationship to the provisional reading
 
 The provisional reading (`provisional-task-contract-0`) was written to make the exchange layer testable before
-this note existed, and most of this profile is its field table. Where they differ, this note proposes the
+this note existed, and most of this profile is its field table. Where they differ, this note makes the
 change, and the provisional reading keeps its own name, so no contract silently changes meaning:
 
 | Point | Provisional reading | This note |
@@ -698,7 +729,10 @@ change, and the provisional reading keeps its own name, so no contract silently 
 | what is a submission | `submit` only; a `fulfills` statement is a disclosure | `submit`, and an `authored` or `observed` carrying `fulfills` (§5.1) |
 | refutation binding | inferred from `of` | explicit `task`/`edition` (§4.2) |
 | grants | read through a stand-in, not a wire kind | `grant` (§4.1) |
-| credit | seven counts, as in §6 Q5 | the same, pending Q5 |
+| credit | seven counts, as in §6 Q5 | the same (§6 Q5) |
+| `results`, `min_grade`, `pins` | not read (unknown fields: the contract is unread) | read (§3.1, §6 Q2, Q3) |
+| a unit with several submissions | counts once in each group it appears in | its current submission only (§6 Q1) |
+| `submit.salt` | shown as a salted commitment | inert; the commitment is an `authored` with availability withheld (§6 Q4) |
 
 ## 9. Out of scope
 
