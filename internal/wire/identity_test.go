@@ -66,7 +66,7 @@ func TestIdentityReaderAgreesWithCandidateVectors(t *testing.T) {
 	}
 	ir := NewIdentityReader()
 	keys := map[string]Key{AlgEd25519: Ed25519Key{Seed: bytes.Repeat([]byte{51}, 32)}, AlgEIP191: EIP191Key{Scalar: bytes.Repeat([]byte{52}, 32)}}
-	checked := 0
+	checked, resourceChecked := 0, 0
 	for _, cv := range suite.(*canon.Object).Members["cases"].(canon.Array) {
 		c := cv.(*canon.Object)
 		name := string(c.Members["name"].(canon.String))
@@ -105,6 +105,9 @@ func TestIdentityReaderAgreesWithCandidateVectors(t *testing.T) {
 			_, serr := frValidate(schema, line, true)
 			st, rerr := ir.Read(line)
 			checked++
+			if major == 2 && candidateResource[string(kind)] {
+				resourceChecked++
+			}
 			if accept && serr != nil {
 				t.Skipf("re-signing changed the candidate verdict (%v); not a reader differential", serr)
 			}
@@ -113,6 +116,9 @@ func TestIdentityReaderAgreesWithCandidateVectors(t *testing.T) {
 				if accept {
 					t.Fatalf("accepted vector refused: %v", rerr)
 				}
+			case accept && candidateResource[string(kind)] && major == 2 && st.Status != Valid:
+				// the rc/2 resource kinds are read in full: an accepted vector is valid, not merely retained
+				t.Fatalf("accepted rc/2 %s vector read %s (%s)", kind, st.Status, st.Why)
 			case accept && st.Status != Valid && st.Status != Unsupported:
 				t.Fatalf("accepted vector read %s (%s)", st.Status, st.Why)
 			case !accept && major == 2 && candidateNotImplemented[string(kind)]:
@@ -130,7 +136,7 @@ func TestIdentityReaderAgreesWithCandidateVectors(t *testing.T) {
 			}
 		})
 	}
-	if checked < 60 {
-		t.Fatalf("only %d vectors exercised", checked)
+	if checked < 60 || resourceChecked < 15 {
+		t.Fatalf("only %d vectors exercised (%d of the rc/2 resource kinds)", checked, resourceChecked)
 	}
 }
