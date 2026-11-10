@@ -175,7 +175,7 @@ body are one statement. Canonical encoding, field names and test vectors belong 
 | `retracts` | the author | A recall request for the author's own artifact. |
 | `anchors` | any key, own log | Time evidence for that key's own log prefix (§10). |
 | resource editions | resource controllers | Collection and task editions (§8), and a controller's withdrawal of its own approval. |
-| lifecycle | task participants | Intent, progress, withdrawal, submission, decision (§9). |
+| lifecycle | task participants | Intent, progress, withdrawal, submission, decision, and a coordinator's grant (§9). |
 | key events | the key | Rotation and revocation (§4.1). |
 
 Lineage links that carry meaning (`supersedes`, `extends`, `fulfills`, evidence links) are fields of signed
@@ -673,7 +673,9 @@ immutable editions.
 ### 9.1 Tasks and coordination
 
 A task contract pins the question, required inputs and methods, acceptance rubric or comparator, eligible
-evidence, decision authority, quorum requirements and deadlines. **Claims are advisory intents, not locks.**
+evidence, decision authority, quorum requirements and deadlines. Its grammar is a named contract profile; the
+first, `task-contract-v1`, is `DESIGN-notes-task-contracts.md`.
+**Claims are advisory intents, not locks.**
 They make work visible without excluding independent attempts. A partition-tolerant global lock is impossible,
 and the design doesn't pretend otherwise. Liveness reports (heartbeats) are evidence of activity, not lease
 renewals. A task that truly needs exclusion names a coordinator, whose signed grants are the only thing that
@@ -713,15 +715,15 @@ Refutations and failed reproductions are first-class submissions, credited on th
 rule before the data. Results that fulfil it display "pre-registered" with the bound at verified quality. A
 pre-registration proves the plan existed by time T, not that the author hadn't seen the data. An `observed`
 statement can carry `fulfills` to a task edition, so a pre-registered observation campaign is in scope, not
-only derived results. The opposite case is declared, not inferred: `exploratory` is a disclosure value (§7). A
+only derived results; such a statement is itself a submission of that edition (task-contracts note §5.1). The opposite case is declared, not inferred: `exploratory` is a disclosure value (§7). A
 **departure check** compares the delivered `sampling` disclosure with the contract's declared n, per group
 where the contract declares groups, and reports `conforms`, `departed`, `unchecked` (no structured count, or
 no count for a declared group) or `not comparable` (unit mismatch). It never moves the grade (I6).
 
 ### 9.5 Credit
 
-Credit is a projection: contribution, citation, reproduction, review, corroboration and acceptance are counted
-separately, under rules the reader chooses, with denominators shown. No transferable entitlement is created.
+Credit is a projection: contribution, citation, reproduction, refutation, review, corroboration and acceptance
+are counted separately (each defined in the task-contracts note §6 Q5), under rules the reader chooses, with denominators shown. No transferable entitlement is created.
 
 ## 10. Time
 
@@ -819,6 +821,10 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
   of "could not check" it was. Limits and environments call for different next steps (raise the limit or accept
   `unchecked`, versus run where the pinned environment exists). Exit 0 means the requested operation succeeded,
   not that everything it referenced is valid.
+- **`verify` of a task** reads its current edition's readiness: exit 0 for `ready`, `not ready` or `settled by
+  review`, exit 3 when the terms are unread, readiness is `unknown` or `unchecked`, or the beneficiary's
+  decisions conflict. `not ready` is a completed check whose answer is "not yet", so it is never exit 1; a
+  divergent submission is reported, and the task check is not itself a comparison (task-contracts note §5.7).
 - **`verify` of an observation** checks its signature and its pins: exit 0 when they hold, exit 3
   when the referent is `unpinned` or its finality rule cannot be evaluated, or, for a method-class observation,
   the method edition it pins is not held as authorized (whether it declares `system_keys` cannot be read).
@@ -900,7 +906,8 @@ that note exists: a member schema under no dialect the reader implements is load
 primitive is charged against it, and regular expressions are linear-time (RE2-class) or charged per
 backtracking step, so C-core-94's limit binds whatever the dialect computes);
 attestation verifiers (receipts, TEEs); receiver-local Bitcoin verification (#59); size policy (#9); hub
-conventions (discovery #66; the hub-template and `COMMONS.md` rubric, which still use alpha vocabulary).
+conventions (discovery #66; the hub-template and `COMMONS.md` rubric, which still use alpha vocabulary);
+task-contract profiles (§9.1).
 
 ## 16. Decisions on the questions this note first left open
 
