@@ -63,26 +63,39 @@ func absentToken(name string) string {
 	return "undeclared"
 }
 
-// Claim is one key's authorship claim on the blob.
+// Claim is one subject's authorship claim on the blob: a key's (every production reader), or an identity's when
+// an actor evaluator finds its delegates' statements eligible for it (identity profile §5.1; not active).
 type Claim struct {
-	Signer string
-	// Statements are every `authored` by Signer on the blob that counts, by seq then id.
+	// Subject owns the claim. Signers are the keys that signed its statements, sorted: the key itself for a key
+	// subject; for an identity subject, every delegate key whose eligible statement is in the claim.
+	Subject Subject
+	Signers []string
+	// Statements are every counted `authored` of the subject on the blob in the claim, by seq then id.
 	Statements []string
-	// Current are the counted statements no later one of the same key on the blob amends, sorted. Two on an
-	// uncleared fork of the key's log are both current.
+	// Current are the counted statements no later one of the same subject on the blob amends, sorted. Two on an
+	// uncleared fork of the key's log (or two concurrent amendments of an identity's claim) are both current.
 	Current []string
-	// Amends maps an amending statement to the earlier ones it amends (C-core-11).
+	// Amends maps an amending statement to the earlier ones it amends (C-core-11; for an identity, its explicit
+	// amendments, profile §5.1).
 	Amends map[string][]string
 	// Provenance is the current statements' provenance; nil without one. Current statements that disagree on
 	// provenance are separate claims (one per provenance).
 	Provenance *Provenance
 	Bound      Bound
+	// Unresolved names, for an identity's claim, each authorized amendment of its claims on the blob whose
+	// target cannot be established: the identity's current view is unknown (profile §5.1). Always nil for a key.
+	Unresolved []string
 	current    []*wire.Statement
 }
 
-// NotCounted is an `authored` on the blob that counts toward nothing, with why.
+// NotCounted is an `authored` on the blob that counts toward nothing, with why. Subject is the key that signed
+// it, or for an identity-context statement the identity its actor names (never its key: identity profile §2.3);
+// Signer is the signing key either way.
 type NotCounted struct {
-	Statement, Signer, Why string
+	Statement string
+	Subject   Subject
+	Signer    string
+	Why       string
 }
 
 // Provenance is a derivation's workflow and input hashes (wire §5 `provenance`, environment excluded).
@@ -109,21 +122,40 @@ func (p *Provenance) String() string {
 // Unit is a set of claims priority treats as one: a derivation group, or one claim without provenance.
 type Unit struct {
 	Provenance *Provenance
-	Claims     []*Claim // by signer
+	Claims     []*Claim // by subject (keys, then identities)
 	Bound      Bound
+}
+
+// Subjects are the unit's claim subjects, in claim order.
+func (u *Unit) Subjects() []Subject {
+	s := make([]Subject, len(u.Claims))
+	for i, c := range u.Claims {
+		s[i] = c.Subject
+	}
+	return s
+}
+
+// Signers are every key that signed a statement of the unit's claims, sorted and distinct.
+func (u *Unit) Signers() []string {
+	var s []string
+	for _, c := range u.Claims {
+		s = append(s, c.Signers...)
+	}
+	slices.Sort(s)
+	return slices.Compact(s)
 }
 
 func (u *Unit) signers() string {
 	s := make([]string, len(u.Claims))
 	for i, c := range u.Claims {
-		s[i] = shortKey(c.Signer)
+		s[i] = c.Subject.String()
 	}
 	return strings.Join(s, ",")
 }
 
 func (u *Unit) describe() string {
 	if u.Provenance == nil {
-		return shortKey(u.Claims[0].Signer)
+		return u.Claims[0].Subject.String()
 	}
 	return u.signers() + " under " + u.Provenance.String()
 }
@@ -144,6 +176,10 @@ const (
 	FieldAbsent    FieldState = "undeclared"
 	// FieldNoDefault: authorship itself is contested, so no claimant's value is the default (C-btc-02).
 	FieldNoDefault FieldState = "no default (authorship contested)"
+	// FieldUnknown: the default unit is an identity whose current view is unknown (an authorized amendment of its
+	// claims names a target this reader cannot establish: identity profile §5.1), so no value it states is the
+	// default; Why names the amendment. Only a reader with an actor evaluator reaches it.
+	FieldUnknown FieldState = "unknown"
 )
 
 // Field is the resolved single-party field.
@@ -155,6 +191,8 @@ type Field struct {
 	From []Source
 	// Rivals are values from claimants outside the default unit, listed with their signers, never dropped.
 	Rivals []Source
+	// Why says why the state is FieldUnknown; "" otherwise.
+	Why string
 }
 
 // Default returns the field's default value (canonical JSON) and whether it has one.
@@ -219,24 +257,43 @@ func (r *Resolver) artifact(d string, visiting map[string]bool) *Artifact {
 func (r *Resolver) authorship(d string) *Artifact {
 	a := &Artifact{Digest: d}
 	byKey := map[string][]*Placed{}
+	byIdentity := map[string][]*Placed{}
 	for _, p := range r.byKind["authored"] {
 		if contentDigest(p.St.Body) != d {
 			continue
 		}
-		if !p.Counts() {
-			a.NotCounted = append(a.NotCounted, NotCounted{p.St.ID, p.St.Signer, notCountedWhy(p)})
-			continue
+		// the counting gate: with no actor evaluator (every production reader) exactly Counts, and the evaluator
+		// is never asked; with one, a statement it binds to an identity counts for that identity (actorgate.go)
+		g := r.gate(p)
+		switch {
+		case !g.Counts:
+			why := g.Why
+			if why == "" {
+				why = notCountedWhy(p)
+			}
+			a.NotCounted = append(a.NotCounted, NotCounted{p.St.ID, notCountedSubject(g, p), p.St.Signer, why})
+		case g.Identity != "":
+			byIdentity[g.Identity] = append(byIdentity[g.Identity], p)
+		default:
+			byKey[p.St.Signer] = append(byKey[p.St.Signer], p)
 		}
-		byKey[p.St.Signer] = append(byKey[p.St.Signer], p)
 	}
-	slices.SortFunc(a.NotCounted, func(x, y NotCounted) int { return strings.Compare(x.Signer+x.Statement, y.Signer+y.Statement) })
 	for _, k := range sortedKeys(byKey) {
 		a.Claims = append(a.Claims, r.claims(k, byKey[k])...)
 	}
+	for _, i := range sortedKeys(byIdentity) {
+		cs, notCounted, explain := r.identityAuthorship(i, d, byIdentity[i])
+		a.Claims = append(a.Claims, cs...)
+		a.NotCounted = append(a.NotCounted, notCounted...)
+		a.Explain = append(a.Explain, explain...)
+	}
+	slices.SortFunc(a.NotCounted, func(x, y NotCounted) int {
+		return strings.Compare(x.Subject.sortKey()+x.Signer+x.Statement, y.Subject.sortKey()+y.Signer+y.Statement)
+	})
 
 	units := map[string]*Unit{}
 	for _, c := range a.Claims {
-		uk := "key:" + c.Signer + "|" + c.Provenance.key()
+		uk := "key:" + c.Subject.sortKey() + "|" + c.Provenance.key()
 		if c.Provenance != nil {
 			uk = "prov:" + c.Provenance.key()
 		}
@@ -301,7 +358,7 @@ func (r *Resolver) claims(k string, ps []*Placed) []*Claim {
 		pv := provenance(st.Body)
 		c, ok := byProv[pv.key()]
 		if !ok {
-			c = &Claim{Signer: k, Provenance: pv, Amends: map[string][]string{}, Bound: Bound{Quality: NoBound}}
+			c = &Claim{Subject: KeySubject(k), Signers: []string{k}, Provenance: pv, Amends: map[string][]string{}, Bound: Bound{Quality: NoBound}}
 			byProv[pv.key()] = c
 		}
 		c.Current = append(c.Current, st.ID)
@@ -381,7 +438,9 @@ func (r *Resolver) priority(a *Artifact) {
 func forked(a *Artifact) []string {
 	cur := map[string][]string{}
 	for _, c := range a.Claims {
-		cur[c.Signer] = append(cur[c.Signer], c.Current...)
+		if c.Subject.IsKey() {
+			cur[c.Subject.ID] = append(cur[c.Subject.ID], c.Current...)
+		}
 	}
 	var out []string
 	for _, k := range sortedKeys(cur) {
@@ -411,7 +470,9 @@ func (r *Resolver) successorHints(a *Artifact) []string {
 	}
 	claimant := map[string]bool{}
 	for _, c := range a.Claims {
-		claimant[c.Signer] = true
+		if c.Subject.IsKey() {
+			claimant[c.Subject.ID] = true
+		}
 	}
 	var out []string
 	for _, s := range r.logs.Successions() {
@@ -422,7 +483,7 @@ func (r *Resolver) successorHints(a *Artifact) []string {
 			continue // a rotation that counts toward nothing names no successor worth a hint
 		}
 		for _, u := range contesting {
-			if !slices.ContainsFunc(u.Claims, func(c *Claim) bool { return c.Signer == s.To }) {
+			if !slices.ContainsFunc(u.Claims, func(c *Claim) bool { return c.Subject == KeySubject(s.To) }) {
 				continue
 			}
 			out = append(out, fmt.Sprintf("claimant %s is the successor named by claimant %s's rotate_key %s: a successor inherits no claims (claims §4.1), so this changes nothing above; a reader may follow it by a reader-policy selection (authorship-declaration)",
@@ -446,7 +507,7 @@ func (r *Resolver) fields(a *Artifact) []Field {
 					if !ok {
 						continue
 					}
-					s := Source{Value: string(canon.Encode(v)), Signer: c.Signer, Statement: st.ID}
+					s := Source{Value: string(canon.Encode(v)), Signer: st.Signer, Statement: st.ID}
 					if u == a.Default {
 						mine = append(mine, s)
 					} else {
@@ -461,6 +522,8 @@ func (r *Resolver) fields(a *Artifact) []Field {
 		switch {
 		case a.Default == nil && len(a.Units) > 1:
 			f.State = FieldNoDefault
+		case len(unresolvedDefault(a)) > 0:
+			f.State, f.Why = FieldUnknown, joinUnresolved(unresolvedDefault(a))
 		case len(mine) == 0:
 			f.State = FieldAbsent
 		case distinctValues(mine) > 1:
@@ -578,6 +641,9 @@ func (a *Artifact) VerifyExit() (int, []string) {
 			why = append(why, "field "+f.Name+": contested")
 		}
 	}
+	if len(unresolvedDefault(a)) > 0 {
+		why = append(why, "authorship: unknown")
+	}
 	if a.Selection != nil && !a.Selection.Met() {
 		why = append(why, "reader's authorship selection: "+a.Selection.State)
 	}
@@ -651,8 +717,15 @@ func (a *Artifact) Render() string {
 		}
 		fmt.Fprintf(&b, "  %s %s, bound %s\n", role, u.describe(), u.Bound)
 		for _, c := range u.Claims {
+			by := map[string]string{}
+			for _, st := range c.current {
+				by[st.ID] = st.Signer
+			}
 			for _, id := range c.Current {
-				fmt.Fprintf(&b, "    authored %s by %s", keylog.Short(id), shortKey(c.Signer))
+				fmt.Fprintf(&b, "    authored %s by %s", keylog.Short(id), shortKey(by[id]))
+				if !c.Subject.IsKey() {
+					fmt.Fprintf(&b, " for %s", c.Subject)
+				}
 				if am := c.Amends[id]; len(am) > 0 {
 					fmt.Fprintf(&b, " (amends %s)", shorts(am))
 				}
@@ -661,7 +734,11 @@ func (a *Artifact) Render() string {
 		}
 	}
 	for _, n := range a.NotCounted {
-		fmt.Fprintf(&b, "  authored %s by %s not counted: %s\n", keylog.Short(n.Statement), shortKey(n.Signer), n.Why)
+		fmt.Fprintf(&b, "  authored %s by %s", keylog.Short(n.Statement), shortKey(n.Signer))
+		if !n.Subject.IsKey() {
+			fmt.Fprintf(&b, " for %s", n.Subject)
+		}
+		fmt.Fprintf(&b, " not counted: %s\n", n.Why)
 	}
 	for _, f := range a.Fields {
 		switch {
@@ -686,6 +763,9 @@ func (a *Artifact) Render() string {
 			fmt.Fprintf(&b, "  %s: %s (%s)\n", f.Name, f.From[0].Value, sources(f.From))
 		default:
 			fmt.Fprintf(&b, "  %s: %s\n", f.Name, f.State)
+			if f.Why != "" {
+				fmt.Fprintf(&b, "    %s\n", f.Why)
+			}
 			for _, s := range f.From {
 				fmt.Fprintf(&b, "    %s by %s in %s\n", s.Value, shortKey(s.Signer), keylog.Short(s.Statement))
 			}
@@ -763,6 +843,17 @@ func provenance(b *canon.Object) *Provenance {
 	}
 	o := v.(*canon.Object)
 	return &Provenance{Workflow: str(o, "workflow"), Inputs: ids(o, "inputs")}
+}
+
+// notCountedSubject is the subject a statement not counted is listed under: the identity the actor evaluator binds
+// it to (its denial or uncertainty is that identity's to report: profile §5.1), else its signing key, which is who
+// signed it. An actor header no evaluator binds names no one's identity (an outsider cannot list a statement under
+// I), and the reason says which identity it names; it is never counted as its key's evidence either way (§2.3).
+func notCountedSubject(g countGate, p *Placed) Subject {
+	if g.Identity != "" {
+		return IdentitySubject(g.Identity)
+	}
+	return KeySubject(p.St.Signer)
 }
 
 func notCountedWhy(p *Placed) string {

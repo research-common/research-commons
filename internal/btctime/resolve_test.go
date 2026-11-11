@@ -58,7 +58,7 @@ func TestPriorityEndToEnd(t *testing.T) {
 					}
 					return
 				}
-				if a.State != resolve.Priority || a.Default.Claims[0].Signer != w.signer("A") || exitOf(a) != 0 {
+				if a.State != resolve.Priority || a.Default.Claims[0].Subject.ID != w.signer("A") || exitOf(a) != 0 {
 					t.Fatalf("%s", out)
 				}
 				if v, _ := a.Field("licence").Default(); v != `"CC0-1.0"` {
@@ -156,7 +156,7 @@ func TestReorg(t *testing.T) {
 		t.Fatalf("B's block is on the new branch too: %s", eb)
 	}
 	a := w.resolver(nil, v).Artifact(dig("X"))
-	if a.Default == nil || a.Default.Claims[0].Signer != w.signer("BB") {
+	if a.Default == nil || a.Default.Claims[0].Subject.ID != w.signer("BB") {
 		t.Fatalf("after the reorg, A's orphaned bound still ranks:\n%s", a.Render())
 	}
 	has(t, a.Render(), "orphaned")

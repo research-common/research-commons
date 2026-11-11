@@ -37,7 +37,10 @@ func (w *world) signRC2(name, n, kind string, body *canon.Object, act rc2Act, ac
 func (w *world) rc2Line(n, kind string, body *canon.Object, act rc2Act, actor [2]string) ([]byte, string) {
 	k := w.key(n)
 	s := w.seq[n]
-	b := withMember(body, wire.IdentityCrit, obj())
+	b := body
+	if _, ok := body.Get(wire.IdentityCrit); !ok {
+		b = withMember(body, wire.IdentityCrit, obj()) // the marker, unless the caller wrote one (amends)
+	}
 	d := wire.Draft{RC: "rc/2", Kind: kind, Seq: s, Prev: w.head[n], TS: fmt.Sprintf("2026-10-16T03:%02d:%02dZ", s/60%60, s%60),
 		Crit: []string{wire.IdentityCrit}, Body: b}
 	env := d.Envelope(k)

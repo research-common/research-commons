@@ -363,7 +363,7 @@ func TestVerifiedPriority(t *testing.T) {
 			has(t, a.Render(), c.relation)
 			if c.licenceOK {
 				wantField(t, a, "licence", FieldDefault, `"CC0-1.0"`)
-				if len(a.Later) != 1 || a.Later[0].Claims[0].Signer != w.signer("BB") {
+				if len(a.Later) != 1 || a.Later[0].Claims[0].Subject.ID != w.signer("BB") {
 					t.Fatalf("%s: later %v", c.name, a.Later)
 				}
 				has(t, a.Render(), "later claimant")
@@ -466,7 +466,7 @@ func TestKeyEventsReachAuthorship(t *testing.T) {
 	w.authored("B1", "BB", "X")
 	everyOrderArtifact(t, w, "X", func(a *Artifact) {
 		wantAuthorship(t, a, SoleAuthor)
-		if a.Default.Claims[0].Signer != w.signer("BB") || len(a.NotCounted) != 1 || a.NotCounted[0].Statement != stolen {
+		if a.Default.Claims[0].Subject.ID != w.signer("BB") || len(a.NotCounted) != 1 || a.NotCounted[0].Statement != stolen {
 			t.Fatalf("%s", a.Render())
 		}
 		has(t, a.Render(), "not counted: on a branch revoke_key")
@@ -642,7 +642,7 @@ func TestAcrossWorkflows(t *testing.T) {
 		"provenance", obj("workflow", dig("W2"), "inputs", []string{dig("I")})))
 	everyOrderArtifact(t, w, "X", func(a *Artifact) {
 		wantAuthorship(t, a, Priority)
-		if len(a.Units) != 2 || a.Default.Claims[0].Signer != w.signer("A") || a.Group.Provenance.Workflow != dig("W1") {
+		if len(a.Units) != 2 || a.Default.Claims[0].Subject.ID != w.signer("A") || a.Group.Provenance.Workflow != dig("W1") {
 			t.Fatalf("%s", a.Render())
 		}
 		out := a.Render()
@@ -949,7 +949,7 @@ func TestBoundsArePerSigner(t *testing.T) {
 	everyOrderArtifact(t, w, "X", func(a *Artifact) {
 		// C's verified bound outranks B's absent one: if A's misattached anchor had bounded B at 100, B would win
 		wantAuthorship(t, a, Priority)
-		if a.Default.Claims[0].Signer != w.signer("C") {
+		if a.Default.Claims[0].Subject.ID != w.signer("C") {
 			t.Fatalf("%s", a.Render())
 		}
 		has(t, a.Render(), "later claimant "+shortKey(w.signer("BB"))+", bound no anchor")
@@ -1841,11 +1841,11 @@ func TestGroupVersusOutsider(t *testing.T) {
 				}
 				var members []string
 				for _, cl := range grp.Claims {
-					members = append(members, cl.Signer)
+					members = append(members, cl.Subject.ID)
 				}
 				slices.Sort(want)
 				slices.Sort(members)
-				if !slices.Equal(want, members) || len(out2.Claims) != 1 || out2.Claims[0].Signer != w.signer("CC") {
+				if !slices.Equal(want, members) || len(out2.Claims) != 1 || out2.Claims[0].Subject.ID != w.signer("CC") {
 					t.Fatalf("%s late=%v: group %v, outsider unit %d claims\n%s", c.name, late, members, len(out2.Claims), out)
 				}
 				has(t, out, "default author "+a.Default.describe()+", bound")

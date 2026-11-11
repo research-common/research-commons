@@ -170,7 +170,7 @@ func rc1Decision(pw *propWorld, r *Resolver, obs []string) string {
 		var def []string
 		if a.Default != nil {
 			for _, c := range a.Default.Claims {
-				def = append(def, c.Signer)
+				def = append(def, c.Subject.ID)
 			}
 		}
 		code, _ := r.Verify(dig(x))

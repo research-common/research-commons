@@ -265,7 +265,7 @@ func (r *Resolver) inputValue(d, name string) (v canon.Value, ok bool, why strin
 	f := a.Field(name)
 	s, has := f.Default()
 	if !has {
-		if f.State == FieldContested || f.State == FieldNoDefault {
+		if f.State == FieldContested || f.State == FieldNoDefault || f.State == FieldUnknown {
 			return nil, false, string(f.State)
 		}
 		return nil, false, ""

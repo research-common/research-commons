@@ -133,13 +133,17 @@ func TestIdentityAmendmentTargets(t *testing.T) {
 	})
 
 	// A target that is I's claim in shape but not eligible for I (a cut left it outside last_good): the amendment
-	// applies to nothing, and the ineligible target is not current either.
+	// applies to nothing, and the ineligible target is not current either. Both statements are I's (the evaluator
+	// binds them to I), so neither is its key's claim: the blob has no claim, and both are listed not counted.
 	w, f = identityWorld(t)
 	w.authored("A1", "K1", "X", "licence", "CC0-1.0", wire.IdentityCrit, amendsBody(w.ids["A0"]))
 	f.set(w.ids, "A1", policy.ActorEligible)
 	f.set(w.ids, "A0", policy.ActorDenied)
 	selectIdentity(t, w, f, func(a *Artifact) {
-		wantField(t, a, "licence", FieldSelectionUnmet, "")
+		wantField(t, a, "licence", FieldAbsent, "")
+		if a.State != NoClaim || len(a.NotCounted) != 2 {
+			t.Fatalf("ineligible target: %s, %d not counted\n%s", a.State, len(a.NotCounted), a.Render())
+		}
 		has(t, a.Render(), SelNone)
 		has(t, a.Render(), "is not a claim of identity")
 	})

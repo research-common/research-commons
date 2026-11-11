@@ -21,6 +21,30 @@ type identityGraph struct {
 	// denied names each amendment that applies to nothing because a target is not one of I's claims of this
 	// kind on this blob (another principal, another blob, another kind). The amending statement is not a claim.
 	denied []string
+	// amends maps each accepted amendment to its targets (the explicit DAG's edges); deniedBy and unresolvedBy
+	// map each denied or unresolved amending statement to its reason (the same text as denied and unresolved).
+	amends                 map[string][]string
+	deniedBy, unresolvedBy map[string]string
+}
+
+// ancestry is every node reachable from ids through accepted amendments, ids included, sorted: the explicit
+// eligible amendment ancestry priority may follow (profile §5.1).
+func (g identityGraph) ancestry(ids []string) []string {
+	seen := map[string]bool{}
+	var walk func(string)
+	walk = func(id string) {
+		if seen[id] {
+			return
+		}
+		seen[id] = true
+		for _, t := range g.amends[id] {
+			walk(t)
+		}
+	}
+	for _, id := range ids {
+		walk(id)
+	}
+	return sortedKeys(seen)
 }
 
 // amendsOf is the statement's explicit amendment targets (`body.x_identity_v1.amends`) and whether it names any.
@@ -54,7 +78,7 @@ func amendsOf(st *wire.Statement) ([]string, bool) {
 // one target that cannot be established leaves the amendment unresolved. Accepted amendments remove their
 // targets from the current set; what remains is current.
 func (r *Resolver) identityClaims(identity, kind, content string, nodes []*Placed) identityGraph {
-	var g identityGraph
+	g := identityGraph{amends: map[string][]string{}, deniedBy: map[string]string{}, unresolvedBy: map[string]string{}}
 	amended := map[string]bool{}
 	var accepted []*Placed
 	for _, b := range nodes {
@@ -66,11 +90,14 @@ func (r *Resolver) identityClaims(identity, kind, content string, nodes []*Place
 		denied, unknown := r.amendTargets(identity, kind, content, b, targets)
 		switch {
 		case len(denied) > 0:
-			g.denied = append(g.denied, keylog.Short(b.St.ID)+" amends nothing: "+strings.Join(denied, ", "))
+			why := keylog.Short(b.St.ID) + " amends nothing: " + strings.Join(denied, ", ")
+			g.denied, g.deniedBy[b.St.ID] = append(g.denied, why), why
 		case len(unknown) > 0:
-			g.unresolved = append(g.unresolved, keylog.Short(b.St.ID)+" is an authorized amendment of identity "+keylog.Short(identity)+"'s claims and "+strings.Join(unknown, ", "))
+			why := keylog.Short(b.St.ID) + " is an authorized amendment of identity " + keylog.Short(identity) + "'s claims and " + strings.Join(unknown, ", ")
+			g.unresolved, g.unresolvedBy[b.St.ID] = append(g.unresolved, why), why
 		default:
 			accepted = append(accepted, b)
+			g.amends[b.St.ID] = slices.Sorted(slices.Values(targets))
 			for _, t := range targets {
 				amended[t] = true
 			}

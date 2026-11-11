@@ -136,7 +136,7 @@ func TestSettledDepth(t *testing.T) {
 			}
 		case StateVerified:
 			has(t, e.String(), "as of "+sync.UTC().Format(time.RFC3339))
-			if a.Default == nil || a.Default.Claims[0].Signer != w.signer("A") || exitOf(a) != 0 {
+			if a.Default == nil || a.Default.Claims[0].Subject.ID != w.signer("A") || exitOf(a) != 0 {
 				t.Fatalf("settled bound did not rank:\n%s", out)
 			}
 		default:
@@ -402,7 +402,7 @@ func TestAnchorRefusalsAreScoped(t *testing.T) {
 		has(t, out, "refused")
 		has(t, out, string(c.class))
 		// B's verified bound outranks A's absent one: A got no bound from the refused anchor
-		if a.Default == nil || a.Default.Claims[0].Signer != w.signer("BB") {
+		if a.Default == nil || a.Default.Claims[0].Subject.ID != w.signer("BB") {
 			t.Fatalf("%s:\n%s", c.name, out)
 		}
 		if y := r.Artifact(dig("Y")); y.State != "sole author" {
@@ -447,7 +447,7 @@ func TestPerSignerProof(t *testing.T) {
 	}
 	everyOrder(t, w, "X", v, func(a *resolveArtifact) {
 		out := a.Render()
-		if a.Default == nil || a.Default.Claims[0].Signer != w.signer("BB") {
+		if a.Default == nil || a.Default.Claims[0].Subject.ID != w.signer("BB") {
 			t.Fatalf("%s", out)
 		}
 		has(t, out, "later claimant "+shortKey(w.signer("A"))+", bound no anchor (anchor ")

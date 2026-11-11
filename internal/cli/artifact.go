@@ -69,8 +69,11 @@ func disclosures(a *resolve.Artifact) *Obj {
 				by = append(by, s.Signer)
 			}
 			d.set("signers", refs(by...))
-		} else if f.State == resolve.FieldContested || f.State == resolve.FieldNoDefault {
+		} else if f.State == resolve.FieldContested || f.State == resolve.FieldNoDefault || f.State == resolve.FieldUnknown {
 			d.set("values", sources(append(slices.Clone(f.From), f.Rivals...)))
+		}
+		if f.Why != "" {
+			d.set("why", textV(f.Why))
 		}
 		switch {
 		case name == "availability" && a.Availability != nil:
@@ -141,7 +144,9 @@ func (v *view) labels(a *resolve.Artifact) listV {
 	owner := map[string]string{}
 	for _, c := range a.Claims {
 		for _, id := range c.Statements {
-			owner[id] = c.Signer
+			if p, ok := v.r.Statement(id); ok {
+				owner[id] = p.St.Signer // a retraction is its signer's own act on its own statement
+			}
 		}
 	}
 	for _, n := range a.NotCounted {
@@ -188,12 +193,30 @@ func (v *view) claimants(a *resolve.Artifact) listV {
 			role = "later claimant"
 		}
 		e := newObj().set("role", tokV(tok(role)))
-		var signers, current []string
+		var current, ids []string
+		subjects := listV{}
 		for _, c := range u.Claims {
-			signers = append(signers, c.Signer)
+			subjects = append(subjects, subjectObj(c.Subject))
 			current = append(current, c.Current...)
+			if !c.Subject.IsKey() {
+				ids = append(ids, "identity "+c.Subject.ID)
+			}
 		}
-		e.set("signers", refs(signers...)).set("statements", refs(current...))
+		// JSON carries each claim's typed subject; both surfaces print the keys that signed the unit's statements,
+		// which for key subjects is the subjects themselves, so a key-only human line is unchanged
+		e.setJSON("subjects", subjects).set("signers", refs(u.Signers()...))
+		if len(ids) > 0 {
+			e.setHuman("for", texts(ids...))
+		}
+		e.set("statements", refs(current...))
+		var unresolved []string
+		for _, c := range u.Claims {
+			unresolved = append(unresolved, c.Unresolved...)
+		}
+		if len(unresolved) > 0 {
+			// an identity's current view is unknown (identity profile §5.1); reachable only with an actor evaluator
+			e.set("current_view", tokV(tok("unknown"))).set("unresolved", texts(unresolved...))
+		}
 		if u.Provenance != nil {
 			e.set("provenance", newObj().set("workflow", refV(u.Provenance.Workflow)).set("inputs", refs(u.Provenance.Inputs...)))
 		}
@@ -201,6 +224,11 @@ func (v *view) claimants(a *resolve.Artifact) listV {
 		l = append(l, e)
 	}
 	return l
+}
+
+// subjectObj is a claim's typed subject, tagged as the wire tags it: {"key": K} or {"identity": I}.
+func subjectObj(s resolve.Subject) *Obj {
+	return newObj().set(string(s.Kind), refV(s.ID))
 }
 
 // boundObj is a time bound: its quality and, for an anchor, the verifier's state token for it.
@@ -218,8 +246,12 @@ func (v *view) boundObj(b resolve.Bound) *Obj {
 func (v *view) notCounted(a *resolve.Artifact) listV {
 	l := listV{}
 	for _, n := range a.NotCounted {
-		l = append(l, newObj().set("statement", refV(n.Statement)).set("signer", refV(n.Signer)).
-			set("counted", tokV(tok("not counted"))).set("reason", textV(n.Why)))
+		e := newObj().set("statement", refV(n.Statement)).setHuman("signer", refV(n.Signer)).
+			setJSON("subject", subjectObj(n.Subject)).setJSON("signers", refs(n.Signer))
+		if !n.Subject.IsKey() {
+			e.setHuman("for", textV("identity "+n.Subject.ID))
+		}
+		l = append(l, e.set("counted", tokV(tok("not counted"))).set("reason", textV(n.Why)))
 	}
 	return l
 }
