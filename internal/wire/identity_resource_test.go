@@ -99,3 +99,53 @@ func TestCandidateResourceKindsRead(t *testing.T) {
 		t.Fatal("rc/1 genesis read a typed subject")
 	}
 }
+
+// The rc/2 task lifecycle kinds are read, not retained (§2.3, §5.3): intent, submit and decide with marker {};
+// progress and withdraw with the mandatory intent pin. Every negative is a verified line whose one mutation the
+// reader names. An rc/2 `grant` stays an unknown kind: the profile's kind list does not hold it.
+func TestCandidateTaskKindsRead(t *testing.T) {
+	conformance.Partial(t, "C-id-43", "wire half: progress and withdraw must pin an intent in the marker (a statement id); same edition and same actor are the task consumer's (internal/resolve TestRC2AttemptContinuity)")
+	ref := func(kv ...any) *canon.Object { return body(append([]any{"task", tID, "edition", tID2}, kv...)...) }
+	act := body("identity", tID, "grant", tID2)
+	empty := body()
+	pin := body("intent", tID)
+	for _, c := range []struct {
+		name, kind string
+		b, marker  *canon.Object
+		actor      *canon.Object
+		want       Status
+		why        string
+	}{
+		{"intent", "intent", ref(), empty, act, Valid, ""},
+		{"intent bare", "intent", ref(), empty, nil, Valid, ""},
+		{"progress", "progress", ref("note", "n"), pin, act, Valid, ""},
+		{"withdraw", "withdraw", ref(), pin, act, Valid, ""},
+		{"submit", "submit", ref("result", dg("r")), empty, act, Valid, ""},
+		{"decide", "decide", ref("submissions", arr(s(tID)), "verdict", "accept"), empty, act, Valid, ""},
+
+		{"progress no pin", "progress", ref(), empty, act, Invalid, "intent is required for progress"},
+		{"withdraw no pin", "withdraw", ref(), empty, act, Invalid, "intent is required for withdraw"},
+		{"progress bad pin", "progress", ref(), body("intent", "x"), act, Invalid, "must be a statement id"},
+		{"progress extra member", "progress", ref(), body("intent", tID, "amends", arr(s(tID))), act, Invalid, "amends is not a member"},
+		{"intent pins intent", "intent", ref(), pin, act, Invalid, "must be {} for intent"},
+		{"submit marker member", "submit", ref("result", dg("r")), pin, act, Invalid, "must be {} for submit"},
+		{"decide marker member", "decide", ref("submissions", arr(), "verdict", "accept"), body("task_roles", empty), act, Invalid, "must be {} for decide"},
+		{"submit missing result", "submit", ref(), empty, act, Invalid, "result is missing"},
+		{"decide bad verdict", "decide", ref("submissions", arr(), "verdict", "maybe"), empty, act, Invalid, "one of"},
+		{"grant unknown in rc/2", "grant", ref("grantee", "ed25519:"+strings.Repeat("2b", 32)), empty, nil, UnknownKind, "grant"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			st := rc2Read(t, c.kind, c.b, c.marker, c.actor)
+			if st.Status != c.want || !strings.Contains(st.Why, c.why) {
+				t.Fatalf("read %s (%q), want %s containing %q", st.Status, st.Why, c.want, c.why)
+			}
+			if c.want == Valid && (c.kind == "progress" || c.kind == "withdraw") && IntentPin(st) != tID {
+				t.Fatalf("intent pin %q", IntentPin(st))
+			}
+		})
+	}
+	// the default reader never reads an rc/2 task line, and an rc/1 progress carries no pin
+	if st, err := readBody(t, "progress", minimal("progress")); err != nil || IntentPin(st) != "" {
+		t.Fatalf("rc/1 progress: %v %q", err, IntentPin(st))
+	}
+}
