@@ -94,7 +94,7 @@ its exact id through prev/merges (then it is authenticated but unsupported). Bad
 never facts. Authenticated non-administrative lines that are not understood become unsupported, so a malformed
 root key event reads unknown rather than ineffective. rc/2 resource kinds (`genesis`, `edition`,
 `withdraw_approval`) are read with typed controller subjects (`wire/identity_resource.go`); rc/2 task kinds are
-verified but unsupported. Under the dual reader the resource view counts effective subjects (`key(K)` from a
+read too (`wire.taskBody`), and an rc/2 task edition's roles come from its `task_roles` (`resolve/task_roles.go`). Under the dual reader the resource view counts effective subjects (`key(K)` from a
 bare-key approval, `identity(I)` only through the actor evaluator, never a key fallback; an undecided answer or a
 grant-history cut that removes a needed approval is contested), and edition ids are hashed in their statement's
 major (`resolve.EditionIDOf`).

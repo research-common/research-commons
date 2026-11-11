@@ -145,6 +145,9 @@ func (b Binding) ok() bool { return b.State == string(Authorized) && b.Terms != 
 // Attempt is one signer's intent on one edition and what followed it.
 type Attempt struct {
 	Signer, Intent, Edition string
+	// Subject is who the attempt is for: the intent's signing key, or the identity the counting gate binds an
+	// rc/2 identity-context intent to (profile §5.3: the participant is exactly its actor).
+	Subject Subject
 	// Progress lists the signer's progress statements on the edition after the intent (activity evidence).
 	Progress []string
 	// Withdrawn names the withdraw that ended this attempt; "" when none.
@@ -165,7 +168,9 @@ type Submission struct {
 	Counts   bool
 	Why      string
 	Identity string
-	// Eligible: the edition's terms admit the signer as an issuer; Granted names the coordinator grant that
+	// Subject is who the submission is for (actorSubject): its key, or the identity its actor names.
+	Subject Subject
+	// Eligible: the edition's terms admit the submission's subject as an issuer; Granted names the coordinator grant that
 	// admits it under a coordinator ("" when the edition names none or the signer holds no counting grant).
 	Eligible bool
 	Granted  string
@@ -196,8 +201,10 @@ type CriterionEval struct {
 // Decision is one `decide` naming the task.
 type Decision struct {
 	Statement, Signer, Verdict, Edition string
-	Submissions, Evaluations            []string
-	Supersedes                          string
+	// Subject is who decided (actorSubject): the signing key, or the identity an rc/2 decide acts for.
+	Subject                  Subject
+	Submissions, Evaluations []string
+	Supersedes               string
 	// Counts: the decision is the bound edition's beneficiary's, counts under its key events, and cites at least
 	// one submission of this task. Why explains a decision that does not count.
 	Counts bool
@@ -276,9 +283,12 @@ func (r *Resolver) Task(id string) (*Task, bool) {
 		if b.State == string(Authorized) {
 			e, _ := res.Edition(eid)
 			c := object(object(e.Body, "contents"), "contract")
-			if c == nil {
+			switch {
+			case c == nil:
 				b.TermsWhy = "the edition carries no contract"
-			} else {
+			case e.Major == 2:
+				b.Terms, b.TermsWhy = r.readRC2Terms(c, e.Body)
+			default:
 				b.Terms, b.TermsWhy, _ = r.exch.contracts.Read(c)
 			}
 		} else if b.TermsWhy == "" {
@@ -323,27 +333,52 @@ func (r *Resolver) attempts(t *Task, mine func(string) []*Placed, bind func(stri
 	withdraws := mine("withdraw")
 	progress := mine("progress")
 	for _, p := range mine("intent") {
-		if !p.Counts() {
-			t.Explain = append(t.Explain, fmt.Sprintf("intent %s by %s counts toward nothing: %s", keylog.Short(p.St.ID), shortKey(p.St.Signer), notCountedWhy(p)))
+		g := r.gate(p) // bare-key: Counts; identity-context: actor eligibility (actorgate.go)
+		if !g.Counts {
+			t.Explain = append(t.Explain, fmt.Sprintf("intent %s by %s counts toward nothing: %s", keylog.Short(p.St.ID), shortKey(p.St.Signer), g.Why))
 			continue
 		}
 		ed := str(p.St.Body, "edition")
 		bind(ed)
-		a := &Attempt{Signer: p.St.Signer, Intent: p.St.ID, Edition: ed}
+		a := &Attempt{Signer: p.St.Signer, Intent: p.St.ID, Edition: ed, Subject: actorSubject(p, g)}
 		for _, w := range withdraws {
-			if w.Counts() && w.St.Signer == a.Signer && str(w.St.Body, "edition") == ed && r.precedes(a.Signer, a.Intent, w.St.ID) {
-				if a.Withdrawn == "" || r.precedes(a.Signer, w.St.ID, a.Withdrawn) {
-					a.Withdrawn = w.St.ID
-				}
+			if r.continues(a, w) && (a.Withdrawn == "" || r.earlier(w.St, a.Withdrawn)) {
+				a.Withdrawn = w.St.ID
 			}
 		}
-		for _, g := range progress {
-			if g.Counts() && g.St.Signer == a.Signer && str(g.St.Body, "edition") == ed && r.precedes(a.Signer, a.Intent, g.St.ID) {
-				a.Progress = append(a.Progress, g.St.ID)
+		for _, q := range progress {
+			if r.continues(a, q) {
+				a.Progress = append(a.Progress, q.St.ID)
 			}
 		}
 		t.Attempts = append(t.Attempts, a)
 	}
+}
+
+// continues reports whether a progress or withdraw continues attempt a. An rc/2 one pins its intent exactly
+// (profile §5.3): it continues a when it names a's intent and edition, acts for a's subject, and counts under the
+// gate (an identity-context continuation needs its own task-scoped grant), whichever key of the identity signs
+// it: K2 for I continues K1-for-I, never a bare K1 attempt. One without a pin (rc/1) continues only a bare-key
+// attempt of its own key, after the intent in that key's log, as before.
+func (r *Resolver) continues(a *Attempt, q *Placed) bool {
+	if str(q.St.Body, "edition") != a.Edition {
+		return false
+	}
+	if pin := wire.IntentPin(q.St); pin != "" {
+		g := r.gate(q)
+		return pin == a.Intent && g.Counts && actorSubject(q, g) == a.Subject
+	}
+	return q.Counts() && a.Subject == KeySubject(q.St.Signer) && q.St.Signer == a.Signer && r.precedes(a.Signer, a.Intent, q.St.ID)
+}
+
+// earlier picks between two withdrawals of one attempt: the earlier in the key's log when one key signed both,
+// else the smaller statement id (no cross-key order exists; profile §5.3). Either way the attempt is withdrawn,
+// and no later progress reopens it.
+func (r *Resolver) earlier(w *wire.Statement, cur string) bool {
+	if c, ok := r.byID[cur]; ok && c.St.Signer == w.Signer {
+		return r.precedes(w.Signer, w.ID, cur)
+	}
+	return w.ID < cur
 }
 
 // grants reads every held statement through the reader's GrantReader and keeps the grants naming this task.
@@ -388,7 +423,7 @@ func (r *Resolver) submissions(t *Task, ps []*Placed, bind func(string) Binding)
 		b := p.St.Body
 		g := r.gate(p) // bare-key: Counts; identity-context: actor eligibility (actorgate.go)
 		s := &Submission{Statement: p.St.ID, Signer: p.St.Signer, Result: str(b, "result"), Edition: str(b, "edition"), Counts: g.Counts,
-			Identity: g.Identity, Why: g.Why, Kind: "submit"}
+			Identity: g.Identity, Why: g.Why, Kind: "submit", Subject: actorSubject(p, g)}
 		_, s.Salted = b.Get("salt")
 		if v, ok := b.Get("self_declared_independence"); ok {
 			s.SelfDeclared = bool(v.(canon.Bool))
@@ -409,8 +444,10 @@ func (r *Resolver) admitSubmission(t *Task, s *Submission, p *Placed, bd Binding
 	{
 		if bd.ok() {
 			tm := bd.Terms
-			s.Eligible = tm.AnyIssuer || slices.Contains(tm.EligibleIssuers, s.Signer)
-			if tm.Coordinator != "" {
+			s.Eligible = tm.eligibleIssuer(s.Subject)
+			if tm.Coordinator != "" && s.Subject.IsKey() {
+				// a coordinator grant names a key (task-contracts note §4.1); an identity grantee waits for §6 Q9,
+				// so no key's grant admits an identity-context submission
 				for _, g := range t.Grants {
 					if g.Grantee == s.Signer && g.Edition == s.Edition {
 						s.Granted = g.Statement
@@ -454,8 +491,10 @@ func (r *Resolver) decisions(t *Task, ps []*Placed, bind func(string) Binding) {
 	byID := map[string]*Decision{}
 	for _, p := range ps {
 		b := p.St.Body
+		g := r.gate(p) // bare-key: Counts; identity-context: actor eligibility, i.e. a `decide` grant for this task
 		d := &Decision{Statement: p.St.ID, Signer: p.St.Signer, Verdict: str(b, "verdict"), Edition: str(b, "edition"),
-			Submissions: ids(b, "submissions"), Evaluations: ids(b, "evaluations"), Supersedes: str(b, "supersedes"), Counts: true}
+			Submissions: ids(b, "submissions"), Evaluations: ids(b, "evaluations"), Supersedes: str(b, "supersedes"), Counts: true,
+			Subject: actorSubject(p, g)}
 		bd := bind(d.Edition)
 		var cited int
 		for _, s := range d.Submissions {
@@ -464,12 +503,12 @@ func (r *Resolver) decisions(t *Task, ps []*Placed, bind func(string) Binding) {
 			}
 		}
 		switch {
-		case !p.Counts():
-			d.Counts, d.Why = false, notCountedWhy(p)
+		case !g.Counts:
+			d.Counts, d.Why = false, g.Why
 		case !bd.ok():
 			d.Counts, d.Why = false, "bound edition "+keylog.Short(d.Edition)+" has no terms this reader read: "+bd.TermsWhy
-		case bd.Terms.Beneficiary != d.Signer:
-			d.Counts, d.Why = false, "signed by "+shortKey(d.Signer)+", not the edition's beneficiary "+shortKey(bd.Terms.Beneficiary)+": shown, settles nothing"
+		case !bd.Terms.isBeneficiary(d.Subject):
+			d.Counts, d.Why = false, "signed by "+shortKey(d.Signer)+d.forWhom()+", not the edition's beneficiary "+bd.Terms.beneficiaryName()+": shown, settles nothing"
 		case len(d.Submissions) == 0:
 			d.Counts, d.Why = false, "cites nothing"
 		case cited == 0:
@@ -488,8 +527,13 @@ func (r *Resolver) decisions(t *Task, ps []*Placed, bind func(string) Binding) {
 		switch {
 		case !ok:
 			t.Explain = append(t.Explain, fmt.Sprintf("decision %s supersedes %s, which is no decision on this task held", keylog.Short(d.Statement), keylog.Short(d.Supersedes)))
-		case x.Signer != d.Signer:
+		case x.Subject != d.Subject && d.Subject.IsKey():
 			t.Explain = append(t.Explain, fmt.Sprintf("decision %s names %s, signed by another key: no effect", keylog.Short(d.Statement), keylog.Short(x.Statement)))
+		case x.Subject != d.Subject:
+			t.Explain = append(t.Explain, fmt.Sprintf("decision %s for %s names %s, a decision for another subject: no effect", keylog.Short(d.Statement), d.Subject, keylog.Short(x.Statement)))
+		case !d.Subject.IsKey() && x.Edition != d.Edition:
+			// profile §5.3: cross-key supersession by one identity needs the same task edition (and so beneficiary)
+			t.Explain = append(t.Explain, fmt.Sprintf("decision %s names %s, bound to another edition: no effect", keylog.Short(d.Statement), keylog.Short(x.Statement)))
 		case x.SupersededBy == "" || d.Statement < x.SupersededBy:
 			x.SupersededBy = d.Statement
 		}
@@ -550,9 +594,10 @@ func (r *Resolver) refutations(t *Task, bind func(string) Binding) {
 		if s == nil {
 			s = claimOf[str(p.St.Body, "of")]
 		}
+		counts := r.gate(p).Counts // bare-key: Counts; identity-context: actor eligibility
 		if str(p.St.Body, "task") == t.ID {
 			t.Bound = append(t.Bound, r.boundRefutation(p, bind))
-			if s != nil && p.Counts() {
+			if s != nil && counts {
 				s.Refuted = append(s.Refuted, p.St.ID)
 			}
 			continue
@@ -561,7 +606,7 @@ func (r *Resolver) refutations(t *Task, bind func(string) Binding) {
 			if s.V1 == nil {
 				t.Refutations = append(t.Refutations, p)
 			}
-			if p.Counts() {
+			if counts {
 				s.Refuted = append(s.Refuted, p.St.ID)
 			}
 		}
@@ -971,7 +1016,7 @@ func (t *Task) Render() string {
 		}
 	}
 	for _, a := range t.Attempts {
-		fmt.Fprintf(&b, "  intent %s by %s on %s (advisory: excludes nobody; no lease, no expiry)", keylog.Short(a.Intent), shortKey(a.Signer), keylog.Short(a.Edition))
+		fmt.Fprintf(&b, "  intent %s by %s%s on %s (advisory: excludes nobody; no lease, no expiry)", keylog.Short(a.Intent), shortKey(a.Signer), forSubject(a.Subject), keylog.Short(a.Edition))
 		if a.Withdrawn != "" {
 			fmt.Fprintf(&b, " withdrawn by %s", keylog.Short(a.Withdrawn))
 		}
@@ -1047,7 +1092,7 @@ func (t *Task) Render() string {
 		fmt.Fprintf(&b, "  refutation %s by %s of %s, evidence %s\n", keylog.Short(p.St.ID), shortKey(p.St.Signer), keylog.Short(str(p.St.Body, "of")), shortDigest(str(p.St.Body, "evidence")))
 	}
 	for _, d := range t.Decisions {
-		fmt.Fprintf(&b, "  decision %s by %s: %s citing %s", keylog.Short(d.Statement), shortKey(d.Signer), d.Verdict, citeList(d.Submissions))
+		fmt.Fprintf(&b, "  decision %s by %s%s: %s citing %s", keylog.Short(d.Statement), shortKey(d.Signer), d.forWhom(), d.Verdict, citeList(d.Submissions))
 		if len(d.Evaluations) > 0 {
 			ev := make([]string, len(d.Evaluations))
 			for i, e := range d.Evaluations {

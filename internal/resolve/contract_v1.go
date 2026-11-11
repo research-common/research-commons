@@ -45,7 +45,20 @@ var v1QuorumFields = []string{"k", "independence", "grouping", "comparator", "te
 type TaskContractV1 struct{}
 
 // Read implements ContractReader.
-func (TaskContractV1) Read(c *canon.Object) (*Terms, string, bool) {
+func (TaskContractV1) Read(c *canon.Object) (*Terms, string, bool) { return readV1(c, nil) }
+
+// ReadRC2 implements RC2ContractReader: the rc/2 placement (§3.2), the roles from the edition's task_roles.
+func (TaskContractV1) ReadRC2(c *canon.Object, roles *TaskRoles) (*Terms, string, bool) {
+	if roles == nil {
+		return nil, "an rc/2 contract needs the edition's " + taskRolesPath, false
+	}
+	return readV1(c, roles)
+}
+
+// readV1 reads a task-contract-v1 contract. roles nil is the rc/1 placement (roles in the contract); non-nil is
+// the rc/2 placement: the four role fields are forbidden in the contract (identity profile §5.3, task-contracts
+// note §3.2) and the roles are the edition's task_roles. The coordinator stays a key in the contract (§6 Q9).
+func readV1(c *canon.Object, roles *TaskRoles) (*Terms, string, bool) {
 	if c == nil {
 		return nil, "no contract", false
 	}
@@ -65,34 +78,18 @@ func (TaskContractV1) Read(c *canon.Object) (*Terms, string, bool) {
 	if t.Question, ok = stringMember(c, "question"); !ok {
 		return nil, "contract field question is missing or not a string", false
 	}
-	if _, has := c.Get("beneficiary"); !has {
-		return nil, "contract field beneficiary is missing", false
-	}
-	if t.Beneficiary, ok = keyMember(c, "beneficiary", true); !ok {
-		return bad("beneficiary")
-	}
-	if t.Coordinator, ok = keyMember(c, "coordinator", false); !ok {
-		return bad("coordinator")
-	}
-	if t.CountingUnit, ok = optString(c, "counting_unit"); !ok || (t.CountingUnit != "" && t.CountingUnit != CountKey && t.CountingUnit != CountIdentity) {
-		return bad("counting_unit")
-	}
-	_, hasList := c.Get("eligible_issuers")
-	av, hasAny := c.Get("any_issuer")
-	switch {
-	case hasList == hasAny:
-		return nil, "contract must declare exactly one of eligible_issuers and any_issuer", false
-	case hasAny:
-		if b, ok := av.(canon.Bool); !ok || !bool(b) {
-			return bad("any_issuer")
+	if roles != nil {
+		for _, f := range roleFields {
+			if _, has := c.Get(f); has {
+				return nil, "contract field " + f + " is forbidden under rc/2: the roles are the edition's " + taskRolesPath, false
+			}
 		}
-		t.AnyIssuer = true
-	default:
-		l, ok := keySet(c, "eligible_issuers")
-		if !ok {
-			return bad("eligible_issuers")
+		if t.Coordinator, ok = keyMember(c, "coordinator", false); !ok {
+			return bad("coordinator")
 		}
-		t.EligibleIssuers = l
+		t.Roles, t.AnyIssuer, t.CountingUnit = roles, roles.AnyIssuer, roles.Unit
+	} else if why, ok := readV1Roles(c, t); !ok {
+		return nil, why, false
 	}
 	if d, present, ok := memberObject(c, "deadline"); !ok {
 		return bad("deadline")
@@ -174,6 +171,44 @@ func (TaskContractV1) Read(c *canon.Object) (*Terms, string, bool) {
 		return nil, "contract fields results and pins.method_edition: a method-edition pin applies to no derived result", false
 	}
 	return t, "", true
+}
+
+// readV1Roles reads the rc/1 placement of the role fields (§3.2): a key beneficiary, the coordinator (in this
+// order, so an rc/1 contract's first named defect is what it was), an optional counting unit (default key), and
+// exactly one of a key set of eligible issuers and any_issuer.
+func readV1Roles(c *canon.Object, t *Terms) (string, bool) {
+	bad := func(f string) (string, bool) { return "contract field " + f + " malformed", false }
+	var ok bool
+	if _, has := c.Get("beneficiary"); !has {
+		return "contract field beneficiary is missing", false
+	}
+	if t.Beneficiary, ok = keyMember(c, "beneficiary", true); !ok {
+		return bad("beneficiary")
+	}
+	if t.Coordinator, ok = keyMember(c, "coordinator", false); !ok {
+		return bad("coordinator")
+	}
+	if t.CountingUnit, ok = optString(c, "counting_unit"); !ok || (t.CountingUnit != "" && t.CountingUnit != CountKey && t.CountingUnit != CountIdentity) {
+		return bad("counting_unit")
+	}
+	_, hasList := c.Get("eligible_issuers")
+	av, hasAny := c.Get("any_issuer")
+	switch {
+	case hasList == hasAny:
+		return "contract must declare exactly one of eligible_issuers and any_issuer", false
+	case hasAny:
+		if b, ok := av.(canon.Bool); !ok || !bool(b) {
+			return bad("any_issuer")
+		}
+		t.AnyIssuer = true
+	default:
+		l, ok := keySet(c, "eligible_issuers")
+		if !ok {
+			return bad("eligible_issuers")
+		}
+		t.EligibleIssuers = l
+	}
+	return "", true
 }
 
 // readV1Quorum reads a task-contract-v1 `quorum` (§3.1); nil and the reason when it is malformed.

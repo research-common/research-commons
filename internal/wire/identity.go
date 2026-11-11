@@ -257,9 +257,17 @@ func baseBody(s *Statement) (Status, string) {
 	return Valid, ""
 }
 
-// candidateNotImplemented are rc/2 kinds the profile defines but this slice does not evaluate (task lifecycle
-// kinds: attempt continuity, task roles and contracts). They are verified and non-passing.
-var candidateNotImplemented = map[string]bool{
+// candidateNotImplemented are rc/2 kinds the profile defines but this reader does not evaluate. They are verified
+// and non-passing. Empty since the task lifecycle kinds are read (candidateTask); kept as the seam a later profile
+// kind starts from.
+var candidateNotImplemented = map[string]bool{}
+
+// candidateTask are the rc/2 task lifecycle kinds (§5.3): the unchanged rc/1 body schema plus the marker. The
+// marker of `progress` and `withdraw` pins the attempt's `intent` (a statement id, mandatory); every other task
+// kind's marker is {}. Attempt continuity (same edition, same actor) and decision authority are the task
+// consumer's questions, not the schema's. `grant` is not among them: the profile's kind list and permission
+// registry do not hold it, so an rc/2 grant reads as an unknown kind.
+var candidateTask = map[string]bool{
 	"intent": true, "withdraw": true, "progress": true, "submit": true, "decide": true,
 }
 
@@ -341,6 +349,8 @@ func candidateBody(s *Statement) (Status, string) {
 		return Invalid, "raw key events stay rc/1 in this profile"
 	case candidateNotImplemented[s.Kind]:
 		return Unsupported, "rc/2 " + s.Kind + " not implemented by this reader"
+	case candidateTask[s.Kind]:
+		return taskBody(s, marker)
 	case candidateResource[s.Kind]:
 		return resourceBody(s, marker)
 	case candidateBase[s.Kind]:
@@ -363,6 +373,35 @@ func candidateBody(s *Statement) (Status, string) {
 	default:
 		return UnknownKind, s.Kind
 	}
+}
+
+// taskBody reads an rc/2 task lifecycle statement (§2.3, §5.3): `progress` and `withdraw` carry exactly
+// {intent: <statement id>} in the marker; the other task kinds carry {}. The body is the rc/1 schema unchanged.
+func taskBody(s *Statement, marker *canon.Object) (Status, string) {
+	mp := "body." + IdentityCrit
+	if s.Kind == "progress" || s.Kind == "withdraw" {
+		if why := closed(marker, mp, "intent"); why != "" {
+			return Invalid, why
+		}
+		if _, ok := idValue(marker, "intent"); !ok {
+			return Invalid, mp + ".intent is required for " + s.Kind + " and must be a statement id (the attempt's intent)"
+		}
+	} else if len(marker.Keys) != 0 {
+		return Invalid, mp + " must be {} for " + s.Kind
+	}
+	return baseBody(s)
+}
+
+// IntentPin is the `intent` an rc/2 `progress` or `withdraw` pins in its marker ("" for any other statement, or
+// when the marker carries none).
+func IntentPin(s *Statement) string {
+	if s == nil || s.RC != "rc/2" || s.Body == nil {
+		return ""
+	}
+	m, _ := s.Body.Get(IdentityCrit)
+	mo, _ := m.(*canon.Object)
+	v, _ := idValue(mo, "intent")
+	return v
 }
 
 func inceptionBody(s *Statement, marker *canon.Object) (Status, string) {

@@ -52,7 +52,7 @@ func TestIdentityReaderMatchesReadOnRC1(t *testing.T) {
 
 // Candidate differential: every profile draft vector is re-signed with a real synthetic key (signer/alg replaced
 // so the signature verifies) and read by the production identity reader. A vector the candidate schema accepts
-// must read Valid or Unsupported (the slice does not implement typed resources/tasks); a rejected draft must never
+// must read Valid or Unsupported (an rc/2 resource or task kind must read Valid); a rejected draft must never
 // read Valid. This binds the production reader to the profile's independently written schema harness.
 func TestIdentityReaderAgreesWithCandidateVectors(t *testing.T) {
 	schema := frLoad(t, "fixed-root-identity.schema.json")
@@ -66,7 +66,7 @@ func TestIdentityReaderAgreesWithCandidateVectors(t *testing.T) {
 	}
 	ir := NewIdentityReader()
 	keys := map[string]Key{AlgEd25519: Ed25519Key{Seed: bytes.Repeat([]byte{51}, 32)}, AlgEIP191: EIP191Key{Scalar: bytes.Repeat([]byte{52}, 32)}}
-	checked, resourceChecked := 0, 0
+	checked, resourceChecked, taskChecked := 0, 0, 0
 	for _, cv := range suite.(*canon.Object).Members["cases"].(canon.Array) {
 		c := cv.(*canon.Object)
 		name := string(c.Members["name"].(canon.String))
@@ -108,6 +108,9 @@ func TestIdentityReaderAgreesWithCandidateVectors(t *testing.T) {
 			if major == 2 && candidateResource[string(kind)] {
 				resourceChecked++
 			}
+			if major == 2 && candidateTask[string(kind)] {
+				taskChecked++
+			}
 			if accept && serr != nil {
 				t.Skipf("re-signing changed the candidate verdict (%v); not a reader differential", serr)
 			}
@@ -116,8 +119,8 @@ func TestIdentityReaderAgreesWithCandidateVectors(t *testing.T) {
 				if accept {
 					t.Fatalf("accepted vector refused: %v", rerr)
 				}
-			case accept && candidateResource[string(kind)] && major == 2 && st.Status != Valid:
-				// the rc/2 resource kinds are read in full: an accepted vector is valid, not merely retained
+			case accept && (candidateResource[string(kind)] || candidateTask[string(kind)]) && major == 2 && st.Status != Valid:
+				// the rc/2 resource and task kinds are read in full: an accepted vector is valid, not merely retained
 				t.Fatalf("accepted rc/2 %s vector read %s (%s)", kind, st.Status, st.Why)
 			case accept && st.Status != Valid && st.Status != Unsupported:
 				t.Fatalf("accepted vector read %s (%s)", st.Status, st.Why)
@@ -136,7 +139,7 @@ func TestIdentityReaderAgreesWithCandidateVectors(t *testing.T) {
 			}
 		})
 	}
-	if checked < 60 || resourceChecked < 15 {
-		t.Fatalf("only %d vectors exercised (%d of the rc/2 resource kinds)", checked, resourceChecked)
+	if checked < 60 || resourceChecked < 15 || taskChecked < 6 {
+		t.Fatalf("only %d vectors exercised (%d of the rc/2 resource kinds, %d of the task kinds)", checked, resourceChecked, taskChecked)
 	}
 }
