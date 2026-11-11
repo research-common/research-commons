@@ -435,8 +435,8 @@
       "isolated_tests": [
         "internal/resolve:TestTypedControllerCutContests"
       ],
-      "conformance": "partial",
-      "remaining": "A signed grant-history cut whose last_good excludes a required approval, and an unsupported root event, make the edition and its dependants contested (verify exit 3) in internal/resolve:TestTypedControllerCutContests. Open: the resource's current pointer then names the last authorized node beside the contested list, as a key revocation's does; whether that is the older-tip fallback the profile forbids is unsettled."
+      "conformance": "covers",
+      "remaining": "Covered by internal/resolve:TestTypedControllerCutContests: a signed grant-history cut whose last_good excludes a required approval, and an unsupported root event, make the edition and its dependants contested (verify exit 3); the last authorized edition is named only beside the contested list, as for a key revocation (C-core-143e)."
     },
     {
       "handle": "ID-31",

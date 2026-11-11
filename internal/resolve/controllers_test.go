@@ -365,7 +365,7 @@ func TestTypedControllerWithdrawalIsKeyAndGrantLocal(t *testing.T) {
 // C-id-30: a cut that removes a required approval makes the edition and its dependants contested, never authorized
 // and never silently unauthorized; so does unresolved identity state that would decide the slot.
 func TestTypedControllerCutContests(t *testing.T) {
-	conformance.Partial(t, "C-id-30", "contested edition and dependants, verify exit 3, through a signed cut and an unsupported root event; open: the resource's current pointer then names the last authorized node (the genesis here) beside the contested list, as a key revocation's does, and whether that is the older-tip fallback the profile forbids is unsettled")
+	conformance.Covers(t, "C-id-30")
 	w := newCtrlWorld(t, "K1", "K2")
 	g := w.genesis2("G", "GK", 1, "I")
 	g1 := w.grant("G1", "K1", g, "edition")
