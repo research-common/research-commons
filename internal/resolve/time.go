@@ -2,6 +2,8 @@ package resolve
 
 import (
 	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/research-common/research-commons/internal/keylog"
 	"github.com/research-common/research-commons/internal/wire"
@@ -47,6 +49,11 @@ type Bound struct {
 	Margin int64
 	// Detail is the verifier's further disclosure for explain (block hash, confirmations, validation mode).
 	Detail string
+	// State is the verifier's state token for the anchor (bitcoin-time note §8.1: verified, pending,
+	// verified-historical, ...); "" when the verifier names none. A task deadline reads it (task-contracts note
+	// §4.3): a verified-historical bound carries Network and Height, still of Local quality, so it orders nothing
+	// here and meets a deadline only.
+	State string
 }
 
 func (b Bound) verified() bool { return b.Quality == Bitcoin }
@@ -92,6 +99,39 @@ type Option func(*Resolver)
 
 // WithTimeVerifier sets the reader's time verifier.
 func WithTimeVerifier(v TimeVerifier) Option { return func(r *Resolver) { r.time = v } }
+
+// TipReader is implemented by a TimeVerifier that knows the reader's validated chain tip. A task deadline asks
+// it whether the tip is at or past the deadline height (task-contracts note §4.3); ok is false when no chain
+// view is configured.
+type TipReader interface {
+	Tip() (height int64, ok bool)
+}
+
+// tip is the reader's validated tip height; ok false when its verifier reads no chain.
+func (r *Resolver) tip() (int64, bool) {
+	if t, ok := r.time.(TipReader); ok {
+		return t.Tip()
+	}
+	return 0, false
+}
+
+// bounds is every bound the reader derives for statement st from the counting anchors of st's signer whose
+// covered head has st in its history, by anchor id. bound picks the best of them.
+func (r *Resolver) bounds(st *wire.Statement) []Bound {
+	var out []Bound
+	for _, a := range r.byKind["anchors"] {
+		if a.St.Signer != st.Signer || !a.Counts() {
+			continue
+		}
+		cov := str(a.St.Body, "covered")
+		if !r.precedes(st.Signer, cov, a.St.ID) || !closure(cov, r.chained[st.Signer])[st.ID] {
+			continue
+		}
+		out = append(out, r.time.Verify(a.St))
+	}
+	slices.SortFunc(out, func(a, b Bound) int { return strings.Compare(a.Anchor, b.Anchor) })
+	return out
+}
 
 // bound is the best bound the reader holds for statement st: the earliest verified bound among the counting
 // anchors of st's signer whose covered head has st in its history; else a local one; else none. An anchor
