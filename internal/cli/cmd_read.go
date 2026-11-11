@@ -37,8 +37,10 @@ func init() {
 		Run:  listCmd})
 }
 
+// viewOf is the read commands' view: the reader policy, and the production contract reader, so a task's terms
+// are read under the profiles this reader implements (the task section, resource.go and task.go).
 func viewOf(c *Ctx) (*view, error) {
-	v, err := loadView(c.Store, c.Policy.Reader)
+	v, err := loadView(c.Store, c.Policy.Reader, resolve.WithContractReader(resolve.ContractProfiles{}))
 	if err != nil {
 		return nil, failed(err, "store", false, "run status, then fsck")
 	}
@@ -75,7 +77,11 @@ func (v *view) showRef(ref string, full bool) *Obj {
 	if rr.edition != nil {
 		o.set("pinned_edition", v.editionObj(rr.edition, full))
 	}
-	return o.set("resource_view", v.resourceObj(rr.res, full))
+	o.set("resource_view", v.resourceObj(rr.res, full))
+	if t, ok := v.taskOf(rr.res); ok {
+		o.set("task", v.taskObj(t, full))
+	}
+	return o
 }
 
 func (v *view) showArtifact(d string) *Obj {
@@ -258,7 +264,8 @@ func verifyCmd(c *Ctx) (*Obj, int, error) {
 // statement's own check (code). The resource: 0 with one current edition, 3 under an uncleared FORK (no edition
 // is current, C-core-84) or with a contested edition (§4.1). A pinned edition: 0 when it is an authorized
 // edition, 3 otherwise (pending, orphan, contested, …: not established as an edition from the statements held).
-// A completeness claim's check is shown beside it and never moves the exit (I6).
+// A completeness claim's check is shown beside it and never moves the exit (I6). A task adds its own causes
+// (task.go, taskCauses) for the current edition, or for the pinned edition.
 func (v *view) verifyResource(o *Obj, rr resourceRef, code int) int {
 	causes := listV{}
 	if rr.edition != nil {
@@ -276,6 +283,16 @@ func (v *view) verifyResource(o *Obj, rr resourceRef, code int) int {
 		}
 	}
 	o.set("resource_view", v.resourceObj(rr.res, false))
+	if t, ok := v.taskOf(rr.res); ok {
+		// a task (task-contracts note §5.7): readiness unknown or unchecked, or a decision conflict, is exit 3;
+		// ready, not ready and settled by review are completed checks (not ready says "not yet", never exit 1)
+		ed := ""
+		if rr.edition != nil {
+			ed = rr.edition.ID
+		}
+		o.set("task", v.taskObj(t, false))
+		causes = append(causes, taskCauses(t, ed)...)
+	}
 	if len(causes) > 0 {
 		o.set("causes", causes)
 		if code == ExitOK {
@@ -306,6 +323,9 @@ func explainCmd(c *Ctx) (*Obj, int, error) {
 		o = v.showRef(ref, true)
 		if rr, ok := v.resourceOf(ref); ok {
 			inputs = append(inputs, v.resourceInputs(rr.res)...)
+			if t, ok := v.taskOf(rr.res); ok {
+				inputs = append(inputs, v.taskInputs(t)...)
+			}
 		}
 		if p, ok := v.r.Statement(ref); ok {
 			st := p.St

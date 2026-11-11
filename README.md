@@ -84,12 +84,13 @@ takes `--json`, which prints one JSON object (an RFC 9457 problem-details object
 | `key new` / `key show` | generate a signing key file / print its signer (never the key) |
 | `publish` | sign and commit a statement: authored (with bytes), holds, describes, retracts, or a draft |
 | `publish task` | create a task, or publish a new edition of one |
+| `publish grant` | as a task edition's coordinator, grant a key for that edition (refused when the grant would have no effect) |
 | `revoke` | revoke your signing key, keeping the history you choose |
 | `rotate` | retire your signing key and name its successor |
 | `pull` | admit a package (a store directory or a tar archive) under this reader's policy |
 | `fetch` | obtain blobs from the locations a `holds` statement names, verified by full hash |
-| `list` / `show` | the blobs, resources and statements the store holds (`list`: one line each), with authorship, grade and disclosures; an observation's corroboration status; for a resource (its genesis id), an edition id or an approval id, the resource view: controllers and rule, current edition and the chain behind it, every edition with its approvals, any `FORK`, members, and the check of a completeness claim |
-| `verify` | check a blob or statement from the statements held; `--rerun` re-runs a derivation under your policy |
+| `list` / `show` | the blobs, resources and statements the store holds (`list`: one line each), with authorship, grade and disclosures; an observation's corroboration status; for a resource (its genesis id), an edition id or an approval id, the resource view: controllers and rule, current edition and the chain behind it, every edition with its approvals, any `FORK`, members, and the check of a completeness claim; for a task, its terms, readiness, every submission (`counted`, `undecided`, `not counted`, with every reason), grants, bound refutations and decisions |
+| `verify` | check a blob or statement from the statements held; `--rerun` re-runs a derivation under your policy; for a task, exit 0 when readiness is `ready`, `not ready` or settled by review and no decisions conflict, else 3 |
 | `explain` | the statements, policy, evaluator and time context behind every token shown; `--since <file>` names what changed since an earlier `explain --json`, and why |
 | `fsck` | re-hash blobs, re-read statements, resolve references, check the journal |
 | `status` | recovery state, unfinished operations, the durability declaration (`--limits` for scan limits) |

@@ -390,6 +390,12 @@ func resourceWorld(t *testing.T) (*world, []string) {
 func TestResourceSurfaceSweep(t *testing.T) {
 	conformance.Partial(t, "C-core-132", "the resource surface (show, verify, explain of a resource, an edition, an approval) and the corroboration status print only table tokens; a rule evaluation is one typed state member")
 	w, refs := resourceWorld(t)
+	sweepRefs(t, w, refs)
+}
+
+// sweepRefs is the resource surface sweep over refs (TestResourceSurfaceSweep, TestTaskSurfaceSweep).
+func sweepRefs(t *testing.T, w *world, refs []string) {
+	t.Helper()
 	for _, ref := range refs {
 		for _, cmd := range []string{"show", "verify", "explain"} {
 			j := w.run(cmd, ref, "--json")

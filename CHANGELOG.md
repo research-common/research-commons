@@ -9,6 +9,23 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ## [Unreleased]
 
+### Added
+- **Task view on `show`, `verify` and `explain`.** A task is a resource: `show` of a task (its genesis id), one of its
+  edition ids or an approval prints, beside the resource view, a task section: each edition's terms as this reader
+  read them (or why it read none), the readiness of the current edition and of every edition a submission binds to
+  (the token, the count against the quorum and the reasons), every submission as `counted`, `undecided` or
+  `not counted` with every reason, the coordinator's grants and grants without effect, bound refutations on their own
+  track, decisions and a decision conflict. `verify` of a task exits 0 when the edition's readiness is `ready`,
+  `not ready` (a completed check whose answer is "not yet") or settled by review and the beneficiary's decisions agree,
+  and 3 when readiness is `unknown` or `unchecked` or the decisions conflict. `explain` adds every condition checked
+  for each submission (the passing ones too), the quorum groups and reports, and lists every task statement among its
+  inputs. New state tokens: `undecided`, `not shown`, `accept`, `reject`.
+- **`publish grant --task T --edition E --grantee K [--note TEXT]`**: a task coordinator's grant for one edition,
+  printing the edition's readiness with the grant added. Refused with nothing signed when the grant would have no
+  effect: exit 2 when your key is not the edition's coordinator, the contract names none, this reader does not read the
+  contract, or the id is an approval's; exit 3 when the task or edition is not held as an authorized edition.
+  `publish --draft` stays the raw path.
+
 ## [0.5.0-alpha.2] - 2026-11-11
 
 The second prerelease of the next format. Highlights: task contracts are read under the accepted

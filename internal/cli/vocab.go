@@ -157,6 +157,12 @@ var vocabulary = []Token{
 	{"settled by review, not by counting", "readiness", "the task edition has no quorum predicate: its beneficiary's decisions settle it; nothing is counted"},
 	{"ready", "readiness", "the quorum is met by distinct signing keys under the edition's terms"},
 	{"not ready", "readiness", "the quorum is not met yet"},
+	// a task submission's state and a task decision (task-contracts note §5.1, §5.8); `counted`, `not counted`,
+	// `unknown`, `unchecked` and `contested` are the rows above, read for a task
+	{"undecided", "submission", "a condition of the edition's terms is unchecked for the submission and none failed: left out of the lower count, in the upper one; never a veto"},
+	{"not shown", "submission", "a deadline outcome: no verified bound shows the submission existed by the deadline height (a ts or a local bound meets nothing); the submission is not counted"},
+	{"accept", "decision", "the verdict of a `decide`: the beneficiary accepts the cited submissions; it settles only when the decision counts"},
+	{"reject", "decision", "the verdict of a `decide`: the beneficiary rejects the cited submissions; it settles only when the decision counts"},
 	// store and journal (storage note §3, §7)
 	{"nothing pending", "store", "no journal record is waiting: every committed operation is installed and projected"},
 	{"committed, pending install", "store", "the operation reached its commit point and its statements are not all installed yet"},

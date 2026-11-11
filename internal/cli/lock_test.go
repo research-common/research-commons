@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/conformance"
 	"github.com/research-common/research-commons/internal/keylog"
 	"github.com/research-common/research-commons/internal/resolve"
@@ -219,10 +220,16 @@ func TestEveryWriterWaitsOnTheLock(t *testing.T) {
 	}
 	defer holder.Unlock()
 	ct := p.file("c.json", `{"profile":"`+resolve.ProvisionalProfile+`","beneficiary":"`+p.signer+`","any_issuer":true}`)
+	// a task whose coordinator is p's key, held before the lock is, for publish grant
+	g := p.sign("G", "K9", "genesis", obj("type", "task", "name", "t", "controllers", []string{p.signer9()}, "rule", obj("any_one", true)))
+	gc := obj("profile", resolve.TaskContractV1Profile, "question", "q?", "beneficiary", p.signer9(), "any_issuer", true, "coordinator", p.signer)
+	ge := obj("resource", g, "predecessors", []string{g}, "contents", obj("contract", canon.Value(gc)))
+	p.sign("GE", "K9", "edition", ge)
 	for _, c := range []struct {
 		name string
 		args []string
 	}{
+		{"publish grant", []string{"publish", "grant", "--key", p.key, "--task", g, "--edition", resolve.EditionID(ge), "--grantee", p.signer9(), "--json"}},
 		{"publish", []string{"publish", "--key", p.key, "--json", "--kind", "authored", "--content", p.file("d.bin", "x"), "--licence", "CC0-1.0", "--description", "x"}},
 		{"publish task", []string{"publish", "task", "--key", p.key, "--name", "t", "--contract", ct, "--json"}},
 		{"rotate", []string{"rotate", "--key", p.key, "--successor", testKey("S").Signer(), "--json"}},
