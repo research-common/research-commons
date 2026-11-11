@@ -165,7 +165,12 @@ func (r *Resolver) v1Conditions(t *Task, bind func(string) Binding) {
 			c.Results, c.ResultsWhy = resultKind(tm.Results, recs)
 		}
 		if tm.Quorum != nil && tm.Quorum.MinGrade != "" {
-			c.MinGrade, c.MinGradeWhy = r.minGrade(tm.Quorum.MinGrade, s.Result, recs)
+			if c.Results == RuleOK {
+				c.MinGrade, c.MinGradeWhy = r.minGrade(tm.Quorum.MinGrade, s.Result, recs)
+			} else {
+				// min_grade grades derived results only: until the result is one, there is nothing to grade
+				c.MinGrade, c.MinGradeWhy = RuleUnchecked, "graded only once the result is shown to be a derived result"
+			}
 		}
 		if tm.Pins != nil {
 			c.Pins, c.PinsWhy = pinsCheck(tm.Pins, recs)
@@ -707,4 +712,37 @@ func (s *Submission) renderV1(b *strings.Builder) {
 		fmt.Fprintf(b, ": %s", strings.Join(c.Reasons, "; "))
 	}
 	b.WriteString("\n")
+}
+
+// FulfillsDropWarning is the `publish` guard of §5.1 (C-exch-15b): an `authored` by signer about to be signed on
+// blob d replaces the signer's current claims on d (an amendment replaces, never patches). When a current claim
+// carries `fulfills` and the new body drops it or names another edition, the submission is withdrawn or moved;
+// the warning names the edition. "" when nothing changes. A warning, never a refusal.
+func (r *Resolver) FulfillsDropWarning(signer, d string, body *canon.Object) string {
+	nf := object(body, "fulfills")
+	var lost []string
+	for _, p := range r.byKind["authored"] {
+		if p.St.Signer != signer || !p.Counts() || contentDigest(p.St.Body) != d || r.amendedBy(p) != "" {
+			continue
+		}
+		f := object(p.St.Body, "fulfills")
+		if f == nil {
+			continue
+		}
+		if nf == nil || str(nf, "resource") != str(f, "resource") || str(nf, "edition") != str(f, "edition") {
+			lost = append(lost, keylog.Short(str(f, "edition"))+" (task "+keylog.Short(str(f, "resource"))+", carried by "+keylog.Short(p.St.ID)+")")
+		}
+	}
+	if len(lost) == 0 {
+		return ""
+	}
+	slices.Sort(lost)
+	lost = slices.Compact(lost)
+	how := "drops"
+	if nf != nil {
+		how = "changes"
+	}
+	return "this amendment " + how + " the fulfills of your current claim on these bytes, naming edition " + strings.Join(lost, ", ") +
+		": your submission to it is withdrawn (an amendment replaces, never patches); re-adding fulfills later starts a new run, " +
+		"and the deadline does not inherit the earlier bound. Carry fulfills forward to keep the submission. This warning is not recorded"
 }

@@ -661,6 +661,11 @@ func publishCmd(c *Ctx) (*Obj, int, error) {
 	if w := withheldWarning(body); w != "" {
 		warns = append(warns, w)
 	}
+	if p.kind == "authored" && digest != "" {
+		if w := v.r.FulfillsDropWarning(signer, digest, body); w != "" {
+			warns = append(warns, w)
+		}
+	}
 	if p.kind == "rotate_key" {
 		warns = append(warns, draftRotateWarning)
 	}
