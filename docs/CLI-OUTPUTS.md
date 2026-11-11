@@ -72,8 +72,8 @@ JSON members carrying tokens: `authorship`, `role`, `state`, `grade`, `step`, `q
 | `unknown-height` | time | the attested height is not in the reader's chain view |
 | `orphaned` | time | the attested block is not on the accepted chain |
 | `stale-chain` | time | the reader's chain view is not fresh under its policy |
-| `backend-unconfigured` | time | no chain backend is configured, so no bound is verified; a state, not a failed invocation (exit 3) |
-| `backend-unavailable` | time | the configured chain backend could not be read |
+| `backend-unconfigured` | time | no chain backend is configured, so no bound is verified; a state, not a failed invocation (exit 3). commons anchor headers sync --from <file> configures one |
+| `backend-unavailable` | time | the configured chain backend could not be read, or its header database is not trusted (commons anchor status names why) |
 | `unsupported` | time | a proof format, attestation, rc major, alg or critical extension this reader does not implement |
 | `refused` | time | an anchor refused under a limit of this reader; as a gate verdict, an object not admitted, with its class, reason and narrowest next step named |
 | `valid` | statement | signature verified and every rule this reader implements passed |

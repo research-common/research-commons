@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/research-common/research-commons/internal/btctime"
 	"io"
 	"os"
 	"slices"
@@ -927,7 +928,13 @@ func (v *view) readinessWith(c *Ctx, sts []signed, task, edition string) (*Obj, 
 	for _, s := range sts {
 		add(s.line)
 	}
-	r := resolve.New(logs, resolve.WithContractReader(resolve.ContractProfiles{}))
+	ropts := []resolve.Option{resolve.WithContractReader(resolve.ContractProfiles{})}
+	if v.timeV.View != nil {
+		// the view's time verifier, over the persisted chain: a deadline reads its tip and verified bounds. With no
+		// chain the resolver keeps its default, so the answer is the one it was before the header database existed.
+		ropts = append(ropts, resolve.WithTimeVerifier(btctime.TimeVerifier{V: v.timeV}))
+	}
+	r := resolve.New(logs, ropts...)
 	t, ok := r.Task(task)
 	if !ok {
 		return nil, "not held", "the task does not resolve"

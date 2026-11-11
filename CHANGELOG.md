@@ -25,6 +25,18 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   effect: exit 2 when your key is not the edition's coordinator, the contract names none, this reader does not read the
   contract, or the id is an approval's; exit 3 when the task or edition is not held as an authorized edition.
   `publish --draft` stays the raw path.
+- **A chain backend from a headers file** (bitcoin-time note §6.1, §9.1, §10; L-02 narrowed). `commons anchor headers
+  sync --from <file>` reads concatenated raw 80-byte block headers, validates every one (linkage, proof of work, the
+  exact retarget, median time past, future time, version rules, greatest chainwork) and persists them in the
+  reader's own state: the store's git directory, or `COMMONS_STATE_DIR` for a store that is not git-backed; never
+  inside the store. A header that fails validation stops the sync (exit 1) and keeps what validated; a re-run adds
+  nothing; `--max-headers` bounds a sync. `--bootstrap-height`/`--bootstrap-work` start from an explicit local trust
+  root instead of genesis; the tool ships no checkpoint. The database is re-validated on every load and refused
+  whole when foreign, of another network, corrupt, tampered or loosely permissioned (`backend-unavailable`).
+  `commons anchor status` prints provider, mode, network, bootstrap, tip, last sync, freshness and the receipt count.
+  `show`, `verify`, `explain`, `list` and `publish task` readiness now evaluate anchors against the persisted view
+  (fresh, as of the last sync past the settled depth, or `verified-historical`), and a task deadline reads its tip.
+  With no database every answer is unchanged. No network header source and no operator node yet.
 
 ## [0.5.0-alpha.2] - 2026-11-11
 

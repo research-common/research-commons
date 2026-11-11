@@ -40,7 +40,7 @@ func init() {
 // viewOf is the read commands' view: the reader policy, and the production contract reader, so a task's terms
 // are read under the profiles this reader implements (the task section, resource.go and task.go).
 func viewOf(c *Ctx) (*view, error) {
-	v, err := loadView(c.Store, c.Policy.Reader, resolve.WithContractReader(resolve.ContractProfiles{}))
+	v, err := buildView(c.Store, c.Policy.Reader, timeVerifierFor(c), resolve.WithContractReader(resolve.ContractProfiles{}))
 	if err != nil {
 		return nil, failed(err, "store", false, "run status, then fsck")
 	}
@@ -375,6 +375,11 @@ func explainCmd(c *Ctx) (*Obj, int, error) {
 		set("time_policy_fingerprint", refV(v.timeV.Policy.Fingerprint())).set("reader_policy", rp))
 	o.set("evaluator", evaluatorObj(c.Env.Build))
 	tc := "none: this answer does not depend on the reader's clock (no shelf life, finality or freshness is evaluated, and no chain backend is configured)"
+	if v.timeV.View != nil {
+		tc = chainContext(v.timeV)
+	} else if v.timeV.Unavailable != "" {
+		tc = "none: this answer does not depend on the reader's clock (no shelf life, finality or freshness is evaluated; the chain backend is unavailable: " + v.timeV.Unavailable + ")"
+	}
 	if isDigest(ref) {
 		if s := v.r.Artifact(ref).ShelfLife; s != nil && s.UsedReadTime {
 			tc = "read time " + v.r.ReadTime().Format(time.RFC3339) + ": the shelf-life age is counted to it from the verified bound of anchor " + s.Since.Anchor
