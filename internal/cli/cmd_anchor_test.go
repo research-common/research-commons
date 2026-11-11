@@ -13,6 +13,8 @@ import (
 
 	"github.com/research-common/research-commons/internal/btctime"
 	"github.com/research-common/research-commons/internal/canon"
+	"github.com/research-common/research-commons/internal/resolve"
+	"github.com/research-common/research-commons/internal/store"
 )
 
 // A synthetic network for the CLI tests: easy proof of work (about one nonce in two), no retarget. It is reachable
@@ -338,5 +340,31 @@ func TestNoDatabaseByteIdentical(t *testing.T) {
 				t.Fatalf("%v differs with an empty state directory", args)
 			}
 		}
+	}
+}
+
+// TestReadVerifierReadsTip: the read commands' time verifier answers resolve.TipReader from the persisted view (so a
+// task deadline reads the validated tip, task-contracts note §4.3), and with no database it has no tip (the deadline
+// stays unchecked, as before).
+func TestReadVerifierReadsTip(t *testing.T) {
+	c := newChainWorld(t, 30)
+	now := c.tip.Add(10 * time.Minute)
+	useTestChain(t, &now, 0)
+	ctx := func() *Ctx {
+		s, err := store.Open(c.root, store.Options{NoSync: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return &Ctx{Root: c.root, Store: s, Env: &Env{Getenv: func(k string) string { return c.env[k] }}}
+	}
+	if _, ok := (btctime.TimeVerifier{V: timeVerifierFor(ctx())}).Tip(); ok {
+		t.Fatal("a tip with no database")
+	}
+	if r := c.run("anchor", "headers", "sync", "--from", c.headers); r.code != ExitOK {
+		t.Fatal(r.stdout + r.stderr)
+	}
+	var tr resolve.TipReader = btctime.TimeVerifier{V: timeVerifierFor(ctx())}
+	if h, ok := tr.Tip(); !ok || h != 30 {
+		t.Fatalf("tip %d %v", h, ok)
 	}
 }
