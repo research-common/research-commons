@@ -157,6 +157,9 @@ type SamplingGroup struct {
 	N    int
 }
 
+// Describe is the terms as the task display renders them, one line per term (a display helper for surfaces).
+func (t *Terms) Describe() []string { return t.describe() }
+
 // describe renders terms for the task display.
 func (t *Terms) describe() []string {
 	label := "contract profile " + t.Profile
