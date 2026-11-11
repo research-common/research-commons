@@ -82,6 +82,9 @@ type Terms struct {
 	CountingUnit string
 	// Coordinator is the key whose signed grants are the only exclusion that counts (§9.1); "" for none.
 	Coordinator string
+	// Roles are an rc/2 edition's typed roles (task_roles.go); nil under rc/1. When set, Beneficiary and
+	// EligibleIssuers are empty and AnyIssuer and CountingUnit mirror Roles.
+	Roles *TaskRoles
 	// Deadline is the provisional reading's deadline as written (a time value); "" for none. It is displayed and
 	// never evaluated. It is a term of this edition, never a lease: no intent expires by it (C-exch-02).
 	Deadline string
@@ -170,22 +173,11 @@ func (t *Terms) describe() []string {
 	if t.Question != "" {
 		out = append(out, fmt.Sprintf("question %q (displayed, never evaluated)", t.Question))
 	}
-	out = append(out, "beneficiary "+shortKey(t.Beneficiary))
-	switch {
-	case t.AnyIssuer:
-		out = append(out, "eligible issuers: any key")
-	default:
-		ks := make([]string, len(t.EligibleIssuers))
-		for i, k := range t.EligibleIssuers {
-			ks[i] = shortKey(k)
-		}
-		out = append(out, "eligible issuers: "+strings.Join(ks, ","))
+	if t.Roles != nil {
+		out = append(out, t.Roles.describe()...)
+	} else {
+		out = append(out, t.rc1Roles()...)
 	}
-	unit := t.CountingUnit
-	if unit == "" {
-		unit = CountKey + " (rc/1 default)"
-	}
-	out = append(out, "counting unit "+unit)
 	if t.Coordinator != "" {
 		out = append(out, "coordinator "+shortKey(t.Coordinator))
 	}
@@ -595,4 +587,25 @@ func DepartureCheck(declared *DeclaredSampling, delivered *canon.Object) (string
 		return Departed, strings.Join(short, "; ")
 	}
 	return Conforms, fmt.Sprintf("every declared group delivered (%d groups)", len(declared.Groups))
+}
+
+// rc1Roles is the rc/1 placement's role lines (roles in the contract).
+func (t *Terms) rc1Roles() []string {
+	out := []string{"beneficiary " + shortKey(t.Beneficiary)}
+	switch {
+	case t.AnyIssuer:
+		out = append(out, "eligible issuers: any key")
+	default:
+		ks := make([]string, len(t.EligibleIssuers))
+		for i, k := range t.EligibleIssuers {
+			ks[i] = shortKey(k)
+		}
+		out = append(out, "eligible issuers: "+strings.Join(ks, ","))
+	}
+	unit := t.CountingUnit
+	if unit == "" {
+		unit = CountKey + " (rc/1 default)"
+	}
+	out = append(out, "counting unit "+unit)
+	return out
 }

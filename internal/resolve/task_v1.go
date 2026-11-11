@@ -124,7 +124,7 @@ func (r *Resolver) fulfillsSubmissions(t *Task, bind func(string) Binding) {
 			}
 			g := r.gate(p)
 			s := &Submission{Statement: p.St.ID, Signer: p.St.Signer, Result: contentDigest(p.St.Body), Edition: ed, Counts: g.Counts,
-				Identity: g.Identity, Why: g.Why, Kind: kind}
+				Identity: g.Identity, Why: g.Why, Kind: kind, Subject: actorSubject(p, g)}
 			r.admitSubmission(t, s, p, bd)
 			t.Submissions = append(t.Submissions, s)
 		}
@@ -190,7 +190,7 @@ func (r *Resolver) v1Conditions(t *Task, bind func(string) Binding) {
 		var currents []*Submission
 		later := ""
 		for _, o := range t.Submissions {
-			if o.Signer != s.Signer || o.Edition != s.Edition || !o.Counts || o == s {
+			if !r.sameSeries(o, s, bind) || !o.Counts || o == s {
 				continue
 			}
 			if r.precedes(s.Signer, s.Statement, o.Statement) && (later == "" || o.Statement < later) {
@@ -202,7 +202,7 @@ func (r *Resolver) v1Conditions(t *Task, bind func(string) Binding) {
 			continue
 		}
 		for _, o := range t.Submissions {
-			if o.Signer == s.Signer && o.Edition == s.Edition && o.Counts && !r.hasLater(o, t) {
+			if r.sameSeries(o, s, bind) && o.Counts && !r.hasLater(o, t, bind) {
 				currents = append(currents, o)
 			}
 		}
@@ -220,35 +220,89 @@ func (r *Resolver) v1Conditions(t *Task, bind func(string) Binding) {
 		}
 		s.V1.Current = true
 	}
+	// Under identity counting the unit is the identity, and its keys' logs have no common order (profile §5.3: no
+	// implicit cross-key ordering). Each key's current submission is read as above; when the current submissions
+	// of one identity's keys disagree, the identity counts in none, as an uncleared fork's branches do (§6 Q1).
+	split := map[string]string{} // edition+identity -> the disagreeing results, for identities whose keys disagree
+	for _, s := range t.Submissions {
+		if s.V1 == nil || !s.V1.Current || s.Identity == "" || !r.identityCounting(bind(s.Edition).Terms) {
+			continue
+		}
+		u := s.Edition + "/" + s.Identity
+		if _, done := split[u]; done {
+			continue
+		}
+		results := map[string]bool{}
+		for _, o := range t.Submissions {
+			if o.V1 != nil && o.V1.Current && o.Identity == s.Identity && o.Edition == s.Edition {
+				results[o.Result] = true
+			}
+		}
+		split[u] = ""
+		if len(results) > 1 {
+			var rs []string
+			for _, x := range sortedKeys(results) {
+				rs = append(rs, shortDigest(x))
+			}
+			split[u] = strings.Join(rs, ", ")
+		}
+	}
+	for _, s := range t.Submissions {
+		if s.V1 != nil && s.V1.Current && s.Identity != "" && split[s.Edition+"/"+s.Identity] != "" {
+			s.V1.Current = false
+			s.V1.CurrentWhy = "the current submissions of identity " + keylog.Short(s.Identity) + "'s keys disagree (results " +
+				split[s.Edition+"/"+s.Identity] + ") and no cross-key order picks one: counts in none"
+		}
+	}
 	for _, s := range t.Submissions {
 		if s.V1 != nil {
-			classify(s, bind(s.Edition).Terms, t)
+			tm := bind(s.Edition).Terms
+			classify(s, tm, t, r.identityCounting(tm))
 		}
 	}
 }
 
-func (r *Resolver) hasLater(s *Submission, t *Task) bool {
+func (r *Resolver) hasLater(s *Submission, t *Task, bind func(string) Binding) bool {
 	for _, o := range t.Submissions {
-		if o != s && o.Signer == s.Signer && o.Edition == s.Edition && o.Counts && r.precedes(s.Signer, s.Statement, o.Statement) {
+		if o != s && r.sameSeries(o, s, bind) && o.Counts && r.precedes(s.Signer, s.Statement, o.Statement) {
 			return true
 		}
 	}
 	return false
 }
 
+// sameSeries reports whether o and s are in one key's series of submissions to one edition, whose last in the
+// key's log is current (§6 Q1). Under key counting the unit is the key, so a key's raw submission and one it signs
+// for an identity are one series (identity profile §5.3: they count once, and a hedge across them closes as any
+// other). Under identity counting through an evaluator a key's series is per subject: a later bare submission,
+// which is no identity vote, does not withdraw the key's vote for the identity.
+func (r *Resolver) sameSeries(o, s *Submission, bind func(string) Binding) bool {
+	if o.Signer != s.Signer || o.Edition != s.Edition {
+		return false
+	}
+	return o.Subject == s.Subject || !r.identityCounting(bind(s.Edition).Terms)
+}
+
 // classify sets the submission's state from §5.1's seven conditions: any fail or not shown → not counted; else
 // any unchecked → undecided; else counted. Independence is not a condition here: the bracket reads it (§5.6).
-func classify(s *Submission, tm *Terms, t *Task) {
+func classify(s *Submission, tm *Terms, t *Task, byIdentity bool) {
 	c := s.V1
 	var fail, unchecked []string
 	if !s.Counts {
 		fail = append(fail, "counts toward nothing: "+s.Why)
+	}
+	if byIdentity && s.Counts && s.Identity == "" {
+		// identity profile §5.3: bare submissions do not turn into identity votes
+		fail = append(fail, "a bare-key submission is not an identity vote (counting unit identity)")
 	}
 	if !s.Eligible {
 		fail = append(fail, "not an eligible issuer")
 	}
 	if tm.Coordinator != "" && s.Granted == "" {
 		why := "no grant from " + shortKey(tm.Coordinator) + " for this edition"
+		if !s.Subject.IsKey() && s.Subject.ID != "" {
+			why += " (a coordinator grant names a key; an identity grantee waits for task-contracts note §6 Q9)"
+		}
 		for _, g := range t.Grants {
 			if g.Grantee == s.Signer && g.Edition != s.Edition {
 				why += " (grant " + keylog.Short(g.Statement) + " names edition " + keylog.Short(g.Edition) + "; a grant does not carry)"
@@ -584,17 +638,26 @@ func (r *Resolver) readinessV1(t *Task, b Binding) *Readiness {
 		rd.Token = ByReview
 		return rd
 	}
-	if tm.CountingUnit == CountIdentity {
+	byIdentity := r.identityCounting(tm)
+	if tm.CountingUnit == CountIdentity && !byIdentity {
 		rd.Token = ReadyUnknown
 		rd.Why = append(rd.Why, "counting unit identity: no identity profile is registered for task-contract-v1 in this reader, so no identity count exists (never a key count shown as one)")
 		return rd
 	}
 	rd.K, rd.Unit = q.K, CountedAs
+	if byIdentity {
+		rd.Unit = CountedAsIdentities
+	}
 	count := func(g []*Submission, only func(*Submission) bool) int {
 		keys := map[string]bool{}
 		for _, s := range g {
 			if only == nil || only(s) {
-				keys[s.Signer] = true
+				// the unit: the key (after actor authority passed: the gate), or the eligible identity (§5.3)
+				if byIdentity {
+					keys["identity:"+s.Identity] = true
+				} else {
+					keys[s.Signer] = true
+				}
 			}
 		}
 		return len(keys)
