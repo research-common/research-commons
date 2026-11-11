@@ -259,6 +259,10 @@ no existing signed bytes reinterpreted. Each needs a row in the wire-format note
   no grant from <coordinator>` (TC3).
 - **Grantee is a key.** Under an identity profile a grantee could be a typed subject; that waits for the
   identity profile (§6, Q9).
+  Until Q9 is decided, `grant` keeps its `rc/1` body under `rc/2` as well (`grantee` a key, signed as a
+  bare-key statement by the coordinator key) and admits only bare-key submissions by that key. A typed identity
+  grantee would be a new field decided under Q9; until then an `rc/2` edition with a coordinator counts no
+  identity-context submission, naming why. *(Clarification from the reference implementation, 2026-11-11.)*
 - **Name.** The identity candidate's `identity_grant` is a key-delegation statement, a different concept. The
   shared word is kept because §9.1 says "grants"; `task_grant` is the fallback if reviewers find the overlap
   confusing.
@@ -521,6 +525,13 @@ before acceptance.
    honest correction a way to replace an error: a corrected export carrying `fulfills` supersedes the
    erroneous one by being later in the same log. A `dedup` field is not needed while there is one rule.
    *Review: agreed (#109).*
+   *Clarification (reference implementation, 2026-11-11), for `rc/2` identity counting (identity profile §5.3):*
+   keys acting for one identity share no log order, so the unit's current submissions are each delegate key's
+   current one; if they disagree, the identity counts in none and is shown, as disagreeing fork branches are.
+   Under `counting_unit: key`, a key's raw submission and its submissions for an identity are one series (the
+   later in the key's log is current), because the unit is the key whatever subject it acted for. Under
+   `counting_unit: identity` the series is per subject, so a later bare submission (not an identity vote) does
+   not withdraw the key's identity vote.
 2. **Required evidence strength.** Does a re-derived result count for more than a bare submission?
    (a) no requirement: any counted submission counts;
    (b) `quorum.min_grade`, `"T0"`/`"T1"`/`"T2"`: a submission counts only if the reader's own grade of its

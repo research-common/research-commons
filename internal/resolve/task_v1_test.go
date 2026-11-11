@@ -626,7 +626,7 @@ func TestV1BoundRefutations(t *testing.T) {
 	// (c) one of task/edition alone is malformed (intrinsic): wire schema test TestTaskKindsBindings
 }
 
-// counting_unit identity under v1: readiness unknown naming the missing profile (steward decision F2).
+// counting_unit identity under v1: readiness unknown naming the missing profile.
 func TestV1IdentityUnit(t *testing.T) {
 	w := newWorld(t)
 	g := w.task("G", "R")
