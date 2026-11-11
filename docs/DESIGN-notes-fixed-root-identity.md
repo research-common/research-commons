@@ -186,10 +186,13 @@ resolver answer as the unchanged reader (C-id-01). An `rc/2` line carrying an ac
 never its signing key's evidence: with no actor evaluator it counts toward nothing and
 reads `unknown (identity profile not active)`; an evaluator that binds it to no identity
 leaves it uncounted as well (§2.3, "never a key fallback"). An `rc/2` line with the
-marker and no actor is a `key(K)` statement and keeps the bare-key gate. `rc/2` kinds this
-slice does not implement (genesis, edition, withdraw_approval, task kinds) stay verified
-and unsupported, so they resolve no resource and count toward nothing. Nothing in a
-production reader uses this dispatch yet.
+marker and no actor is a `key(K)` statement and keeps the bare-key gate. The `rc/2`
+resource kinds (genesis, edition, withdraw_approval) and task kinds (intent, progress,
+withdraw, submit, decide) are read: a task edition's roles come from its `task_roles`,
+and task statements count through the actor evaluator as every other identity-context
+statement does (§5.3). An `rc/2` kind the reader does not implement stays verified and
+unsupported and counts toward nothing. Nothing in a production reader uses this dispatch
+yet.
 
 ## 3. Administrative vocabulary and permissions
 

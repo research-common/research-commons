@@ -78,9 +78,10 @@ func (b *BoundRefutation) line() string {
 
 func (r *Resolver) boundRefutation(p *Placed, bind func(string) Binding) *BoundRefutation {
 	b := p.St.Body
-	x := &BoundRefutation{Statement: p.St.ID, Signer: p.St.Signer, Of: str(b, "of"), Evidence: str(b, "evidence"), Edition: str(b, "edition"), Counts: p.Counts()}
+	g := r.gate(p) // bare-key: Counts; identity-context: actor eligibility (a `refutes` grant over its target)
+	x := &BoundRefutation{Statement: p.St.ID, Signer: p.St.Signer, Of: str(b, "of"), Evidence: str(b, "evidence"), Edition: str(b, "edition"), Counts: g.Counts}
 	if !x.Counts {
-		x.Why = notCountedWhy(p)
+		x.Why = g.Why
 		return x
 	}
 	if bd := bind(x.Edition); bd.State != string(Authorized) {
@@ -176,7 +177,7 @@ func (r *Resolver) v1Conditions(t *Task, bind func(string) Binding) {
 			c.Pins, c.PinsWhy = pinsCheck(tm.Pins, recs)
 		}
 		for _, q := range r.byKind["retracts"] {
-			if q.Counts() && str(q.St.Body, "of") == s.Statement {
+			if r.gate(q).Counts && str(q.St.Body, "of") == s.Statement {
 				c.Retracted = append(c.Retracted, q.St.ID)
 			}
 		}
@@ -641,6 +642,12 @@ func (r *Resolver) readinessV1(t *Task, b Binding) *Readiness {
 	byIdentity := r.identityCounting(tm)
 	if tm.CountingUnit == CountIdentity && !byIdentity {
 		rd.Token = ReadyUnknown
+		if r.actors != nil {
+			// an evaluator is configured, but the rc/1 placement names its roles as keys: no identity can be
+			// checked against them (identity profile §5.3)
+			rd.Why = append(rd.Why, "counting unit identity: this edition names its roles in the contract (the rc/1 placement), as keys; typed identity roles are an rc/2 edition's task_roles, so no identity count exists (never a key count shown as one)")
+			return rd
+		}
 		rd.Why = append(rd.Why, "counting unit identity: no identity profile is registered for task-contract-v1 in this reader, so no identity count exists (never a key count shown as one)")
 		return rd
 	}

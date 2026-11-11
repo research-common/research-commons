@@ -32,8 +32,9 @@ rc/2 line stays an unknown major, retained unverified.
 
 rc/2 `genesis`, `edition` and `withdraw_approval` are read (typed controller subjects, the edition marker's
 `task_roles` shape-checked only). An edition's id is hashed in its statement's major (`resolve.EditionIDOf`), so an
-rc/1 and an rc/2 approval of the same body bytes are two editions. The five task kinds still read as verified but
-`Unsupported` ("not implemented by this reader"), which is non-passing.
+rc/1 and an rc/2 approval of the same body bytes are two editions. The five task kinds (`intent`, `progress`,
+`withdraw`, `submit`, `decide`) are read too (`wire.taskBody`): `progress` and `withdraw` must pin their attempt's
+`intent` in the marker. `grant` stays rc/1-only (the profile's kind list does not hold it).
 
 ## 3. Authenticated invalid controls
 
@@ -136,7 +137,13 @@ Otherwise: wire `Valid` → `Understood`; `Invalid` → per §3; `Unsupported` o
 
 ## 8. Task contracts
 
-Every rc/2 task kind is verified-`Unsupported`. No settlement or readiness can pass.
+The rc/2 task kinds are read; the task consumer (`internal/resolve`, `task_roles.go`) reads an rc/2 edition's roles
+from its `task_roles` (typed subjects) and asks this evaluator about every identity-context task statement through
+the counting gate: an intent opens an attempt for its actor, an exactly pinned `progress`/`withdraw` by any delegate
+of that identity continues it, a `decide` settles only for the typed beneficiary (and, identity-context, under a
+`decide` grant for the task), and `counting_unit: identity` counts eligible identities. Without this evaluator
+(every production reader) identity-context task statements count toward nothing and identity counting is
+`unknown`.
 
 ## 8a. Actor evaluator (candidate, not wired)
 

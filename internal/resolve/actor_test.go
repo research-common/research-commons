@@ -271,8 +271,8 @@ func TestActorIdentitySelection(t *testing.T) {
 // no evaluator identity counting stays unknown, as before; a contract listing key issuers cannot be read for
 // identities.
 func TestActorIdentityCount(t *testing.T) {
-	conformance.Partial(t, "C-id-34", "identity counting through the resolver with a test-only evaluator: eligible submissions deduplicated by identity, bare and unresolved ones named and not counted; the real evaluator over rc/2 task statements needs rc/2 task kinds (read unsupported today) and a registered task-contract profile")
-	conformance.Partial(t, "C-id-35", "key counting through the resolver with a test-only evaluator: an identity submission with denied or undecided authority is not counted for its key; the real evaluator over rc/2 task statements needs rc/2 task kinds")
+	conformance.Partial(t, "C-id-34", "identity counting through the resolver with a test-only evaluator: eligible submissions deduplicated by identity, bare and unresolved ones named and not counted; the provisional contract half; the whole outcome over signed rc/2 evidence is TestRC2IdentityCounting")
+	conformance.Partial(t, "C-id-35", "key counting through the resolver with a test-only evaluator: an identity submission with denied or undecided authority is not counted for its key; the provisional contract half; the whole outcome over signed rc/2 evidence is TestRC2KeyCountingNoBypass")
 	w := newWorld(t)
 	g := w.task("G", "R")
 	e1 := w.taskEdition("E1", "R", g, []string{g}, w.contract("R", "counting_unit", "identity", "quorum", quorum(2, IndependenceNotRequired)))

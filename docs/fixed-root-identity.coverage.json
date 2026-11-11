@@ -506,10 +506,11 @@
       ],
       "isolated_tests": [
         "internal/wire:TestFixedRootCandidateVectors",
-        "internal/resolve:TestActorIdentityCount"
+        "internal/resolve:TestActorIdentityCount",
+        "internal/resolve:TestRC2IdentityCounting"
       ],
-      "conformance": "partial",
-      "remaining": "Mandatory counting unit checked. Through the resolver with a test-only evaluator: eligible submissions deduplicated by identity, bare submissions never identity votes, denied and undecided actors named and not counted. The real evaluator over rc/2 task statements needs rc/2 task kinds (read unsupported today) and a registered task-contract profile with typed identity issuers."
+      "conformance": "covers",
+      "remaining": "Covered by internal/resolve:TestRC2IdentityCounting over signed rc/2 evidence (dual reader, the real evaluator identity.Actors): counting_unit identity from the edition's task_roles; two delegates of I are one vote; a bare submission is no identity vote; a denied actor (grant without submit) and an unresolved one (no held grant) are named and not counted; one identity's keys whose current submissions disagree count in none. Without an evaluator readiness stays unknown naming the missing profile. The profile is not active: no production reader wires the dual reader or the evaluator."
     },
     {
       "handle": "ID-35",
@@ -517,10 +518,11 @@
       "scenario": "Key counting cannot bypass actor authority",
       "schema_vectors": [],
       "isolated_tests": [
-        "internal/resolve:TestActorIdentityCount"
+        "internal/resolve:TestActorIdentityCount",
+        "internal/resolve:TestRC2KeyCountingNoBypass"
       ],
-      "conformance": "partial",
-      "remaining": "Through the resolver with a test-only evaluator: an identity submission with denied or undecided actor authority is not counted for its key; bare-key submissions keep the bare-key gate. The real evaluator over rc/2 task statements needs rc/2 task kinds (read unsupported today)."
+      "conformance": "covers",
+      "remaining": "Covered by internal/resolve:TestRC2KeyCountingNoBypass over signed rc/2 evidence (dual reader, identity.Actors): under counting_unit key, an identity submission with denied or unresolved actor authority counts for nobody; a raw and an identity submission by one key count once (one series, its current submission read); typed eligible issuers admit by subject. The profile is not active."
     },
     {
       "handle": "ID-36",
@@ -647,10 +649,11 @@
         "task-contract-without-role-object"
       ],
       "isolated_tests": [
-        "internal/identitymodel:TestGrantEligibilityDoesNotPretendToImplementRoles"
+        "internal/identitymodel:TestGrantEligibilityDoesNotPretendToImplementRoles",
+        "internal/resolve:TestRC2DecideAuthority"
       ],
-      "conformance": "partial",
-      "remaining": "Typed complete task roles checked; concrete contract profile and beneficiary enforcement required."
+      "conformance": "covers",
+      "remaining": "Covered by internal/resolve:TestRC2DecideAuthority over signed rc/2 evidence: a decide settles only for the pinned edition's typed beneficiary acting under a decide grant for the task; a decide grant held for a non-beneficiary identity, an actor without decide permission, and a raw key that is not the beneficiary settle nothing. Without an evaluator no identity decide settles. The profile is not active."
     },
     {
       "handle": "ID-43",
@@ -660,10 +663,12 @@
         "progress-must-pin-intent"
       ],
       "isolated_tests": [
-        "internal/wire:TestFixedRootCandidateVectors"
+        "internal/wire:TestFixedRootCandidateVectors",
+        "internal/wire:TestCandidateTaskKindsRead",
+        "internal/resolve:TestRC2AttemptContinuity"
       ],
-      "conformance": "partial",
-      "remaining": "Explicit intent syntax checked; same-actor/edition continuity and irreversible withdrawal require model/consumer integration."
+      "conformance": "covers",
+      "remaining": "Covered by internal/resolve:TestRC2AttemptContinuity over signed rc/2 evidence: K2 for I continues K1-for-I's exact intent (progress and withdraw pin it in the marker; internal/wire:TestCandidateTaskKindsRead requires the pin); a pin to a bare K1 intent continues nothing; an actor without progress permission continues nothing; the first withdrawal ends the attempt. The profile is not active."
     },
     {
       "handle": "ID-44",

@@ -594,9 +594,10 @@ func (r *Resolver) refutations(t *Task, bind func(string) Binding) {
 		if s == nil {
 			s = claimOf[str(p.St.Body, "of")]
 		}
+		counts := r.gate(p).Counts // bare-key: Counts; identity-context: actor eligibility
 		if str(p.St.Body, "task") == t.ID {
 			t.Bound = append(t.Bound, r.boundRefutation(p, bind))
-			if s != nil && p.Counts() {
+			if s != nil && counts {
 				s.Refuted = append(s.Refuted, p.St.ID)
 			}
 			continue
@@ -605,7 +606,7 @@ func (r *Resolver) refutations(t *Task, bind func(string) Binding) {
 			if s.V1 == nil {
 				t.Refutations = append(t.Refutations, p)
 			}
-			if p.Counts() {
+			if counts {
 				s.Refuted = append(s.Refuted, p.St.ID)
 			}
 		}
