@@ -675,7 +675,7 @@ func TestFixedRootCandidateBaseSchemaIsNotBypassed(t *testing.T) {
 		} // deliberately rc/1 only
 		if kind == "grant" {
 			continue
-		} // rc/1 only: the profile's kind list holds no grant (steward decision 2026-11-10, kept by D-1111-3)
+		} // rc/1 only: the profile's kind list holds no grant, and the task-contracts note gives grant no rc/2 reading (§4.1)
 		t.Run(kind, func(t *testing.T) {
 			b := minimal(kind)
 			if kind == "genesis" {
