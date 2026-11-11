@@ -403,13 +403,10 @@ func (v *Verifier) eligible(e Evidence, bd *binding) Evidence {
 	if v.Now != nil {
 		now = v.Now()
 	}
-	switch {
-	case view.LastSync.IsZero():
-		return fail(StateStaleChain, "chain view never synced")
-	case now.Before(view.LastSync):
-		return fail(StateStaleChain, "local clock is before the last sync (%s); no live eligibility until a sync succeeds", view.LastSync.UTC().Format(time.RFC3339))
+	fresh, never, why := v.Policy.Freshness(view, now)
+	if never {
+		return fail(StateStaleChain, "%s", why)
 	}
-	fresh := now.Sub(view.LastSync) <= v.Policy.MaxViewAge && now.Sub(time.Unix(int64(view.TipTime), 0)) <= v.Policy.MaxTipAge
 	if fresh {
 		e.State, e.Quality = StateVerified, QualityBitcoin
 		return e
@@ -423,6 +420,25 @@ func (v *Verifier) eligible(e Evidence, bd *binding) Evidence {
 	e.State = StateVerifiedHistorical
 	e.Why = fmt.Sprintf("view not fresh and the block had %d confirmations as of the last sync, below the settled depth %d", e.Confirmations, v.Policy.SettledDepth)
 	return e
+}
+
+// Freshness applies §7's freshness rules to a view at the reader's clock now: fresh when the last successful sync is
+// within MaxViewAge and the tip header's time within MaxTipAge. never is true when the view cannot carry even
+// as-of evidence (never synced, or the clock is before the last sync: a rollback, §7); why says what failed.
+func (p Policy) Freshness(view *ChainView, now time.Time) (fresh, never bool, why string) {
+	switch {
+	case view.LastSync.IsZero():
+		return false, true, "chain view never synced"
+	case now.Before(view.LastSync):
+		return false, true, fmt.Sprintf("local clock is before the last sync (%s); no live eligibility until a sync succeeds", view.LastSync.UTC().Format(time.RFC3339))
+	}
+	if age := now.Sub(view.LastSync); age > p.MaxViewAge {
+		return false, false, fmt.Sprintf("last sync %s ago, beyond the maximum view age %s", age.Round(time.Second), p.MaxViewAge)
+	}
+	if age := now.Sub(time.Unix(int64(view.TipTime), 0)); age > p.MaxTipAge {
+		return false, false, fmt.Sprintf("tip header time %s ago, beyond the maximum tip age %s", age.Round(time.Second), p.MaxTipAge)
+	}
+	return true, false, ""
 }
 
 func heightText(a Attestation) string {

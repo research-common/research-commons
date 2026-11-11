@@ -524,3 +524,18 @@ func (d *HeaderDB) Sync(ctx context.Context, p Params, r io.Reader, opt SyncOpti
 	res.View = c.Snapshot()
 	return res, nil
 }
+
+// ReceiptFiles counts the receipt files held at loc without opening (or creating) the receipt store; ok is false
+// when there is no receipt directory.
+func ReceiptFiles(loc Location) (n int, ok bool) {
+	ents, err := os.ReadDir(filepath.Join(loc.Dir, receiptsDir, receiptSubdir))
+	if err != nil {
+		return 0, false
+	}
+	for _, e := range ents {
+		if e.Type().IsRegular() {
+			n++
+		}
+	}
+	return n, true
+}
