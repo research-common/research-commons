@@ -354,7 +354,9 @@ var kinds = map[string][]field{
 	"corroborates": {req("of", id()), req("result", id()), req("verdict", enum("supports", "contradicts", "inconclusive")),
 		req("model", text()), req("cohort", exactlyOne([]field{opt("rule", text()), opt("hand_picked", isTrue())})),
 		opt("shares", list(text())), opt("cause", text())},
-	"refutes":  {req("of", id()), req("evidence", digest()), opt("note", text())},
+	// refutes: `task` and `edition` bind the refutation to a task edition (task-contracts note §4.2); both or
+	// neither (refutesBinding).
+	"refutes":  {req("of", id()), req("evidence", digest()), opt("note", text()), opt("task", id()), opt("edition", id())},
 	"retracts": {req("of", id()), opt("reason", text())},
 	"anchors":  {req("covered", id()), req("proof", digest()), req("proof_format", text()), opt("services", list(text()))},
 	"genesis": {req("type", enum("collection", "task", "series")), req("name", text()), req("controllers", set(key(), false)),
@@ -366,6 +368,9 @@ var kinds = map[string][]field{
 	"submit":   with(taskRef, req("result", digest()), opt("salt", text()), opt("self_declared_independence", boolean())),
 	"decide": with(taskRef, req("submissions", list(id())), req("verdict", enum("accept", "reject")),
 		opt("evaluations", list(digest())), opt("supersedes", id())),
+	// grant: a task coordinator's grant (task-contracts note §4.1). It counts only when its signer is the
+	// coordinator of the edition it names, and only for that edition: the resolver's question, not the schema's.
+	"grant":             with(taskRef, req("grantee", key()), opt("note", text())),
 	"withdraw_approval": {req("resource", id()), req("edition", id())},
 	"rotate_key":        {req("successor", key())},
 	"revoke_key": {req("reason", pattern(reToken, "a reason token ([a-z][a-z0-9_]{0,63})")),
@@ -418,6 +423,9 @@ func bodySchema(kind string, body *canon.Object) (bool, *schemaCtx, error) {
 	if kind == "edition" {
 		return true, ctx, completenessBeside(body)
 	}
+	if kind == "refutes" {
+		return true, ctx, refutesBinding(body)
+	}
 	if kind == "holds" {
 		_, w := body.Get("withdrawn")
 		if _, l := body.Get("locations"); w && l {
@@ -464,6 +472,20 @@ func satisfiable(body *canon.Object, p string) error {
 		if k < 1 || k > int64(len(ctrl)) {
 			return bad(p+".rule.k_of_n.k", "is "+strconv.FormatInt(k, 10)+" with "+itoa(len(ctrl))+" controllers: no set of controllers satisfies it")
 		}
+	}
+	return nil
+}
+
+// refutesBinding refuses a refutation that names a task without its edition, or an edition without its task
+// (wire §5, task-contracts note §4.2): a binding is to one task edition, so one member alone binds nothing.
+func refutesBinding(body *canon.Object) error {
+	_, t := body.Get("task")
+	_, e := body.Get("edition")
+	switch {
+	case t && !e:
+		return bad("body.edition", "is missing: a refutation bound to a task names the edition too")
+	case e && !t:
+		return bad("body.task", "is missing: a refutation bound to an edition names the task too")
 	}
 	return nil
 }

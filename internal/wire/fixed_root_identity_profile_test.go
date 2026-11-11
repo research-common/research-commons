@@ -673,6 +673,9 @@ func TestFixedRootCandidateBaseSchemaIsNotBypassed(t *testing.T) {
 		if kind == "rotate_key" || kind == "revoke_key" {
 			continue
 		} // deliberately rc/1 only
+		if kind == "grant" {
+			continue
+		} // rc/1 only until the rc/2 task kinds are implemented (steward decision, 2026-11-10)
 		t.Run(kind, func(t *testing.T) {
 			b := minimal(kind)
 			if kind == "genesis" {

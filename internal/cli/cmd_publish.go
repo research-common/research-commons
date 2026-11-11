@@ -158,7 +158,7 @@ func init() {
 	tflags := append(slices.Clone(writerFlags),
 		Flag{Name: "name", Value: "text", Help: "a new task's name"},
 		Flag{Name: "task", Value: "id", Help: "an existing task (its genesis id): publish a new edition after its current one", Check: checkIDFlag},
-		Flag{Name: "contract", Value: "file", Help: "the edition's contract, a JSON object (the contract grammar is provisional)"},
+		Flag{Name: "contract", Value: "file", Help: "the edition's contract, a JSON object: profile " + resolve.TaskContractV1Profile + " (or the provisional profile, read under its own name); any other profile or an unknown field leaves readiness unchecked"},
 	)
 	Register(&Command{Name: "publish task", Summary: "create a task (genesis + first edition) or publish a new edition of one",
 		Store: true, Writes: true, Flags: tflags, Prepare: preparePublishTask, Run: publishTaskCmd,
@@ -401,7 +401,7 @@ func preparePublish(c *Ctx) *Problem {
 // wireKind reports whether kind is a statement kind wire-format note §5 lists (the writer signs no other).
 func wireKind(kind string) bool {
 	return slices.Contains([]string{"authored", "observed", "holds", "describes", "reproduced", "corroborates", "refutes", "retracts",
-		"anchors", "genesis", "edition", "intent", "withdraw", "progress", "submit", "decide", "withdraw_approval", "rotate_key", "revoke_key"}, kind)
+		"anchors", "genesis", "edition", "intent", "withdraw", "progress", "submit", "decide", "grant", "withdraw_approval", "rotate_key", "revoke_key"}, kind)
 }
 
 func preparePublishTask(c *Ctx) *Problem {
@@ -660,6 +660,11 @@ func publishCmd(c *Ctx) (*Obj, int, error) {
 	var warns []string
 	if w := withheldWarning(body); w != "" {
 		warns = append(warns, w)
+	}
+	if p.kind == "authored" && digest != "" {
+		if w := v.r.FulfillsDropWarning(signer, digest, body); w != "" {
+			warns = append(warns, w)
+		}
 	}
 	if p.kind == "rotate_key" {
 		warns = append(warns, draftRotateWarning)
@@ -922,7 +927,7 @@ func (v *view) readinessWith(c *Ctx, sts []signed, task, edition string) (*Obj, 
 	for _, s := range sts {
 		add(s.line)
 	}
-	r := resolve.New(logs, resolve.WithContractReader(resolve.ProvisionalContract{}))
+	r := resolve.New(logs, resolve.WithContractReader(resolve.ContractProfiles{}))
 	t, ok := r.Task(task)
 	if !ok {
 		return nil, "not held", "the task does not resolve"
@@ -949,9 +954,15 @@ func (v *view) readinessWith(c *Ctx, sts []signed, task, edition string) (*Obj, 
 		default:
 			o.set("state", tokV(tok(rd.Token))).set("quorum", intV(int64(rd.K))).set("counted", textV(resolve.CountedAs)).
 				set("why", textV("settled by counting: "+strconv.Itoa(rd.K)+" distinct signing keys"))
+			if len(rd.Why) > 0 {
+				o.set("explain", texts(rd.Why...))
+			}
 		}
-		if b.Terms != nil && b.Terms.Provisional {
+		switch {
+		case b.Terms != nil && b.Terms.Provisional:
 			o.set("contract_profile", textV(b.Terms.Profile+" (provisional: the contract grammar is pending)"))
+		case b.Terms != nil:
+			o.set("contract_profile", textV(b.Terms.Profile))
 		}
 	}
 	return o, b.State, ""

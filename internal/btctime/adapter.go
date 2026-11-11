@@ -21,6 +21,14 @@ import (
 // Each Verify reads the snapshot the Verifier holds; build the resolver for one batch with one snapshot.
 type TimeVerifier struct{ V *Verifier }
 
+// Tip implements resolve.TipReader: the validated tip of the Verifier's chain view; ok false with no view.
+func (t TimeVerifier) Tip() (int64, bool) {
+	if t.V == nil || t.V.View == nil {
+		return 0, false
+	}
+	return t.V.View.TipHeight, true
+}
+
 // Verify implements resolve.TimeVerifier.
 func (t TimeVerifier) Verify(a *wire.Statement) resolve.Bound {
 	return BoundOf(t.V.Evaluate(a), t.V.Policy.PriorityMargin)
@@ -31,17 +39,21 @@ func BoundOf(e Evidence, margin int64) resolve.Bound {
 	switch {
 	case e.Live():
 		return resolve.Bound{Quality: resolve.Bitcoin, Anchor: e.Anchor, Network: e.Network, Height: e.BlockHeight, Time: int64(e.HeaderTime), Margin: margin,
-			Detail: e.String() + ", verified by this reader"}
+			Detail: e.String() + ", verified by this reader", State: string(e.State)}
 	case e.State == StateInvalidProof || e.State == StateInvalidAnchor || e.State == StateRefused:
 		why := fmt.Sprintf("%s: %s", e.State, e.Why)
 		if e.Refusal != nil {
 			why = fmt.Sprintf("%s (%s, %s): %s", e.State, e.Refusal.Class, e.Refusal.Reason, e.Why)
 		}
-		return resolve.Bound{Quality: resolve.NoBound, Anchor: e.Anchor, Why: why}
+		return resolve.Bound{Quality: resolve.NoBound, Anchor: e.Anchor, Why: why, State: string(e.State)}
 	}
 	why := e.Why
+	b := resolve.Bound{Quality: resolve.Local, Anchor: e.Anchor, State: string(e.State)}
 	if e.State == StateVerifiedHistorical {
+		// still Local (it orders nothing); its height meets a task deadline only (task-contracts note §4.3)
 		why = e.String()
+		b.Network, b.Height = e.Network, e.BlockHeight
 	}
-	return resolve.Bound{Quality: resolve.Local, Anchor: e.Anchor, Why: fmt.Sprintf("not verified by this reader: %s (%s)", e.State, why)}
+	b.Why = fmt.Sprintf("not verified by this reader: %s (%s)", e.State, why)
+	return b
 }
