@@ -675,7 +675,7 @@ func TestFixedRootCandidateBaseSchemaIsNotBypassed(t *testing.T) {
 		} // deliberately rc/1 only
 		if kind == "grant" {
 			continue
-		} // added to rc/1 by the task-contracts note after the candidate profile; the profile does not list it yet
+		} // rc/1 only until the rc/2 task kinds are implemented (steward decision, 2026-11-10)
 		t.Run(kind, func(t *testing.T) {
 			b := minimal(kind)
 			if kind == "genesis" {
