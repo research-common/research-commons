@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -297,5 +299,85 @@ func TestTaskDecisionsOverTheCLI(t *testing.T) {
 		if a != answers[0] {
 			t.Fatalf("the conflict differs by ts or order:\n%s\n%s", answers[0], a)
 		}
+	}
+}
+
+// TestPublishGrant: publish grant signs a coordinator's grant for one edition and prints the readiness after it;
+// it refuses (exit 2, nothing signed or appended) a grant this reader would show with no effect.
+func TestPublishGrant(t *testing.T) {
+	conformance.Partial(t, "C-exch-03b", "the writer half: publish grant refuses a grant by a non-coordinator, on an edition it does not read or that is not authorized; the reading is TestV1Grants in internal/resolve")
+	p := newPubWorld(t)
+	grantee := p.signer9()
+	ct := p.file("c.json", `{"profile":"`+resolve.TaskContractV1Profile+`","question":"q?","beneficiary":"`+p.signer+`","any_issuer":true,"coordinator":"`+p.signer+`","quorum":{"k":1,"independence":"not-required"}}`)
+	r := runIn(p.root, nil, "publish", "task", "--key", p.key, "--name", "g", "--contract", ct, "--json")
+	if r.code != 0 {
+		t.Fatalf("publish task: %d %s", r.code, r.stdout)
+	}
+	o := outObj(t, r)
+	task, ed := string(o.Members["task"].(canon.String)), string(o.Members["edition"].(canon.String))
+	approval := statementsOf(o)[1].Members["statement"].(canon.String)
+	// the grantee submits before the grant: not counted, then counted once the grant is held (no time order)
+	w := p.world
+	w.sign("S9", "K9", "submit", obj("task", task, "edition", ed, "result", dig("r")))
+	if s := subState(t, taskSection(t, jsonOf(t, w.run("show", task, "--json"))), w.ids["S9"]); s.Members["state"] != canon.String("not counted") {
+		t.Fatalf("before the grant: %s", canon.Encode(s))
+	}
+	grant := func(key string, extra ...string) result {
+		if !slices.Contains(extra, "--task") {
+			extra = append(extra, "--task", task)
+		}
+		return runIn(p.root, nil, append([]string{"publish", "grant", "--key", key, "--json"}, extra...)...)
+	}
+	// refusals: nothing signed or appended
+	other := filepath.Join(p.dir, "other.key")
+	runIn(p.dir, nil, "key", "new", "--out", other)
+	ct2 := p.file("u.json", `{"profile":"task-contract-v9"}`)
+	for name, c := range map[string]struct {
+		key  string
+		args []string
+		says string
+		exit int
+	}{
+		"not the coordinator": {other, []string{"--edition", ed, "--grantee", grantee}, "not the edition's coordinator", ExitDidNotStart},
+		"an approval id":      {p.key, []string{"--edition", string(approval), "--grantee", grantee}, "statement id of an approval", ExitDidNotStart},
+		"no such edition":     {p.key, []string{"--edition", strings.Repeat("ab", 32), "--grantee", grantee}, "holds no edition with that id", ExitCouldNot},
+		"no such task":        {p.key, []string{"--edition", ed, "--grantee", grantee, "--task", strings.Repeat("cd", 32)}, "no task genesis", ExitCouldNot},
+	} {
+		before := snapshot(t, p.root)
+		r := grant(c.key, c.args...)
+		if r.code != c.exit || !strings.Contains(r.stdout, c.says) || snapshot(t, p.root) != before {
+			t.Fatalf("%s: %d %s", name, r.code, r.stdout)
+		}
+	}
+	// a malformed grantee is refused at the argument
+	if r := grant(p.key, "--edition", ed, "--grantee", "K9"); r.code != ExitDidNotStart {
+		t.Fatalf("malformed grantee: %d %s", r.code, r.stdout)
+	}
+	// the grant: signed, committed, the readiness after it ready (1 of 1)
+	r = grant(p.key, "--edition", ed, "--grantee", grantee, "--note", "welcome")
+	if r.code != 0 || !strings.Contains(r.stdout, `"readiness":{`) || !strings.Contains(r.stdout, `"state":"ready"`) || !strings.Contains(r.stdout, `"kind":"grant"`) {
+		t.Fatalf("grant: %d %s", r.code, r.stdout)
+	}
+	sec := taskSection(t, jsonOf(t, w.run("show", task, "--json")))
+	if s := subState(t, sec, w.ids["S9"]); s.Members["state"] != canon.String("counted") || s.Members["granted_by"] == nil {
+		t.Fatalf("after the grant: %s", canon.Encode(s))
+	}
+	// an edition this reader does not read: no coordinator is known, refused
+	r = runIn(p.root, nil, "publish", "task", "--key", p.key, "--task", task, "--contract", ct2, "--json")
+	ed2 := string(outObj(t, r).Members["edition"].(canon.String))
+	before := snapshot(t, p.root)
+	if r := grant(p.key, "--edition", ed2, "--grantee", grantee); r.code != ExitDidNotStart || !strings.Contains(r.stdout, "does not read the edition's contract") || snapshot(t, p.root) != before {
+		t.Fatalf("unread contract: %d %s", r.code, r.stdout)
+	}
+	// a contract with no coordinator: refused, no grant is required
+	ct3 := p.file("n.json", `{"profile":"`+resolve.TaskContractV1Profile+`","question":"q?","beneficiary":"`+p.signer+`","any_issuer":true}`)
+	r = runIn(p.root, nil, "publish", "task", "--key", p.key, "--task", task, "--contract", ct3, "--json")
+	ed3 := string(outObj(t, r).Members["edition"].(canon.String))
+	if r := grant(p.key, "--edition", ed3, "--grantee", grantee); r.code != ExitDidNotStart || !strings.Contains(r.stdout, "names no coordinator") {
+		t.Fatalf("no coordinator: %d %s", r.code, r.stdout)
+	}
+	// the human surface
+	if h := runIn(p.root, nil, "publish", "grant", "--key", p.key, "--task", task, "--edition", ed, "--grantee", grantee, "--dry-run"); h.code != 0 || !strings.Contains(h.stdout, "readiness:") {
+		t.Fatalf("dry run: %d %s", h.code, h.stdout)
 	}
 }
