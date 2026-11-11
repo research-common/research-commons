@@ -5,7 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/conformance"
+	"github.com/research-common/research-commons/internal/identity"
 	"github.com/research-common/research-commons/internal/keylog"
 	"github.com/research-common/research-commons/internal/policy"
 	"github.com/research-common/research-commons/internal/wire"
@@ -275,4 +277,119 @@ func TestIdentityUnitNotCounted(t *testing.T) {
 		}
 		has(t, a.Render(), "for identity "+keylog.Short(actorI)+" not counted")
 	}, unitsOpts(f)...)
+}
+
+// identityAmending incepts identity name (root key root) and grants each worker `authored` with amend:true over any
+// content (identity-wide amendment breadth, profile §3). It returns the inception and one grant per worker.
+func (w *world) identityAmending(name, root string, workers ...string) (string, map[string]string) {
+	w.t.Helper()
+	id := w.signRC2(name, root, "identity_inception", obj("profile", wire.FixedRootProfile), rc2MarkerOnly, [2]string{})
+	grants := map[string]string{}
+	for _, wk := range workers {
+		perms := canon.Array{obj("kind", "authored", "targets", obj("any_content", true), "amend", true)}
+		grants[wk] = w.signRC2(name+":grant:"+wk, root, "identity_grant", obj("identity", id,
+			"delegate", obj("key", w.signer(wk), "inception", w.firstLine(wk)), "permissions", perms), rc2MarkerOnly, [2]string{})
+	}
+	return id, grants
+}
+
+// TestIdentityAuthorshipSignedRC2: the authorship scenarios over signed rc/2 evidence, read by the candidate
+// dual-major reader and judged by the real candidate actor evaluator (identity.Actors), no fake. Two delegate keys
+// of I: one claim of I; same-key ancestry amends nothing; concurrent cross-key amendments are contested and one
+// naming both reconciles; an amendment naming a missing target makes I's fields unknown; an amendment naming
+// another principal's claim applies to nothing; an outsider's self-signed header naming I with an invented grant
+// changes nothing. Without the evaluator every identity statement counts toward nothing (hook-absent text).
+func TestIdentityAuthorshipSignedRC2(t *testing.T) {
+	conformance.Partial(t, "C-id-21", "artifact authorship over signed rc/2 lines with the real candidate evaluator under the dual reader: concurrent cross-key amendments contested, reconciliation by an amendment naming both; the profile is not active (no production reader wires the evaluator)")
+	conformance.Partial(t, "C-id-22", "artifact authorship over signed rc/2 with the real evaluator: a missing target makes I's fields unknown, another principal's target makes the amendment apply to nothing and not a claim; not active in production")
+	conformance.Partial(t, "C-id-44", "artifact authorship over signed rc/2 with the real evaluator: authorized missing-target amendment makes I's fields unknown (verify 3); an outsider's self-signed header with an invented grant changes nothing; not active in production")
+	conformance.Partial(t, "C-id-45", "artifact authorship over signed rc/2 with the real evaluator: amend:true lets K2 amend K1's claim of I across keys and grants; not active in production")
+	ghost := strings.Repeat("e", 64)
+	lic := func(l string) *canon.Object {
+		return obj("content", contentOf("X"), "type", "dataset", "licence", l)
+	}
+	amending := func(l string, targets ...string) *canon.Object {
+		return withMember(lic(l), wire.IdentityCrit, amendsBody(targets...))
+	}
+	build := func() (*world, [2]string, [2]string, string) {
+		w := newWorld(t)
+		w.authored("K1:0", "K1", "K1-0")
+		w.authored("K2:0", "K2", "K2-0")
+		w.authored("S:0", "S", "S-0")
+		i, g := w.identityAmending("I", "IR", "K1", "K2")
+		return w, [2]string{i, g["K1"]}, [2]string{i, g["K2"]}, i
+	}
+	read := func(w *world, opts ...Option) *Artifact {
+		t.Helper()
+		var lines [][]byte
+		lines = append(lines, w.lines...)
+		actors, err := identity.NewActors(lines)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return dualResolver(t, w, append([]Option{WithActorEligibility(actors)}, opts...)...).Artifact(dig("X"))
+	}
+
+	// two keys of I, then K1 again (same-key successor, no amends): three current claims of I, contested
+	w, a1, a2, i := build()
+	w.signRC2("A0", "K1", "authored", lic("MIT"), rc2Actor, a1)
+	w.signRC2("B0", "K2", "authored", lic("MIT"), rc2Actor, a2)
+	a := read(w)
+	if a.State != SoleAuthor || len(a.Claims) != 1 || a.Claims[0].Subject != IdentitySubject(i) || len(a.Claims[0].Signers) != 2 {
+		t.Fatalf("one claim of I by two keys:\n%s", a.Render())
+	}
+	wantField(t, a, "licence", FieldDefault, `"MIT"`)
+	w.signRC2("A1", "K1", "authored", lic("CC0-1.0"), rc2Actor, a1)
+	wantField(t, read(w), "licence", FieldContested, "")
+
+	// cross-key concurrent amendments, then reconciliation (K2 amends K1's claim: amend:true is identity-wide)
+	w, a1, a2, _ = build()
+	w.signRC2("A0", "K1", "authored", lic("MIT"), rc2Actor, a1)
+	w.signRC2("A1", "K1", "authored", amending("CC0-1.0", w.ids["A0"]), rc2Actor, a1)
+	w.signRC2("B1", "K2", "authored", amending("Apache-2.0", w.ids["A0"]), rc2Actor, a2)
+	a = read(w)
+	if len(a.Claims) != 1 || len(a.Claims[0].Current) != 2 {
+		t.Fatalf("concurrent amendments both current:\n%s", a.Render())
+	}
+	wantField(t, a, "licence", FieldContested, "")
+	w.signRC2("C1", "K2", "authored", amending("CC-BY-4.0", w.ids["A1"], w.ids["B1"]), rc2Actor, a2)
+	a = read(w)
+	wantField(t, a, "licence", FieldDefault, `"CC-BY-4.0"`)
+	wantExit(t, a, 0, "")
+
+	// a missing target: I's view is unknown, verify 3
+	w, a1, a2, _ = build()
+	w.signRC2("A0", "K1", "authored", lic("MIT"), rc2Actor, a1)
+	w.signRC2("B1", "K2", "authored", amending("CC0-1.0", w.ids["A0"], ghost), rc2Actor, a2)
+	a = read(w)
+	wantField(t, a, "licence", FieldUnknown, "")
+	wantExit(t, a, 3, "authorship: unknown")
+
+	// another principal's target: S's bare-key claim. The amendment applies to nothing and is not a claim of I.
+	w, a1, a2, i = build()
+	w.signRC2("A0", "K1", "authored", lic("MIT"), rc2Actor, a1)
+	w.authored("S1", "S", "X", "licence", "GPL-3.0")
+	w.signRC2("B1", "K2", "authored", amending("CC0-1.0", w.ids["S1"]), rc2Actor, a2)
+	a = read(w)
+	if len(a.NotCounted) != 1 || a.NotCounted[0].Statement != w.ids["B1"] || a.NotCounted[0].Subject != IdentitySubject(i) ||
+		!strings.Contains(a.NotCounted[0].Why, "amends nothing") {
+		t.Fatalf("wrong-principal amendment:\n%s", a.Render())
+	}
+
+	// an outsider S signs a header naming I with an invented grant: not counted, I untouched
+	w, a1, _, i = build()
+	w.signRC2("A0", "K1", "authored", lic("MIT"), rc2Actor, a1)
+	before := read(w)
+	w.signRC2("Z", "S", "authored", amending("WTFPL", w.ids["A0"], ghost), rc2Actor, [2]string{i, ghost})
+	a = read(w)
+	if a.Outcome() != before.Outcome() || len(a.NotCounted) != 1 || a.NotCounted[0].Subject != KeySubject(w.signer("S")) ||
+		!strings.Contains(a.NotCounted[0].Why, "binds it to no identity") {
+		t.Fatalf("an outsider changed I's answer:\n%s\nvs\n%s", a.Render(), before.Render())
+	}
+
+	// no evaluator: identity statements count toward nothing, with the hook-absent text, never as their keys'
+	b := dualResolver(t, w).Artifact(dig("X"))
+	if b.State != NoClaim || !strings.Contains(b.Render(), "unknown (identity profile not active)") {
+		t.Fatalf("hook absent:\n%s", b.Render())
+	}
 }
