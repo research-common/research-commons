@@ -137,18 +137,18 @@ var limits = []limit{
 	},
 	{
 		id:  "L-05",
-		gap: "The task contract grammar is provisional: only the provisional profile is read; any other contract leaves readiness `unchecked`",
+		gap: "Task contracts are read under " + resolve.TaskContractV1Profile + " (and the provisional profile, under its own name) only: any other profile, or an unknown field, leaves readiness `unchecked`; no identity profile is registered, so `counting_unit: identity` reads `unknown`",
 		sources: []limitSource{
-			{help: []string{"publish", "task"}, says: "the edition's contract, a JSON object (the contract grammar is provisional)"},
+			{help: []string{"publish", "task"}, says: "any other profile or an unknown field leaves readiness unchecked"},
 		},
-		probe:  "`publish task` with a contract of any other profile prints readiness `unchecked`, naming the profile it reads",
-		closes: "a specified contract grammar this reader reads",
+		probe:  "`publish task` with a contract of another profile prints readiness `unchecked`, naming the profile it reads",
+		closes: "a later contract profile this reader reads",
 		open: func(t *testing.T) (bool, string) {
 			p := newPubWorld(t)
 			ct := p.file("c.json", `{"profile":"rc-task-contract/1","beneficiary":"`+p.signer+`","any_issuer":true}`)
 			r := runIn(p.root, nil, "publish", "task", "--key", p.key, "--name", "t", "--contract", ct, "--json")
 			return r.code == ExitOK && strings.Contains(r.stdout, `"readiness":{"state":"unchecked"`) &&
-				strings.Contains(r.stdout, resolve.ProvisionalProfile), r.stdout
+				strings.Contains(r.stdout, resolve.TaskContractV1Profile), r.stdout
 		},
 	},
 	{

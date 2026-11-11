@@ -11,6 +11,25 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ### Changed
 - Identity profile (candidate, not active): the candidate `rc/2` reader now reads resources (`genesis`, `edition`, `withdraw_approval`) with typed controllers (`{key: K}` or `{identity: I}`); task roles on an edition are shape-checked only. Behind the opt-in reader and an actor evaluator, a resource rule counts each controller once whoever signs for it (two delegates of one identity fill one slot, a delegate never fills its own key's slot), withdrawal is local to the key and grant that approved, and an approval a grant-history cut removes, or whose eligibility is undecided, leaves the edition `contested`. An `rc/2` edition's id is computed in its own major, so `rc/1` and `rc/2` approvals of the same bytes are different editions. `rc/1` histories read exactly as before.
+- **Task contracts: the `task-contract-v1` profile is read** (task-contracts note). A task edition whose contract names
+  `profile: "task-contract-v1"` gets its terms read in full, or not at all: an unknown field (`x_` names included), a
+  malformed field, or terms that apply to no submission (`min_grade` without `results: "derived"`, a workflow pin
+  under `results: "observed"`) leave readiness `unchecked` naming the field. The provisional profile keeps its own
+  name and reading; any other profile stays `unchecked`. Under v1: an `authored` or `observed` carrying `fulfills` is
+  a submission; each submission is `counted`, `undecided` or `not counted` with every reason named (eligibility,
+  the coordinator's `grant` for that edition, rubric, deadline, results kind, `min_grade`, pins), and stays
+  admissible whatever the outcome; a key counts by its current submission only (its log order, never `ts`), and
+  disagreeing branches of a fork count in none; readiness is a bracket, so an undecided submission never takes away
+  a quorum the counted ones reach. A `deadline: {height: h}` is met only by a verified Bitcoin bound at or below
+  `h` (or a withheld-availability commitment's bound, which shows possession only); otherwise it is `unchecked` while
+  anything can still resolve and `not shown` after, never "missed". `grouping: {rule: "any"}` collects every counted
+  submission in one group. `counting_unit: identity` is read and readiness is `unknown` (no identity profile is
+  registered). `publish task` prints the contract profile and, when readiness is not settled, why.
+- New wire kind `grant` (a task coordinator seats a key for one edition) and optional `refutes` members `task` +
+  `edition` (both or neither): a bound refutation is listed under that edition on its own track, in no quorum group.
+  `publish --draft` can sign a `grant`. A `submit`'s `salt` is still read and shown as an inert field.
+- `publish` of an `authored` that replaces your current claim on the same bytes and drops (or changes) its
+  `fulfills` now warns, naming the edition: the submission is withdrawn. It still signs.
 - Identity profile (candidate, not active): a dual-major reader that reads `rc/1` lines exactly as today and candidate `rc/2` identity lines with their signed actor, available only as an opt-in store option (no command uses it). Under it, an `rc/2` statement that acts for an identity never counts as its signing key's evidence: without an actor evaluator it reads `unknown (identity profile not active)`. Tests show an `rc/1`-only history gives the same ids, statuses and every resolver answer with and without it, that every resolver view handles `rc/2` bytes from either reader without failing, and that order-independence and non-interference hold on mixed `rc/1` + `rc/2` histories.
 - `commons pull` now gives edition rules the package's blob bytes (and the blobs this store already holds), as `hub check` does, so a content rule re-applied at pull (a forbidden key inside a pulled `.tar` or `.tar.gz` member) reads the content instead of `unchecked (content not held)`. Archives are walked by the same scanner under the same limits. Rule dialects still ship none, so a rule with no dialect stays `unchecked`.
 - `publish --draft` of a `rotate_key` now prints a warning naming the checks `commons rotate` would have made and this path skips (successor, key events already held, merged tips). It still signs, so the way out after a compromise stays open; the gap is listed in `docs/KNOWN-LIMITS.md` (L-13).

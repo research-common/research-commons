@@ -492,6 +492,38 @@ func TestPublishTask(t *testing.T) {
 	}
 }
 
+// TestPublishTaskV1: a task-contract-v1 edition is read by `publish task` (its profile named, readiness computed);
+// an `authored` carrying fulfills is a submission; publishing an amendment that drops fulfills warns, naming the
+// edition, and still signs (C-exch-15b (a), CLI half).
+func TestPublishTaskV1(t *testing.T) {
+	conformance.Partial(t, "C-exch-15b", "the publish warning; the resolver half is TestV1Amendments in internal/resolve")
+	p := newPubWorld(t)
+	ct := p.file("c.json", `{"profile":"`+resolve.TaskContractV1Profile+`","question":"q?","beneficiary":"`+p.signer+`","any_issuer":true,"quorum":{"k":1,"independence":"not-required"}}`)
+	r := runIn(p.root, nil, "publish", "task", "--key", p.key, "--name", "v1", "--contract", ct, "--json")
+	if r.code != 0 || !strings.Contains(r.stdout, `"contract_profile":"`+resolve.TaskContractV1Profile+`"`) || !strings.Contains(r.stdout, `"state":"not ready"`) {
+		t.Fatalf("publish task v1: %d %s", r.code, r.stdout)
+	}
+	o := outObj(t, r)
+	task, ed := string(o.Members["task"].(canon.String)), string(o.Members["edition"].(canon.String))
+	f := `{"edition":"` + ed + `","resource":"` + task + `"}`
+	content := p.file("d", "the submitted bytes")
+	if r = p.publish("--kind", "authored", "--content", content, "--fulfills", f); r.code != 0 || strings.Contains(r.stdout, "withdrawn") {
+		t.Fatalf("submit by fulfills: %d %s", r.code, r.stdout)
+	}
+	tk, _ := resolve.New(mustLogs(t, p), resolve.WithContractReader(resolve.ContractProfiles{})).Task(task)
+	if len(tk.Submissions) != 1 || tk.Submissions[0].V1 == nil || tk.Submissions[0].V1.State != resolve.SubCounted {
+		t.Fatalf("fulfills submission: %s", tk.Render())
+	}
+	r = p.publish("--kind", "authored", "--content", content, "--licence", "CC0-1.0")
+	if r.code != 0 || !strings.Contains(r.stdout, "withdrawn") || !strings.Contains(r.stdout, ed[:12]) {
+		t.Fatalf("amendment without fulfills: %d %s", r.code, r.stdout)
+	}
+	tk, _ = resolve.New(mustLogs(t, p), resolve.WithContractReader(resolve.ContractProfiles{})).Task(task)
+	if len(tk.Submissions) != 0 {
+		t.Fatalf("the amendment did not withdraw the submission: %s", tk.Render())
+	}
+}
+
 func mustLogs(t *testing.T, p *pubWorld) *keylog.Store {
 	v, err := loadView(p.s, nil)
 	if err != nil {

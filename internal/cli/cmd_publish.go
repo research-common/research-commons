@@ -158,7 +158,7 @@ func init() {
 	tflags := append(slices.Clone(writerFlags),
 		Flag{Name: "name", Value: "text", Help: "a new task's name"},
 		Flag{Name: "task", Value: "id", Help: "an existing task (its genesis id): publish a new edition after its current one", Check: checkIDFlag},
-		Flag{Name: "contract", Value: "file", Help: "the edition's contract, a JSON object (the contract grammar is provisional)"},
+		Flag{Name: "contract", Value: "file", Help: "the edition's contract, a JSON object: profile " + resolve.TaskContractV1Profile + " (or the provisional profile, read under its own name); any other profile or an unknown field leaves readiness unchecked"},
 	)
 	Register(&Command{Name: "publish task", Summary: "create a task (genesis + first edition) or publish a new edition of one",
 		Store: true, Writes: true, Flags: tflags, Prepare: preparePublishTask, Run: publishTaskCmd,
@@ -954,9 +954,15 @@ func (v *view) readinessWith(c *Ctx, sts []signed, task, edition string) (*Obj, 
 		default:
 			o.set("state", tokV(tok(rd.Token))).set("quorum", intV(int64(rd.K))).set("counted", textV(resolve.CountedAs)).
 				set("why", textV("settled by counting: "+strconv.Itoa(rd.K)+" distinct signing keys"))
+			if len(rd.Why) > 0 {
+				o.set("explain", texts(rd.Why...))
+			}
 		}
-		if b.Terms != nil && b.Terms.Provisional {
+		switch {
+		case b.Terms != nil && b.Terms.Provisional:
 			o.set("contract_profile", textV(b.Terms.Profile+" (provisional: the contract grammar is pending)"))
+		case b.Terms != nil:
+			o.set("contract_profile", textV(b.Terms.Profile))
 		}
 	}
 	return o, b.State, ""
