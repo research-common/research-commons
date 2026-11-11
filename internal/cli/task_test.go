@@ -381,3 +381,43 @@ func TestPublishGrant(t *testing.T) {
 		t.Fatalf("dry run: %d %s", h.code, h.stdout)
 	}
 }
+
+// TestTaskIndependenceAndDivergenceOverTheCLI: C-exch-11 and C-exch-14 under task-contract-v1, through show and
+// explain. (a) self-declared-accepted, two submitters declare it: ready, and the readiness says the independence
+// is self-declared; under `required` the same submissions are `unknown` (verify 3). (b) k = 2 by byte equality:
+// A and B match, a later C diverges: ready, and explain still shows C's divergence as its own report.
+func TestTaskIndependenceAndDivergenceOverTheCLI(t *testing.T) {
+	conformance.Covers(t, "C-exch-11", "C-exch-14")
+	for _, mode := range []string{"self-declared-accepted", "required"} {
+		w := newWorld(t)
+		g := w.taskGenesis("T", "Q")
+		_, e := w.taskEd("T:E1", "Q", g, g, v1Contract(w.signer("Q"), "quorum", obj("k", 2, "independence", mode)))
+		w.life("SA", "A", "submit", g, e, "result", dig("x"), "self_declared_independence", true)
+		w.life("SB", "B", "submit", g, e, "result", dig("x"), "self_declared_independence", true)
+		rd := readinessOf(t, taskSection(t, jsonOf(t, w.run("show", g, "--json"))), e)
+		v := w.run("verify", g)
+		switch mode {
+		case "self-declared-accepted":
+			if rd.Members["state"] != canon.String("ready") || !strings.Contains(string(canon.Encode(rd.Members["independence"])), "self-declared") || v.code != ExitOK {
+				t.Fatalf("%s: %s (verify %d)", mode, canon.Encode(rd), v.code)
+			}
+			if h := w.run("show", g); !strings.Contains(h.stdout, "independence: self-declared") {
+				t.Fatalf("human surface: %s", h.stdout)
+			}
+		default:
+			if rd.Members["state"] != canon.String("unknown") || v.code != ExitCouldNot {
+				t.Fatalf("%s: %s (verify %d)", mode, canon.Encode(rd), v.code)
+			}
+		}
+	}
+	w := newWorld(t)
+	g := w.taskGenesis("T", "Q")
+	_, e := w.taskEd("T:E1", "Q", g, g, v1Contract(w.signer("Q"), "quorum", obj("k", 2, "independence", "not-required")))
+	w.life("SA", "A", "submit", g, e, "result", dig("x"))
+	w.life("SB", "B", "submit", g, e, "result", dig("x"))
+	late := w.life("SC", "C", "submit", g, e, "result", dig("z"))
+	rd := readinessOf(t, taskSection(t, jsonOf(t, w.run("explain", g, "--json"))), e)
+	if rd.Members["state"] != canon.String("ready") || !strings.Contains(string(canon.Encode(rd.Members["reports"])), "divergence report: submission "+late[:12]) {
+		t.Fatalf("divergence: %s", canon.Encode(rd))
+	}
+}
