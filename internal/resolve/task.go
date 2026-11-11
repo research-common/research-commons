@@ -151,9 +151,14 @@ type Attempt struct {
 	Withdrawn string
 }
 
-// Submission is one `submit` naming the task.
+// Submission is one `submit` naming the task, or (under task-contract-v1, §5.1) an `authored` or `observed`
+// carrying `fulfills` for one of its editions.
 type Submission struct {
 	Statement, Signer, Result, Edition string
+	// Kind is the submitting statement's kind: submit, authored or observed.
+	Kind string
+	// V1 is set when the bound edition's terms are task-contract-v1; the fields below it are read only then.
+	V1 *V1Conditions
 	// Counts is the counting gate (actorgate.go): the bare-key gate (key events, chained, understood) for a
 	// bare-key submission, actor eligibility for one the actor evaluator binds to Identity. Why says why not, or,
 	// for a counted identity submission, the signer's bare-key status shown beside it.
@@ -229,7 +234,11 @@ type Task struct {
 	Grants      []Grant
 	GrantNotes  []string
 	Refutations []*Placed
-	Readiness   []*Readiness
+	// Bound are the refutations bound to an edition of this task by their own `task`/`edition` (§4.2): the
+	// refutation track, in no quorum group. Under task-contract-v1 an unbound refutation is shown beside what it
+	// refutes and is not listed here; Refutations keeps the provisional reading's inferred list.
+	Bound     []*BoundRefutation
+	Readiness []*Readiness
 	// Contested lists the submissions whose effective decisions disagree.
 	DecisionConflict []string
 	Explain          []string
@@ -292,8 +301,10 @@ func (r *Resolver) Task(id string) (*Task, bool) {
 	r.attempts(t, mine, bind)
 	r.grants(t, bind)
 	r.submissions(t, mine("submit"), bind)
+	r.fulfillsSubmissions(t, bind)
+	r.v1Conditions(t, bind)
+	r.refutations(t, bind)
 	r.decisions(t, mine("decide"), bind)
-	r.refutations(t)
 	editions := map[string]bool{}
 	for _, s := range t.Submissions {
 		editions[s.Edition] = true
@@ -343,6 +354,10 @@ func (r *Resolver) grants(t *Task, bind func(string) Binding) {
 				continue
 			}
 			g, ok := r.exch.grants.Grant(p.St)
+			if p.St.Kind == "grant" {
+				// the wire kind (task-contracts note §4.1); scope is the edition it names, and no time order
+				g, ok = Grant{Task: str(p.St.Body, "task"), Edition: str(p.St.Body, "edition"), Grantee: str(p.St.Body, "grantee")}, p.St.Status == wire.Valid
+			}
 			if !ok || g.Task != t.ID {
 				continue
 			}
@@ -373,7 +388,7 @@ func (r *Resolver) submissions(t *Task, ps []*Placed, bind func(string) Binding)
 		b := p.St.Body
 		g := r.gate(p) // bare-key: Counts; identity-context: actor eligibility (actorgate.go)
 		s := &Submission{Statement: p.St.ID, Signer: p.St.Signer, Result: str(b, "result"), Edition: str(b, "edition"), Counts: g.Counts,
-			Identity: g.Identity, Why: g.Why}
+			Identity: g.Identity, Why: g.Why, Kind: "submit"}
 		_, s.Salted = b.Get("salt")
 		if v, ok := b.Get("self_declared_independence"); ok {
 			s.SelfDeclared = bool(v.(canon.Bool))
@@ -383,7 +398,15 @@ func (r *Resolver) submissions(t *Task, ps []*Placed, bind func(string) Binding)
 				s.Labels = append(s.Labels, k+"="+string(canon.Encode(b.Members[k])))
 			}
 		}
-		bd := bind(s.Edition)
+		r.admitSubmission(t, s, p, bind(s.Edition))
+		t.Submissions = append(t.Submissions, s)
+	}
+}
+
+// admitSubmission evaluates the bound edition's terms that read the submission alone: eligibility, the coordinator grant,
+// the rubric, independence and the departure check.
+func (r *Resolver) admitSubmission(t *Task, s *Submission, p *Placed, bd Binding) {
+	{
 		if bd.ok() {
 			tm := bd.Terms
 			s.Eligible = tm.AnyIssuer || slices.Contains(tm.EligibleIssuers, s.Signer)
@@ -406,7 +429,6 @@ func (r *Resolver) submissions(t *Task, ps []*Placed, bind func(string) Binding)
 				s.Departure, s.DepartureWhy = DepartureCheck(tm.Sampling, r.deliveredSampling(s.Result))
 			}
 		}
-		t.Submissions = append(t.Submissions, s)
 	}
 }
 
@@ -437,8 +459,8 @@ func (r *Resolver) decisions(t *Task, ps []*Placed, bind func(string) Binding) {
 		bd := bind(d.Edition)
 		var cited int
 		for _, s := range d.Submissions {
-			if subs[s] != nil {
-				cited++
+			if subs[s] != nil || t.boundRefutation(s, d.Edition) != nil {
+				cited++ // a submission of this task, or a refutation bound to the edition (§5.8)
 			}
 		}
 		switch {
@@ -451,7 +473,7 @@ func (r *Resolver) decisions(t *Task, ps []*Placed, bind func(string) Binding) {
 		case len(d.Submissions) == 0:
 			d.Counts, d.Why = false, "cites nothing"
 		case cited == 0:
-			d.Counts, d.Why = false, "cites no submission of this task held"
+			d.Counts, d.Why = false, "cites no submission or bound refutation of this task held"
 		}
 		byID[d.Statement] = d
 		t.Decisions = append(t.Decisions, d)
@@ -503,7 +525,10 @@ func (r *Resolver) decisions(t *Task, ps []*Placed, bind func(string) Binding) {
 }
 
 // refutations lists every counted `refutes` naming a submission of this task: first-class, on their own track.
-func (r *Resolver) refutations(t *Task) {
+// A refutation bound by its own `task`/`edition` (§4.2) is listed under that edition whatever its `of`; an
+// unbound one refuting a submission bound to a task-contract-v1 edition is shown beside that submission only
+// (no binding is inferred from `of`); under the provisional reading the binding is inferred, as before.
+func (r *Resolver) refutations(t *Task, bind func(string) Binding) {
 	subs := map[string]*Submission{}
 	for _, s := range t.Submissions {
 		subs[s.Statement] = s
@@ -525,13 +550,23 @@ func (r *Resolver) refutations(t *Task) {
 		if s == nil {
 			s = claimOf[str(p.St.Body, "of")]
 		}
+		if str(p.St.Body, "task") == t.ID {
+			t.Bound = append(t.Bound, r.boundRefutation(p, bind))
+			if s != nil && p.Counts() {
+				s.Refuted = append(s.Refuted, p.St.ID)
+			}
+			continue
+		}
 		if s != nil {
-			t.Refutations = append(t.Refutations, p)
+			if s.V1 == nil {
+				t.Refutations = append(t.Refutations, p)
+			}
 			if p.Counts() {
 				s.Refuted = append(s.Refuted, p.St.ID)
 			}
 		}
 	}
+	slices.SortFunc(t.Bound, func(a, b *BoundRefutation) int { return strings.Compare(a.Statement, b.Statement) })
 	slices.SortFunc(t.Refutations, func(a, b *Placed) int { return strings.Compare(a.St.ID, b.St.ID) })
 }
 
@@ -544,6 +579,9 @@ func (r *Resolver) readiness(t *Task, b Binding) *Readiness {
 		return rd
 	}
 	tm := b.Terms
+	if tm.Profile == TaskContractV1Profile {
+		return r.readinessV1(t, b)
+	}
 	byIdentity := tm.CountingUnit == CountIdentity
 	if byIdentity {
 		switch {
@@ -754,6 +792,19 @@ func (r *Resolver) reachesWith(q *Quorum, subs []*Submission, count func([]*Subm
 // reference submitter's. Without a rule nothing groups and the missing rule is named. Results outside every
 // group that reached the quorum are reported as divergence, also after readiness.
 func (r *Resolver) quorumGroups(q *Quorum, pool []*Submission, limit int) (groups [][]*Submission, notes []string, unchecked string) {
+	return r.quorumGroupsAs(q, pool, limit, false)
+}
+
+// quorumGroupsAs is quorumGroups; optimistic takes a comparison that did not run as matching (the upper bound
+// of the bracket, task-contracts note §5.6) and still reports it as not run. Under `grouping: {rule: "any"}`
+// every submission is in one group (§5.2).
+func (r *Resolver) quorumGroupsAs(q *Quorum, pool []*Submission, limit int, optimistic bool) (groups [][]*Submission, notes []string, unchecked string) {
+	if q.Grouping == GroupAny {
+		if len(pool) > 0 {
+			groups = append(groups, slices.Clone(pool))
+		}
+		return groups, nil, ""
+	}
 	byResult := map[string][]*Submission{}
 	for _, s := range pool {
 		byResult[s.Result] = append(byResult[s.Result], s)
@@ -791,7 +842,7 @@ func (r *Resolver) quorumGroups(q *Quorum, pool []*Submission, limit int) (group
 			notes = append(notes, fmt.Sprintf("divergence report: results %s and %s diverged under %s", shortDigest(min(a, b)), shortDigest(max(a, b)), q.comparatorName()))
 			return false, ""
 		}
-		return false, fmt.Sprintf("results %s and %s: %s (%s)", shortDigest(min(a, b)), shortDigest(max(a, b)), res, why)
+		return optimistic, fmt.Sprintf("results %s and %s: %s (%s)", shortDigest(min(a, b)), shortDigest(max(a, b)), res, why)
 	}
 	var pending []string
 	switch q.Grouping {
@@ -817,7 +868,8 @@ func (r *Resolver) quorumGroups(q *Quorum, pool []*Submission, limit int) (group
 			ok, p := match(ref[0], x)
 			if ok {
 				in = append(in, x)
-			} else if p != "" {
+			}
+			if p != "" {
 				pending = append(pending, p)
 			}
 		}
@@ -935,7 +987,11 @@ func (t *Task) Render() string {
 		fmt.Fprintf(&b, "  %s\n", n)
 	}
 	for _, s := range t.Submissions {
-		fmt.Fprintf(&b, "  submission %s by %s: result %s, bound to %s, read under its terms only; admissible", keylog.Short(s.Statement), shortKey(s.Signer), shortDigest(s.Result),
+		via := ""
+		if s.Kind != "submit" && s.Kind != "" {
+			via = " (an " + s.Kind + " carrying fulfills)"
+		}
+		fmt.Fprintf(&b, "  submission %s%s by %s: result %s, bound to %s, read under its terms only; admissible", keylog.Short(s.Statement), via, shortKey(s.Signer), shortDigest(s.Result),
 			keylog.Short(s.Edition))
 		if !s.Counts {
 			fmt.Fprintf(&b, "; counts toward nothing: %s", s.Why)
@@ -962,7 +1018,10 @@ func (t *Task) Render() string {
 		case s.SelfDeclared:
 			b.WriteString("    independence self-declared (the submitter's word)\n")
 		}
-		if s.Salted {
+		switch {
+		case s.Salted && s.V1 != nil:
+			b.WriteString("    salt: retained, inert (task-contract-v1 reads no commitment from it; it changes no outcome)\n")
+		case s.Salted:
 			b.WriteString("    salted commitment: shows possession by T only, not independence\n")
 		}
 		for _, l := range s.Labels {
@@ -971,12 +1030,18 @@ func (t *Task) Render() string {
 		if s.Departure != "" {
 			fmt.Fprintf(&b, "    departure check: %s (%s); the grade is unchanged\n", s.Departure, s.DepartureWhy)
 		}
+		if s.V1 != nil {
+			s.renderV1(&b)
+		}
 		if s.Verdict != "" {
 			fmt.Fprintf(&b, "    decision: %s\n", s.Verdict)
 		}
 		for _, x := range s.Refuted {
 			fmt.Fprintf(&b, "    refuted by %s (a first-class refutation, credited on its own track)\n", keylog.Short(x))
 		}
+	}
+	for _, x := range t.Bound {
+		fmt.Fprintf(&b, "  %s\n", x.line())
 	}
 	for _, p := range t.Refutations {
 		fmt.Fprintf(&b, "  refutation %s by %s of %s, evidence %s\n", keylog.Short(p.St.ID), shortKey(p.St.Signer), keylog.Short(str(p.St.Body, "of")), shortDigest(str(p.St.Body, "evidence")))
