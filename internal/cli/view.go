@@ -50,16 +50,24 @@ func (b verifiedBlobs) Has(d string) bool {
 	return true
 }
 
-// The reader's time verifier. No chain backend is configured by any command yet (the receipt store and the
-// header sync command are not built), so every anchor whose proof parses evaluates to backend-unconfigured:
-// a state, exit 3 where a bound is needed, never a failed invocation (claims-model note §13, C-core-133a (e)).
+// The reader's time verifier with no chain backend: every anchor whose proof parses evaluates to
+// backend-unconfigured, a state, exit 3 where a bound is needed, never a failed invocation (claims-model note §13,
+// C-core-133a (e)). loadView uses it; the read commands build theirs from the persisted header database through
+// timeVerifierFor (chain.go), which falls back to exactly this when the reader has none.
 func newTimeVerifier(s *store.Store) *btctime.Verifier {
 	return &btctime.Verifier{Policy: btctime.DefaultPolicy(), Blobs: storeBlobs{s}}
 }
 
 // loadView builds the view under the reader policy rp (nil = no reader policy: every answer is the no-policy
-// answer); opts are extra resolver options (publish's pre-pin check passes its rule dialects and content reader).
+// answer) with no chain backend; opts are extra resolver options (publish's pre-pin check passes its rule dialects
+// and content reader).
 func loadView(s *store.Store, rp *policy.Policy, opts ...resolve.Option) (*view, error) {
+	return buildView(s, rp, newTimeVerifier(s), opts...)
+}
+
+// buildView is loadView with the time verifier given: one verifier, over one immutable chain snapshot, answers
+// every anchor of the invocation (bitcoin-time note §6.3).
+func buildView(s *store.Store, rp *policy.Policy, tv *btctime.Verifier, opts ...resolve.Option) (*view, error) {
 	lines, err := s.Statements()
 	if err != nil {
 		return nil, err
@@ -77,7 +85,6 @@ func loadView(s *store.Store, rp *policy.Policy, opts ...resolve.Option) (*view,
 		}
 		logs.Log(st.Signer).Add(lines[id]) // a log-relative refusal keeps the line; it is part of the view
 	}
-	tv := newTimeVerifier(s)
 	// The read time is the writer/reader clock Now (tests replace it), passed in: the resolver reads no clock of
 	// its own, so an answer that depends on time (a shelf-life age) is a function of the held set and this
 	// time context (claims-model note I14; storage note §5.1). The blob index re-hashes on every question.

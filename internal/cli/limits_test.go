@@ -47,7 +47,7 @@ func squash(s string) string { return strings.Join(strings.Fields(s), " ") }
 var limits = []limit{
 	{
 		id:  "L-01",
-		gap: "Priority needs time evidence this reader verified, and no command verifies Bitcoin time: every multi-author construction is `contested` (#59)",
+		gap: "Priority needs time evidence this reader verified: until the reader syncs a header chain (`anchor headers sync`, from a file only, L-02), every multi-author construction is `contested` (#59)",
 		sources: []limitSource{
 			{file: "docs/DESIGN-notes-claims-model.md", says: "Until readers can verify Bitcoin time evidence locally (#59), every multi-author construction is honestly `contested`."},
 			{file: "CHANGELOG.md", says: "No command verifies Bitcoin time yet, so every rival construction is `contested`."},
@@ -65,22 +65,28 @@ var limits = []limit{
 	},
 	{
 		id:  "L-02",
-		gap: "No chain backend or header sync, and no command opens the receipt store: no anchor is ever verified, every answer is clock-free, and a task contract with a `deadline` never reaches `ready` (its deadline outcome stays `unchecked`)",
+		gap: "Block headers come only from a file the operator obtains (`anchor headers sync --from`): no network header source (P2P, compact filters) and no operator-node provider, so keeping a chain view fresh is a manual step; and no command opens the receipt store (every proof is read cold)",
 		sources: []limitSource{
-			{file: "internal/README.md", says: "Not built: the commands (§10), persisted headers and policy"},
-			{file: "docs/CLI-OUTPUTS.md", says: "no chain backend is configured, so no bound is verified; a state, not a failed invocation (exit 3)"},
+			{file: "internal/README.md", says: "Not built: a network header source, the operator-node provider (§6.2), persisted policy, and a command that opens the receipt store"},
+			{help: []string{"anchor", "headers", "sync"}, says: "No network source is built: obtain the file from sources you choose."},
 		},
-		probe:  "no registered command starts with `anchor`; `explain` says no chain backend is configured",
-		closes: "an `anchor headers sync` / `anchor status` command (bitcoin-time note §10) and a configurable backend",
+		probe:  "`anchor headers sync` without `--from` exits 2, and no command has an option naming a peer, node, RPC or URL",
+		closes: "a network header source or an operator-node provider (bitcoin-time note §6.1–§6.2)",
 		open: func(t *testing.T) (bool, string) {
 			for _, c := range Commands() {
-				if strings.HasPrefix(c.Name, "anchor") {
-					return false, "command " + c.Name
+				if !strings.HasPrefix(c.Name, "anchor") {
+					continue
+				}
+				for _, f := range c.Flags {
+					for _, w := range []string{"peer", "node", "rpc", "url", "connect"} {
+						if strings.Contains(f.Name, w) {
+							return false, c.Name + " --" + f.Name
+						}
+					}
 				}
 			}
-			w := fixture(t)
-			tc, _ := jsonOf(t, w.run("explain", dig("contested"), "--json")).Members["time_context"].(canon.String)
-			return strings.Contains(string(tc), "no chain backend is configured"), string(tc)
+			r := runIn(t.TempDir(), nil, "anchor", "headers", "sync", "--json")
+			return r.code == ExitDidNotStart && strings.Contains(r.stdout, "no network source is built"), r.stdout
 		},
 	},
 	{

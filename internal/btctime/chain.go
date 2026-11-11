@@ -105,6 +105,9 @@ type Chain struct {
 	byHeight  map[int64][]*node
 	lastSync  time.Time
 	epoch     uint64
+	// boot is the explicit bootstrap the chain started from (nil from genesis), kept so the header database can
+	// persist the trust root the reader chose alongside the headers validated on top of it.
+	boot *Bootstrap
 	// view is the last snapshot built, reused while the epoch is unchanged: building one walks every held
 	// header, which is the cost of a verify on a chain synced from genesis.
 	view *ChainView
@@ -148,6 +151,10 @@ func NewChainFrom(p Params, provider string, b Bootstrap) (*Chain, error) {
 		return nil, errors.New("bootstrap names no chainwork below its first header")
 	}
 	c := newChain(p, provider, b.ID(), b.Height)
+	c.boot = &Bootstrap{Height: b.Height, WorkBelow: new(big.Int).Set(b.WorkBelow)}
+	for _, raw := range b.Headers {
+		c.boot.Headers = append(c.boot.Headers, slices.Clone(raw))
+	}
 	var prev *node
 	work := new(big.Int).Set(b.WorkBelow)
 	for i, raw := range b.Headers {
@@ -232,6 +239,49 @@ func (c *Chain) Add(raw []byte, now time.Time) error {
 	c.insert(&node{h: h, height: height, work: new(big.Int).Add(parent.work, Work(target(h.Bits))), parent: parent})
 	return nil
 }
+
+// held is what the header database persists: the bootstrap (nil from genesis), every other held header in an
+// order where each follows its parent (height, then hash), and the last successful sync. The genesis header and
+// the bootstrap's own headers are not in rest: NewChain and NewChainFrom insert them.
+func (c *Chain) held() (boot *Bootstrap, rest [][]byte, lastSync time.Time) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	skip := map[Hash]bool{}
+	if c.boot != nil {
+		for _, raw := range c.boot.Headers {
+			h, _ := ParseHeader(raw)
+			skip[h.Hash] = true
+		}
+	}
+	var ns []*node
+	for _, n := range c.nodes {
+		if n.parent == nil || skip[n.h.Hash] {
+			continue
+		}
+		ns = append(ns, n)
+	}
+	sort.Slice(ns, func(i, j int) bool {
+		if ns[i].height != ns[j].height {
+			return ns[i].height < ns[j].height
+		}
+		return bytes.Compare(ns[i].h.Hash[:], ns[j].h.Hash[:]) < 0
+	})
+	for _, n := range ns {
+		raw := n.h.Raw
+		rest = append(rest, raw[:])
+	}
+	return c.boot, rest, c.lastSync
+}
+
+// Len is the number of headers the chain holds (every branch).
+func (c *Chain) Len() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.nodes)
+}
+
+// Params returns the network rules the chain validates with.
+func (c *Chain) Params() Params { return c.p }
 
 // Epoch counts changes to the chain; a snapshot carries the epoch it was taken at.
 func (c *Chain) Epoch() uint64 {
