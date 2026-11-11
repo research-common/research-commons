@@ -29,6 +29,10 @@
 // sync command the reader runs; calendars and transports are interfaces the writer supplies. Reads touch the
 // snapshot and the blobs the reader already holds, nothing else (§9.4, C-btc-25).
 //
-// Not built yet: an operator-node provider (§6.2), the commands of §10, and the policy and header database that
-// §9.1 also places in receiver-local state (the receipt store is built; nothing persists headers or policy yet).
+//   - headerdb.go: the header database of §6.1/§9.1 in the same receiver-local state: headers persisted whole
+//     (temporary, sync, rename, under a lock), re-validated through Chain.Add on every load, and refused whole when
+//     foreign, of another network, of an unknown version, corrupt or tampered. Sync reads raw headers from a
+//     source the operator chose (a file today), bounded and cancellable; a header that fails validation stops it.
+//
+// Not built yet: an operator-node provider (§6.2), a network header source, and the persisted policy of §9.1.
 package btctime
