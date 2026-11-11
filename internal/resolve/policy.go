@@ -317,8 +317,9 @@ func (r *Resolver) selectDefaults(a *Artifact) {
 		sortSources(rivals)
 		f.From, f.Rivals = mine, rivals
 		switch {
-		case !s.Met() && len(rivals) > 0:
-			f.State = FieldSelectionUnmet
+		case !s.Met() && (len(rivals) > 0 || f.State == FieldUnknown):
+			// an identity claimant whose current view is unknown is a claim too, even with no current candidate
+			f.State, f.Why = FieldSelectionUnmet, ""
 		case len(mine) == 0:
 			f.State = FieldAbsent
 		case distinctValues(mine) > 1:

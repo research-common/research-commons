@@ -313,10 +313,11 @@
       ],
       "isolated_tests": [
         "internal/wire:TestFixedRootCandidateVectors",
-        "internal/resolve:TestIdentityClaimsGroupByExplicitAmendment"
+        "internal/resolve:TestIdentityClaimsGroupByExplicitAmendment",
+        "internal/resolve:TestIdentityAuthorshipUnits"
       ],
       "conformance": "partial",
-      "remaining": "The amendment DAG, concurrent cross-key amendments (contested, no tiebreak) and reconciliation run in the resolver behind the actor hook with a test-only evaluator; the same over signed rc/2 evidence needs the dual-major reader."
+      "remaining": "The amendment DAG, concurrent cross-key amendments (contested, no tiebreak) and reconciliation run in the resolver's selection and artifact authorship behind the actor hook with a test-only evaluator; the same over signed rc/2 evidence needs the dual-major reader."
     },
     {
       "handle": "ID-22",
@@ -671,7 +672,8 @@
       ],
       "isolated_tests": [
         "internal/identitymodel:TestAuthenticatedIssuerBoundaryAndNoninterference",
-        "internal/resolve:TestIdentityAmendmentTargets"
+        "internal/resolve:TestIdentityAmendmentTargets",
+        "internal/resolve:TestIdentityUnitUnknownCurrentView"
       ],
       "conformance": "partial",
       "remaining": "Outsider half at the model; an authorized amendment naming a missing target makes I's current view unknown (an exact pin still selects the eligible target) and an unbound outsider changes nothing in the resolver behind the actor hook with a test-only evaluator; signed rc/2 end to end needs the dual-major reader."

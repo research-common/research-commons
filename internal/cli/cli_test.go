@@ -214,7 +214,7 @@ func TestClosedVocabulary(t *testing.T) {
 	for _, s := range []resolve.AuthorshipState{resolve.NoClaim, resolve.SoleAuthor, resolve.Derived, resolve.Priority, resolve.ContestedAuthorship} {
 		below = append(below, string(s))
 	}
-	for _, s := range []resolve.FieldState{resolve.FieldDefault, resolve.FieldContested, resolve.FieldAbsent, resolve.FieldNoDefault} {
+	for _, s := range []resolve.FieldState{resolve.FieldDefault, resolve.FieldContested, resolve.FieldAbsent, resolve.FieldNoDefault, resolve.FieldUnknown} {
 		below = append(below, string(s))
 	}
 	below = append(below, resolve.NoDerivation, resolve.NotRederived, resolve.IdenticalProto, resolve.DivergedToken,

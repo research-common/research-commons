@@ -82,6 +82,9 @@ type Claim struct {
 	// provenance are separate claims (one per provenance).
 	Provenance *Provenance
 	Bound      Bound
+	// Unresolved names, for an identity's claim, each authorized amendment of its claims on the blob whose
+	// target cannot be established: the identity's current view is unknown (profile §5.1). Always nil for a key.
+	Unresolved []string
 	current    []*wire.Statement
 }
 
@@ -173,6 +176,10 @@ const (
 	FieldAbsent    FieldState = "undeclared"
 	// FieldNoDefault: authorship itself is contested, so no claimant's value is the default (C-btc-02).
 	FieldNoDefault FieldState = "no default (authorship contested)"
+	// FieldUnknown: the default unit is an identity whose current view is unknown (an authorized amendment of its
+	// claims names a target this reader cannot establish: identity profile §5.1), so no value it states is the
+	// default; Why names the amendment. Only a reader with an actor evaluator reaches it.
+	FieldUnknown FieldState = "unknown"
 )
 
 // Field is the resolved single-party field.
@@ -184,6 +191,8 @@ type Field struct {
 	From []Source
 	// Rivals are values from claimants outside the default unit, listed with their signers, never dropped.
 	Rivals []Source
+	// Why says why the state is FieldUnknown; "" otherwise.
+	Why string
 }
 
 // Default returns the field's default value (canonical JSON) and whether it has one.
@@ -248,22 +257,39 @@ func (r *Resolver) artifact(d string, visiting map[string]bool) *Artifact {
 func (r *Resolver) authorship(d string) *Artifact {
 	a := &Artifact{Digest: d}
 	byKey := map[string][]*Placed{}
+	byIdentity := map[string][]*Placed{}
 	for _, p := range r.byKind["authored"] {
 		if contentDigest(p.St.Body) != d {
 			continue
 		}
-		if !p.Counts() {
-			a.NotCounted = append(a.NotCounted, NotCounted{p.St.ID, KeySubject(p.St.Signer), p.St.Signer, notCountedWhy(p)})
-			continue
+		// the counting gate: with no actor evaluator (every production reader) exactly Counts, and the evaluator
+		// is never asked; with one, a statement it binds to an identity counts for that identity (actorgate.go)
+		g := r.gate(p)
+		switch {
+		case !g.Counts:
+			why := g.Why
+			if why == "" {
+				why = notCountedWhy(p)
+			}
+			a.NotCounted = append(a.NotCounted, NotCounted{p.St.ID, notCountedSubject(g, p), p.St.Signer, why})
+		case g.Identity != "":
+			byIdentity[g.Identity] = append(byIdentity[g.Identity], p)
+		default:
+			byKey[p.St.Signer] = append(byKey[p.St.Signer], p)
 		}
-		byKey[p.St.Signer] = append(byKey[p.St.Signer], p)
+	}
+	for _, k := range sortedKeys(byKey) {
+		a.Claims = append(a.Claims, r.claims(k, byKey[k])...)
+	}
+	for _, i := range sortedKeys(byIdentity) {
+		cs, notCounted, explain := r.identityAuthorship(i, d, byIdentity[i])
+		a.Claims = append(a.Claims, cs...)
+		a.NotCounted = append(a.NotCounted, notCounted...)
+		a.Explain = append(a.Explain, explain...)
 	}
 	slices.SortFunc(a.NotCounted, func(x, y NotCounted) int {
 		return strings.Compare(x.Subject.sortKey()+x.Signer+x.Statement, y.Subject.sortKey()+y.Signer+y.Statement)
 	})
-	for _, k := range sortedKeys(byKey) {
-		a.Claims = append(a.Claims, r.claims(k, byKey[k])...)
-	}
 
 	units := map[string]*Unit{}
 	for _, c := range a.Claims {
@@ -496,6 +522,8 @@ func (r *Resolver) fields(a *Artifact) []Field {
 		switch {
 		case a.Default == nil && len(a.Units) > 1:
 			f.State = FieldNoDefault
+		case len(unresolvedDefault(a)) > 0:
+			f.State, f.Why = FieldUnknown, joinUnresolved(unresolvedDefault(a))
 		case len(mine) == 0:
 			f.State = FieldAbsent
 		case distinctValues(mine) > 1:
@@ -612,6 +640,9 @@ func (a *Artifact) VerifyExit() (int, []string) {
 		if f.State == FieldContested {
 			why = append(why, "field "+f.Name+": contested")
 		}
+	}
+	if len(unresolvedDefault(a)) > 0 {
+		why = append(why, "authorship: unknown")
 	}
 	if a.Selection != nil && !a.Selection.Met() {
 		why = append(why, "reader's authorship selection: "+a.Selection.State)
@@ -732,6 +763,9 @@ func (a *Artifact) Render() string {
 			fmt.Fprintf(&b, "  %s: %s (%s)\n", f.Name, f.From[0].Value, sources(f.From))
 		default:
 			fmt.Fprintf(&b, "  %s: %s\n", f.Name, f.State)
+			if f.Why != "" {
+				fmt.Fprintf(&b, "    %s\n", f.Why)
+			}
 			for _, s := range f.From {
 				fmt.Fprintf(&b, "    %s by %s in %s\n", s.Value, shortKey(s.Signer), keylog.Short(s.Statement))
 			}

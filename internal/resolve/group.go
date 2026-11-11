@@ -186,12 +186,17 @@ func (r *Resolver) Group(p *Provenance) *Group { return r.group(p, "") }
 func (r *Resolver) group(p *Provenance, only string) *Group {
 	g := &Group{Provenance: p, Mode: "undeclared", only: only}
 	authored := map[string]bool{}
+	cur := map[string]identityGraph{}
 	for _, q := range r.byKind["authored"] {
-		if !q.Counts() || provenance(q.St.Body).key() != p.key() {
+		// the counting gate (actorgate.go): with no actor evaluator exactly Counts. An identity's claim joins the
+		// group exactly as a key's does (derivation groups never compete on priority); only I's current claims run,
+		// by I's explicit amendments (identity profile §5.1), never by its key's same-key ancestry
+		cg := r.gate(q)
+		if !cg.Counts || provenance(q.St.Body).key() != p.key() {
 			continue
 		}
-		// only the key's current claim on that blob runs; an amended statement is history (C-core-11)
-		if r.amended(q) {
+		// only the claimant's current claim on that blob runs; an amended statement is history (C-core-11)
+		if cg.Identity != "" && !r.identityCurrent(cg.Identity, q, cur) || cg.Identity == "" && r.amended(q) {
 			continue
 		}
 		authored[q.St.ID] = true

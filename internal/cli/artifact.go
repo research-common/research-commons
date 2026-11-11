@@ -69,8 +69,11 @@ func disclosures(a *resolve.Artifact) *Obj {
 				by = append(by, s.Signer)
 			}
 			d.set("signers", refs(by...))
-		} else if f.State == resolve.FieldContested || f.State == resolve.FieldNoDefault {
+		} else if f.State == resolve.FieldContested || f.State == resolve.FieldNoDefault || f.State == resolve.FieldUnknown {
 			d.set("values", sources(append(slices.Clone(f.From), f.Rivals...)))
+		}
+		if f.Why != "" {
+			d.set("why", textV(f.Why))
 		}
 		switch {
 		case name == "availability" && a.Availability != nil:
@@ -206,6 +209,14 @@ func (v *view) claimants(a *resolve.Artifact) listV {
 			e.setHuman("for", texts(ids...))
 		}
 		e.set("statements", refs(current...))
+		var unresolved []string
+		for _, c := range u.Claims {
+			unresolved = append(unresolved, c.Unresolved...)
+		}
+		if len(unresolved) > 0 {
+			// an identity's current view is unknown (identity profile §5.1); reachable only with an actor evaluator
+			e.set("current_view", tokV(tok("unknown"))).set("unresolved", texts(unresolved...))
+		}
 		if u.Provenance != nil {
 			e.set("provenance", newObj().set("workflow", refV(u.Provenance.Workflow)).set("inputs", refs(u.Provenance.Inputs...)))
 		}
