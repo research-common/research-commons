@@ -185,7 +185,7 @@ func TestReceiptShapedInputGrantsNothing(t *testing.T) {
 // TestNoNetworkInVerifier: C-btc-25 (verifier half). The package that evaluates bounds imports no network package
 // (checked statically over its non-test sources); evaluation reads the snapshot and the blob source only.
 func TestNoNetworkInVerifier(t *testing.T) {
-	conformance.Partial(t, "C-btc-25", "the verifier package imports no network package; the status/verify/settlement commands and a process-level network audit are not built")
+	conformance.Partial(t, "C-btc-25", "the verifier package imports no network package, and the CLI package (anchor status, verify, every read) imports none either (cli.TestInert's static check); settlement reads and a process-level network audit are not built")
 	files, _ := filepath.Glob("*.go")
 	fset := token.NewFileSet()
 	for _, f := range files {
