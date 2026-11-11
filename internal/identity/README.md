@@ -30,9 +30,10 @@ rc/2 line stays an unknown major, retained unverified.
 
 ## 2. Edition ids
 
-Not covered. rc/2 `genesis`, `edition`, `withdraw_approval` and the five task kinds read as verified but
-`Unsupported` ("not implemented by this reader"), which is non-passing. Major-aware edition grouping is a
-precondition for resource and task integration.
+rc/2 `genesis`, `edition` and `withdraw_approval` are read (typed controller subjects, the edition marker's
+`task_roles` shape-checked only). An edition's id is hashed in its statement's major (`resolve.EditionIDOf`), so an
+rc/1 and an rc/2 approval of the same body bytes are two editions. The five task kinds still read as verified but
+`Unsupported` ("not implemented by this reader"), which is non-passing.
 
 ## 3. Authenticated invalid controls
 

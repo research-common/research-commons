@@ -544,7 +544,7 @@ func TestMergeAuthorityR2(t *testing.T) {
 	w.sign("MB2", "B", "edition", body2)
 	res, _ = w.resolve(g, nil)
 	wantState(t, res, w.ids["MA2"], Authorized, "")
-	if e := editionOf(t, res, w.ids["MA2"]); !slices.Equal(e.Controllers, w.controllers("A")) {
+	if e := editionOf(t, res, w.ids["MA2"]); !slices.Equal(controllerWords(e.Controllers), w.controllers("A")) {
 		t.Fatalf("merge authority %v", e.Controllers)
 	}
 	wantCurrent(t, res, w.ids["MA2"])
@@ -1083,4 +1083,13 @@ func TestEditionBodyTypeIsV1Domain(t *testing.T) {
 	if EditionBodyType != wire.EditionBodyType(1) || EditionBodyType == wire.EditionBodyType(2) {
 		t.Fatalf("%s vs %s / %s", EditionBodyType, wire.EditionBodyType(1), wire.EditionBodyType(2))
 	}
+}
+
+// controllerWords is a controller set as words (keys as themselves), for comparing with w.controllers.
+func controllerWords(cs []Controller) []string {
+	var out []string
+	for _, c := range cs {
+		out = append(out, c.String())
+	}
+	return out
 }

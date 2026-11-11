@@ -168,7 +168,9 @@ func TestUnchangedReaderStackOnCandidateBytes(t *testing.T) {
 	}
 	s := w.admit()
 	w.expect(s, "Gen", identitymodel.Denied, "invalid_actor_binding") // genesis is raw-key only in the profile
-	w.expect(s, "Ed", identitymodel.Unknown, "unsupported_evidence")
+	// an rc/2 edition is read since the typed-controller slice: this one's controllers are not typed subjects and
+	// it has no rule, so it is authenticated-invalid, and its actor binds nothing (it was unsupported before)
+	w.expect(s, "Ed", identitymodel.Denied, "invalid_actor_binding")
 	w.expect(s, "Obs", identitymodel.Denied, "invalid_actor_binding")
 	w.expect(s, "A1", identitymodel.Unknown, "unsupported_root_event")
 }

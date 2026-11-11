@@ -92,7 +92,12 @@ is still an unverified other-major line.
 authenticated only when this reader verified its signature, or when a verified line of the same key commits to
 its exact id through prev/merges (then it is authenticated but unsupported). Bad-signature copies are refused,
 never facts. Authenticated non-administrative lines that are not understood become unsupported, so a malformed
-root key event reads unknown rather than ineffective. rc/2 resource and task kinds are verified but unsupported.
+root key event reads unknown rather than ineffective. rc/2 resource kinds (`genesis`, `edition`,
+`withdraw_approval`) are read with typed controller subjects (`wire/identity_resource.go`); rc/2 task kinds are
+verified but unsupported. Under the dual reader the resource view counts effective subjects (`key(K)` from a
+bare-key approval, `identity(I)` only through the actor evaluator, never a key fallback; an undecided answer or a
+grant-history cut that removes a needed approval is contested), and edition ids are hashed in their statement's
+major (`resolve.EditionIDOf`).
 `Snapshot.Receipt()` digests the admitted canonical lines; `EvidenceDigest()` is the model's fact digest. No
 consumer (authorship, resources, tasks, policy, time) reads the result yet.
 

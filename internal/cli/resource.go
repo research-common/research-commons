@@ -151,36 +151,23 @@ func (v *view) resourceObj(res *resolve.Resource, full bool) *Obj {
 func (v *view) authorityOf(res *resolve.Resource) ([]string, int) {
 	if res.Current != "" && res.Current != res.ID {
 		if e, ok := res.Edition(res.Current); ok {
-			return e.Controllers, e.K
+			return controllerWords(e.Controllers), e.K
 		}
 	}
 	if res.Current == res.ID && res.Genesis != nil {
-		b := res.Genesis.St.Body
-		var cs []string
-		if x, ok := b.Get("controllers"); ok {
-			for _, c := range x.(canon.Array) {
-				if s, ok := c.(canon.String); ok {
-					cs = append(cs, string(s))
-				}
-			}
-		}
-		k := 1
-		if r, ok := b.Get("rule"); ok {
-			if ro, ok := r.(*canon.Object); ok {
-				if kn, ok := ro.Get("k_of_n"); ok {
-					if ko, ok := kn.(*canon.Object); ok {
-						if kv, ok := ko.Get("k"); ok {
-							if n, ok := kv.(canon.Int); ok {
-								k = int(n)
-							}
-						}
-					}
-				}
-			}
-		}
-		return cs, k
+		return controllerWords(res.GenesisControllers), res.GenesisK
 	}
 	return nil, 0
+}
+
+// controllerWords is a controller set as display words: a key controller is its key, as it has always been
+// printed; an identity controller (candidate rc/2 only, never read by a production reader) is identity:<id>.
+func controllerWords(cs []resolve.Controller) []string {
+	var out []string
+	for _, c := range cs {
+		out = append(out, c.String())
+	}
+	return out
 }
 
 func ruleText(k, n int) string {
@@ -254,7 +241,7 @@ func (v *view) editionObj(e *resolve.Edition, full bool) *Obj {
 	}
 	o.set("approvals", al)
 	if e.State == resolve.Authorized {
-		o.set("controllers", refs(e.Controllers...)).set("rule", textV(ruleText(e.K, len(e.Controllers))))
+		o.set("controllers", refs(controllerWords(e.Controllers)...)).set("rule", textV(ruleText(e.K, len(e.Controllers))))
 	}
 	if full && len(e.Explain) > 0 {
 		o.set("reasoning", texts(e.Explain...))

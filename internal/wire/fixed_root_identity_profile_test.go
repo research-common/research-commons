@@ -471,8 +471,8 @@ func frPolicy(schema frSchema, line []byte) error {
 
 func TestFixedRootCandidateVectors(t *testing.T) {
 	conformance.Partial(t, "C-id-21", "shape only (amendment reference syntax); no scenario test: the amendment DAG and contested view need the claim consumer")
-	conformance.Partial(t, "C-id-25", "shape only (typed, duplicate-free subjects); no scenario test: effective-subject deduplication needs the resource consumer")
-	conformance.Partial(t, "C-id-28", "shape only (complete typed controllers and rule); no scenario test: predecessor and merge authority need the resource consumer")
+	conformance.Partial(t, "C-id-25", "candidate schema vectors (typed, duplicate-free subjects); the scenario is internal/resolve TestTypedControllerSlotsSharedBody")
+	conformance.Partial(t, "C-id-28", "candidate schema vectors (complete typed controllers and rule); the scenario is internal/resolve TestTypedControllerChangesAndMerges")
 	conformance.Partial(t, "C-id-31", "shape only (policy selection syntax); no scenario test: the selection evaluator is not built")
 	conformance.Partial(t, "C-id-32", "shape only (conflicting selector syntax); no scenario test: production preflight (exit 2) and non-passing pins are not built")
 	conformance.Partial(t, "C-id-33", "shape only (closed policy syntax); no scenario test: purpose-specific trust evaluation is not built")
@@ -581,8 +581,8 @@ func TestFixedRootCandidateCrypto(t *testing.T) {
 	}
 }
 func TestFixedRootCandidateSharedEdition(t *testing.T) {
-	conformance.Partial(t, "C-id-24", "shared v2 edition id across actors with real signatures; per-subject counting needs major-aware edition grouping and the resource consumer")
-	conformance.Partial(t, "C-id-27", "raw and identity signatures over one body are distinct statements; slot counting needs the resource consumer")
+	conformance.Partial(t, "C-id-24", "shared v2 edition id across actors with real signatures; per-subject counting is internal/resolve TestTypedControllerSlotsSharedBody")
+	conformance.Partial(t, "C-id-27", "raw and identity signatures over one body are distinct statements; slot counting is internal/resolve TestTypedControllerSlotsRawAndIdentity")
 	schema := frLoad(t, "fixed-root-identity.schema.json")
 	k := Ed25519Key{Seed: bytes.Repeat([]byte{43}, 32)}
 	b := minimal("edition")

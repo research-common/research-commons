@@ -316,6 +316,27 @@ func with(base []field, more ...field) []field {
 	return append(append([]field{}, base...), more...)
 }
 
+// editionContents are the fields of an edition's contents (§5). The candidate rc/2 reader swaps `controllers` for
+// typed subjects (candidateEditionContents, identity.go); everything else is shared.
+var editionContents = []field{
+	opt("members", list(exactlyOne([]field{opt("content", digest()), opt("resource", id()), opt("statement", id())}, req("role", text())))),
+	opt("schema", digest()),
+	opt("rules", list(object(req("dialect", text()), req("expr", text())))),
+	opt("contract", anyObject()),
+	opt("selection", enum("curated", "rule-based", "completeness")),
+	// completeness: the scope of a completeness claim, present only beside selection "completeness"
+	// (completenessBeside). The window is in the referent timescale it names, UTC when none (§1.1).
+	opt("completeness", object(req("class", enum("source", "phenomenon", "method")),
+		req("source", text()), req("window", windowObj), opt("timescale", text()))),
+	opt("frozen_before", exactlyOne([]field{opt("date", date()), opt("height", integer()), opt("run", text())})),
+	// system_keys: a method edition's declaration of the referent.system keys an observed under it must
+	// pin. A non-empty set (omit the field to declare nothing); flat key names, so "system.model" is
+	// well-formed and simply matches no key (C-core-32a).
+	opt("system_keys", set(text(), true)),
+	opt("controllers", set(key(), false)),
+	opt("rule", ruleObj),
+}
+
 // kinds is the closed vocabulary of §5, except observed, whose referent depends on its class.
 var kinds = map[string][]field{
 	"authored": with(disclosures, req("content", contentObj),
@@ -338,24 +359,7 @@ var kinds = map[string][]field{
 	"anchors":  {req("covered", id()), req("proof", digest()), req("proof_format", text()), opt("services", list(text()))},
 	"genesis": {req("type", enum("collection", "task", "series")), req("name", text()), req("controllers", set(key(), false)),
 		req("rule", ruleObj), opt("forked_from", id())},
-	"edition": {req("resource", id()), req("predecessors", set(id(), true)), req("contents", object(
-		opt("members", list(exactlyOne([]field{opt("content", digest()), opt("resource", id()), opt("statement", id())}, req("role", text())))),
-		opt("schema", digest()),
-		opt("rules", list(object(req("dialect", text()), req("expr", text())))),
-		opt("contract", anyObject()),
-		opt("selection", enum("curated", "rule-based", "completeness")),
-		// completeness: the scope of a completeness claim, present only beside selection "completeness"
-		// (completenessBeside). The window is in the referent timescale it names, UTC when none (§1.1).
-		opt("completeness", object(req("class", enum("source", "phenomenon", "method")),
-			req("source", text()), req("window", windowObj), opt("timescale", text()))),
-		opt("frozen_before", exactlyOne([]field{opt("date", date()), opt("height", integer()), opt("run", text())})),
-		// system_keys: a method edition's declaration of the referent.system keys an observed under it must
-		// pin. A non-empty set (omit the field to declare nothing); flat key names, so "system.model" is
-		// well-formed and simply matches no key (C-core-32a).
-		opt("system_keys", set(text(), true)),
-		opt("controllers", set(key(), false)),
-		opt("rule", ruleObj),
-	))},
+	"edition":  {req("resource", id()), req("predecessors", set(id(), true)), req("contents", object(editionContents...))},
 	"intent":   taskRef,
 	"withdraw": taskRef,
 	"progress": with(taskRef, opt("note", text())),

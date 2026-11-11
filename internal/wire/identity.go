@@ -257,12 +257,15 @@ func baseBody(s *Statement) (Status, string) {
 	return Valid, ""
 }
 
-// candidateNotImplemented are rc/2 kinds the profile defines but this slice does not evaluate (typed resource
-// controllers, major-aware edition ids, task roles and contracts). They are verified and non-passing.
+// candidateNotImplemented are rc/2 kinds the profile defines but this slice does not evaluate (task lifecycle
+// kinds: attempt continuity, task roles and contracts). They are verified and non-passing.
 var candidateNotImplemented = map[string]bool{
-	"genesis": true, "edition": true, "withdraw_approval": true,
 	"intent": true, "withdraw": true, "progress": true, "submit": true, "decide": true,
 }
+
+// candidateResource are rc/2 resource kinds: their body is the rc/1 schema with typed controller subjects
+// (resource.go in this package's candidate half, resourceBody).
+var candidateResource = map[string]bool{"genesis": true, "edition": true, "withdraw_approval": true}
 
 // candidateBase are rc/2 kinds whose body is the unchanged rc/1 base schema plus the marker.
 var candidateBase = map[string]bool{
@@ -338,6 +341,8 @@ func candidateBody(s *Statement) (Status, string) {
 		return Invalid, "raw key events stay rc/1 in this profile"
 	case candidateNotImplemented[s.Kind]:
 		return Unsupported, "rc/2 " + s.Kind + " not implemented by this reader"
+	case candidateResource[s.Kind]:
+		return resourceBody(s, marker)
 	case candidateBase[s.Kind]:
 		if s.Kind == "authored" || s.Kind == "observed" {
 			if why := closed(marker, "body."+IdentityCrit, "amends"); why != "" {

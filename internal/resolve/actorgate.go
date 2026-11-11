@@ -23,6 +23,11 @@ type countGate struct {
 	// Why is why it is not counted; for a counted identity-context statement whose key the bare-key gate would
 	// have left out, the bare-key status shown beside it. "" otherwise.
 	Why string
+	// State and Reasons are the evaluator's answer for an identity-context statement it binds (policy.Actor*
+	// and its reasons, "code: detail"); "" and nil otherwise. A consumer that must tell an undecided answer from a
+	// denial (a resource slot: unknown is contested, never silently unauthorized) reads them.
+	State   string
+	Reasons []string
 }
 
 func (r *Resolver) gate(p *Placed) countGate {
@@ -40,7 +45,7 @@ func (r *Resolver) gate(p *Placed) countGate {
 	if id == "" {
 		return countGate{Counts: p.Counts(), Why: whyNot(p)}
 	}
-	g := countGate{Identity: id}
+	g := countGate{Identity: id, State: state, Reasons: why}
 	because := ""
 	if len(why) > 0 {
 		because = " (" + strings.Join(why, "; ") + ")"
