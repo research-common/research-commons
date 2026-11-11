@@ -9,6 +9,16 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ## [Unreleased]
 
+## [0.5.0-alpha.2] - 2026-11-11
+
+The second prerelease of the next format. Highlights: task contracts are read under the accepted
+`task-contract-v1` profile (new wire kind `grant`, refutations bound to a task edition, deadlines on verified
+Bitcoin bounds), the resource view on `show`/`verify`/`explain`, `commons rotate`, `explain --since`, an idle
+timeout for `fetch`, and content rules that see inside archives. The candidate fixed-root identity profile
+(`rc/2`) moved a long way behind an opt-in hook, but **no command activates it**: the format major is still
+`rc/1`, and every output without the hook is unchanged. `--json` output changed shape in places (claim
+`subjects`, `list` `resources`); it stays unstable during the alpha (L-12).
+
 ### Changed
 - Identity profile (candidate, not active): the candidate `rc/2` reader now reads resources (`genesis`, `edition`, `withdraw_approval`) with typed controllers (`{key: K}` or `{identity: I}`); task roles on an edition are shape-checked only. Behind the opt-in reader and an actor evaluator, a resource rule counts each controller once whoever signs for it (two delegates of one identity fill one slot, a delegate never fills its own key's slot), withdrawal is local to the key and grant that approved, and an approval a grant-history cut removes, or whose eligibility is undecided, leaves the edition `contested`. An `rc/2` edition's id is computed in its own major, so `rc/1` and `rc/2` approvals of the same bytes are different editions. `rc/1` histories read exactly as before.
 - **Task contracts: the `task-contract-v1` profile is read** (task-contracts note). A task edition whose contract names
@@ -131,6 +141,15 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   rule's outcome is `unchecked`, never `ok`. A blob that is itself in such a compression is one unscanned unit.
   Other blobs are read as before. Previously a forbidden key inside a compressed archive was missed and the rule
   could record `ok`.
+
+### Known issues (open at this tag)
+- Every gap in `docs/KNOWN-LIMITS.md` (L-01…L-13). The ones a first user meets:
+  - No command verifies Bitcoin time yet (no header sync, L-02), so every rival construction is `contested`, and a
+    task contract with a `deadline` never reaches `ready`. (#59)
+  - Task readiness is printed by `publish task` only; `show`/`verify` of a task do not yet print submissions.
+  - There is no Windows build (L-11), and `--json` output may change between alphas (L-12).
+- The identity profile is a candidate and inactive (L-07): an `rc/2` line reads as `unsupported`.
+- The `next-format` issues are requirements for later stages, not defects in this release.
 
 ## [0.5.0-alpha.1] - 2026-11-05
 
@@ -612,7 +631,8 @@ contributions, landed on top of that baseline.
 - **#12** — COMMONS.md review request from an external hub: the first outside use of the
   template and rubric.
 
-[Unreleased]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.1...next
+[Unreleased]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.2...next
+[0.5.0-alpha.2]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.1...v0.5.0-alpha.2
 [0.5.0-alpha.1]: https://github.com/research-common/research-commons/releases/tag/v0.5.0-alpha.1
 [0.4.0-alpha.1]: https://github.com/research-common/research-commons/compare/v0.3.0-alpha.1...v0.4.0-alpha.1
 [0.3.0-alpha.1]: https://github.com/research-common/research-commons/compare/v0.2.0-alpha.1...v0.3.0-alpha.1
