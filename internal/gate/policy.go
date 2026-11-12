@@ -82,6 +82,10 @@ type Policy struct {
 	Limits map[string]int64
 	// Freeze is the series freeze policy (C-core-104); nil means none.
 	Freeze resolve.FreezePolicy
+	// SourceProfiles are the source profile digests the policy pins (`series.source_profiles`, claims-model note
+	// §5.3.1a), in file order. The policy names them; whoever applies the policy loads the blobs from what it held
+	// where it read the policy (a hub: the base revision) and refuses to start when one is not held there.
+	SourceProfiles []string
 	// RefuseIncomplete refuses a resource edition whose completeness claim this receiver's own check finds
 	// failed (`selection.refuse_incomplete`); a claim it cannot check is could not check. False means off.
 	RefuseIncomplete bool
@@ -114,8 +118,49 @@ func DefaultPolicy() *Policy {
 // one of these.
 var HubControlPlane = []string{"hub-policy.json", "rc-store", "README.md", "LICENSE", "CONTRIBUTING.md", "docs/", ".github/", ".gitignore", ".gitattributes"}
 
+// MaxSourceProfiles bounds the entries of a hub policy's `series.source_profiles` member.
+const MaxSourceProfiles = 64
+
 // MaxControlPlane bounds the entries of a hub policy's `control_plane` member.
 const MaxControlPlane = 256
+
+// sourceProfiles reads `series.source_profiles`: at most MaxSourceProfiles objects, each exactly {digest}, the
+// digest in content-digest form, no repeats. The reason names the entry.
+func sourceProfiles(v canon.Value) ([]string, string) {
+	arr, ok := v.(canon.Array)
+	if !ok {
+		return nil, "series.source_profiles is not an array"
+	}
+	if len(arr) > MaxSourceProfiles {
+		return nil, fmt.Sprintf("series.source_profiles has %d entries, more than %d", len(arr), MaxSourceProfiles)
+	}
+	var out []string
+	for i, e := range arr {
+		eo, ok := e.(*canon.Object)
+		if !ok {
+			return nil, fmt.Sprintf("series.source_profiles[%d] is not an object", i)
+		}
+		var d string
+		for _, k := range eo.Keys {
+			s, ok := eo.Members[k].(canon.String)
+			switch {
+			case k != "digest":
+				return nil, fmt.Sprintf("series.source_profiles[%d] carries undefined field %q", i, inert(k))
+			case !ok || !reDigest.MatchString(string(s)):
+				return nil, fmt.Sprintf("series.source_profiles[%d].digest is not a sha256:<64 hex> digest", i)
+			}
+			d = string(s)
+		}
+		if d == "" {
+			return nil, fmt.Sprintf("series.source_profiles[%d] has no digest", i)
+		}
+		if slices.Contains(out, d) {
+			return nil, fmt.Sprintf("series.source_profiles[%d] %s repeats an entry", i, d)
+		}
+		out = append(out, d)
+	}
+	return out, ""
+}
 
 // controlPlaneEntry names why s cannot be a `control_plane` entry, or "". An entry is a relative path (an
 // exact file) or a prefix ending in "/" (a directory and everything under it), with the same path rules the
@@ -315,15 +360,23 @@ func ParseHubPolicy(data []byte, source string) (*Policy, error) {
 				return nil, fail("series is not an object")
 			}
 			for _, sk := range so.Keys {
-				if sk != "refuse_premature_freeze" {
+				switch sk {
+				case "refuse_premature_freeze":
+					b, ok := so.Members[sk].(canon.Bool)
+					if !ok {
+						return nil, fail("series.refuse_premature_freeze is not a boolean")
+					}
+					if b {
+						p.Freeze = resolve.RequireDeclaredNotAfterComputed{}
+					}
+				case "source_profiles":
+					ds, err := sourceProfiles(so.Members[sk])
+					if err != "" {
+						return nil, fail("%s", err)
+					}
+					p.SourceProfiles = ds
+				default:
 					return nil, fail("series carries undefined field %q", sk)
-				}
-				b, ok := so.Members[sk].(canon.Bool)
-				if !ok {
-					return nil, fail("series.refuse_premature_freeze is not a boolean")
-				}
-				if b {
-					p.Freeze = resolve.RequireDeclaredNotAfterComputed{}
 				}
 			}
 		case "selection":
