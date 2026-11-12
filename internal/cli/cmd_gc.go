@@ -16,6 +16,11 @@ import (
 // remove a blob the operator's own serving `holds` pins: it signs a `holds` with withdrawn:true and deletes the
 // blob in one operation, so it acts at once and takes the signing key (--key <file>, else $COMMONS_KEY_FILE;
 // never printed). It does not combine with --apply or --grace.
+//
+// The store-root policy's `series.source_profiles` pin their blobs: `pull` reads its source profiles from this
+// store, so gc keeps each pinned digest, named in the plan as pinned by the policy. The policy is the one every
+// store command loads before work starts (policy.go): a policy file that cannot be used stops gc with exit 2,
+// so a run never proceeds with no pins because the file could not be read.
 
 func init() {
 	Register(&Command{Name: "gc", Summary: "list (default) or delete unreferenced blobs outside the grace window; release a blob this store serves",
@@ -39,7 +44,7 @@ func init() {
 			{Name: "key", Value: "file", Help: "the signing key file for --release (default: $" + KeyEnv + "); a key file written by commons key new; never printed"},
 		},
 		Store: true, Before: gcBefore,
-		Help: "Exit 0 the plan was made (dry run) or carried out; 2 did not start (a malformed duration or digest, --release with --apply or --grace, --key without --release, no usable key for --release); 3 the operation failed after work started (the output says whether anything was committed).",
+		Help: "Exit 0 the plan was made (dry run) or carried out; 2 did not start (an unusable hub-policy.json at the store root, a malformed duration or digest, --release with --apply or --grace, --key without --release, no usable key for --release); 3 the operation failed after work started (the output says whether anything was committed).",
 		Run:  gcCmd})
 }
 
@@ -74,7 +79,7 @@ func gcCmd(c *Ctx) (*Obj, int, error) {
 	if d, ok := c.Flag("release"); ok {
 		return releaseCmd(c, store.Digest(d), c.state.(wire.Key))
 	}
-	cfg := store.GCConfig{}
+	cfg := gcConfig(c.Policy)
 	if g, ok := c.Flag("grace"); ok {
 		d, _ := time.ParseDuration(g)
 		cfg.PerRun = &d
@@ -118,6 +123,17 @@ func gcCmd(c *Ctx) (*Obj, int, error) {
 		o.set("next", textV("re-run with --apply to delete the listed blobs"))
 	}
 	return o, ExitOK, nil
+}
+
+// gcConfig is the gc configuration the store-root policy implies: its source profile pins.
+func gcConfig(p *Policy) store.GCConfig {
+	cfg := store.GCConfig{PolicyPinSource: PolicyFile + " series.source_profiles"}
+	if p != nil && p.Hub != nil {
+		for _, d := range p.Hub.SourceProfiles {
+			cfg.PolicyPins = append(cfg.PolicyPins, store.Digest(d))
+		}
+	}
+	return cfg
 }
 
 func releaseCmd(c *Ctx, d store.Digest, k wire.Key) (*Obj, int, error) {

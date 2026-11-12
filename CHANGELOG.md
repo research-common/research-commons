@@ -61,6 +61,10 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 ### Fixed
 - Credit: `contribution` and `acceptance` now count a key's submissions whatever their kind, as the task-contracts note
   defines them: an `authored` or `observed` carrying `fulfills` for a task edition counts beside `submit` statements.
+- `gc` no longer deletes a source profile that `hub-policy.json` pins in `series.source_profiles`. A profile blob held
+  only for that pin used to be collected after the grace window, after which every `pull` stopped (exit 2, "not held
+  at this store") until it was held again. `gc` now keeps each pinned digest and names the pin in its plan; a policy
+  file it cannot use stops it before any work (exit 2), never a run as if nothing were pinned.
 
 ## [0.5.0-alpha.2] - 2026-11-11
 

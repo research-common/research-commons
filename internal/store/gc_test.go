@@ -687,3 +687,31 @@ func TestReleaseNeedsRepair(t *testing.T) {
 		t.Fatal(res, err)
 	}
 }
+
+// TestGCPolicyPin: a digest the store-root policy pins (GCConfig.PolicyPins: `series.source_profiles`) is kept
+// past the grace window though no statement, journal record or holds names it, and the plan says why. Control:
+// the same blob, unpinned, is collected; a pin of a digest not held changes nothing.
+func TestGCPolicyPin(t *testing.T) {
+	root := t.TempDir()
+	s := open(t, root, Options{NoSync: true})
+	d, _, err := s.InstallBlob(bytes.NewReader([]byte(`{"profile":"rc-source-profile/1"}`)), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, _, _ := s.InstallBlob(bytes.NewReader([]byte("unpinned")), "")
+	age(t, s, d, hours(72))
+	age(t, s, other, hours(72))
+	absent := Digest("sha256:" + strings.Repeat("0", 64))
+	cfg := GCConfig{PolicyPins: []Digest{d, absent}, PolicyPinSource: "hub-policy.json series.source_profiles"}
+	plan, err := s.GC(cfg, true)
+	if err != nil || !slices.Equal(deleted(plan), []Digest{other}) || !s.HasBlob(d) {
+		t.Fatalf("pinned: %v\n%s", err, plan.Render())
+	}
+	if !strings.Contains(plan.Render(), "pinned by hub-policy.json series.source_profiles") {
+		t.Fatalf("the pin is not named:\n%s", plan.Render())
+	}
+	// control: unpinned, the same blob goes
+	if p, err := s.GC(GCConfig{}, true); err != nil || !slices.Equal(deleted(p), []Digest{d}) || s.HasBlob(d) {
+		t.Fatalf("unpinned: %v\n%s", err, p.Render())
+	}
+}
