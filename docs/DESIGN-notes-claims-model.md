@@ -449,7 +449,10 @@ Rules:
   a response) needs a response-layout dialect and is not part of a profile yet.
 - **A hub pins its profiles in its own policy, read at the base revision**, as it reads the rest of its
   policy (§11): a change cannot bring the profile that judges it, and the blob must be held at the base. The
-  series boundary a hub computes from the pinned profiles is §8's `as captured` boundary.
+  series boundary a hub computes from the pinned profiles is §8's `as captured` boundary. A store's own policy
+  pins the profiles its reads choose, from the blobs it holds: the same pins judge each observation's rule
+  (referent status, the finality-aware comparisons) and a series' boundary, and a pin the store cannot honour
+  stops the read rather than reading as no profile.
 
 #### 5.3.2 Corroboration is a derivation
 
