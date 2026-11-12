@@ -255,17 +255,12 @@ func pullCmd(c *Ctx) (*Obj, int, error) {
 	}
 	// the source profiles the store-root policy pins, as this store holds them before the pull: a package
 	// cannot bring the profile that judges it (claims-model note §5.3.1a)
-	profiles, err := gate.LoadSourceProfiles(pol.SourceProfiles, func(d string) ([]byte, error) { return storeBlobCapped(c.Store, d) },
-		"policy file "+PolicyFile+" at the store root", "this store")
+	profiles, err := loadStoreProfiles(c.Store, pol.SourceProfiles)
 	if err != nil {
-		var d *gate.DidNotStart
-		if errors.As(err, &d) {
-			return nil, 0, didNotStart(d)
-		}
 		return nil, 0, err
 	}
 	if profiles != nil {
-		ropts = append(ropts, resolve.WithSegments(resolve.ProfileSegments{Rules: *profiles}))
+		ropts = append(ropts, resolve.WithSegments(resolve.ProfileSegments{Rules: *profiles}), resolve.WithFinalityRules(*profiles))
 	}
 	pol.Resolver = append(ropts, pol.Resolver...)
 	rep, err := gate.Pull(pkg, gate.StoreHeld{S: c.Store}, &pol, opt)
@@ -413,6 +408,30 @@ func heldStatements(pkg gate.Package, st *store.Store) func(string) (*wire.State
 		}
 		return nil, false
 	}
+}
+
+// storeProfiles loads the source profiles the store-root policy pins (nil when it pins none).
+func storeProfiles(c *Ctx) (*resolve.ProfileRules, error) {
+	if c.Policy == nil || c.Policy.Hub == nil {
+		return nil, nil
+	}
+	return loadStoreProfiles(c.Store, c.Policy.Hub.SourceProfiles)
+}
+
+// loadStoreProfiles loads the pinned profiles from the blobs this store holds, through the one loader
+// (gate.LoadSourceProfiles: held, hashing to the digest, capped, a valid profile). A pin that fails is the
+// did-not-start problem naming the entry (exit 2).
+func loadStoreProfiles(s *store.Store, digests []string) (*resolve.ProfileRules, error) {
+	profiles, err := gate.LoadSourceProfiles(digests, func(d string) ([]byte, error) { return storeBlobCapped(s, d) },
+		"policy file "+PolicyFile+" at the store root", "this store")
+	if err != nil {
+		var d *gate.DidNotStart
+		if errors.As(err, &d) {
+			return nil, didNotStart(d)
+		}
+		return nil, err
+	}
+	return profiles, nil
 }
 
 // storeBlobCapped reads blob d as this store holds it, up to the profile size bound: nil when not held. A copy
