@@ -393,11 +393,11 @@ func TestV1RefutationTrack(t *testing.T) {
 }
 
 // TestV1CreditProjection: the C-exch-19 reading under task-contract-v1, for `submit` submissions: separate counts
-// with their denominators, rule and window shown; no default projection; nothing written. The fulfills half
-// shows the remaining gap: an accepted `authored` carrying `fulfills` (a submission, task-contracts §5.1) is in
-// neither contribution nor acceptance.
+// with their denominators, rule and window shown; no default projection; nothing written. An accepted `authored`
+// carrying `fulfills` (a submission, task-contracts §5.1) counts in contribution and acceptance (§6 Q5: the key's
+// submissions, whatever their kind).
 func TestV1CreditProjection(t *testing.T) {
-	conformance.Partial(t, "C-exch-19", "credit counts `submit` statements only: contribution and acceptance miss submissions carried by `fulfills` (task-contracts §5.1), which §6 Q5 (decided) defines as the key's submissions whatever their kind")
+	conformance.Covers(t, "C-exch-19")
 	w := newWorld(t)
 	g := w.task("G", "R")
 	e := w.taskEdition("E", "R", g, []string{g}, w.v1c("R"))
@@ -443,16 +443,23 @@ func TestV1CreditProjection(t *testing.T) {
 	if len(w.lines) != lines {
 		t.Fatal("a projection wrote a statement")
 	}
-	// the remaining gap, pinned so a fix shows here: C's accepted fulfills-carrying submission
+	// C's accepted fulfills-carrying submission is C's contribution and acceptance
 	sC := w.authored("SC", "C", "W", "fulfills", fulfills(g, w.ed(e)))
 	w.decide("DC", "R", g, e, "accept", []string{sC})
 	r = w.store(nil, WithContractReader(ContractProfiles{}))
 	if s := subOf(t, taskV1View(t, w, g), sC); s.Verdict != "accept" {
 		t.Fatalf("the fulfills submission is not accepted: %q", s.Verdict)
 	}
-	cc := r.Credit(w.signer("C"), &CreditRule{Name: "all"})
-	if c := get(cc, "contribution"); c.N != 0 {
-		t.Fatalf("contribution now counts a fulfills submission (%+v): move C-exch-19 to Covers and drop this check", c)
+	cc := r.Credit(w.signer("C"), &CreditRule{Name: "all", Denominators: map[string]string{"acceptance": DenomOwnSubmissions}})
+	if c := get(cc, "contribution"); c.N != 1 || c.Of != 4 || !slices.Contains(c.Statements, sC) {
+		t.Fatalf("contribution misses the fulfills submission %+v\n%s", c, cc.Render())
+	}
+	if c := get(cc, "acceptance"); c.N != 1 || c.Of != 1 {
+		t.Fatalf("acceptance misses the fulfills submission %+v\n%s", c, cc.Render())
+	}
+	// A's counts are unchanged by C's submission, except the shared contribution denominator
+	if c := get(r.Credit(w.signer("A"), &CreditRule{Name: "all"}), "contribution"); c.N != 2 || c.Of != 4 {
+		t.Fatalf("A's contribution %+v", c)
 	}
 }
 

@@ -17,7 +17,7 @@ import (
 // superseded decision stays in its explain (I3, I5).
 //
 // The counts, each over counted statements in the window:
-//   - contribution: the key's `submit` statements;
+//   - contribution: the key's submissions, whatever their kind: `submit`, and `authored`/`observed` carrying `fulfills`;
 //   - citation: `authored` statements of other keys whose provenance inputs name a blob the key authored;
 //   - reproduction: the key's `reproduced` statements;
 //   - refutation: the key's `refutes` statements, a track of its own (§9.4: refutations are first-class);
@@ -189,8 +189,27 @@ func (r *Resolver) Credit(key string, rule *CreditRule) *Credit {
 		}
 		return false
 	}
+	// submissions, whatever their kind (task-contracts §6 Q5): every `submit`, plus every `authored` or `observed`
+	// a held task reads as a submission because it carries `fulfills` (§5.1)
+	subs := append([]*Placed(nil), inWin["submit"]...)
+	seen := map[string]bool{}
+	for _, p := range subs {
+		seen[p.St.ID] = true
+	}
+	for _, t := range tasks {
+		for _, s := range t.Submissions {
+			if s.Kind == "submit" || seen[s.Statement] {
+				continue
+			}
+			if p, ok := r.byID[s.Statement]; ok && in(p) {
+				seen[s.Statement] = true
+				subs = append(subs, p)
+			}
+		}
+	}
+	slices.SortFunc(subs, func(a, b *Placed) int { return strings.Compare(a.St.ID, b.St.ID) })
 	var own []*Placed
-	for _, p := range inWin["submit"] {
+	for _, p := range subs {
 		if p.St.Signer == key {
 			own = append(own, p)
 		}
@@ -205,6 +224,8 @@ func (r *Resolver) Credit(key string, rule *CreditRule) *Credit {
 		switch name {
 		case "acceptance":
 			pool = own
+		case "contribution":
+			pool = subs
 		case "citation":
 			for _, p := range inWin["authored"] {
 				if provenance(p.St.Body) != nil {
