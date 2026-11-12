@@ -826,10 +826,12 @@ func TestReceiptReorg(t *testing.T) {
 // operations: anchors = anchor the signer's head at a coming block; authored = mine blocks; holds = a heavier
 // branch replacing the last blocks, dropping the anchors' roots there; describes = change the policy; observed =
 // shift the clock: fresh, stale, or before the last sync). After every step every anchor is read cold, through
-// one persistent store, and through the resolver both ways: the answers are identical. At the end the state
-// directory is deleted and a cold start gives the same answers again.
+// one persistent store, through a read-only open of that same store (what a read command uses when its state is
+// not writable: receipts used, none written), and through the resolver both ways: the answers are identical. At the
+// end the state directory is deleted and a cold start gives the same answers again (a read-only open then finds no
+// store and reads cold).
 func TestPropertyReceiptsColdEqualsWarm(t *testing.T) {
-	conformance.Partial(t, "P-07", "the bitcoin-time receipt store: warm, cold and deleted-store answers identical over seeded chain histories, at the evidence and through the resolver; the resolver's own caches are not wired")
+	conformance.Partial(t, "P-07", "the bitcoin-time receipt store: warm, read-only, cold and deleted-store answers identical over seeded chain histories, at the evidence, through the resolver and through the read commands (cli TestReadsReceiptsByteIdentical); the resolver's own caches are not wired")
 	opts := fixture.Options{Keys: 3, Blobs: 3, MaxStatements: 14, Kinds: []string{"anchors", "anchors", "authored", "authored", "holds", "describes", "observed"}}
 	used := 0
 	fixture.Check(t, 0x7ec0_0000, 30, opts, func(f fixture.Fixture) string {
@@ -873,8 +875,16 @@ func replayReceipts(t *testing.T, f fixture.Fixture) (string, int) {
 		v := verifier()
 		vr := *v
 		vr.Receipts = r
+		ro, roErr := OpenReceipts(r.Location(), ReceiptOptions{ReadOnly: true, NoSync: true})
 		for _, a := range anchors {
 			cold := v.Evaluate(w.sts[a])
+			if roErr == nil {
+				// before the read-write store reads (and maybe rewrites) the receipt: a read-only read of what is there
+				rov, ruse := ro.Evaluate(v, w.sts[a])
+				if ruse.Written || !reflect.DeepEqual(cold, rov) {
+					return fmt.Sprintf("step %d anchor %s read-only (%+v):\ncold %s\nread-only %s", step, a, ruse, cold, rov)
+				}
+			}
 			warm, use := r.Evaluate(v, w.sts[a])
 			if use.Used {
 				used++
@@ -939,9 +949,15 @@ func replayReceipts(t *testing.T, f fixture.Fixture) (string, int) {
 		}
 	}
 	_ = tip
-	// a cold start: the state directory deleted, then reopened
+	// a cold start: the state directory deleted, then reopened (a read-only open finds no store and creates none)
 	if err := os.RemoveAll(loc.Dir); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := OpenReceipts(loc, ReceiptOptions{ReadOnly: true}); !errors.Is(err, ErrNoReceipts) {
+		return fmt.Sprintf("read-only open of a deleted store: %v", err), used
+	}
+	if _, err := os.Lstat(loc.Dir); err == nil {
+		return "a read-only open created the state directory", used
 	}
 	if msg := check(len(f.Statements), openR(t, loc, ReceiptOptions{})); msg != "" {
 		return "after deleting the state directory: " + msg, used
@@ -1082,5 +1098,49 @@ func TestReceiptStoreRefusesSymlinks(t *testing.T) {
 				t.Fatal("the key behind the link changed")
 			}
 		})
+	}
+}
+
+// TestReceiptsReadOnlyOpen: a read-only open never creates, sweeps or changes anything. No store: ErrNoReceipts and
+// nothing created. A store with receipts: they are used and none is written (a cold read leaves no file). A
+// malformed key: not opened (a read-write open would replace it). StateWritable follows the owner write bit.
+func TestReceiptsReadOnlyOpen(t *testing.T) {
+	g := newRig(t)
+	empty := Location{Dir: filepath.Join(t.TempDir(), "state"), Hub: g.loc.Hub}
+	if _, err := OpenReceipts(empty, ReceiptOptions{ReadOnly: true}); !errors.Is(err, ErrNoReceipts) {
+		t.Fatalf("read-only open of no store: %v", err)
+	}
+	if _, err := os.Lstat(empty.Dir); err == nil {
+		t.Fatal("a read-only open created the state directory")
+	}
+	v := g.v()
+	g.read(v, g.r, "AA") // writes AA's receipt
+	ro := openR(t, g.loc, ReceiptOptions{ReadOnly: true})
+	if _, use := g.read(v, ro, "AA"); !use.Used {
+		t.Fatalf("read-only store did not use the receipt: %+v", use)
+	}
+	if _, use := g.read(v, ro, "BA"); use.Used || use.Written {
+		t.Fatalf("read-only store on a cold read: %+v", use)
+	}
+	if _, err := os.Lstat(g.r.path(receiptSubdir, g.w.ids["BA"])); err == nil {
+		t.Fatal("a read-only store wrote a receipt")
+	}
+	if !StateWritable(g.loc) || StateWritable(Location{}) {
+		t.Fatal("StateWritable: control")
+	}
+	if err := os.Chmod(g.loc.Dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(g.loc.Dir, 0o700) })
+	if StateWritable(g.loc) {
+		t.Fatal("StateWritable on an owner-read-only state directory")
+	}
+	os.Chmod(g.loc.Dir, 0o700)
+	os.WriteFile(g.r.path(keyFileName), []byte("not a key\n"), 0o600)
+	if _, err := OpenReceipts(g.loc, ReceiptOptions{ReadOnly: true}); !errors.Is(err, ErrNoReceipts) {
+		t.Fatalf("read-only open over a malformed key: %v", err)
+	}
+	if b, _ := os.ReadFile(g.r.path(keyFileName)); string(b) != "not a key\n" {
+		t.Fatal("a read-only open replaced the key")
 	}
 }

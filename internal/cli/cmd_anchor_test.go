@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/research-common/research-commons/internal/btctime"
 	"github.com/research-common/research-commons/internal/canon"
+	"github.com/research-common/research-commons/internal/conformance"
 	"github.com/research-common/research-commons/internal/resolve"
 	"github.com/research-common/research-commons/internal/store"
 )
@@ -392,5 +394,115 @@ func TestReadVerifierReadsTip(t *testing.T) {
 	var tr resolve.TipReader = btctime.TimeVerifier{V: timeVerifierFor(ctx())}
 	if h, ok := tr.Tip(); !ok || h != 30 {
 		t.Fatalf("tip %d %v", h, ok)
+	}
+}
+
+// TestReadsReceiptsByteIdentical: P-07 through the read commands. With a synced view, every read surface (the
+// sweep: show, verify, explain, list, … on every ref, human and JSON) prints the same bytes and exits the same
+// whether it reads with no receipt store (every proof cold), through a store it opens read-write (the first pass
+// writes receipts, the second answers from them), through the same store opened read-only (the state directory
+// not writable: receipts used, none written, nothing created), and over receipts made untrustworthy (downgraded,
+// read cold). The stores' counters show each mode reached its path.
+func TestReadsReceiptsByteIdentical(t *testing.T) {
+	conformance.Partial(t, "P-07", "the bitcoin-time receipt store through the read commands: cold, read-write, warm, read-only and untrusted-receipt runs print identical bytes; the resolver's own caches are not wired")
+	c := newChainWorld(t, 30)
+	now := c.tip.Add(10 * time.Minute)
+	useTestChain(t, &now, 0)
+	if r := c.run("anchor", "headers", "sync", "--from", c.headers); r.code != ExitOK {
+		t.Fatal(r.stdout + r.stderr)
+	}
+	state := filepath.Join(c.env[StateDirEnv], "research-commons")
+	rdir := filepath.Join(state, "receipts-v1")
+	var stats btctime.ReceiptStats
+	var last *btctime.Receipts // the store the most recent read opened
+	readOnly := 0
+	old := readReceipts
+	t.Cleanup(func() { readReceipts = old })
+	observe := func(loc btctime.Location) *btctime.Receipts {
+		r := receiptsFor(loc)
+		if r != nil && !btctime.StateWritable(loc) {
+			readOnly++
+		}
+		last = r
+		return r
+	}
+	var args [][]string
+	for _, a := range sweepArgs(c.world) {
+		if a[0] == "anchor" {
+			continue // anchor status counts the receipt files
+		}
+		args = append(args, a, append(append([]string{}, a...), "--json"))
+	}
+	type out struct {
+		code   int
+		stdout string
+	}
+	pass := func() []out {
+		stats = btctime.ReceiptStats{}
+		var o []out
+		for _, a := range args {
+			last = nil
+			r := c.run(a...)
+			if last != nil {
+				s := last.Stats()
+				stats.Used += s.Used
+				stats.Cold += s.Cold
+				stats.Written += s.Written
+				stats.Skipped += s.Skipped
+				stats.Downgraded += s.Downgraded
+			}
+			o = append(o, out{r.code, r.stdout})
+		}
+		return o
+	}
+	same := func(mode string, want, got []out) {
+		t.Helper()
+		t.Logf("%s: %d reads, receipts %+v", mode, len(got), stats)
+		for i := range want {
+			if want[i] != got[i] {
+				t.Fatalf("%s: %v differs from the cold read:\n%d %s\nvs\n%d %s", mode, args[i], want[i].code, want[i].stdout, got[i].code, got[i].stdout)
+			}
+		}
+	}
+	readReceipts = func(btctime.Location) *btctime.Receipts { return nil }
+	cold := pass()
+	if _, err := os.Lstat(rdir); err == nil {
+		t.Fatal("a read with no receipt store created one")
+	}
+	if !strings.Contains(fmt.Sprint(cold), "verified") {
+		t.Fatal("fixture: no anchor verified, so receipts would never be written")
+	}
+	readReceipts = observe
+	same("read-write (first)", cold, pass())
+	if stats.Written == 0 {
+		t.Fatalf("the first read-write pass wrote no receipt: %+v", stats)
+	}
+	same("read-write (warm)", cold, pass())
+	if stats.Used == 0 || stats.Written != 0 {
+		t.Fatalf("the warm pass did not answer from receipts: %+v", stats)
+	}
+	files := func() int { n, _ := btctime.ReceiptFiles(btctime.Location{Dir: state}); return n }
+	before := files()
+	if err := os.Chmod(state, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(state, 0o700) })
+	readOnly = 0
+	same("read-only", cold, pass())
+	if readOnly == 0 || stats.Used == 0 || stats.Written != 0 || files() != before {
+		t.Fatalf("the read-only pass: %d read-only opens, %+v, %d→%d files", readOnly, stats, before, files())
+	}
+	if err := os.Chmod(state, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	ents, _ := os.ReadDir(filepath.Join(rdir, "r"))
+	for _, e := range ents {
+		p := filepath.Join(rdir, "r", e.Name())
+		b, _ := os.ReadFile(p)
+		os.WriteFile(p, b[:len(b)/2], 0o600)
+	}
+	same("untrusted receipts", cold, pass())
+	if stats.Downgraded == 0 {
+		t.Fatalf("the truncated receipts were not reached: %+v", stats)
 	}
 }

@@ -252,6 +252,11 @@ func anchorStatusCmd(c *Ctx) (*Obj, int, error) {
 // the §7 policy and the reader's clock. No state or no database: the verifier of newTimeVerifier, so every answer
 // is byte-identical to a reader without a backend (backend-unconfigured). A database present and refused: no view,
 // and every anchor reads backend-unavailable naming why (never a partial view).
+//
+// With a view, the verifier also reads through the receipt store in the same state (bitcoin-time note §9):
+// read-write when the state directory is writable (a cold evaluation leaves a receipt for the next read),
+// read-only otherwise (receipts are used, none is written, nothing is created). A receipt is a cache, never
+// evidence: every answer is the one a cold evaluation gives (P-07), so a store that cannot be opened is no store.
 func timeVerifierFor(c *Ctx) *btctime.Verifier {
 	tv := newTimeVerifier(c.Store)
 	db, err := chainState(c)
@@ -268,7 +273,26 @@ func timeVerifierFor(c *Ctx) *btctime.Verifier {
 		return tv
 	}
 	tv.Policy, tv.View, tv.Now = chainPolicy(), ch.Snapshot(), Now
+	tv.Receipts = readReceipts(db.Location())
 	return tv
+}
+
+// readReceipts is how a read opens the receipt store; tests replace it to read with none (every proof cold) or to
+// observe the store a read used.
+var readReceipts = receiptsFor
+
+// receiptsFor opens the receipt store for a read: read-write when the state is writable, else (or when that open
+// fails) read-only; nil when there is no store to read, so every proof is read cold.
+func receiptsFor(loc btctime.Location) *btctime.Receipts {
+	if btctime.StateWritable(loc) {
+		if r, err := btctime.OpenReceipts(loc, btctime.ReceiptOptions{}); err == nil {
+			return r
+		}
+	}
+	if r, err := btctime.OpenReceipts(loc, btctime.ReceiptOptions{ReadOnly: true}); err == nil {
+		return r
+	}
+	return nil
 }
 
 // chainContext is explain's time context when a chain view answers: the view the bounds were read against and the
