@@ -59,15 +59,21 @@ func ParseHeader(b []byte) (Header, error) {
 	if len(b) != HeaderSize {
 		return h, fmt.Errorf("header is %d bytes, not %d", len(b), HeaderSize)
 	}
-	copy(h.Raw[:], b)
-	h.Version = int32(binary.LittleEndian.Uint32(b[0:4]))
-	copy(h.Prev[:], b[4:36])
-	copy(h.MerkleRoot[:], b[36:68])
-	h.Time = binary.LittleEndian.Uint32(b[68:72])
-	h.Bits = binary.LittleEndian.Uint32(b[72:76])
-	h.Nonce = binary.LittleEndian.Uint32(b[76:80])
-	h.Hash = dsha256(b)
-	return h, nil
+	var raw [HeaderSize]byte
+	copy(raw[:], b)
+	return headerFrom(raw, dsha256(b)), nil
+}
+
+// headerFrom reads the fields of raw, whose hash is already known (the chain computed it at admission).
+func headerFrom(raw [HeaderSize]byte, hash Hash) Header {
+	h := Header{Raw: raw, Hash: hash}
+	h.Version = int32(binary.LittleEndian.Uint32(raw[0:4]))
+	copy(h.Prev[:], raw[4:36])
+	copy(h.MerkleRoot[:], raw[36:68])
+	h.Time = binary.LittleEndian.Uint32(raw[68:72])
+	h.Bits = binary.LittleEndian.Uint32(raw[72:76])
+	h.Nonce = binary.LittleEndian.Uint32(raw[76:80])
+	return h
 }
 
 // Serialize writes the header's fields in wire order.

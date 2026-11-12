@@ -807,7 +807,7 @@ func TestReceiptReorg(t *testing.T) {
 	}
 	tip := v.View.TipHash
 	tipNode := g.s.c.nodes[tip]
-	parent := tipNode.parent.h.Hash
+	parent := tipNode.parent.hash
 	g.s.extend(parent, 1, 0, "tie")
 	vt := g.v()
 	if vt.View.Unresolved == 0 {

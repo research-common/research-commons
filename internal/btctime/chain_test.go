@@ -147,11 +147,11 @@ func TestHeaderRules(t *testing.T) {
 	tip := s.extend(s.genesis(), 3, 1200, "") // three slow blocks: the boundary at 4 must make the target easier
 	n := s.c.nodes[tip]
 	want, _ := s.c.nextBits(n)
-	if want == n.h.Bits {
+	if want == n.bits() {
 		t.Fatalf("the synthetic retarget did not change the target (%08x)", want)
 	}
 	// clamping: an extremely slow period clamps at ×4, capped at the PoW limit
-	if tt := target(want); tt.Cmp(new(big.Int).Mul(target(n.h.Bits), big.NewInt(4))) > 0 {
+	if tt := target(want); tt.Cmp(new(big.Int).Mul(target(n.bits()), big.NewInt(4))) > 0 {
 		t.Fatalf("retarget exceeded the ×4 clamp")
 	}
 	ok := s.next(tip, 0, 0, "ok")
@@ -159,13 +159,13 @@ func TestHeaderRules(t *testing.T) {
 		name, reason string
 		h            Header
 	}{
-		{"PoW-valid header with the wrong contextual target", "bad-diffbits", mineHeader(Header{Version: 4, Prev: tip, MerkleRoot: ok.MerkleRoot, Time: ok.Time, Bits: n.h.Bits}, p.PowLimit)},
+		{"PoW-valid header with the wrong contextual target", "bad-diffbits", mineHeader(Header{Version: 4, Prev: tip, MerkleRoot: ok.MerkleRoot, Time: ok.Time, Bits: n.bits()}, p.PowLimit)},
 		{"bad compact target (negative)", "bad-diffbits", func() Header { h := ok; h.Bits = 0x04923456; return reparse(h) }()},
 		{"bad compact target (zero)", "bad-diffbits", func() Header { h := ok; h.Bits = 0x01003456; return reparse(h) }()},
 		{"target above the PoW limit", "bad-diffbits", func() Header { h := ok; h.Bits = 0x2100ffff; return reparse(h) }()},
 		{"hash above target", "high-hash", mineFailing(ok, target(ok.Bits))},
 		{"wrong predecessor", "prev-blk-not-found", mineHeader(Header{Version: 4, Prev: Hash(sha([]byte("nowhere"))), MerkleRoot: ok.MerkleRoot, Time: ok.Time, Bits: ok.Bits}, p.PowLimit)},
-		{"median-time-past violation", "time-too-old", mineHeader(Header{Version: 4, Prev: tip, MerkleRoot: ok.MerkleRoot, Time: s.c.nodes[tip].parent.h.Time, Bits: ok.Bits}, p.PowLimit)},
+		{"median-time-past violation", "time-too-old", mineHeader(Header{Version: 4, Prev: tip, MerkleRoot: ok.MerkleRoot, Time: s.c.nodes[tip].parent.time(), Bits: ok.Bits}, p.PowLimit)},
 		{"more than two hours ahead", "time-too-new", mineHeader(Header{Version: 4, Prev: tip, MerkleRoot: ok.MerkleRoot, Time: uint32(s.now.Unix() + 7201), Bits: ok.Bits}, p.PowLimit)},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -215,13 +215,14 @@ func TestForkChoice(t *testing.T) {
 	// mixed-work tree: nodes inserted by hand (the retarget rule is not under test here)
 	c := newChain(p, "t", "test", 0)
 	g, _ := ParseHeader(p.Genesis[:])
-	root := &node{h: g, height: 0, work: big.NewInt(1)}
+	root := newNode(g, 0, u256{1}, nil)
 	c.insert(root)
 	add := func(parent *node, w int64, tag string) *node {
-		h := Header{Prev: parent.h.Hash, MerkleRoot: Hash(sha([]byte(tag)))}
+		h := Header{Prev: parent.hash, MerkleRoot: Hash(sha([]byte(tag)))}
 		raw := h.Serialize()
 		hh, _ := ParseHeader(raw[:])
-		n := &node{h: hh, height: parent.height + 1, work: new(big.Int).Add(parent.work, big.NewInt(w)), parent: parent}
+		work, _ := parent.work.add(u256{uint64(w)})
+		n := newNode(hh, parent.height+1, work, parent)
 		c.insert(n)
 		return n
 	}
@@ -231,10 +232,10 @@ func TestForkChoice(t *testing.T) {
 		l = add(l, 4, "l"+string(rune('a'+i))) // height 6, work 25
 	}
 	v = c.Snapshot()
-	if v.TipHash != heavy.h.Hash || v.Unresolved != 0 {
+	if v.TipHash != heavy.hash || v.Unresolved != 0 {
 		t.Fatalf("longer-by-height, lower-work fork selected: tip %d", v.TipHeight)
 	}
-	if v.IsActive(l.h.Hash, 6) {
+	if v.IsActive(l.hash, 6) {
 		t.Fatal("light branch active")
 	}
 	// equal work: a second branch of total work 31
@@ -243,7 +244,7 @@ func TestForkChoice(t *testing.T) {
 	if v.Unresolved != 2 || v.TipHeight != 0 {
 		t.Fatalf("equal-work tips: unresolved %d, accepted tip %d", v.Unresolved, v.TipHeight)
 	}
-	if v.IsActive(eq.h.Hash, 2) || v.IsActive(heavy.h.Hash, 3) {
+	if v.IsActive(eq.hash, 2) || v.IsActive(heavy.hash, 3) {
 		t.Fatal("a tied branch is on the accepted chain")
 	}
 }

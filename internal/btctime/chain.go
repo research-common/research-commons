@@ -3,6 +3,7 @@ package btctime
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -87,12 +88,35 @@ func (b Bootstrap) ID() string {
 	return "bootstrap:sha256:" + hex.EncodeToString(h.Sum(nil))
 }
 
+// node is one held header, compact: its 80 raw bytes (the only copy; fields are read from them on demand), its
+// hash (computed once, at admission), its height, the cumulative chainwork up to and including it as an in-place
+// 256-bit value, and its parent. No per-header heap object besides the node itself: a chain synced from genesis
+// holds about a million of them, and every read command loads and re-validates them all.
 type node struct {
-	h      Header
+	raw    [HeaderSize]byte
+	hash   Hash
 	height int64
-	work   *big.Int // cumulative
+	work   u256 // cumulative
 	parent *node
 }
+
+func newNode(h Header, height int64, work u256, parent *node) *node {
+	return &node{raw: h.Raw, hash: h.Hash, height: height, work: work, parent: parent}
+}
+
+// header is the parsed header, from the raw bytes and the hash computed at admission (no second hash).
+func (n *node) header() Header { return headerFrom(n.raw, n.hash) }
+
+func (n *node) time() uint32       { return binary.LittleEndian.Uint32(n.raw[68:72]) }
+func (n *node) bits() uint32       { return binary.LittleEndian.Uint32(n.raw[72:76]) }
+func (n *node) merkleRoot() []byte { return n.raw[36:68] }
+
+// powEntry is what one compact target decodes to, kept per chain: the target and the work of a header that
+// carries it. Targets change once per retarget period, so a chain holds a few hundred of these at most.
+type powEntry struct{ target, work u256 }
+
+// maxPowCache bounds the per-chain cache of decoded targets; headers past it are checked without caching.
+const maxPowCache = 4096
 
 // Chain is a validated header tree. It is safe for concurrent use; readers take immutable snapshots.
 type Chain struct {
@@ -102,7 +126,7 @@ type Chain struct {
 	bootstrap string
 	base      int64 // height of the lowest held header
 	nodes     map[Hash]*node
-	byHeight  map[int64][]*node
+	pow       map[uint32]powEntry // valid compact targets seen, decoded (checkPoW)
 	lastSync  time.Time
 	epoch     uint64
 	// boot is the explicit bootstrap the chain started from (nil from genesis), kept so the header database can
@@ -135,7 +159,11 @@ func NewChain(p Params, provider string) (*Chain, error) {
 		return nil, err
 	}
 	c := newChain(p, provider, "genesis:"+g.Hash.String(), 0)
-	c.insert(&node{h: g, height: 0, work: Work(target(g.Bits))})
+	pe, err := c.checkPoW(g)
+	if err != nil {
+		return nil, err
+	}
+	c.insert(newNode(g, 0, pe.work, nil))
 	return c, nil
 }
 
@@ -156,20 +184,26 @@ func NewChainFrom(p Params, provider string, b Bootstrap) (*Chain, error) {
 		c.boot.Headers = append(c.boot.Headers, slices.Clone(raw))
 	}
 	var prev *node
-	work := new(big.Int).Set(b.WorkBelow)
+	work, ok := u256FromBig(b.WorkBelow)
+	if !ok {
+		return nil, errors.New("bootstrap chainwork does not fit in 256 bits")
+	}
 	for i, raw := range b.Headers {
 		h, err := ParseHeader(raw)
 		if err != nil {
 			return nil, err
 		}
-		if prev != nil && h.Prev != prev.h.Hash {
+		if prev != nil && h.Prev != prev.hash {
 			return nil, fmt.Errorf("bootstrap header %d does not link to the one before", b.Height+int64(i))
 		}
-		if err := CheckProofOfWork(h, p.PowLimit); err != nil {
+		pe, err := c.checkPoW(h)
+		if err != nil {
 			return nil, fmt.Errorf("bootstrap header %d: %w", b.Height+int64(i), err)
 		}
-		work = new(big.Int).Add(work, Work(target(h.Bits)))
-		n := &node{h: h, height: b.Height + int64(i), work: work, parent: prev}
+		if work, ok = work.add(pe.work); !ok {
+			return nil, fmt.Errorf("bootstrap header %d: cumulative chainwork overflows 256 bits", b.Height+int64(i))
+		}
+		n := newNode(h, b.Height+int64(i), work, prev)
 		c.insert(n)
 		prev = n
 	}
@@ -177,7 +211,30 @@ func NewChainFrom(p Params, provider string, b Bootstrap) (*Chain, error) {
 }
 
 func newChain(p Params, provider, bootstrap string, base int64) *Chain {
-	return &Chain{p: p, provider: provider, bootstrap: bootstrap, base: base, nodes: map[Hash]*node{}, byHeight: map[int64][]*node{}}
+	return &Chain{p: p, provider: provider, bootstrap: bootstrap, base: base, nodes: map[Hash]*node{}, pow: map[uint32]powEntry{}}
+}
+
+// checkPoW is CheckProofOfWork with the decoded target and its work cached per compact value: the comparison runs
+// on in-place 256-bit values, and a refusal is CheckProofOfWork's own (same reason, same text). On success it
+// returns the header's target and work.
+func (c *Chain) checkPoW(h Header) (powEntry, error) {
+	pe, ok := c.pow[h.Bits]
+	if !ok {
+		if err := CheckProofOfWork(h, c.p.PowLimit); err != nil {
+			return pe, err
+		}
+		t := target(h.Bits)
+		pe.target, _ = u256FromBig(t)     // within the PoW limit: fits
+		pe.work, _ = u256FromBig(Work(t)) // 2^256/(t+1) with t >= 1: fits
+		if len(c.pow) < maxPowCache {
+			c.pow[h.Bits] = pe
+		}
+		return pe, nil
+	}
+	if hashU256(h.Hash).cmp(pe.target) > 0 {
+		return pe, CheckProofOfWork(h, c.p.PowLimit) // the refusal, worded as CheckProofOfWork words it
+	}
+	return pe, nil
 }
 
 func target(bits uint32) *big.Int {
@@ -186,8 +243,7 @@ func target(bits uint32) *big.Int {
 }
 
 func (c *Chain) insert(n *node) {
-	c.nodes[n.h.Hash] = n
-	c.byHeight[n.height] = append(c.byHeight[n.height], n)
+	c.nodes[n.hash] = n
 	c.epoch++
 }
 
@@ -208,7 +264,8 @@ func (c *Chain) Add(raw []byte, now time.Time) error {
 	if !ok {
 		return refuse("prev-blk-not-found", "header %s names predecessor %s, which this chain does not hold", h.Hash, h.Prev)
 	}
-	if err := CheckProofOfWork(h, c.p.PowLimit); err != nil {
+	pe, err := c.checkPoW(h)
+	if err != nil {
 		var r string
 		if bytes.HasPrefix([]byte(err.Error()), []byte("high-hash")) {
 			r = "high-hash"
@@ -236,7 +293,11 @@ func (c *Chain) Add(raw []byte, now time.Time) error {
 			return refuse("bad-version", "header %s version %d below %d required from height %d", h.Hash, h.Version, mv[1], mv[0])
 		}
 	}
-	c.insert(&node{h: h, height: height, work: new(big.Int).Add(parent.work, Work(target(h.Bits))), parent: parent})
+	work, ok := parent.work.add(pe.work)
+	if !ok {
+		return refuse("bad-diffbits", "header %s: cumulative chainwork overflows 256 bits", h.Hash)
+	}
+	c.insert(newNode(h, height, work, parent))
 	return nil
 }
 
@@ -249,13 +310,12 @@ func (c *Chain) held() (boot *Bootstrap, rest [][]byte, lastSync time.Time) {
 	skip := map[Hash]bool{}
 	if c.boot != nil {
 		for _, raw := range c.boot.Headers {
-			h, _ := ParseHeader(raw)
-			skip[h.Hash] = true
+			skip[dsha256(raw)] = true
 		}
 	}
 	var ns []*node
 	for _, n := range c.nodes {
-		if n.parent == nil || skip[n.h.Hash] {
+		if n.parent == nil || skip[n.hash] {
 			continue
 		}
 		ns = append(ns, n)
@@ -264,11 +324,10 @@ func (c *Chain) held() (boot *Bootstrap, rest [][]byte, lastSync time.Time) {
 		if ns[i].height != ns[j].height {
 			return ns[i].height < ns[j].height
 		}
-		return bytes.Compare(ns[i].h.Hash[:], ns[j].h.Hash[:]) < 0
+		return bytes.Compare(ns[i].hash[:], ns[j].hash[:]) < 0
 	})
 	for _, n := range ns {
-		raw := n.h.Raw
-		rest = append(rest, raw[:])
+		rest = append(rest, n.raw[:])
 	}
 	return c.boot, rest, c.lastSync
 }
@@ -304,7 +363,7 @@ func (c *Chain) MarkSynced(t time.Time) {
 func (c *Chain) nextBits(last *node) (uint32, error) {
 	height := last.height + 1
 	if height%c.p.RetargetInterval != 0 {
-		return last.h.Bits, nil
+		return last.bits(), nil
 	}
 	first := last
 	for i := int64(0); i < c.p.RetargetInterval-1; i++ {
@@ -313,10 +372,10 @@ func (c *Chain) nextBits(last *node) (uint32, error) {
 		}
 		first = first.parent
 	}
-	span := int64(last.h.Time) - int64(first.h.Time)
+	span := int64(last.time()) - int64(first.time())
 	span = max(span, c.p.TargetTimespan/4)
 	span = min(span, c.p.TargetTimespan*4)
-	t := target(last.h.Bits)
+	t := target(last.bits())
 	t.Mul(t, big.NewInt(span))
 	t.Div(t, big.NewInt(c.p.TargetTimespan))
 	if t.Cmp(c.p.PowLimit) > 0 {
@@ -327,9 +386,10 @@ func (c *Chain) nextBits(last *node) (uint32, error) {
 
 // medianTimePast is Core's GetMedianTimePast: the median of the last 11 header times (fewer near the root).
 func medianTimePast(n *node) int64 {
-	var ts []int64
+	var buf [11]int64
+	ts := buf[:0]
 	for i := 0; i < 11 && n != nil; i++ {
-		ts = append(ts, int64(n.h.Time))
+		ts = append(ts, int64(n.time()))
 		n = n.parent
 	}
 	slices.Sort(ts)
@@ -357,7 +417,6 @@ func (c *Chain) snapshot() *ChainView {
 	v := &ChainView{
 		Network: c.p.Network, Provider: c.provider, Mode: ModeHeadersSPV, Bootstrap: c.bootstrap,
 		LastSync: c.lastSync, Epoch: c.epoch, Base: c.base,
-		active: map[int64]*node{}, others: map[Hash]*node{},
 	}
 	g, _ := ParseHeader(c.p.Genesis[:])
 	v.GenesisHash = g.Hash.String()
@@ -365,28 +424,30 @@ func (c *Chain) snapshot() *ChainView {
 	var best []*node
 	for _, n := range c.nodes {
 		switch {
-		case len(best) == 0 || n.work.Cmp(best[0].work) > 0:
+		case len(best) == 0 || n.work.cmp(best[0].work) > 0:
 			best = []*node{n}
-		case n.work.Cmp(best[0].work) == 0:
+		case n.work.cmp(best[0].work) == 0:
 			best = append(best, n)
 		}
 	}
-	sort.Slice(best, func(i, j int) bool { return bytes.Compare(best[i].h.Hash[:], best[j].h.Hash[:]) < 0 })
+	sort.Slice(best, func(i, j int) bool { return bytes.Compare(best[i].hash[:], best[j].hash[:]) < 0 })
 	tip := best[0]
 	if len(best) > 1 {
 		tip = forkPoint(best)
 		v.Unresolved = len(best)
 	}
+	// the accepted chain, indexed by height above the base: one pointer per header, not a map entry
+	v.active = make([]*node, tip.height-c.base+1)
 	for n := tip; n != nil; n = n.parent {
-		v.active[n.height] = n
+		v.active[n.height-c.base] = n
 	}
 	for _, n := range c.nodes {
-		if v.active[n.height] != n {
-			v.others[n.h.Hash] = n
+		if a := v.activeAt(n.height); a != n {
+			v.others = append(v.others, n)
 		}
 	}
 	v.tip = tip
-	v.TipHeight, v.TipHash, v.TipWork, v.TipTime = tip.height, tip.h.Hash, new(big.Int).Set(tip.work), tip.h.Time
+	v.TipHeight, v.TipHash, v.TipWork, v.TipTime = tip.height, tip.hash, tip.work.big(), tip.time()
 	return v
 }
 
@@ -428,32 +489,40 @@ type ChainView struct {
 	// chain ends at their fork point, and nothing above it is on the accepted chain (C-btc-15).
 	Unresolved int
 
-	tip    *node
-	active map[int64]*node
-	others map[Hash]*node
+	tip *node
+	// active is the accepted chain: active[h-Base] is the header at height h. others are the held headers off it.
+	active []*node
+	others []*node
+}
+
+func (v *ChainView) activeAt(height int64) *node {
+	if i := height - v.Base; i >= 0 && i < int64(len(v.active)) {
+		return v.active[i]
+	}
+	return nil
 }
 
 // HeaderAt returns the header at height on the accepted chain.
 func (v *ChainView) HeaderAt(height int64) (Header, bool) {
-	n, ok := v.active[height]
-	if !ok {
+	n := v.activeAt(height)
+	if n == nil {
 		return Header{}, false
 	}
-	return n.h, true
+	return n.header(), true
 }
 
 // IsActive reports whether the block hash is on the accepted chain at height.
 func (v *ChainView) IsActive(h Hash, height int64) bool {
-	n, ok := v.active[height]
-	return ok && n.h.Hash == h
+	n := v.activeAt(height)
+	return n != nil && n.hash == h
 }
 
 // offChain finds a held header outside the accepted chain at height whose Merkle root is root: a block a reorg
 // orphaned, or one on a branch that ties for the most work.
 func (v *ChainView) offChain(height int64, root []byte) (Header, bool) {
 	for _, n := range v.others {
-		if n.height == height && bytes.Equal(n.h.MerkleRoot[:], root) {
-			return n.h, true
+		if n.height == height && bytes.Equal(n.merkleRoot(), root) {
+			return n.header(), true
 		}
 	}
 	return Header{}, false
