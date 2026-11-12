@@ -284,7 +284,6 @@ func TestRivalLicence(t *testing.T) {
 // superseded; both lines stay in their own logs.
 func TestTwoClaimantsContested(t *testing.T) {
 	conformance.Covers(t, "C-core-18")
-	conformance.Partial(t, "C-core-08", "one blob and both lines kept in their own logs, in the resolver; the blob store half needs store+pull")
 	w := newWorld(t)
 	w.authored("A1", "A", "X")
 	w.authored("B1", "BB", "X")
