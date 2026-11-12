@@ -346,7 +346,6 @@ func TestProjectionFailure(t *testing.T) {
 // TestConcurrentSameBlob: C-core-128. Many goroutines publish the same bytes, two keys: one blob, one
 // statement per key (and per distinct body), nothing overwritten.
 func TestConcurrentSameBlob(t *testing.T) {
-	conformance.Partial(t, "C-core-128", "goroutines here and two OS processes in TestTwoProcesses; publish's own reporting (\"already committed\") needs publish")
 	root := t.TempDir()
 	s := open(t, root, Options{NoSync: true})
 	data := bytes.Repeat([]byte("same"), 4096)
