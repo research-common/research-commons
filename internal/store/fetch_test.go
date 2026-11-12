@@ -202,11 +202,10 @@ func TestFetchHintNextLocation(t *testing.T) {
 	_, _ = first, second
 }
 
-// TestFetchUnreachableAndAll: C-core-120. An artifact whose inputs are held only as external holds; one
+// TestFetchUnreachableAndAll: C-core-120's store half (the command and the derived result's scope are internal/cli TestFetchInputsScopedToWhatIsHeld). An artifact whose inputs are held only as external holds; one
 // location unreachable. Each input is listed fetched-and-verified or unavailable (holder's word); the claim is
 // scoped to what is held; no completeness claim.
 func TestFetchUnreachableAndAll(t *testing.T) {
-	conformance.Partial(t, "C-core-120", "each input listed fetched-and-verified or unavailable (holder's word) with a scoped, non-complete summary: checked at the store (FetchAll, RenderFetch); the derived result's status line belongs to the resolver/command")
 	s := open(t, t.TempDir(), Options{NoSync: true})
 	in1, in2, in3 := []byte("input one"), []byte("input two"), []byte("input three")
 	serveHolds(t, s, "H", in1, "https://h.example/1")

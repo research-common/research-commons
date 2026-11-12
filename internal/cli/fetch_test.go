@@ -438,3 +438,48 @@ func TestFetchDryRun(t *testing.T) {
 		t.Fatalf("dry run, no transport: %d %s", r.code, r.stdout)
 	}
 }
+
+// TestFetchInputsScopedToWhatIsHeld: C-core-120 through the commands. A synthesis whose three inputs are held only
+// as external `holds`, one location reachable, one dead, one naming none: `fetch` lists each input as
+// fetched-and-verified or unavailable (the holder's word, or not held locally) and says the result is scoped to
+// what is held with no completeness claim; the derived result's own show/verify/explain print the scope footer
+// and every inputs-summary line scoped "within statements you hold"; no surface says the inputs are complete.
+func TestFetchInputsScopedToWhatIsHeld(t *testing.T) {
+	conformance.Covers(t, "C-core-120")
+	w := newWorld(t)
+	w.blob("wf", []byte("wf"))
+	w.workflow("K1", "wf", "bytes", "")
+	w.holds("H:in0", "K3", []byte("in0"), 3, "https://h.example/in0")
+	w.holds("H:in1", "K3", []byte("in1"), 3, "https://h.example/in1-dead")
+	w.holds("H:in2", "K3", []byte("in2"), 3) // the holder's word only: no location
+	w.blob("syn", []byte("syn"))
+	w.authored("S", "K1", "syn", "type", "synthesis", "prov", []string{"wf", "in0", "in1", "in2"})
+	f, _, _ := counting(store.MapTransport{"https://h.example/in0": []byte("in0")})
+	r := runFetch(w.root, f, "fetch", shaB([]byte("in0")), shaB([]byte("in1")), shaB([]byte("in2")), "--json")
+	rows := fetchRows(t, r)
+	got := []string{stateOf(rows[0]), stateOf(rows[1]), stateOf(rows[2])}
+	if r.code != 3 || got[0] != store.StateFetched || !strings.HasPrefix(got[1], "unavailable (holder's word") || got[2] != store.StateNotHeld {
+		t.Fatalf("per-input states %v exit %d\n%s", got, r.code, r.stdout)
+	}
+	sum := string(jsonOf(t, r).Members["summary"].(canon.String))
+	if !strings.Contains(sum, "1 of 3") || !strings.Contains(sum, "no completeness claim") {
+		t.Fatalf("fetch summary: %q", sum)
+	}
+	d := dig("syn")
+	for _, cmd := range []string{"show", "verify", "explain"} {
+		o := w.run(cmd, d)
+		if !strings.HasSuffix(o.stdout, "status scope: within statements you hold\n") {
+			t.Fatalf("%s lacks the scope footer:\n%s", cmd, o.stdout)
+		}
+		for _, bad := range []string{"complete", "all inputs"} {
+			if strings.Contains(strings.ReplaceAll(o.stdout, "no completeness claim", ""), bad) {
+				t.Fatalf("%s makes a completeness claim (%q):\n%s", cmd, bad, o.stdout)
+			}
+		}
+	}
+	for _, line := range strings.Split(w.run("show", d).stdout, "\n") {
+		if strings.Contains(line, "inputs summary:") && !strings.Contains(line, "within statements you hold") {
+			t.Fatalf("inputs summary not scoped: %s", line)
+		}
+	}
+}
