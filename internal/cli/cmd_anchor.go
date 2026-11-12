@@ -72,6 +72,7 @@ func init() {
 		Prepare: prepareHeadersSync,
 		Help: "The only command that acquires headers (bitcoin-time note §10). It reads the file, validates every header (linkage, proof of work, the exact retarget, median time past, future time against this clock, version rules) and persists the chain in this reader's state: the store's git directory, or " + StateDirEnv + " for a store that is not git-backed; never inside the store. " +
 			"A header that fails validation stops the sync with its reason; what validated before it is kept, and the sync does not count as completed (the view's last-sync time does not move). Running it again with headers already held changes nothing but the last-sync time. The tool ships no checkpoint. No network source is built: obtain the file from sources you choose. " +
+			"Recommended: start from a bootstrap near the tip (--bootstrap-height at a recent retarget-period start, with the chainwork below it as you established it), not from genesis. Every read command re-validates the whole persisted chain when it loads it, so its cost grows with the headers held: a few thousand headers load in milliseconds, a chain synced from genesis (close to a million headers) costs every read on the order of a second and a few hundred MB. A bootstrap is a trust root you choose: anchors below it read unknown-height. " +
 			"Exit 0 the sync completed; 1 a header failed validation; 3 the sync did not complete for another reason (bounded, cancelled, no state directory, the database refused or locked); 2 did not start.",
 		Run: headersSyncCmd})
 	Register(&Command{Name: "anchor status", Summary: "this reader's chain backend: provider, mode, network, bootstrap, tip, last sync, freshness, receipt count", Store: true,
@@ -252,6 +253,11 @@ func anchorStatusCmd(c *Ctx) (*Obj, int, error) {
 // the §7 policy and the reader's clock. No state or no database: the verifier of newTimeVerifier, so every answer
 // is byte-identical to a reader without a backend (backend-unconfigured). A database present and refused: no view,
 // and every anchor reads backend-unavailable naming why (never a partial view).
+//
+// With a view, the verifier also reads through the receipt store in the same state (bitcoin-time note §9):
+// read-write when the state directory is writable (a cold evaluation leaves a receipt for the next read),
+// read-only otherwise (receipts are used, none is written, nothing is created). A receipt is a cache, never
+// evidence: every answer is the one a cold evaluation gives (P-07), so a store that cannot be opened is no store.
 func timeVerifierFor(c *Ctx) *btctime.Verifier {
 	tv := newTimeVerifier(c.Store)
 	db, err := chainState(c)
@@ -268,7 +274,26 @@ func timeVerifierFor(c *Ctx) *btctime.Verifier {
 		return tv
 	}
 	tv.Policy, tv.View, tv.Now = chainPolicy(), ch.Snapshot(), Now
+	tv.Receipts = readReceipts(db.Location())
 	return tv
+}
+
+// readReceipts is how a read opens the receipt store; tests replace it to read with none (every proof cold) or to
+// observe the store a read used.
+var readReceipts = receiptsFor
+
+// receiptsFor opens the receipt store for a read: read-write when the state is writable, else (or when that open
+// fails) read-only; nil when there is no store to read, so every proof is read cold.
+func receiptsFor(loc btctime.Location) *btctime.Receipts {
+	if btctime.StateWritable(loc) {
+		if r, err := btctime.OpenReceipts(loc, btctime.ReceiptOptions{}); err == nil {
+			return r
+		}
+	}
+	if r, err := btctime.OpenReceipts(loc, btctime.ReceiptOptions{ReadOnly: true}); err == nil {
+		return r
+	}
+	return nil
 }
 
 // chainContext is explain's time context when a chain view answers: the view the bounds were read against and the

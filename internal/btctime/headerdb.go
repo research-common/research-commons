@@ -53,9 +53,17 @@ var ErrNoHeaderDB = errors.New("no header database: no headers have been synced 
 var ErrHeaderDBLocked = errors.New("header database locked by another sync")
 
 // HeaderDBError is a database present but refused: never trusted, never partly used.
-type HeaderDBError struct{ Reason string }
+type HeaderDBError struct {
+	Reason string
+	err    error // the cause, when one is an error a caller tests for (ErrSymlink)
+}
 
 func (e *HeaderDBError) Error() string { return "header database refused: " + e.Reason }
+
+func (e *HeaderDBError) Unwrap() error { return e.err }
+
+// dbRefuseErr refuses the database because of err, keeping it testable with errors.Is.
+func dbRefuseErr(err error) error { return &HeaderDBError{Reason: err.Error(), err: err} }
 
 func dbRefuse(f string, a ...any) error { return &HeaderDBError{Reason: fmt.Sprintf(f, a...)} }
 
@@ -157,9 +165,15 @@ func parseMeta(line []byte) (*dbMeta, error) {
 // header it admitted then into one too new (the clock rollback is the freshness check's to report, §7).
 // ErrNoHeaderDB when there is none; a *HeaderDBError when one is present and refused.
 func (d *HeaderDB) Load(p Params, now time.Time) (*Chain, error) {
-	f, err := os.Open(d.Path())
+	if err := noSymlinkDirs(d.loc.Dir, d.dir); err != nil {
+		return nil, dbRefuseErr(err)
+	}
+	f, err := openNoFollow(d.Path())
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, ErrNoHeaderDB
+	}
+	if errors.Is(err, ErrSymlink) {
+		return nil, dbRefuseErr(err)
 	}
 	if err != nil {
 		return nil, dbRefuse("unreadable: %v", err)
@@ -264,13 +278,11 @@ func (d *HeaderDB) Load(p Params, now time.Time) (*Chain, error) {
 // lock takes the database's write lock (a file created exclusively); a lock older than headerLockStale is a crashed
 // sync's and is broken.
 func (d *HeaderDB) lock(now time.Time) (func(), error) {
-	if err := os.MkdirAll(d.dir, 0o700); err != nil {
-		return nil, err
-	}
-	for _, p := range []string{d.loc.Dir, d.dir} {
-		if err := os.Chmod(p, 0o700); err != nil {
-			return nil, err
+	if err := mkdirsNoFollow(d.loc.Dir, d.dir); err != nil {
+		if errors.Is(err, ErrSymlink) {
+			return nil, dbRefuseErr(err)
 		}
+		return nil, err
 	}
 	p := filepath.Join(d.dir, headersLock)
 	for try := 0; try < 2; try++ {
@@ -283,7 +295,7 @@ func (d *HeaderDB) lock(now time.Time) (func(), error) {
 		if !errors.Is(err, fs.ErrExist) {
 			return nil, err
 		}
-		fi, err := os.Stat(p)
+		fi, err := os.Lstat(p)
 		if err != nil {
 			continue
 		}
@@ -528,7 +540,11 @@ func (d *HeaderDB) Sync(ctx context.Context, p Params, r io.Reader, opt SyncOpti
 // ReceiptFiles counts the receipt files held at loc without opening (or creating) the receipt store; ok is false
 // when there is no receipt directory.
 func ReceiptFiles(loc Location) (n int, ok bool) {
-	ents, err := os.ReadDir(filepath.Join(loc.Dir, receiptsDir, receiptSubdir))
+	dir := filepath.Join(loc.Dir, receiptsDir, receiptSubdir)
+	if noSymlinkDirs(loc.Dir, filepath.Join(loc.Dir, receiptsDir), dir) != nil {
+		return 0, false
+	}
+	ents, err := os.ReadDir(dir)
 	if err != nil {
 		return 0, false
 	}

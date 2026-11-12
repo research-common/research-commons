@@ -9,6 +9,7 @@
 //   - header.go: 80-byte headers, compact targets, proof of work and work, exactly as Bitcoin Core computes them;
 //   - chain.go: a headers-only chain (§6.1): genesis or an explicit local bootstrap, exact retargeting, median time
 //     past, future-time admission, version rules, greatest-chainwork selection, and immutable snapshots (ChainView);
+//     each held header is a compact node (its raw bytes once, cumulative work as an in-place 256-bit value, u256.go);
 //   - verify.go: the binding checks of §4, attestation selection of §5, the local policy of §7, and the evidence
 //     record and state tokens of §8.1, §10;
 //   - adapter.go: the resolver's TimeVerifier, so priority among rival claims reads reader-verified bounds only;
@@ -19,11 +20,14 @@
 //     and a receipt that is corrupt, copied, foreign or of an unknown version never trusted. A receipt is a cache:
 //     every answer equals the cold one.
 //
-// The receipt store is opt-in: a Verifier reads every proof cold unless the caller sets Verifier.Receipts, and
-// nothing does so by default. Measured, a small proof (a few hundred bytes, the common case) verifies faster
-// cold than through the cache, which reads, parses and authenticates a receipt and re-hashes the proof bytes on
-// every read anyway (check 1 of §9.3); the cache only pays for large proofs. Enable it by default once proofs
-// are large or verification moves to a helper process with its own time budget (§12).
+// The receipt store is opt-in at this level: a Verifier reads every proof cold unless the caller sets
+// Verifier.Receipts. The read commands set it whenever the reader has a header database: read-write when the state
+// directory is writable, read-only (receipts used, none written, nothing created) otherwise. Measured, a small proof
+// (a few hundred bytes, the common case) verifies faster cold than through the cache, which reads, parses and
+// authenticates a receipt and re-hashes the proof bytes on every read anyway (check 1 of §9.3); the cache only pays
+// for large proofs. Either way every answer is the cold one (P-07).
+//
+// Receiver-local state is never read or written through a symbolic link (fsguard.go).
 //
 // Nothing in this package opens a network connection. Headers arrive through Chain.Add from whatever explicit
 // sync command the reader runs; calendars and transports are interfaces the writer supplies. Reads touch the

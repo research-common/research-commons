@@ -162,7 +162,7 @@ func (s *synth) next(parent Hash, dt int64, bits uint32, tweak string) Header {
 	if root == nil {
 		root = sha([]byte(fmt.Sprintf("filler %d %s", height, tweak)))
 	}
-	h := Header{Version: 4, Prev: parent, MerkleRoot: Hash(root), Time: uint32(int64(pn.h.Time) + dt), Bits: bits}
+	h := Header{Version: 4, Prev: parent, MerkleRoot: Hash(root), Time: uint32(int64(pn.time()) + dt), Bits: bits}
 	return mineHeader(h, s.p.PowLimit)
 }
 

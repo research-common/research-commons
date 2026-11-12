@@ -37,6 +37,13 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   `show`, `verify`, `explain`, `list` and `publish task` readiness now evaluate anchors against the persisted view
   (fresh, as of the last sync past the settled depth, or `verified-historical`), and a task deadline reads its tip.
   With no database every answer is unchanged. No network header source and no operator node yet.
+- **Reads use the receipt store, and the header database is lighter.** When a reader has a header database, `show`,
+  `verify`, `explain`, `list` and `publish task` readiness read anchors through the receipt store in the same
+  receiver-local state: read-write when the state directory is writable, read-only otherwise (receipts are used,
+  none is written, nothing is created). Every answer is the one a cold read gives. A held header now costs about
+  half the memory and time to load (about 230–260 B and 1 µs per header). Every read still re-validates the whole
+  chain, so `anchor headers sync --help` now recommends a bootstrap near the tip over a sync from genesis. The header
+  database and the receipt store refuse a symbolic link at any of their paths, naming it, instead of following it.
 
 ## [0.5.0-alpha.2] - 2026-11-11
 

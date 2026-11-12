@@ -71,10 +71,15 @@ var ErrReceiptCrash = errors.New("injected crash")
 
 var reAnchorID = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
+// ErrNoReceipts is a read-only open of a store that has no usable receipts: it was never created, or its key is
+// missing or malformed (a read-only open never creates or replaces one).
+var ErrNoReceipts = errors.New("no receipt store to read (a read-only open creates nothing)")
+
 // ReceiptOptions configure a receipt store.
 type ReceiptOptions struct {
-	// ReadOnly reads receipts but never writes one (a read-only status read). Default: a re-check replaces the
-	// receipt it re-checked.
+	// ReadOnly reads receipts but never writes one, and opening creates, sweeps or changes nothing: a store whose
+	// directories or key do not exist yet, or whose key is malformed, is not opened (ErrNoReceipts) and every proof
+	// is read cold. Default: opening creates what is missing, and a re-check replaces the receipt it re-checked.
 	ReadOnly bool
 	// NoSync skips fsync (tests that do not exercise power loss).
 	NoSync bool
@@ -127,13 +132,11 @@ func OpenReceipts(loc Location, opt ReceiptOptions) (*Receipts, error) {
 		return nil, ErrNoState
 	}
 	r := &Receipts{loc: loc, dir: filepath.Join(loc.Dir, receiptsDir), opt: opt}
-	for _, d := range []string{loc.Dir, r.dir, r.path(receiptSubdir), r.path("tmp")} {
-		if err := os.MkdirAll(d, 0o700); err != nil {
-			return nil, err
-		}
-		if err := os.Chmod(d, 0o700); err != nil {
-			return nil, err
-		}
+	if opt.ReadOnly {
+		return r.openReadOnly()
+	}
+	if err := mkdirsNoFollow(loc.Dir, r.dir, r.path(receiptSubdir), r.path("tmp")); err != nil {
+		return nil, err
 	}
 	if err := r.sweepTmp(time.Now()); err != nil {
 		return nil, err
@@ -193,10 +196,13 @@ func (r *Receipts) sweepTmp(now time.Time) error {
 func (r *Receipts) loadKey() ([]byte, error) {
 	p := r.path(keyFileName)
 	for try := 0; try < 3; try++ {
-		b, err := os.ReadFile(p)
+		b, err := readKeyFile(p)
+		if errors.Is(err, ErrSymlink) {
+			return nil, err
+		}
 		if err == nil {
 			if k, err := hex.DecodeString(string(bytes.TrimSpace(b))); err == nil && len(k) == 32 {
-				if fi, err := os.Stat(p); err == nil && fi.Mode().Perm()&0o077 != 0 {
+				if fi, err := os.Lstat(p); err == nil && fi.Mode().IsRegular() && fi.Mode().Perm()&0o077 != 0 {
 					_ = os.Chmod(p, 0o600)
 				}
 				return k, nil
@@ -228,6 +234,67 @@ func (r *Receipts) loadKey() ([]byte, error) {
 		// another opener won the race: read theirs
 	}
 	return nil, errors.New("receipt store key could not be created or read")
+}
+
+// openReadOnly opens an existing store without creating, sweeping or changing anything.
+func (r *Receipts) openReadOnly() (*Receipts, error) {
+	dirs := []string{r.loc.Dir, r.dir, r.path(receiptSubdir)}
+	if err := noSymlinkDirs(dirs...); err != nil {
+		return nil, err
+	}
+	for _, d := range dirs {
+		if _, err := os.Lstat(d); err != nil {
+			return nil, ErrNoReceipts
+		}
+	}
+	b, err := readKeyFile(r.path(keyFileName))
+	if errors.Is(err, ErrSymlink) {
+		return nil, err
+	}
+	if err != nil {
+		return nil, ErrNoReceipts
+	}
+	k, err := hex.DecodeString(string(bytes.TrimSpace(b)))
+	if err != nil || len(k) != 32 {
+		return nil, ErrNoReceipts
+	}
+	r.key = k
+	return r, nil
+}
+
+// StateWritable reports whether a read may write receipts at loc: the state directory and, where they exist, the
+// receipt store's directories are directories (never links) whose owner may write them. It changes nothing. A
+// directory the reader made read-only (chmod u-w) keeps its reads read-only, since opening for writing would
+// chmod it back to 0700. Ownership is not inspected: an open that is refused the write falls back to read-only.
+func StateWritable(loc Location) bool {
+	if loc.Dir == "" {
+		return false
+	}
+	d := filepath.Join(loc.Dir, receiptsDir)
+	for i, p := range []string{loc.Dir, d, filepath.Join(d, receiptSubdir), filepath.Join(d, "tmp")} {
+		fi, err := os.Lstat(p)
+		if errors.Is(err, fs.ErrNotExist) && i > 0 {
+			continue
+		}
+		if err != nil || !fi.IsDir() || fi.Mode().Perm()&0o200 == 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// readKeyFile reads the store key without following a symbolic link at it (a link is refused, never replaced:
+// replacing it would leave whatever it pointed at in place and the store under someone else's choice).
+func readKeyFile(p string) ([]byte, error) {
+	f, err := openNoFollow(p)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	if fi, err := f.Stat(); err != nil || !fi.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s is not a regular file", p)
+	}
+	return io.ReadAll(io.LimitReader(f, 1<<10))
 }
 
 func (r *Receipts) syncDir(d string) error {
@@ -315,7 +382,7 @@ func (r *Receipts) lock(now time.Time) error {
 		if !errors.Is(err, fs.ErrExist) {
 			return err
 		}
-		fi, err := os.Stat(p)
+		fi, err := os.Lstat(p)
 		if err != nil {
 			continue // released meanwhile
 		}
@@ -459,7 +526,10 @@ func (r *Receipts) read(id string) (*receipt, string, bool) {
 	if li, err := os.Lstat(p); err == nil && !li.Mode().IsRegular() {
 		return nil, "not a regular file (a symlink or other entry is never followed)", true
 	}
-	f, err := os.Open(p)
+	f, err := openNoFollow(p)
+	if errors.Is(err, ErrSymlink) {
+		return nil, "not a regular file (a symlink or other entry is never followed)", true
+	}
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, "no receipt", false
 	}
