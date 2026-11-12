@@ -380,7 +380,6 @@ func TestVerifiedPriority(t *testing.T) {
 // explain lists C's statements as held, not as inputs.
 func TestNonInterference(t *testing.T) {
 	conformance.Covers(t, "C-core-05")
-	conformance.Partial(t, "C-core-13", "defaults, grade and verify exit unchanged by an unknown kind; membership and corroboration land with their views")
 	base := newWorld(t)
 	base.authored("A1", "A", "X", "licence", "CC0-1.0")
 	before := base.store(nil).Artifact(dig("X"))

@@ -336,7 +336,6 @@ func TestSchemaUnpinned(t *testing.T) {
 // TestSchemaUnknownKind: a validly signed statement of an unlisted kind is verified, stored as an unknown
 // kind, and its body is not interpreted (C-core-13).
 func TestSchemaUnknownKind(t *testing.T) {
-	conformance.Partial(t, "C-core-13", "verified and marked unknown kind at the wire layer; defaults, grade, membership and verify exit unchanged need the resolver")
 	st, err := readBody(t, "endorses", body("content", "not even a digest", "licence", 7, "member_of", tID))
 	if err != nil || st.Status != UnknownKind || st.Why != "endorses" || !st.Verified {
 		t.Fatalf("%v %+v", err, st)
