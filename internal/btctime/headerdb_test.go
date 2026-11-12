@@ -237,16 +237,55 @@ func TestHeaderDBRefused(t *testing.T) {
 		})
 	}
 	t.Run("symlink", func(t *testing.T) {
-		d := testDB(t)
-		os.MkdirAll(filepath.Dir(d.Path()), 0o700)
-		if err := os.Symlink(base.Path(), d.Path()); err != nil {
-			t.Fatal(err)
+		// a link at the database file, at its directory, or at the state directory: refused naming the path, never
+		// followed, and a sync neither writes through it nor replaces it (O_NOFOLLOW where the platform has it)
+		for _, at := range []string{"file", "headers dir", "state dir"} {
+			t.Run(at, func(t *testing.T) {
+				d := testDB(t)
+				d.loc.Hub = base.loc.Hub
+				var link string
+				switch at {
+				case "file":
+					os.MkdirAll(d.dir, 0o700)
+					link = d.Path()
+					if err := os.Symlink(base.Path(), link); err != nil {
+						t.Fatal(err)
+					}
+				case "headers dir":
+					os.MkdirAll(d.loc.Dir, 0o700)
+					link = d.dir
+					if err := os.Symlink(base.dir, link); err != nil {
+						t.Fatal(err)
+					}
+				case "state dir":
+					link = d.loc.Dir
+					if err := os.Symlink(base.loc.Dir, link); err != nil {
+						t.Fatal(err)
+					}
+				}
+				before, _ := os.ReadFile(base.Path())
+				_, err := d.Load(Mainnet(), now)
+				var re *HeaderDBError
+				if !errors.As(err, &re) || !errors.Is(err, ErrSymlink) || !strings.Contains(err.Error(), link) {
+					t.Fatalf("load through a symlink at the %s: %v, want a refusal naming %s", at, err, link)
+				}
+				if _, err := d.Sync(context.Background(), Mainnet(), bytes.NewReader(in), SyncOptions{Now: clockAt(now)}); !errors.As(err, &re) || !errors.Is(err, ErrSymlink) {
+					t.Fatalf("sync through a symlink at the %s: %v", at, err)
+				}
+				if fi, err := os.Lstat(link); err != nil || fi.Mode()&os.ModeSymlink == 0 {
+					t.Fatalf("the link at the %s was replaced", at)
+				}
+				if after, _ := os.ReadFile(base.Path()); !bytes.Equal(before, after) {
+					t.Fatal("a sync wrote through the link")
+				}
+				if _, ok := ReceiptFiles(d.loc); ok && at == "state dir" {
+					t.Fatal("ReceiptFiles counted through a linked state directory")
+				}
+			})
 		}
-		d.loc.Hub = base.loc.Hub
-		// Open follows the link; the file it reaches is a regular, 0600 file of this hub, so Load accepts it.
-		// A symlink in a 0700 directory the reader owns is the reader's own choice; the content checks still hold.
-		if _, err := d.Load(Mainnet(), now); err != nil {
-			t.Fatalf("symlink to a valid database: %v", err)
+		// control: the same database read at its real path loads (the refusal is the link, not the content)
+		if _, err := base.Load(Mainnet(), now); err != nil {
+			t.Fatalf("control: %v", err)
 		}
 	})
 	t.Run("sync with another bootstrap", func(t *testing.T) {

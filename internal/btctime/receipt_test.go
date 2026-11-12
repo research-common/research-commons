@@ -1038,3 +1038,49 @@ func copyTree(t testing.TB, src, dst string) {
 		t.Fatal(err)
 	}
 }
+
+// TestReceiptStoreRefusesSymlinks: opening the receipt store refuses a symbolic link at its key, its directories or
+// the state directory, naming the path; nothing is created or chmodded through the link and the link stays.
+// (A link at one receipt file is a downgraded receipt: TestReceiptCorruptOrForeign.)
+func TestReceiptStoreRefusesSymlinks(t *testing.T) {
+	for _, at := range []string{"key", "receipts dir", "receipt subdir", "state dir"} {
+		t.Run(at, func(t *testing.T) {
+			real := Location{Dir: filepath.Join(t.TempDir(), "real"), Hub: "dir:/hub-under-test"}
+			r0 := openR(t, real, ReceiptOptions{})
+			keyBefore, _ := os.ReadFile(r0.path(keyFileName))
+			loc := Location{Dir: filepath.Join(t.TempDir(), "state"), Hub: real.Hub}
+			dir := filepath.Join(loc.Dir, receiptsDir)
+			var link, target string
+			switch at {
+			case "key":
+				os.MkdirAll(dir, 0o700)
+				link, target = filepath.Join(dir, keyFileName), r0.path(keyFileName)
+			case "receipts dir":
+				os.MkdirAll(loc.Dir, 0o700)
+				link, target = dir, r0.dir
+			case "receipt subdir":
+				os.MkdirAll(dir, 0o700)
+				link, target = filepath.Join(dir, receiptSubdir), r0.path(receiptSubdir)
+			case "state dir":
+				link, target = loc.Dir, real.Dir
+			}
+			if err := os.Symlink(target, link); err != nil {
+				t.Fatal(err)
+			}
+			os.Chmod(target, 0o755) // a chmod through the link would tighten this back
+			_, err := OpenReceipts(loc, ReceiptOptions{NoSync: true})
+			if !errors.Is(err, ErrSymlink) || !strings.Contains(err.Error(), link) {
+				t.Fatalf("open through a symlink at the %s: %v, want a refusal naming %s", at, err, link)
+			}
+			if fi, err := os.Lstat(link); err != nil || fi.Mode()&os.ModeSymlink == 0 {
+				t.Fatalf("the link at the %s was replaced", at)
+			}
+			if fi, _ := os.Stat(target); fi.Mode().Perm() != 0o755 {
+				t.Fatalf("the link's target was chmodded to %v", fi.Mode().Perm())
+			}
+			if after, _ := os.ReadFile(r0.path(keyFileName)); !bytes.Equal(keyBefore, after) {
+				t.Fatal("the key behind the link changed")
+			}
+		})
+	}
+}

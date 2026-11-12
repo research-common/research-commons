@@ -198,9 +198,9 @@ func TestAnchorFreshness(t *testing.T) {
 	}
 }
 
-// TestAnchorDatabaseRefused: a database that is not trusted (here: loosened permissions; the btctime tests cover
-// the rest) is never used: every bound reads backend-unavailable naming why, status reports it, and a sync refuses
-// to extend it.
+// TestAnchorDatabaseRefused: a database that is not trusted (here: loosened permissions, then a symbolic link at its
+// path; the btctime tests cover the rest) is never used: every bound reads backend-unavailable naming why, status
+// reports it, and a sync refuses to extend it.
 func TestAnchorDatabaseRefused(t *testing.T) {
 	c := newChainWorld(t, 30)
 	now := c.tip.Add(10 * time.Minute)
@@ -223,6 +223,32 @@ func TestAnchorDatabaseRefused(t *testing.T) {
 	r = c.run("anchor", "headers", "sync", "--from", c.headers, "--json")
 	if r.code != ExitCouldNot || !strings.Contains(r.stdout, "header-database-refused") {
 		t.Fatalf("sync over a refused database: %d %s", r.code, r.stdout)
+	}
+	// a symbolic link at the database path, to a valid database elsewhere, is refused naming the path, never followed
+	if err := os.Chmod(p, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	moved := filepath.Join(t.TempDir(), "chain")
+	if err := os.Rename(p, moved); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(moved, p); err != nil {
+		t.Fatal(err)
+	}
+	r = c.run("verify", dig("X"), "--json")
+	if r.code != ExitCouldNot || strings.Count(r.stdout, `"state":"backend-unavailable"`) != 2 {
+		t.Fatalf("symlinked database: %d %s", r.code, r.stdout)
+	}
+	r = c.run("anchor", "status", "--json")
+	if o := string(canon.Encode(jsonOf(t, r))); r.code != ExitCouldNot || !strings.Contains(o, "symbolic link") || !strings.Contains(o, "headers-v1/chain") {
+		t.Fatalf("status of a symlinked database: %d %s", r.code, r.stdout)
+	}
+	r = c.run("anchor", "headers", "sync", "--from", c.headers, "--json")
+	if r.code != ExitCouldNot || !strings.Contains(r.stdout, "header-database-refused") || !strings.Contains(r.stdout, "symbolic link") {
+		t.Fatalf("sync through a symlinked database: %d %s", r.code, r.stdout)
+	}
+	if fi, err := os.Lstat(p); err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		t.Fatal("the sync replaced the link")
 	}
 }
 
