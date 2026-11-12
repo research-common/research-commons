@@ -382,6 +382,10 @@ func finalityVerdict(rules FinalityRules, rule string, a, b State) (verdict stri
 	metA, _, knownA := rules.Evaluate(rule, a)
 	metB, _, knownB := rules.Evaluate(rule, b)
 	if !knownA || !knownB {
+		if ordersLabels(rules, rule) {
+			// the cited profile orders the rule; a state it cannot place compares with nothing (§5.3.1a)
+			return "inconclusive", false, NotComparableUnderRule
+		}
 		return "inconclusive", false, "finality rule not evaluable by this reader"
 	}
 	c, ok := rules.Compare(rule, a, b)

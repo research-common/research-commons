@@ -699,9 +699,12 @@ func (r *Resolver) revision(o *Observation, st *wire.Statement) string {
 			continue
 		}
 		qs := captureState(q.St)
-		if c, ok := r.rulesFor(o.Finality).Compare(o.Finality.Rule, o.Finality.State, qs); ok && c >= 0 {
+		rules := r.rulesFor(o.Finality)
+		if c, ok := rules.Compare(o.Finality.Rule, o.Finality.State, qs); ok && c >= 0 {
 			continue // not later
-		} else if !ok && qs == o.Finality.State {
+		} else if !ok && (qs == o.Finality.State || ordersLabels(rules, o.Finality.Rule)) {
+			// under a cited profile that orders the rule, a state it cannot place compares with nothing: not
+			// later, so no revision is asserted (§5.3.1a)
 			continue
 		}
 		return fmt.Sprintf("capture %s by %s at state %s holds different bytes for the same referent: revised before finality; this observation stays true of what it pinned",

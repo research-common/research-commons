@@ -287,6 +287,22 @@ func (b BoundRules) Check(rule string, s State) (met bool, final string, why str
 	return si >= ri, l, ""
 }
 
+// ordersLabels reports whether rules are bound to a profile that orders rule's labels: an ordered-label rule whose
+// label is in an ordered-label profile. Under it a state the profile cannot place is not comparable (claims-model
+// note §5.3.1a), not a rule the reader cannot evaluate.
+func ordersLabels(rules FinalityRules, rule string) bool {
+	b, ok := rules.(BoundRules)
+	if !ok {
+		return false
+	}
+	m := reLabelRule.FindStringSubmatch(rule)
+	if m == nil || b.Profile == nil || b.Profile.Dialect != DialectOrderedLabel {
+		return false
+	}
+	_, ok = b.Profile.index[m[2]]
+	return ok
+}
+
 // underProfile names the source profile that ordered an ordered-label rule's states, for a history line; "" when
 // no profile did (a depth rule, or rules not bound to a profile).
 func underProfile(rules FinalityRules, rule string) string {
