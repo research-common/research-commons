@@ -310,6 +310,29 @@ var limits = []limit{
 			return r.code == ExitOK && has && strings.Contains(string(canon.Encode(w)), "skips the checks"), r.stdout[:min(len(r.stdout), 300)]
 		},
 	},
+	{
+		id:  "L-14",
+		gap: "Source profiles (`series.source_profiles`) judge only a growing series' boundary, from the segments' asserted states: an observation's referent status and corroboration do not read them, so an ordered-label rule (`run >= L`) on `show`/`verify` stays `finality unchecked`; and no profile reads a state out of the captured bytes",
+		sources: []limitSource{
+			{file: "CHANGELOG.md", says: "The profile is not yet read by observation views (referent status, corroboration), and the state is never re-derived from the captured bytes."},
+			{file: "docs/DESIGN-notes-claims-model.md", says: "Reading the state out of the captured bytes (where the run label sits in a response) needs a response-layout dialect and is not part of a profile yet."},
+		},
+		probe:  "with a profile pinned in the store-root policy and held, `verify` of an observation whose rule `run >= RF` cites it at state `RF` exits 3 with referent `finality unchecked`",
+		closes: "observation views resolve `rule_source` against the reader's profiles (referent `final (as captured, not re-checked)`)",
+		open: func(t *testing.T) (bool, string) {
+			prof := canon.Encode(obj("profile", resolve.SourceProfileTag, "source", "s", "dialect", resolve.DialectOrderedLabel, "labels", []string{"SF", "RF"}))
+			pd := dig(string(prof))
+			w := newWorld(t)
+			w.blob("p", prof)
+			os.WriteFile(filepath.Join(w.root, PolicyFile), []byte(`{"policy":"rc-hub-policy/1","series":{"source_profiles":[{"digest":"`+pd+`"}]}}`), 0o644)
+			ref := obj("endpoint", "https://api.example/settlement", "parameters", obj("period", "x"), "response_digest", dig("x"))
+			id := w.sign("O", "O", "observed", obj("content", content("x"), "class", "source", "referent", canon.Value(ref),
+				"capture", obj("at", "2026-01-02T00:00:00Z", "evidence", "self-asserted"),
+				"finality", obj("rule", "run >= RF", "rule_source", pd, "state_at_capture", obj("run", "RF"))))
+			r := w.run("verify", id)
+			return r.code == ExitCouldNot && strings.Contains(r.stdout, "state: finality unchecked"), r.stdout[:min(len(r.stdout), 400)]
+		},
+	},
 }
 
 // TestDocumentedLimits: C-core-07.

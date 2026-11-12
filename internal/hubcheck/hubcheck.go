@@ -110,6 +110,10 @@ func Check(dir string, cfg Config) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
+	profiles, err := loadProfiles(r, res.PolicyRev, pol.SourceProfiles)
+	if err != nil {
+		return nil, err
+	}
 
 	var pkg gate.Package
 	var held gate.MemHeld
@@ -130,13 +134,27 @@ func Check(dir string, cfg Config) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	pol.Resolver = append([]resolve.Option{resolve.WithContent(gate.NewMemoContent(content, 0))}, cfg.Resolver...)
+	pol.Resolver = []resolve.Option{resolve.WithContent(gate.NewMemoContent(content, 0))}
+	if profiles != nil {
+		// the pinned profiles judge the series boundary as captured; a reader's own re-check, if it passes one,
+		// still wins (it comes after)
+		pol.Resolver = append(pol.Resolver, resolve.WithSegments(resolve.ProfileSegments{Rules: *profiles}))
+	}
+	pol.Resolver = append(pol.Resolver, cfg.Resolver...)
 	rep, err := gate.HubCheck(pkg, held, pol, gate.Options{Overrides: cfg.Overrides, Audit: cfg.Base == ""})
 	if err != nil {
 		return nil, err
 	}
 	res.Report = rep
 	return res, nil
+}
+
+// loadProfiles reads the source profiles the policy pins (`series.source_profiles`) from the tree at rev, the
+// revision the policy itself was read at: a change cannot bring the profile that judges it (claims-model note
+// §5.3.1a). A profile must be a regular blob file there; gate.LoadSourceProfiles checks the rest.
+func loadProfiles(r *repo, rev string, digests []string) (*resolve.ProfileRules, error) {
+	return gate.LoadSourceProfiles(digests, func(d string) ([]byte, error) { return r.fileAt(rev, gate.BlobPath(d)) },
+		"policy file "+PolicyFile+" at "+rev, "the policy revision")
 }
 
 // checkMarker requires the marker at rev to name the layout this tool implements (H-10).

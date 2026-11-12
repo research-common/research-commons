@@ -85,6 +85,9 @@ type SegmentState struct {
 	// Final is the re-checked state: "final", "provisional", or "unchecked" (with Why).
 	Final string
 	Why   string
+	// AsCaptured marks a Final read from the observer's asserted state at capture under a source profile, not
+	// from a re-check of the source (claims-model note §8, "a boundary as captured"; I4).
+	AsCaptured bool
 }
 
 // SegmentReader is the reader's re-check of a segment's position and finality.
@@ -144,7 +147,9 @@ type Series struct {
 	Computed          Boundary
 	// ComputedState is "computed", "unchecked" or "no segments"; Why explains unchecked.
 	ComputedState string
-	Provisional   int
+	// AsCaptured: the computed boundary rests on at least one segment state as captured, not re-checked.
+	AsCaptured  bool
+	Provisional int
 	// Comparison is "agrees", "flagged" (declared later than computed), "not comparable", or "unchecked".
 	Comparison string
 	Segments   []Segment
@@ -291,6 +296,7 @@ func (s *Series) compute() {
 	}
 	s.ComputedState = "computed"
 	for _, g := range s.Segments {
+		s.AsCaptured = s.AsCaptured || g.AsCaptured
 		if g.Final == "provisional" {
 			s.Provisional++
 			if s.Provisional == 1 {
@@ -326,11 +332,20 @@ func (s *Series) compare() {
 		case c > 0:
 			s.Comparison = "flagged"
 			s.Explain = append(s.Explain, "declared boundary is later than the members' finality boundary")
+			if s.AsCaptured {
+				s.Explain = append(s.Explain, "the members' boundary is their own asserted states at capture: the members themselves do not claim the declared boundary")
+			}
 		default:
 			s.Comparison = "agrees"
+			if s.AsCaptured {
+				s.Explain = append(s.Explain, "the members' boundary is their asserted states at capture, not re-checked: the declaration is not confirmed (I4)")
+			}
 		}
 	}
 }
+
+// BoundaryAsCaptured marks a members' boundary computed from asserted states at capture (claims-model note §8).
+const BoundaryAsCaptured = "as captured, not re-checked"
 
 // NoRecheck reports whether the boundary is unchecked because some segment had no finality re-check at all
 // (the default RecordSegments reader), rather than for a reason in the series' own data.
@@ -348,6 +363,9 @@ func (s *Series) Line() string {
 	switch s.ComputedState {
 	case "computed":
 		comp = "members final to " + s.Computed.String()
+		if s.AsCaptured {
+			comp += " " + BoundaryAsCaptured
+		}
 		if s.Provisional > 0 {
 			comp += " (" + plural(s.Provisional, "segment") + " provisional)"
 		}
@@ -371,7 +389,11 @@ func (s *Series) Render() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "series %s at %s\n  %s\n", keylog.Short(s.Resource), keylog.Short(s.Edition), s.Line())
 	for _, g := range s.Segments {
-		fmt.Fprintf(&b, "  segment %s from %s: %s\n", shortMember(g.Member), g.From, g.Final)
+		st := g.Final
+		if g.AsCaptured {
+			st += " (" + BoundaryAsCaptured + ")"
+		}
+		fmt.Fprintf(&b, "  segment %s from %s: %s\n", shortMember(g.Member), g.From, st)
 	}
 	for _, id := range sortedKeys(s.Revised) {
 		fmt.Fprintf(&b, "  %s %s\n", RevisedFrozen, keylog.Short(id))
@@ -393,12 +415,13 @@ const PrematureFreeze = "premature freeze"
 
 // RequireDeclaredNotAfterComputed is the policy of C-core-104: the declared boundary must not be later than
 // the members' computed one. A boundary the reader cannot compare is refused too: under this policy an
-// unverifiable freeze is not endorsed (I4).
+// unverifiable freeze is not endorsed (I4). So is one that agrees only with the members' asserted states as
+// captured: their word is not the reader's re-check (C-core-104c).
 type RequireDeclaredNotAfterComputed struct{}
 
 // CheckSeries implements FreezePolicy.
 func (RequireDeclaredNotAfterComputed) CheckSeries(s *Series) *refusal.Refusal {
-	if s.Comparison == "agrees" {
+	if s.Comparison == "agrees" && !s.AsCaptured {
 		return nil
 	}
 	return &refusal.Refusal{Class: refusal.Policy, Reason: PrematureFreeze,

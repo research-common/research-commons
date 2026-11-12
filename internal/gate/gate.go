@@ -853,10 +853,18 @@ func resolverChecks(r *Result, res *resolve.Resolver, pol *Policy) {
 		if rf == nil {
 			return
 		}
-		switch s.Comparison {
-		case "flagged":
+		switch {
+		case s.Comparison == "flagged" && s.AsCaptured:
+			// the members' own asserted states put the boundary earlier: refusable on the receiver's evidence
+			r.refuse(&refusal.Refusal{Class: refusal.Policy, Reason: HubRules + ": series.refuse_premature_freeze",
+				Detail: rf.Detail + "; the edition stays a valid statement elsewhere; " + AsCapturedRefusal}, "object "+r.Path)
+		case s.Comparison == "flagged":
 			r.refuse(&refusal.Refusal{Class: refusal.Policy, Reason: HubRules + ": series.refuse_premature_freeze",
 				Detail: rf.Detail + "; the edition stays a valid statement elsewhere; " + ReaderRecheck}, "object "+r.Path)
+		case s.Comparison == "agrees" && s.AsCaptured:
+			r.Verdict, r.Scope = Undecided, "object "+r.Path
+			r.label(LabelSeriesUnknown, "could not check (as captured): "+s.Line()+"; "+AsCapturedUndecided)
+			r.Next = AsCapturedNext
 		default:
 			r.Verdict, r.Scope = Undecided, "object "+r.Path
 			if s.NoRecheck() {
@@ -903,19 +911,30 @@ func completenessCheck(r *Result, res *resolve.Resolver) {
 // statements it holds, not a claim about readings it has not seen.
 const CompletenessScope = "the missing readings are ones this receiver holds; it cannot know of readings it does not"
 
-// NoSegmentRecheck is what every series.refuse_premature_freeze verdict says about this tool version: it ships
-// no finality re-check for series segments (the default segment reader records positions only), so a members'
-// boundary is never computed by the shipped tool and, with the knob on, every series edition is could not
-// check. A reader that configures its own re-check (resolve.WithSegments) gets real comparisons; no command
-// can supply one, and a hub check takes no input but the base (H-13).
+// NoSegmentRecheck is what a series.refuse_premature_freeze verdict says when no segment reader was configured:
+// this tool version ships no finality re-check of the source (the default segment reader records positions
+// only), so without pinned source profiles (series.source_profiles, read as captured) no members' boundary is
+// computed and, with the knob on, every series edition is could not check. A reader that configures its own
+// re-check (resolve.WithSegments) gets real comparisons; no command can supply one, and a hub check takes no
+// input but the base (H-13).
 const NoSegmentRecheck = "this tool version ships no finality re-check for series segments, so with series.refuse_premature_freeze on every series edition is could not check until a re-check ships"
 
 // ReaderRecheck is added to a series.refuse_premature_freeze refusal: a flagged boundary needs a members'
 // boundary, which only a segment re-check the reader configured itself can compute in this tool version.
 const ReaderRecheck = "the members' boundary came from a segment finality re-check this reader configured; this tool version ships none"
 
+// AsCapturedRefusal is added to a series.refuse_premature_freeze refusal whose members' boundary was computed from
+// the segments' asserted states under the pinned source profiles (claims-model note §8, "a boundary as captured").
+const AsCapturedRefusal = "the members' boundary is their own asserted states at capture under the pinned source profiles: the members themselves do not claim the declared boundary; a later re-check or re-capture is new evidence"
+
+// AsCapturedUndecided says why a declaration at or before an as-captured boundary is not endorsed.
+const AsCapturedUndecided = "the members' asserted states at capture support the declaration, and no re-check of the source confirmed them; never a pass (I4)"
+
+// AsCapturedNext is the next step of a series edition left could-not-check on an as-captured boundary.
+const AsCapturedNext = "a maintainer reviews the edition against the source, or turns series.refuse_premature_freeze off through the maintainers' own review"
+
 // SeriesNoRecheckNext is the next step of a series edition left could-not-check because no re-check ships.
-const SeriesNoRecheckNext = "nothing in this change can make the boundary computable with this tool version (no finality re-check ships); turn series.refuse_premature_freeze off through the maintainers' own review, or accept that series editions are not endorsed here until a re-check ships"
+const SeriesNoRecheckNext = "nothing in this change can make the boundary computable with this tool version (no finality re-check ships); pin the segments' source profiles (series.source_profiles) to judge their asserted states, turn series.refuse_premature_freeze off, both through the maintainers' own review, or accept that series editions are not endorsed here until a re-check ships"
 
 func outcomeOr(o resolve.Outcome) string {
 	if o == "" {

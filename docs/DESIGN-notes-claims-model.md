@@ -418,6 +418,39 @@ Rules:
   is a copy. Only in the exact-bytes class is re-reading the same source a corroboration, and it still needs
   its own `observed` statement with its own capture record.
 
+#### 5.3.1a Source profiles
+
+A finality rule is the observer's account of a source's policy (§5.3.1). Two observers of one settlement API
+should not each have to invent an order for its run labels, and a reader should not have to trust either one's
+order. A **source profile** is the shared, content-addressed statement of that policy: a blob naming the
+source, the dialect its rule is written in, and, for a labelled source, the order of its states. The format
+defines two dialects, versioned with it; anything else is a rule dialect (§15) and stays `unchecked`:
+
+- **Integer depth.** `confirmations >= N` over `state_at_capture.depth`, compared as integers. It needs no
+  profile: the order is the integers'. A profile may still name a depth source, to cite its documents.
+- **Ordered label.** `run >= L` over `state_at_capture.run`, where the order is the profile's closed list of
+  labels, earliest first. A state is met when its label is at or after `L` in that list. A label not in the
+  list (the state's or the rule's) is `not comparable`: it is never placed by its spelling, its capture time
+  or a guess. Two vintages of one label are the same state. The note's prose `settlement run ≥ RF` is written
+  `run >= RF` in this dialect.
+
+Rules:
+
+- **The reader chooses its profiles (I9).** A profile confers nothing by existing; a reader resolves a
+  statement's `finality.rule_source` against the profiles it holds and has chosen. A `rule_source` names a
+  profile when it is the profile's digest, or one of the documents the profile cites (so an observation that
+  cites the published timetable resolves through the profile built from it). A `rule_source` that names no
+  chosen profile, or names two, leaves an ordered-label rule `unchecked`, naming why; two matches are never
+  settled by order (I14). A profile whose dialect is not the rule's is `unchecked` too.
+- **A profile evaluates asserted states, not the source.** What it decides is whether the observer's asserted
+  `state_at_capture` meets the rule. That is `final (as captured, not re-checked)` at best (I4): the reader's own
+  re-check at a state that meets the rule is still what makes a referent `final`, and a later re-check that
+  moves a state is new evidence (I5). Reading the state out of the captured bytes (where the run label sits in
+  a response) needs a response-layout dialect and is not part of a profile yet.
+- **A hub pins its profiles in its own policy, read at the base revision**, as it reads the rest of its
+  policy (§11): a change cannot bring the profile that judges it, and the blob must be held at the base. The
+  series boundary a hub computes from the pinned profiles is §8's `as captured` boundary.
+
 #### 5.3.2 Corroboration is a derivation
 
 A corroboration is an ordinary derived result: a workflow whose inputs are the original observation plus
@@ -659,7 +692,8 @@ immutable editions.
   when the declared unit differs from the computed one (never converted). The computed boundary is the
   position of the earliest segment that is not final, every segment before it being final; when every
   segment is final, it is the end of the last segment. It is `unchecked` when any segment carries no finality
-  rule or its state cannot be re-checked, since one segment without a rule leaves the boundary unknown. A
+  rule or its state can be neither re-checked nor read as captured (below), since one segment without a rule
+  leaves the boundary unknown. A
   series edition rule may require agreement, so a hub can refuse a premature freeze under its own policy. A
   controller can still freeze a tail the source intends to revise; it cannot do so invisibly. A segment's
   position is read from its referent: the start of its window, else its time, else its finality state, in the
@@ -667,6 +701,15 @@ immutable editions.
   not flagged. An edition replaces a segment when a segment of its predecessor is missing from it, or it adds a
   segment, positioned before the predecessor's `frozen_before`. Such an edition is shown as `REVISED-FROZEN`;
   the earlier edition and its segment remain resolvable (I3).
+- **A boundary as captured.** A reader that resolves the segments' rules against source profiles (§5.3.1a) but
+  re-checks no source computes the members' boundary from their *asserted* states at capture, by the same rule
+  as above, and marks it `as captured, not re-checked`: "frozen_before 2025-06-01 (declared) · members final
+  to 2025-04-01 as captured, not re-checked (2 segments provisional)". The mark splits what a freeze policy may
+  conclude. A declared boundary later than the asserted one is refusable on the hub's own evidence: the members
+  themselves do not claim it. A declared boundary at or before it is `could not check (as captured)`, never a
+  pass: the members' word is not the reader's re-check (I4). A segment whose state or rule the profile cannot
+  place leaves the boundary `unchecked`, as a segment with no rule does. A later re-check, or a re-capture added
+  as a member, is new evidence and may move the boundary in either direction (I5).
 
 ## 9. Research exchange
 
@@ -905,6 +948,7 @@ that note exists: a member schema under no dialect the reader implements is load
 `unchecked`, and every dialect states its cost model: evaluation runs under the reader's step budget, each
 primitive is charged against it, and regular expressions are linear-time (RE2-class) or charged per
 backtracking step, so C-core-94's limit binds whatever the dialect computes);
+response-layout dialects (reading a finality state out of captured bytes, §5.3.1a);
 attestation verifiers (receipts, TEEs); receiver-local Bitcoin verification (#59); size policy (#9); hub
 conventions (discovery #66; the hub-template and `COMMONS.md` rubric, which still use alpha vocabulary);
 task-contract profiles (§9.1).
