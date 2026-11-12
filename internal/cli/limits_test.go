@@ -312,25 +312,27 @@ var limits = []limit{
 	},
 	{
 		id:  "L-14",
-		gap: "Source profiles (`series.source_profiles`) judge only a growing series' boundary, from the segments' asserted states: an observation's referent status and corroboration do not read them, so an ordered-label rule (`run >= L`) on `show`/`verify` stays `finality unchecked`; and no profile reads a state out of the captured bytes",
+		gap: "No source profile reads a finality state out of the captured bytes: an observation's state is the observer's asserted `state_at_capture`, so a rule resolved through a pinned profile is at best `final (as captured, not re-checked)`, and a captured response whose own run label contradicts the asserted state is not noticed",
 		sources: []limitSource{
-			{file: "CHANGELOG.md", says: "The profile is not yet read by observation views (referent status, corroboration), and the state is never re-derived from the captured bytes."},
+			{file: "CHANGELOG.md", says: "the state is never re-derived from the captured bytes"},
 			{file: "docs/DESIGN-notes-claims-model.md", says: "Reading the state out of the captured bytes (where the run label sits in a response) needs a response-layout dialect and is not part of a profile yet."},
 		},
-		probe:  "with a profile pinned in the store-root policy and held, `verify` of an observation whose rule `run >= RF` cites it at state `RF` exits 3 with referent `finality unchecked`",
-		closes: "observation views resolve `rule_source` against the reader's profiles (referent `final (as captured, not re-checked)`)",
+		probe:  "with a profile pinned in the store-root policy and held, `verify` of an observation whose rule `run >= RF` cites it at asserted state `RF`, over captured bytes whose run label is `R1`, exits 0 with referent `final (as captured, not re-checked)`",
+		closes: "a response-layout dialect reads the run label out of the captured bytes, so the asserted state is checked against them",
 		open: func(t *testing.T) (bool, string) {
-			prof := canon.Encode(obj("profile", resolve.SourceProfileTag, "source", "s", "dialect", resolve.DialectOrderedLabel, "labels", []string{"SF", "RF"}))
+			prof := canon.Encode(obj("profile", resolve.SourceProfileTag, "source", "s", "dialect", resolve.DialectOrderedLabel, "labels", []string{"SF", "R1", "RF"}))
 			pd := dig(string(prof))
 			w := newWorld(t)
 			w.blob("p", prof)
+			captured := `{"run":"R1","value":1}`
+			w.blob(captured, []byte(captured))
 			os.WriteFile(filepath.Join(w.root, PolicyFile), []byte(`{"policy":"rc-hub-policy/1","series":{"source_profiles":[{"digest":"`+pd+`"}]}}`), 0o644)
-			ref := obj("endpoint", "https://api.example/settlement", "parameters", obj("period", "x"), "response_digest", dig("x"))
-			id := w.sign("O", "O", "observed", obj("content", content("x"), "class", "source", "referent", canon.Value(ref),
+			ref := obj("endpoint", "https://api.example/settlement", "parameters", obj("period", "x"), "response_digest", dig(captured))
+			id := w.sign("O", "O", "observed", obj("content", content(captured), "class", "source", "referent", canon.Value(ref),
 				"capture", obj("at", "2026-01-02T00:00:00Z", "evidence", "self-asserted"),
 				"finality", obj("rule", "run >= RF", "rule_source", pd, "state_at_capture", obj("run", "RF"))))
 			r := w.run("verify", id)
-			return r.code == ExitCouldNot && strings.Contains(r.stdout, "state: finality unchecked"), r.stdout[:min(len(r.stdout), 400)]
+			return r.code == ExitOK && strings.Contains(r.stdout, "status: final (as captured, not re-checked)"), r.stdout[:min(len(r.stdout), 400)]
 		},
 	},
 }
