@@ -139,7 +139,7 @@ func (r *Resolver) amendedBy(p *Placed) string {
 	d := contentDigest(p.St.Body)
 	best := ""
 	for _, q := range r.byKind["authored"] {
-		if q.St.Signer == p.St.Signer && q.Counts() && contentDigest(q.St.Body) == d && r.precedes(p.St.Signer, p.St.ID, q.St.ID) && (best == "" || q.St.ID < best) {
+		if q.St.Signer == p.St.Signer && r.countsAsKey(q) && contentDigest(q.St.Body) == d && r.precedes(p.St.Signer, p.St.ID, q.St.ID) && (best == "" || q.St.ID < best) {
 			best = q.St.ID
 		}
 	}
@@ -354,7 +354,7 @@ func (r *Resolver) deadlineStatements(s *Submission, p *Placed) (sts []*Placed, 
 	case "submit":
 		sts = append(sts, p)
 		for _, q := range r.byKind["authored"] {
-			if q.St.Signer == s.Signer && q.Counts() && contentDigest(q.St.Body) == s.Result &&
+			if q.St.Signer == s.Signer && r.countsAsKey(q) && contentDigest(q.St.Body) == s.Result &&
 				str(object(q.St.Body, "availability"), "redistribution") == "withheld" {
 				sts = append(sts, q)
 				commitments = append(commitments, q.St.ID)
@@ -365,7 +365,7 @@ func (r *Resolver) deadlineStatements(s *Submission, p *Placed) (sts []*Placed, 
 	case "authored":
 		var chain []*Placed
 		for _, q := range r.byKind["authored"] {
-			if q.St.Signer == s.Signer && q.Counts() && contentDigest(q.St.Body) == s.Result && (q == p || r.precedes(s.Signer, q.St.ID, p.St.ID)) {
+			if q.St.Signer == s.Signer && r.countsAsKey(q) && contentDigest(q.St.Body) == s.Result && (q == p || r.precedes(s.Signer, q.St.ID, p.St.ID)) {
 				chain = append(chain, q)
 			}
 		}
@@ -792,7 +792,7 @@ func (r *Resolver) FulfillsDropWarning(signer, d string, body *canon.Object) str
 	nf := object(body, "fulfills")
 	var lost []string
 	for _, p := range r.byKind["authored"] {
-		if p.St.Signer != signer || !p.Counts() || contentDigest(p.St.Body) != d || r.amendedBy(p) != "" {
+		if p.St.Signer != signer || !r.countsAsKey(p) || contentDigest(p.St.Body) != d || r.amendedBy(p) != "" {
 			continue
 		}
 		f := object(p.St.Body, "fulfills")

@@ -281,3 +281,29 @@ func TestGateR5NoHookAbsentTextWithEvaluator(t *testing.T) {
 		t.Fatal("no fixture reached the hook-absent fallback without an evaluator: the corpus no longer tests the gate")
 	}
 }
+
+// TestGateKeyLocalAmendment: a key's same-key amendment and the task file's key-local lookups (amendedBy,
+// FulfillsDropWarning, the deadline chain) read only the key's own claims. A later identity claim signed by the
+// same key on the same blob is the identity's claim (identity profile §5.1: same-key ancestry does not amend an
+// identity-context claim, and an identity claim is never a key's), so it does not make the key's earlier claim
+// history, with or without an evaluator, and whatever the evaluator answers.
+func TestGateKeyLocalAmendment(t *testing.T) {
+	w, ids := dualFallbackWorld(t)
+	f := canon.Value(obj("resource", strings.Repeat("ef", 32), "edition", strings.Repeat("ef", 32)))
+	w.authored("K:raw", "K", "Q", "fulfills", f)
+	w.signRC2("K:forI", "K", "authored", obj("content", contentOf("Q"), "type", "dataset", "licence", "MIT"), rc2Actor,
+		[2]string{ids["I"], ids["G"]})
+	for name, opts := range map[string][]Option{
+		"none":     nil,
+		"eligible": {WithActorEligibility(eligibleFor(w, ids["I"], policy.ActorEligible, "K:forI"))},
+	} {
+		r := dualResolver(t, w, opts...)
+		raw := r.byID[w.ids["K:raw"]]
+		if by := r.amendedBy(raw); by != "" {
+			t.Fatalf("%s: K's claim amended by its identity claim %s", name, keylog.Short(by))
+		}
+		if warn := r.FulfillsDropWarning(w.signer("K"), dig("Q"), obj("content", contentOf("Q"), "type", "dataset")); warn == "" {
+			t.Fatalf("%s: dropping fulfills from K's current claim gave no warning", name)
+		}
+	}
+}

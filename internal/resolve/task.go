@@ -368,7 +368,7 @@ func (r *Resolver) continues(a *Attempt, q *Placed) bool {
 		g := r.gate(q)
 		return pin == a.Intent && g.Counts && actorSubject(q, g) == a.Subject
 	}
-	return q.Counts() && a.Subject == KeySubject(q.St.Signer) && q.St.Signer == a.Signer && r.precedes(a.Signer, a.Intent, q.St.ID)
+	return r.countsAsKey(q) && a.Subject == KeySubject(q.St.Signer) && q.St.Signer == a.Signer && r.precedes(a.Signer, a.Intent, q.St.ID)
 }
 
 // earlier picks between two withdrawals of one attempt: the earlier in the key's log when one key signed both,
@@ -399,8 +399,8 @@ func (r *Resolver) grants(t *Task, bind func(string) Binding) {
 			g.Statement, g.Signer = p.St.ID, p.St.Signer
 			b := bind(g.Edition)
 			switch {
-			case !p.Counts():
-				t.GrantNotes = append(t.GrantNotes, fmt.Sprintf("grant %s by %s counts toward nothing: %s", keylog.Short(g.Statement), shortKey(g.Signer), notCountedWhy(p)))
+			case !r.counts(p):
+				t.GrantNotes = append(t.GrantNotes, fmt.Sprintf("grant %s by %s counts toward nothing: %s", keylog.Short(g.Statement), shortKey(g.Signer), r.gate(p).Why))
 			case !b.ok():
 				t.GrantNotes = append(t.GrantNotes, fmt.Sprintf("grant %s by %s binds to %s (%s): no effect", keylog.Short(g.Statement), shortKey(g.Signer), keylog.Short(g.Edition), b.State))
 			case b.Terms.Coordinator != g.Signer:
@@ -577,11 +577,12 @@ func (r *Resolver) refutations(t *Task, bind func(string) Binding) {
 	for _, s := range t.Submissions {
 		subs[s.Statement] = s
 	}
-	// a refutation names the submission, or a counted `authored` claim of a submitted result
+	// a refutation names the submission, or a counted `authored` claim of a submitted result (a key's or, through
+	// the counting gate, an identity's)
 	claimOf := map[string]*Submission{}
 	for _, s := range t.Submissions {
 		for _, p := range r.byKind["authored"] {
-			if p.Counts() && contentDigest(p.St.Body) == s.Result {
+			if r.counts(p) && contentDigest(p.St.Body) == s.Result {
 				claimOf[p.St.ID] = s
 			}
 		}
