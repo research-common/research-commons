@@ -110,7 +110,7 @@ func (r *Resolver) Credit(key string, rule *CreditRule) *Credit {
 	}
 	outside := 0
 	in := func(p *Placed) bool {
-		if !p.Counts() {
+		if !r.counts(p) {
 			return false
 		}
 		ok, _ := win.Contains(p.St, r.bound(p.St))
@@ -172,7 +172,7 @@ func (r *Resolver) Credit(key string, rule *CreditRule) *Credit {
 	}
 	authoredByKey := map[string]bool{}
 	for _, p := range r.byKind["authored"] {
-		if p.Counts() && p.St.Signer == key {
+		if r.counts(p) && p.St.Signer == key {
 			authoredByKey[contentDigest(p.St.Body)] = true
 		}
 	}

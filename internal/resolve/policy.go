@@ -253,7 +253,7 @@ func (r *Resolver) currentOf(k, content, role string) []*wire.Statement {
 	}
 	var mine []*Placed
 	for _, p := range r.byKind[kind] {
-		if p.St.Signer == k && p.Counts() && contentDigest(p.St.Body) == content {
+		if p.St.Signer == k && r.countsAsKey(p) && contentDigest(p.St.Body) == content {
 			mine = append(mine, p)
 		}
 	}

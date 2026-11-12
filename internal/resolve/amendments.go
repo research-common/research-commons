@@ -129,7 +129,7 @@ func (r *Resolver) amendTargets(identity, kind, content string, b *Placed, targe
 		case contentDigest(q.St.Body) != content:
 			denied = append(denied, "target "+keylog.Short(t)+" is about another blob")
 		case !q.EvidenceReady():
-			unknown = append(unknown, "its target "+keylog.Short(t)+" is held but not evidence-ready ("+notCountedWhy(q)+")")
+			unknown = append(unknown, "its target "+keylog.Short(t)+" is held but not evidence-ready ("+r.gate(q).Why+")")
 		default:
 			id, state, _ := r.actors.Eligible(q.St)
 			switch {

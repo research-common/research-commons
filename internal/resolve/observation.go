@@ -388,7 +388,7 @@ func (r *Resolver) observedOf(d string, counted bool) []*Placed {
 		return out // an absent or malformed content association is not a blob
 	}
 	for _, p := range r.byKind["observed"] {
-		if contentDigest(p.St.Body) == d && (!counted || p.Counts()) {
+		if contentDigest(p.St.Body) == d && (!counted || r.counts(p)) {
 			out = append(out, p)
 		}
 	}
@@ -400,10 +400,16 @@ func (r *Resolver) observedOf(d string, counted bool) []*Placed {
 // Valid detached or revoked evidence keeps its typed display; neither is cryptographically unverified.
 func (r *Resolver) observationBase(p *Placed) *Observation {
 	st := p.St
-	o := &Observation{Statement: st.ID, Signer: st.Signer, Digest: contentDigest(st.Body), Counts: p.Counts(),
+	// the counting gate (actorgate.go): with no actor evaluator exactly Counts; with one, an identity-context
+	// observation counts by its actor's eligibility, its key's bare-key status shown beside it
+	g := r.gate(p)
+	o := &Observation{Statement: st.ID, Signer: st.Signer, Digest: contentDigest(st.Body), Counts: g.Counts,
 		BodyUnderstood: st.Verified && st.Status == wire.Valid}
-	if !o.Counts {
-		o.Explain = append(o.Explain, "this statement counts toward nothing: "+notCountedWhy(p))
+	switch {
+	case !o.Counts:
+		o.Explain = append(o.Explain, "this statement counts toward nothing: "+g.Why)
+	case g.Why != "":
+		o.Explain = append(o.Explain, "this statement "+g.Why)
 	}
 	if !o.BodyUnderstood {
 		why := uninterpretedBodyWhy(st)
@@ -655,7 +661,7 @@ func (r *Resolver) revision(o *Observation, st *wire.Statement) string {
 		return ""
 	}
 	for _, q := range r.byKind["observed"] {
-		if !q.Counts() || q.St.ID == st.ID || contentDigest(q.St.Body) == o.Digest || !sameReferent(st, q.St) {
+		if !r.counts(q) || q.St.ID == st.ID || contentDigest(q.St.Body) == o.Digest || !sameReferent(st, q.St) {
 			continue
 		}
 		qs := captureState(q.St)
@@ -703,13 +709,14 @@ func (r *Resolver) others(o *Observation, st *wire.Statement) {
 		}
 		line := fmt.Sprintf("also observed by %s in %s", shortKey(q.St.Signer), keylog.Short(q.St.ID))
 		if !q.St.Verified || q.St.Status != wire.Valid {
-			o.Others = append(o.Others, line+" (counts toward nothing: "+notCountedWhy(q)+"; "+uninterpretedBodyWhy(q.St)+")")
+			o.Others = append(o.Others, line+" (counts toward nothing: "+r.gate(q).Why+"; "+uninterpretedBodyWhy(q.St)+")")
 			continue
 		}
 		line += " as " + str(q.St.Body, "class")
+		qg := r.gate(q)
 		switch {
-		case !q.Counts():
-			line += " (counts toward nothing: " + notCountedWhy(q) + ")"
+		case !qg.Counts:
+			line += " (counts toward nothing: " + qg.Why + ")"
 		case str(q.St.Body, "class") != o.Class:
 			line += " (another class: each statement is corroborated under its own class's model)"
 		case o.Class == "source" && !r.finalAt(st, q.St):
@@ -758,7 +765,7 @@ func (r *Resolver) comparability(o *Observation, st *wire.Statement) {
 	d := r.methodDecl(ed)
 	mine := memberKeys(object(ref, "system"))
 	for _, q := range r.byKind["observed"] {
-		if !q.Counts() || q.St.ID == st.ID || str(q.St.Body, "class") != "method" {
+		if !r.counts(q) || q.St.ID == st.ID || str(q.St.Body, "class") != "method" {
 			continue
 		}
 		qr := object(q.St.Body, "referent")

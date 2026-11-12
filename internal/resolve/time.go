@@ -115,12 +115,21 @@ func (r *Resolver) tip() (int64, bool) {
 	return 0, false
 }
 
+// anchorCounts is whether anchor a can bound its signer's log. An anchor is a statement about one key's log
+// (wire §5), and every caller keeps that: it reads only anchors whose signer signed the bounded statement, never
+// another key's (identity profile §4: anchors remain key-local; a root's anchor gives a delegate no earlier
+// timestamp). Whether the anchor itself counts is the counting gate's: with no actor evaluator exactly Counts; with
+// one, an identity-context anchor (a grant may carry `anchors` over its signer's own log, profile §3) counts while
+// its actor is eligible, so a cut that excludes it loses its time bound while the claim's authority may survive
+// (profile §4, C-id-23).
+func (r *Resolver) anchorCounts(a *Placed) bool { return r.counts(a) }
+
 // bounds is every bound the reader derives for statement st from the counting anchors of st's signer whose
 // covered head has st in its history, by anchor id. bound picks the best of them.
 func (r *Resolver) bounds(st *wire.Statement) []Bound {
 	var out []Bound
 	for _, a := range r.byKind["anchors"] {
-		if a.St.Signer != st.Signer || !a.Counts() {
+		if a.St.Signer != st.Signer || !r.anchorCounts(a) {
 			continue
 		}
 		cov := str(a.St.Body, "covered")
@@ -139,7 +148,7 @@ func (r *Resolver) bounds(st *wire.Statement) []Bound {
 func (r *Resolver) bound(st *wire.Statement) Bound {
 	best := Bound{Quality: NoBound}
 	for _, a := range r.byKind["anchors"] {
-		if a.St.Signer != st.Signer || !a.Counts() {
+		if a.St.Signer != st.Signer || !r.anchorCounts(a) {
 			continue
 		}
 		// covered is a line of the signer's own log that the anchor line itself reaches (wire §5), and st is in

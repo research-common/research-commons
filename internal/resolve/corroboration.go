@@ -235,7 +235,7 @@ func (r *Resolver) corroborate(o *Observation, st *wire.Statement, full bool) *C
 		}
 		if !p.St.Verified || p.St.Status != wire.Valid {
 			c.Evidence = append(c.Evidence, Evidence{Key: p.St.Signer, Statement: p.St.ID, Via: "corroborates",
-				Origins: r.originsOf(p.St.ID), Cause: "counts toward nothing: " + notCountedWhy(p) + "; " + uninterpretedBodyWhy(p.St)})
+				Origins: r.originsOf(p.St.ID), Cause: "counts toward nothing: " + r.gate(p).Why + "; " + uninterpretedBodyWhy(p.St)})
 			continue
 		}
 		b := p.St.Body
@@ -308,7 +308,7 @@ func (r *Resolver) symmetric(c *Corroboration, o *Observation, st *wire.Statemen
 			continue
 		}
 		of, ok := r.byID[str(b, "of")]
-		if !ok || of.St.Kind != "observed" || !of.Counts() || contentDigest(of.St.Body) == o.Digest {
+		if !ok || of.St.Kind != "observed" || !r.counts(of) || contentDigest(of.St.Body) == o.Digest {
 			continue
 		}
 		if !slices.Contains(r.comparisonData(str(b, "result"), contentDigest(of.St.Body)), o.Digest) {
@@ -423,7 +423,7 @@ func (r *Resolver) readerCheck(c *Corroboration, o *Observation) {
 // original observation plus comparison data), from the result's counted `authored`.
 func (r *Resolver) comparisonData(result, observed string) []string {
 	p, ok := r.byID[result]
-	if !ok || p.St.Kind != "authored" || !p.Counts() {
+	if !ok || p.St.Kind != "authored" || !r.counts(p) {
 		return nil
 	}
 	pv := provenance(p.St.Body)
@@ -458,7 +458,7 @@ func (r *Resolver) incomparableInput(o *Observation, result string) bool {
 // corroborationDetail adds the corroboration's own grade (it is a derivation, §5.3.2) and the reader's
 // re-application of its cohort rule.
 func (r *Resolver) corroborationDetail(e *Evidence, o *Observation) {
-	if p, ok := r.byID[e.Result]; ok && p.St.Kind == "authored" && p.Counts() {
+	if p, ok := r.byID[e.Result]; ok && p.St.Kind == "authored" && r.counts(p) {
 		a := r.Artifact(contentDigest(p.St.Body))
 		e.Grade = a.Grade.String()
 		if a.Group != nil {
@@ -681,7 +681,7 @@ func (r *Resolver) Reputation(observer string, rule ReputationRule) (*Reputation
 	rep := &Reputation{Observer: observer, Rule: rule.Name, Admits: rule.Describe, Window: "[" + rule.From + ", " + rule.To + ")",
 		Unit: "one signing key per observer (not people; independence unknown)"}
 	for _, p := range r.byKind["observed"] {
-		if p.St.Signer != observer || !p.Counts() {
+		if p.St.Signer != observer || !r.counts(p) {
 			continue
 		}
 		at, err := rctime.ParseUTC(str(object(p.St.Body, "capture"), "at"))
