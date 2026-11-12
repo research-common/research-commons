@@ -65,10 +65,11 @@ var limits = []limit{
 	},
 	{
 		id:  "L-02",
-		gap: "Block headers come only from a file the operator obtains (`anchor headers sync --from`): no network header source (P2P, compact filters) and no operator-node provider, so keeping a chain view fresh is a manual step; and no command opens the receipt store (every proof is read cold)",
+		gap: "Block headers come only from a file the operator obtains (`anchor headers sync --from`): no network header source (P2P, compact filters) and no operator-node provider, so keeping a chain view fresh is a manual step. Every read re-validates the whole persisted chain, so a chain synced from genesis costs each read about a second and a few hundred MB: start from a bootstrap near the tip",
 		sources: []limitSource{
-			{file: "internal/README.md", says: "Not built: a network header source, the operator-node provider (§6.2), persisted policy, and a command that opens the receipt store"},
+			{file: "internal/README.md", says: "Not built: a network header source, the operator-node provider (§6.2), and persisted policy"},
 			{help: []string{"anchor", "headers", "sync"}, says: "No network source is built: obtain the file from sources you choose."},
+			{help: []string{"anchor", "headers", "sync"}, says: "Recommended: start from a bootstrap near the tip"},
 		},
 		probe:  "`anchor headers sync` without `--from` exits 2, and no command has an option naming a peer, node, RPC or URL",
 		closes: "a network header source or an operator-node provider (bitcoin-time note §6.1–§6.2)",
