@@ -84,6 +84,7 @@ JSON members carrying tokens: `authorship`, `role`, `state`, `grade`, `step`, `q
 | `not counted` | statement | held and shown, counted toward nothing (the reason is named) |
 | `retained` | line | an unverified line kept and not placed |
 | `FORK` | line | two lines of one key's log from one sequence point, not yet merged; for a resource, two authorized editions with one predecessor and no merge: no edition is current |
+| `merged` | line | a fork of one key's log that has cleared: a later line of the key names every other tip, so every branch is in its history; both branches stay and count |
 | `retracted` | label | the author signed a retraction; display only, the bytes may still be served |
 | `held here` | bytes | this store holds the blob's bytes and they hash correctly when read |
 | `not held here` | bytes | this store does not hold the blob's bytes |

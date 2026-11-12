@@ -10,6 +10,12 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 ## [Unreleased]
 
 ### Added
+- **A forked key log is shown on the read commands.** When two lines of one key name the same predecessor (two
+  machines, or two processes without the writer lock, signing at once), `show`, `verify` and `explain` of a line on
+  the fork print `log: FORK at seq N (tips …)`, and `merged at seq N by <id>` once a later line of the key merges
+  every tip (`--json`: a `log_forks` member). `list` and `status` add a `log_forks` row per open fork, and `fsck`
+  lists every fork, open or merged. Both branches still count and no exit code changes: a fork is disclosed, not
+  failed. A detached line's reason now names what it waits for (the missing seq range, or the unheld line by id).
 - **Observation views read the pinned source profiles.** `show`, `verify`, `explain` and `pull` read the source
   profiles the store-root `hub-policy.json` pins (`series.source_profiles`) for an observation's own finality rule,
   not only for a series boundary: a rule `run >= L` whose `rule_source` names a pinned profile (its digest, or a

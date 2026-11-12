@@ -24,6 +24,8 @@ type view struct {
 	// evidence caches the time verifier's record per anchors statement, so one invocation reports one state
 	// per anchor however many surfaces print it.
 	evidence map[string]btctime.Evidence
+	// logViews caches each key's log view for the invocation (forks.go): the held set does not change under it.
+	logViews map[string]keylog.View
 }
 
 // storeBlobs lets the time verifier read proof blobs from the store: re-hashed on open, never fetched.
@@ -72,6 +74,19 @@ func buildView(s *store.Store, rp *policy.Policy, tv *btctime.Verifier, opts ...
 	if err != nil {
 		return nil, err
 	}
+	logs := deliverLogs(lines)
+	// The read time is the writer/reader clock Now (tests replace it), passed in: the resolver reads no clock of
+	// its own, so an answer that depends on time (a shelf-life age) is a function of the held set and this
+	// time context (claims-model note I14; storage note §5.1). The blob index re-hashes on every question.
+	base := []resolve.Option{resolve.WithTimeVerifier(btctime.TimeVerifier{V: tv}), resolve.WithPolicy(rp),
+		resolve.WithBlobIndex(verifiedBlobs{s}), resolve.WithReadTime(Now())}
+	r := resolve.New(logs, append(base, opts...)...)
+	return &view{r: r, logs: logs, st: s, timeV: tv, evidence: map[string]btctime.Evidence{}}, nil
+}
+
+// deliverLogs delivers every installed statement into its signer's log: the per-key logs every read surface
+// answers from (buildView), and the only source of the log forks status and fsck report (forks.go).
+func deliverLogs(lines map[string][]byte) *keylog.Store {
 	ids := make([]string, 0, len(lines))
 	for id := range lines {
 		ids = append(ids, id)
@@ -85,13 +100,7 @@ func buildView(s *store.Store, rp *policy.Policy, tv *btctime.Verifier, opts ...
 		}
 		logs.Log(st.Signer).Add(lines[id]) // a log-relative refusal keeps the line; it is part of the view
 	}
-	// The read time is the writer/reader clock Now (tests replace it), passed in: the resolver reads no clock of
-	// its own, so an answer that depends on time (a shelf-life age) is a function of the held set and this
-	// time context (claims-model note I14; storage note §5.1). The blob index re-hashes on every question.
-	base := []resolve.Option{resolve.WithTimeVerifier(btctime.TimeVerifier{V: tv}), resolve.WithPolicy(rp),
-		resolve.WithBlobIndex(verifiedBlobs{s}), resolve.WithReadTime(Now())}
-	r := resolve.New(logs, append(base, opts...)...)
-	return &view{r: r, logs: logs, st: s, timeV: tv, evidence: map[string]btctime.Evidence{}}, nil
+	return logs
 }
 
 func (v *view) anchorEvidence(id string) (btctime.Evidence, bool) {

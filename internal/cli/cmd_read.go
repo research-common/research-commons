@@ -18,7 +18,7 @@ import (
 func init() {
 	ref := []Arg{{Name: "digest|id", Shape: ShapeRef}}
 	Register(&Command{Name: "show", Summary: "show a blob (authorship, grade, every disclosure), a statement, or a resource", Args: ref, Store: true, ReaderPolicy: true,
-		Help: "A digest shows the blob: authorship and every claimant, labels, whether the bytes are held here, the grade with the full disclosure set beside it, derivation groups, and every other statement about it. An id shows the statement. A resource's id is its genesis statement's id: show prints the genesis and the resource view beside it (controllers and rule, the current edition and the chain behind it by hash, every edition with its approvals, any FORK, the current edition's members and the receiver's check of a completeness claim). An edition id, or the statement id of one of its approvals, shows the resource pinned at that edition. An observation's statement shows its corroboration status.",
+		Help: "A digest shows the blob: authorship and every claimant, labels, whether the bytes are held here, the grade with the full disclosure set beside it, derivation groups, and every other statement about it. An id shows the statement. A resource's id is its genesis statement's id: show prints the genesis and the resource view beside it (controllers and rule, the current edition and the chain behind it by hash, every edition with its approvals, any FORK, the current edition's members and the receiver's check of a completeness claim). An edition id, or the statement id of one of its approvals, shows the resource pinned at that edition. An observation's statement shows its corroboration status. A statement on a fork of its signer's log shows the fork (FORK with its tips, or merged with the clearing line); it never changes whether the statement counts.",
 		Run:  showCmd})
 	Register(&Command{Name: "verify", Summary: "check a blob or a statement from the statements held; exit per the exit table", Args: ref, Store: true, ReaderPolicy: true,
 		Flags:   rerunFlags,
@@ -34,7 +34,7 @@ func init() {
 			"With --since <file>, an earlier explain --json of the same ref, it also prints what changed since then, each change with its cause: a statement added or removed (a key event named as one), a statement's status, log line or counted state, the hub, reader (each entry that differs) or time policy, the evaluator, or the time context; and whether the rest of the answer changed. Nothing is cached between runs: the file is the only memory. A file that is not an explain output of this ref is exit 2; otherwise the exit is explain's own.",
 		Run: explainCmd})
 	Register(&Command{Name: "list", Summary: "every blob a statement in this store names, and every resource, one line of tokens each", Store: true, ReaderPolicy: true,
-		Help: "One line per blob a held authored or holds statement names (authorship, grade, disclosures), then one line per resource this store holds a genesis for: its id (the genesis id), its current edition (or FORK and the tips), and how many controllers the current authority has. show <resource id> prints the full resource view.",
+		Help: "One line per blob a held authored or holds statement names (authorship, grade, disclosures), then one line per resource this store holds a genesis for: its id (the genesis id), its current edition (or FORK and the tips), and how many controllers the current authority has. show <resource id> prints the full resource view. Each open FORK of a held key log adds a log_forks row (key, seq, tips).",
 		Run:  listCmd})
 }
 
@@ -137,12 +137,22 @@ func (v *view) statementCore(id string) (*Obj, *wire.Statement) {
 		why = append(why, p.After...)
 		why = append(why, p.Doubted...)
 		if !p.Chained {
-			why = append(why, "detached: a predecessor in the signer's log is not held")
+			// the gap named as the log display names it: the missing seq range, and each unheld line a prev or
+			// merges entry names by id (C-core-127b, C-core-143)
+			gap := "a predecessor in the signer's log is not held"
+			if ln, ok := v.logLine(st.Signer, id); ok {
+				if d := ln.Waiting.Describe(st.Signer); d != "" {
+					gap = "waiting for " + d
+				}
+			}
+			why = append(why, "detached: "+gap)
 		} else if !p.EvidenceReady() {
 			why = append(why, "status "+string(st.Status))
 		}
 		o.set("reasons", texts(why...))
 	}
+	// a fork of the signer's log is shown beside every line on it; it never changes counted or an exit
+	v.setLogForks(o, st.Signer, id)
 	return o, st
 }
 
@@ -528,7 +538,12 @@ func listCmd(c *Ctx) (*Obj, int, error) {
 	for _, d := range ds {
 		l = append(l, v.artifactCore(v.r.Artifact(d)))
 	}
-	return v.scoped(newObj().set("blobs", l).set("count", intV(int64(len(ds)))).set("resources", v.resourceRows())), ExitOK, nil
+	o := newObj().set("blobs", l).set("count", intV(int64(len(ds)))).set("resources", v.resourceRows())
+	if fs := logForkRows(v.logs, true); len(fs) > 0 {
+		// a marker per open fork of a held key log; show <id> of a line on it prints the fork in full
+		o.set("log_forks", fs)
+	}
+	return v.scoped(o), ExitOK, nil
 }
 
 // resourceRows is list's line per held resource, by genesis id: the resource, its current edition (the genesis

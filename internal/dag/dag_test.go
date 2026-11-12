@@ -74,6 +74,33 @@ func TestForks(t *testing.T) {
 	}
 }
 
+// TestSpan: the nodes on a fork are what its branches reach, up to its clearing node; the fork point itself and
+// anything after the clearing node are not on it. Span is computed from Forks' own fork, so the two never disagree.
+func TestSpan(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		graph map[string]Node
+		want  [][]string // per fork, in Forks order
+	}{
+		{"open", g("P", "L<P", "S<P", "N<S"), [][]string{{"L", "N", "S"}}},
+		{"cleared, then continued", g("P", "L<P", "S<P", "M<S", "M+L", "Z<M"), [][]string{{"L", "M", "S"}}},
+		{"fork after a clear", g("P", "L<P", "S<P", "M<S", "M+L", "X<M", "Y<M"), [][]string{{"X", "Y"}, {"L", "M", "S"}}},
+		{"three-way, one merged", g("P", "A<P", "B<P", "C<P", "M<A", "M+B"), [][]string{{"A", "B", "C", "M"}}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			fs := Forks(c.graph)
+			if len(fs) != len(c.want) {
+				t.Fatalf("%d forks", len(fs))
+			}
+			for i, f := range fs {
+				if got := Span(c.graph, f); !reflect.DeepEqual(got, c.want[i]) {
+					t.Fatalf("fork at %s: got %v want %v", f.At, got, c.want[i])
+				}
+			}
+		})
+	}
+}
+
 func TestTips(t *testing.T) {
 	if got := Tips(g("P", "L<P", "S<P", "M<S", "M+L")); !reflect.DeepEqual(got, []string{"M"}) {
 		t.Fatal(got)

@@ -202,7 +202,7 @@ func TestDuplicateIsNoOp(t *testing.T) {
 
 // TestFork: two lines from one sequence point are both retained and the log shows FORK naming both.
 func TestFork(t *testing.T) {
-	conformance.Partial(t, "C-core-127", "two lines signed from one sequence point by one key: both kept, FORK shown; two OS processes racing on one store needs the storage layer")
+	conformance.Partial(t, "C-core-127", "two lines signed from one sequence point by one key: both kept, FORK shown on the log; two OS processes and the read commands are cli.TestLogForkTwoProcesses")
 	a := key("A")
 	base := chain(a, 2)
 	l := mk(a, 2, base[1].id, 0xaa, "")
@@ -218,7 +218,7 @@ func TestFork(t *testing.T) {
 
 // TestForkClearing: C-core-127a (a)–(d), each in every delivery order.
 func TestForkClearing(t *testing.T) {
-	conformance.Partial(t, "C-core-127a", "(a)–(d) and permutation invariance checked on the log; \"displayed as merged\" is the log display only (no surface yet)")
+	conformance.Partial(t, "C-core-127a", "(a)–(d) and permutation invariance checked on the log; the read commands are cli.TestLogForkClearingSurfaces")
 	a, other := key("A"), key("B")
 	base := chain(a, 2)
 	P := base[1].id
@@ -358,7 +358,7 @@ func shorts(ids []string) []string {
 // TestMergeWaitsForUnheldTip: C-core-127b. The reader holds S and the clearing line M, not L. M is detached
 // naming L; no FORK is shown. When L arrives, the fork shows as cleared and M chains.
 func TestMergeWaitsForUnheldTip(t *testing.T) {
-	conformance.Partial(t, "C-core-127b", "detached naming L, no FORK, then cleared on arrival: checked; the rotate_key variant is TestRotationWaitsForMergedTip; evaluating the clearing line needs the resolver")
+	conformance.Partial(t, "C-core-127b", "detached naming L, no FORK, then cleared on arrival, on the log; the read commands and both variants are cli.TestLogForkWaitsForMergedTip")
 	a := key("A")
 	base := chain(a, 2)
 	L := mk(a, 2, base[1].id, 0xaa, "")
