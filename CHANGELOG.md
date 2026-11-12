@@ -85,6 +85,12 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 - When a finality rule's `rule_source` names no pinned source profile, the reason now says the match is exact:
   `rule_source compared as written to each profile's digest and documents`. A location spelled differently from the
   profile's `documents` entry (case, a trailing slash, percent-encoding) does not match, as before.
+- A key-log line flagged `incoherent` (its `ts` earlier than its predecessor's) no longer lends a time bound to
+  anything. Its statement has no bound for any use: it does not rank in priority among rival authorship claims, an
+  observation on it shows `anchored at capture (no anchor held)`, and it meets no task deadline; the bound reads
+  `no bound (incoherent line: …)`. An `anchors` statement on an incoherent line keeps only the bound its proof places (its chain position comes from the block header); its own local bound is discarded. The
+  signature is still reported valid and the line is still shown with its flag. Previously the flag was displayed
+  but every bound was derived as if the line were coherent.
 
 ## [0.5.0-alpha.2] - 2026-11-11
 

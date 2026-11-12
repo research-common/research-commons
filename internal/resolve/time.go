@@ -61,6 +61,9 @@ func (b Bound) verified() bool { return b.Quality == Bitcoin }
 func (b Bound) String() string {
 	switch b.Quality {
 	case NoBound:
+		if b.Anchor == "" && b.Why != "" {
+			return "no bound (" + b.Why + ")"
+		}
 		if b.Anchor != "" {
 			// an anchor the verifier refused: no bound is derived from it (bitcoin-time note §4)
 			return "no anchor (anchor " + keylog.Short(b.Anchor) + " refused: " + b.Why + ")"
@@ -124,9 +127,46 @@ func (r *Resolver) tip() (int64, bool) {
 // (profile §4, C-id-23).
 func (r *Resolver) anchorCounts(a *Placed) bool { return r.counts(a) }
 
+// IncoherentWhy is the reason shown in place of the bound of a statement whose log line is flagged incoherent.
+const IncoherentWhy = "incoherent line: its ts is earlier than its predecessor's, so no time bound is derived for it"
+
+// Incoherent lines (wire §2, claims-model note §10, bitcoin-time note §1 rule 6). A line whose ts is earlier
+// than the ts of the line at its prev is still a valid statement and is still displayed with its flag, but:
+//   - a statement on an incoherent line has no time bound for any use (priority, "existed by T", a deadline):
+//     bound answers NoBound with IncoherentWhy and bounds answers nothing;
+//   - an `anchors` statement on an incoherent line keeps only a bound its proof places (a verified bound, a
+//     verified-historical height): its chain position comes from the header, not from its ts (bitcoin-time
+//     note §1 rule 6). The local, self-declared bound resting on its ts is discarded.
+
+// incoherent reports whether the line with this id is flagged incoherent in its signer's log.
+func (r *Resolver) incoherent(id string) bool {
+	p, ok := r.byID[id]
+	return ok && p.Incoherent
+}
+
+// fromProof reports whether b's position comes from a proof the verifier checked rather than from a statement's
+// timestamp: a verified bound, or a verified-historical height (task-contracts note §4.3).
+func fromProof(b Bound) bool {
+	return b.verified() || (b.State == "verified-historical" && b.Network != "")
+}
+
+// anchorBound is the bound anchor a yields, and false when it yields none: an anchor on an incoherent line yields
+// only a bound its proof places.
+func (r *Resolver) anchorBound(a *Placed) (Bound, bool) {
+	b := r.time.Verify(a.St)
+	if a.Incoherent && !fromProof(b) {
+		return Bound{}, false
+	}
+	return b, true
+}
+
 // bounds is every bound the reader derives for statement st from the counting anchors of st's signer whose
-// covered head has st in its history, by anchor id. bound picks the best of them.
+// covered head has st in its history, by anchor id. bound picks the best of them. A statement on an incoherent
+// line has none.
 func (r *Resolver) bounds(st *wire.Statement) []Bound {
+	if r.incoherent(st.ID) {
+		return nil
+	}
 	var out []Bound
 	for _, a := range r.byKind["anchors"] {
 		if a.St.Signer != st.Signer || !r.anchorCounts(a) {
@@ -136,7 +176,9 @@ func (r *Resolver) bounds(st *wire.Statement) []Bound {
 		if !r.precedes(st.Signer, cov, a.St.ID) || !closure(cov, r.chained[st.Signer])[st.ID] {
 			continue
 		}
-		out = append(out, r.time.Verify(a.St))
+		if b, ok := r.anchorBound(a); ok {
+			out = append(out, b)
+		}
 	}
 	slices.SortFunc(out, func(a, b Bound) int { return strings.Compare(a.Anchor, b.Anchor) })
 	return out
@@ -144,8 +186,11 @@ func (r *Resolver) bounds(st *wire.Statement) []Bound {
 
 // bound is the best bound the reader holds for statement st: the earliest verified bound among the counting
 // anchors of st's signer whose covered head has st in its history; else a local one; else none. An anchor
-// bounds only its signer's own log (§10).
+// bounds only its signer's own log (§10). A statement on an incoherent line has no bound (IncoherentWhy).
 func (r *Resolver) bound(st *wire.Statement) Bound {
+	if r.incoherent(st.ID) {
+		return Bound{Quality: NoBound, Why: IncoherentWhy}
+	}
 	best := Bound{Quality: NoBound}
 	for _, a := range r.byKind["anchors"] {
 		if a.St.Signer != st.Signer || !r.anchorCounts(a) {
@@ -157,7 +202,10 @@ func (r *Resolver) bound(st *wire.Statement) Bound {
 		if !r.precedes(st.Signer, cov, a.St.ID) || !closure(cov, r.chained[st.Signer])[st.ID] {
 			continue
 		}
-		b := r.time.Verify(a.St)
+		b, ok := r.anchorBound(a)
+		if !ok {
+			continue
+		}
 		switch {
 		case b.verified() && (!best.verified() || b.Height < best.Height || (b.Height == best.Height && b.Anchor < best.Anchor)):
 			best = b

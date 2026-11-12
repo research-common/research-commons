@@ -78,10 +78,11 @@ disagree on one byte produce different statement ids, so every rule below is a c
 
 The canonical form is **what the signer signed**, so a reader never re-canonicalises a received statement
 and signs or hashes the result. It canonicalises the received envelope minus `sig`, prepends the domain
-tag, and checks that string against `sig`. A received line whose bytes are not already canonical is admitted
-when its canonical form verifies, and is stored canonical; the reader's log holds exactly one byte form per
-statement. This is why C-core-04 (local tree, hub pull, archive; permuted; duplicated) yields one view: every
-delivery canonicalises to the same bytes and the same id.
+tag, and checks that string against `sig`. The id is computed from that canonical string, so any byte form of a
+statement verifies to the same id. What is stored is the canonical form only: a package's statement files must
+already be in it, and a file whose bytes are not is refused `not canonical` (intrinsic; storage note §4.5); the
+reader's log holds exactly one byte form per statement. This is why C-core-04 (local tree, hub pull, archive;
+permuted; duplicated) yields one view: every admitted delivery is the same bytes with the same id.
 
 Any RFC 8785 implementation produces the canonical bytes of a statement that meets the table: every vector in
 §9 was checked against one. The note's additions sit on either side of JCS. Input that JCS would accept but
@@ -191,7 +192,10 @@ Consequences, each a test:
 - Two statements from one key that differ in one field (a reason, a TTL, an unknown extension) have two ids,
   and neither is a replay of the other (C-core-02a first pair, C-core-11).
 - One signed string with two different valid signature encodings has one id (C-core-02a second pair,
-  C-core-10, P-02). The second delivery is a no-op; the stored `sig` is the canonical encoding (§4).
+  C-core-10, P-02): both verify, and the id does not cover `sig`. The stored form carries the canonical
+  encoding (§4), and it is the only form a package may carry: a package whose statement file holds another
+  encoding is refused `not canonical` (intrinsic; storage note §4.5), so a reader's log holds one line for the
+  statement and every count sees it once, whatever was delivered.
 - Flipping one byte anywhere in the signed string changes the id and breaks the signature (C-core-09).
 - The id of a genesis statement is the resource id (C-core-77); `prev`, `predecessors` and `covered` are ids,
   never digests.
@@ -272,11 +276,16 @@ Rules:
 - **Equivalent encodings are one statement, stored in one form.** An Ed25519 signature has exactly one
   encoding under the pinned rule (step 1 refuses `S ≥ L`), so the question arises only for
   `eip191-secp256k1`. There, `v` may arrive as 27/28 or 0/1; `s` may
-  arrive in high form (above n/2, the form EIP-2 refuses for Ethereum transactions). A reader accepts every
-  valid encoding, verifies it, and writes the **canonical encoding**: low-`s` and `v` ∈ {27, 28}. The id,
-  which does not include `sig`, is the same either way. So every reader's log holds the same bytes for a
-  statement, signature included, whichever encoding arrived first (§1). The vectors in §9 show two encodings
-  of one signature verifying to one id; each is stored as V1's `sig`.
+  arrive in high form (above n/2, the form EIP-2 refuses for Ethereum transactions). Every such encoding
+  verifies, and the id, which does not include `sig`, is the same either way. The **canonical encoding** is
+  low-`s` and `v` ∈ {27, 28}, and it is the only one stored. Where it is produced: a writer signs and stores
+  the canonical encoding; a reader that verifies a single signed statement it holds in memory (a library
+  caller reading one line) accepts any valid encoding and reports the canonical one as the statement's `sig`.
+  Where it is not: a package (`pull`, hub CI, `push`, the pre-pin check) carries statements in their stored
+  form, and a statement file holding any other encoding is refused `not canonical` (intrinsic), never
+  canonicalised on the way in (storage note §4.5). So every reader's log holds the same bytes for a
+  statement, signature included. The vectors in §9 show two encodings of one signature verifying to one id;
+  V1's `sig` is the canonical one, the only one a package may carry.
 - **Unknown `alg`.** Retained in the signer's log as `unsupported`, displayed as such, never evaluated: it
   grants nothing, counts in no projection, and is not an error on `pull`. Adding an algorithm is a minor
   format change; a reader implementing it later re-evaluates retained lines (I5). Such a line is **placed**
@@ -632,8 +641,9 @@ sig: 0x1ca247faed0dceef2817c7384c20b872c4d75c90689f4eeb70ceda062078a6bd78a1\
 
 Equivalent encodings of this signature, both recovering the same signer, both the same statement (C-core-10):
 `v` as `00` instead of `1b`, and the high-`s` form `0x1ca2…a6bd` ‖
-`875e2c9d7abd873f6707d95c0a9ffe678312cec8552f0372821bb6e142f4c8db` ‖ `1c`. A reader stores either as V1's
-`sig` above (§4).
+`875e2c9d7abd873f6707d95c0a9ffe678312cec8552f0372821bb6e142f4c8db` ‖ `1c`. Both verify to V1's id; the
+stored form is V1's `sig` above, and a package statement file carrying either equivalent is refused `not
+canonical` (§4).
 
 **V2 observed (exact-bytes, chain referent, finality)**
 
