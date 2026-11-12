@@ -64,6 +64,11 @@ timeout for `fetch`, and content rules that see inside archives. The candidate f
   A view that counts per key still counts per key: an anchor bounds only its signer's own log, credit and records
   stay per signing key, and a key's selection or amendments never take in an identity's claim. With no evaluator
   (every command today), every answer is unchanged.
+- Conformance: the claims-model exchange cases C-exch-07, -08, -09, -12, -13, -17, -18, -20 and C-btc-19 are
+  declared by task-contract-v1 tests (the provisional-contract tests no longer declare anything); C-exch-10 (no receipt
+  verifier ships) and C-exch-19 (credit counts `submit` statements only, not submissions carried by `fulfills`) stay
+  partial. A new test fails when the resolver's task text and the CLI task section stop printing the same ids. The
+  task-contracts note (§5.7) now says which edition `verify` reads for an edition id or an approval id.
 - Identity profile (candidate, not active): the candidate `rc/2` reader now reads resources (`genesis`, `edition`, `withdraw_approval`) with typed controllers (`{key: K}` or `{identity: I}`); task roles on an edition are shape-checked only. Behind the opt-in reader and an actor evaluator, a resource rule counts each controller once whoever signs for it (two delegates of one identity fill one slot, a delegate never fills its own key's slot), withdrawal is local to the key and grant that approved, and an approval a grant-history cut removes, or whose eligibility is undecided, leaves the edition `contested`. An `rc/2` edition's id is computed in its own major, so `rc/1` and `rc/2` approvals of the same bytes are different editions. `rc/1` histories read exactly as before.
 - **Task contracts: the `task-contract-v1` profile is read** (task-contracts note). A task edition whose contract names
   `profile: "task-contract-v1"` gets its terms read in full, or not at all: an unknown field (`x_` names included), a
