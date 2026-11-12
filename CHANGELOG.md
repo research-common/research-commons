@@ -61,6 +61,20 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 ### Fixed
 - Credit: `contribution` and `acceptance` now count a key's submissions whatever their kind, as the task-contracts note
   defines them: an `authored` or `observed` carrying `fulfills` for a task edition counts beside `submit` statements.
+- `gc` no longer deletes a source profile that `hub-policy.json` pins in `series.source_profiles`. A profile blob held
+  only for that pin used to be collected after the grace window, after which every `pull` stopped (exit 2, "not held
+  at this store") until it was held again. `gc` now keeps each pinned digest and names the pin in its plan; a policy
+  file it cannot use stops it before any work (exit 2), never a run as if nothing were pinned, and `gc --release` of a pinned profile does not start (exit 2) until the pin is removed.
+- A series edition whose segments include one the pinned source profile cannot place (a label not in its list, a
+  `rule_source` naming no pinned profile or two) is no longer always `could not check`. When a later placeable
+  segment is provisional, the members' boundary is at most that segment's date whatever the unplaced state is: the
+  view shows it (`members' finality unchecked: final to at most 2025-04-01 (segment … not comparable) as captured,
+  not re-checked`), and with `series.refuse_premature_freeze` on a `frozen_before` later than that bound is refused
+  (exit 1) on the same evidence as a premature freeze; one at or before it stays `could not check` (exit 3). With no
+  placeable provisional segment there is no bound, and the verdict is unchanged.
+- When a finality rule's `rule_source` names no pinned source profile, the reason now says the match is exact:
+  `rule_source compared as written to each profile's digest and documents`. A location spelled differently from the
+  profile's `documents` entry (case, a trailing slash, percent-encoding) does not match, as before.
 
 ## [0.5.0-alpha.2] - 2026-11-11
 

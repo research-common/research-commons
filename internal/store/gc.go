@@ -12,6 +12,9 @@ package store
 //   - a serving `holds`: the current `holds` of an operator key for that digest that is not withdrawn
 //     (GCConfig.Operators; with none configured every key's serving holds pins, which can only keep more).
 //     Only Release moves such a blob.
+//   - a policy pin: a digest the store-root policy names for this store to keep (GCConfig.PolicyPins; today the
+//     source profiles of `series.source_profiles`, which `pull` reads from this store). The pin is by digest
+//     only: gc keeps the file whether or not it parses, and never reads it.
 //
 // A `holds` that is withdrawn, superseded by a later one of its key, or by a key that is not an operator does
 // not pin: it is a holder's word, and local deletion is availability, not erasure (§6.2). This reading makes
@@ -66,6 +69,11 @@ type GCConfig struct {
 	PerRun *time.Duration
 	// Operators are the signers whose serving `holds` pin a blob. Nil means every key's.
 	Operators []string
+	// PolicyPins are digests the store-root policy pins (its `series.source_profiles`): each is kept as long as
+	// the policy names it, held only for that reason or not. PolicyPinSource names where they come from in the
+	// reason gc prints ("" reads "the store-root policy").
+	PolicyPins      []Digest
+	PolicyPinSource string
 	// Now is the clock; zero means time.Now().
 	Now time.Time
 }
@@ -185,7 +193,21 @@ type refIndex struct {
 	seen  map[string]bool
 	pins  map[Digest][]string // non-journal pins
 	jpins map[Digest][]string // journal pins, rebuilt on every refresh
+	ppins map[Digest]string   // policy pins (GCConfig.PolicyPins), fixed for one run
 	holds []holdsEntry
+}
+
+// pinPolicy records the policy pins of one gc run.
+func (ri *refIndex) pinPolicy(ds []Digest, source string) {
+	if source == "" {
+		source = "the store-root policy"
+	}
+	for _, d := range ds {
+		if ri.ppins == nil {
+			ri.ppins = map[Digest]string{}
+		}
+		ri.ppins[d] = "pinned by " + source
+	}
 }
 
 func (s *Store) newRefIndex(operators []string) *refIndex {
@@ -340,6 +362,9 @@ func (ri *refIndex) why(d Digest) string {
 		}
 		parts = append(parts, "referenced by "+first)
 	}
+	if p, ok := ri.ppins[d]; ok {
+		parts = append(parts, p)
+	}
 	if hs := ri.serving()[d]; len(hs) > 0 {
 		slices.SortFunc(hs, func(a, b holdsEntry) int { return strings.Compare(a.id, b.id) })
 		parts = append(parts, fmt.Sprintf("served under holds %s by %s; name the hash with --release to withdraw and delete", hs[0].id, hs[0].signer))
@@ -359,6 +384,7 @@ func (s *Store) GC(cfg GCConfig, apply bool) (*GCPlan, error) {
 	now := cfg.now()
 	plan := &GCPlan{Grace: grace, GraceSource: src}
 	ri := s.newRefIndex(cfg.Operators)
+	ri.pinPolicy(cfg.PolicyPins, cfg.PolicyPinSource)
 	if err := ri.refresh(); err != nil {
 		return nil, err
 	}

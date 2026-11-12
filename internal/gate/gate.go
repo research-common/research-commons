@@ -853,24 +853,32 @@ func resolverChecks(r *Result, res *resolve.Resolver, pol *Policy) {
 		if rf == nil {
 			return
 		}
+		bounded := ""
+		if s.ComputedState != "computed" && s.Bound.Unit != "" {
+			bounded = "; " + BoundedRefusal
+		}
 		switch {
 		case s.Comparison == "flagged" && s.AsCaptured:
 			// the members' own asserted states put the boundary earlier: refusable on the receiver's evidence
 			r.refuse(&refusal.Refusal{Class: refusal.Policy, Reason: HubRules + ": series.refuse_premature_freeze",
-				Detail: rf.Detail + "; the edition stays a valid statement elsewhere; " + AsCapturedRefusal}, "object "+r.Path)
+				Detail: rf.Detail + "; the edition stays a valid statement elsewhere; " + AsCapturedRefusal + bounded}, "object "+r.Path)
 		case s.Comparison == "flagged":
 			r.refuse(&refusal.Refusal{Class: refusal.Policy, Reason: HubRules + ": series.refuse_premature_freeze",
-				Detail: rf.Detail + "; the edition stays a valid statement elsewhere; " + ReaderRecheck}, "object "+r.Path)
+				Detail: rf.Detail + "; the edition stays a valid statement elsewhere; " + ReaderRecheck + bounded}, "object "+r.Path)
 		case s.Comparison == "agrees" && s.AsCaptured:
 			r.Verdict, r.Scope = Undecided, "object "+r.Path
 			r.label(LabelSeriesUnknown, "could not check (as captured): "+s.Line()+"; "+AsCapturedUndecided)
 			r.Next = AsCapturedNext
 		default:
 			r.Verdict, r.Scope = Undecided, "object "+r.Path
-			if s.NoRecheck() {
+			switch {
+			case s.NoRecheck():
 				r.label(LabelSeriesUnknown, s.Comparison+": "+s.Line()+"; "+NoSegmentRecheck)
 				r.Next = SeriesNoRecheckNext
-			} else {
+			case s.Bound.Unit != "":
+				r.label(LabelSeriesUnknown, s.Comparison+": "+s.Line()+"; "+BoundedUndecided)
+				r.Next = BoundedNext
+			default:
 				r.label(LabelSeriesUnknown, s.Comparison+": "+s.Line())
 				r.Next = "make the series boundary computable (finality rules on every segment, one unit) or accept that this edition is not endorsed here"
 			}
@@ -932,6 +940,17 @@ const AsCapturedUndecided = "the members' asserted states at capture support the
 
 // AsCapturedNext is the next step of a series edition left could-not-check on an as-captured boundary.
 const AsCapturedNext = "a maintainer reviews the edition against the source, or turns series.refuse_premature_freeze off through the maintainers' own review"
+
+// BoundedRefusal is added to a series.refuse_premature_freeze refusal decided on an upper bound: some segments'
+// states cannot be placed, so the members' boundary is unknown, but it is at most the earliest provisional
+// segment's position, and the declaration is later than that (claims-model note §8, "a boundary as captured").
+const BoundedRefusal = "the members' boundary is unknown (a segment's state cannot be placed) but at most the earliest provisional segment's position, whatever the unplaced segments' states; the declaration is later than that"
+
+// BoundedUndecided says why a declaration at or before an upper bound is not decided.
+const BoundedUndecided = "a declaration at or before the members' bound needs the unplaced segments' states, which the reader cannot place; never a pass (I4)"
+
+// BoundedNext is the next step of a series edition left could-not-check at or before an upper bound.
+const BoundedNext = "make the unplaced segments' states placeable (a label the pinned source profile lists, a rule_source naming exactly one pinned profile), or a maintainer reviews the edition against the source"
 
 // SeriesNoRecheckNext is the next step of a series edition left could-not-check because no re-check ships.
 const SeriesNoRecheckNext = "nothing in this change can make the boundary computable with this tool version (no finality re-check ships); pin the segments' source profiles (series.source_profiles) to judge their asserted states, turn series.refuse_premature_freeze off, both through the maintainers' own review, or accept that series editions are not endorsed here until a re-check ships"

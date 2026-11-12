@@ -386,6 +386,7 @@ and a `gc` (§6) does not invalidate anything, because `gc` removes no input of 
 | blob referenced by no installed statement and no `pending/` record | yes | outside the grace window (§6.1.1) |
 | blob referenced by an installed statement | **no** | — |
 | blob referenced only by the operator's own `holds` | only on explicit request naming the hash | §6.2 |
+| blob the store-root policy pins (a source profile in `series.source_profiles`, claims-model note §5.3.1a) | **no**, while the policy names it | an unusable policy file stops `gc` before any work; it never runs as if nothing were pinned |
 | statement, any | **never** | — |
 | `pending/` journal record | **never** by `gc`; only recovery or quarantine (§3.4) | — |
 
@@ -397,8 +398,8 @@ keeps `gc` from deleting it in between:
 - **Measured from the last install or reuse.** §2 step 5 refreshes the window of an existing blob it reuses,
   so republishing bytes this store once released is protected exactly like new bytes.
 - **Re-checked at deletion.** `gc` decides from a listing but, immediately before removing each blob,
-  re-checks that no installed statement and no `pending/` record names it and that its window has expired;
-  a blob that gained a reference since the listing is kept.
+  re-checks that no installed statement, no `pending/` record and no store-root policy pin names it and that
+  its window has expired; a blob that gained a reference since the listing is kept.
 - **Configurable.** The window is local policy (default 24 h), printed by `gc` in its plan and in the
   durability declaration (§7). A value below 1 h is refused unless given for one run (`gc --grace <d>`), when
   the operator knows nothing else is writing to the store. The window has to outlast the longest interval

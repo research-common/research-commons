@@ -9,6 +9,7 @@ import (
 
 	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/conformance"
+	"github.com/research-common/research-commons/internal/keylog"
 )
 
 // settlementProfile is an ordered-label profile of a settlement source whose documents list timetable.
@@ -75,6 +76,23 @@ func TestSourceProfileOrderedLabel(t *testing.T) {
 		if c.w.why == "" && (why != "" || met != c.w.met) || c.w.why != "" && (!strings.Contains(why, c.w.why) || met) {
 			t.Errorf("%s: met %v why %q, want %+v", name, met, why, c.w)
 		}
+	}
+	// (d'') a rule_source is compared as written: a location spelled differently from the profile's document, or
+	// a digest in upper case, names no profile, and the reason says the comparison is exact
+	loc := mustProfile(t, canon.Encode(obj("profile", SourceProfileTag, "source", "https://api.example/settlement", "dialect", DialectOrderedLabel,
+		"labels", []string{"R1", "RF"}, "documents", []string{"https://api.example/timetable"})))
+	lr := NewProfileRules(loc)
+	if _, _, why := lr.For("https://api.example/timetable").Check("run >= RF", run("RF")); why != "" {
+		t.Fatalf("(d'') as written: %q", why)
+	}
+	for _, near := range []string{"https://api.example/timetable/", "HTTPS://api.example/timetable", "https://api.example/%74imetable", strings.ToUpper(loc.Digest)} {
+		_, _, why := lr.For(near).Check("run >= RF", run("RF"))
+		if want := "rule_source " + near + " names no source profile this reader chose (" + ProfileMatchExact + ")"; why != want {
+			t.Fatalf("(d'') %s: %q, want %q", near, why, want)
+		}
+	}
+	if ProfileMatchExact != "rule_source compared as written to each profile's digest and documents" {
+		t.Fatalf("the exactness clause changed: %q", ProfileMatchExact)
 	}
 	// (f) two chosen profiles named by one rule_source: unchecked, neither picked, in either order of choice
 	other := mustProfile(t, canon.Encode(obj("profile", SourceProfileTag, "source", "https://api.example/settlement", "dialect", DialectOrderedLabel,
@@ -238,6 +256,60 @@ func TestSeriesBoundaryAsCaptured(t *testing.T) {
 	if s.ComputedState != "unchecked" || s.Comparison != "unchecked" || rf == nil || !strings.Contains(r, `state "II" is not in source profile`) ||
 		!strings.Contains(r, "names no source profile this reader chose") || s.NoRecheck() {
 		t.Fatalf("unplaceable: %s\n%s", s.Line(), r)
+	}
+}
+
+// TestSeriesUpperBound: a segment the profile cannot place leaves the boundary unknown but, when a placeable
+// segment is provisional, bounded above by the earliest such segment's position (claims-model note §8). A
+// declaration later than the bound is flagged and refused by the freeze policy; one at or before it stays
+// unchecked. The bound names every unplaced segment. No bound when no placeable segment is provisional, when a
+// segment carries no rule, or when positions are in different units.
+func TestSeriesUpperBound(t *testing.T) {
+	w := newWorld(t)
+	p := mustProfile(t, settlementProfileBytes())
+	opt := WithSegments(ProfileSegments{Rules: NewProfileRules(p)})
+	g := w.sign("G", "A", "genesis", obj("type", "series", "name", "s", "controllers", w.controllers("A"), "rule", obj("any_one", true)))
+	a := w.profileSegment("a", "2025-01", "DF", p.Digest)
+	b := w.profileSegment("b", "2025-02", "II", p.Digest)
+	c := w.profileSegment("c", "2025-03", "R1", p.Digest)
+	d := w.profileSegment("d", "2025-04", "R2", p.Digest)
+	e := w.profileSegment("e", "2025-05", "RF", "https://elsewhere.example/timetable")
+	w.editionWith("E1", "A", g, []string{g}, "members", segs(a, b, c, d, e), "frozen_before", obj("date", "2025-03-02"))
+	s, rf := w.store(nil, opt).EndorseSeries(g, "", RequireDeclaredNotAfterComputed{})
+	note := "at most 2025-03-01 (segments " + keylog.Short(b) + ", " + keylog.Short(e) + " not comparable) as captured, not re-checked"
+	if s.ComputedState != "unchecked" || s.Bound != day("2025-03-01") || s.Comparison != "flagged" || rf == nil || rf.Reason != PrematureFreeze ||
+		s.Line() != "frozen_before 2025-03-02 (declared) · members' finality unchecked: final to "+note+" · FLAGGED: declared later than the members' bound" ||
+		!strings.Contains(s.Render(), "the members themselves do not claim") {
+		t.Fatalf("late: %s %v\n%s", s.Comparison, rf, s.Render())
+	}
+	prev := w.ids["E1"]
+	for _, date := range []string{"2025-03-01", "2025-02-01"} {
+		prev = w.editionWith("E-"+date, "A", g, []string{prev}, "members", segs(a, b, c, d, e), "frozen_before", obj("date", date))
+		s, rf := w.store(nil, opt).EndorseSeries(g, w.ed(prev), RequireDeclaredNotAfterComputed{})
+		if s == nil || s.Comparison != "unchecked" || s.Bound != day("2025-03-01") || rf == nil || !strings.Contains(s.Line(), note) || strings.Contains(s.Line(), "FLAGGED") {
+			t.Fatalf("%s: %s %v\n%s", date, s.Comparison, rf, s.Render())
+		}
+	}
+
+	// no bound: the only state that could be provisional is the unplaced one
+	w2 := newWorld(t)
+	g2 := w2.sign("G", "A", "genesis", obj("type", "series", "name", "s", "controllers", w2.controllers("A"), "rule", obj("any_one", true)))
+	w2.editionWith("E", "A", g2, []string{g2}, "members", segs(w2.profileSegment("a", "2025-01", "DF", p.Digest),
+		w2.profileSegment("b", "2025-02", "II", p.Digest)), "frozen_before", obj("date", "2025-09-01"))
+	if s, _ := w2.store(nil, opt).Series(g2, ""); s.Bound.Unit != "" || s.Comparison != "unchecked" || strings.Contains(s.Line(), "at most") {
+		t.Fatalf("no provisional: %s", s.Line())
+	}
+	// no bound: a segment carries no rule (C-core-102 stays as it was)
+	f := fakeSegments{}
+	f[a] = SegmentState{From: day("2025-01-01"), Rule: true, Final: "provisional"}
+	f[b] = SegmentState{From: day("2025-02-01"), Rule: false, Final: "unchecked", Why: "carries no finality rule"}
+	if s, _ := w.store(nil, WithSegments(f)).Series(g, w.ed(w.ids["E1"])); s.Bound.Unit != "" || s.Comparison != "unchecked" {
+		t.Fatalf("no rule: %s", s.Line())
+	}
+	// no bound: positions in different units
+	f[b] = SegmentState{From: Boundary{Unit: "height", Height: 9}, Rule: true, Final: "unchecked", Why: "x"}
+	if s, _ := w.store(nil, WithSegments(f)).Series(g, w.ed(w.ids["E1"])); s.Bound.Unit != "" || s.Comparison != "unchecked" {
+		t.Fatalf("mixed units: %s", s.Line())
 	}
 }
 
