@@ -111,12 +111,12 @@ func TestIncoherentObservationExistedBy(t *testing.T) {
 	}
 }
 
-// TestIncoherentAnchorYieldsNoBound: an `anchors` statement on an incoherent line (timestamped earlier than its
-// head, bitcoin-time note §1 rule 6) yields no bound for the statements it covers, a verified one included; the
-// anchor itself is still a valid, displayed statement. With WithIncoherentAnchorProofKept, its proof-placed bound
-// is kept and only a local, self-declared one is dropped. Control: the same anchor coherent bounds them.
-func TestIncoherentAnchorYieldsNoBound(t *testing.T) {
-	conformance.Partial(t, "C-core-106", "anchor half: whether a proof-placed bound of an incoherent anchor survives is a spec point (the default drops it)")
+// TestIncoherentAnchorKeepsOnlyProofBound: an `anchors` statement on an incoherent line (timestamped earlier than
+// its head, bitcoin-time note §1 rule 6) keeps the bound its proof places, because the chain position comes from the
+// header, and loses the local bound that rests on its own timestamp; the anchor itself is still a valid, displayed
+// statement. Control: the same anchor coherent bounds them either way.
+func TestIncoherentAnchorKeepsOnlyProofBound(t *testing.T) {
+	conformance.Covers(t, "C-core-106")
 	for _, c := range []struct {
 		name       string
 		anchorTS   string
@@ -127,10 +127,8 @@ func TestIncoherentAnchorYieldsNoBound(t *testing.T) {
 	}{
 		{"coherent, verified", "2026-10-16T04:00:00Z", "btc:100", nil, true, false},
 		{"coherent, local", "2026-10-16T04:00:00Z", "local", nil, false, true},
-		{"incoherent, verified", beforeEverything, "btc:100", nil, false, false},
+		{"incoherent, verified", beforeEverything, "btc:100", nil, true, false},
 		{"incoherent, local", beforeEverything, "local", nil, false, false},
-		{"incoherent, verified, proof kept", beforeEverything, "btc:100", []Option{WithIncoherentAnchorProofKept()}, true, false},
-		{"incoherent, local, proof kept", beforeEverything, "local", []Option{WithIncoherentAnchorProofKept()}, false, false},
 	} {
 		w := newWorld(t)
 		x := w.authored("A1", "A", "X", "licence", "CC0-1.0")

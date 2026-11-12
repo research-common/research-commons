@@ -65,9 +65,6 @@ type Resolver struct {
 	// time and cmp are the reader's own verifiers (I9): time evidence (§10) and comparator runs (§5.2).
 	time TimeVerifier
 	cmp  Comparator
-	// incoherentAnchorProofKept keeps the proof-placed bound of an `anchors` statement on an incoherent line and
-	// drops only the one resting on its timestamp. false (the default): such an anchor yields no bound (time.go).
-	incoherentAnchorProofKept bool
 	// cmpMu guards cmpRuns: each comparator result this resolver obtained, keyed by comparator and the unordered
 	// pair of outputs, so every pair runs at most once per snapshot whichever blobs are viewed (group.go, pair).
 	cmpMu   sync.Mutex

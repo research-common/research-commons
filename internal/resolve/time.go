@@ -103,14 +103,6 @@ type Option func(*Resolver)
 // WithTimeVerifier sets the reader's time verifier.
 func WithTimeVerifier(v TimeVerifier) Option { return func(r *Resolver) { r.time = v } }
 
-// WithIncoherentAnchorProofKept lets an `anchors` statement on an incoherent line keep a bound its proof places
-// (a verified bound, a verified-historical height), dropping only the one that rests on its own timestamp. The
-// default drops every bound such an anchor would yield (C-core-106: any bound derived from an incoherent line is
-// discarded for every use).
-func WithIncoherentAnchorProofKept() Option {
-	return func(r *Resolver) { r.incoherentAnchorProofKept = true }
-}
-
 // TipReader is implemented by a TimeVerifier that knows the reader's validated chain tip. A task deadline asks
 // it whether the tip is at or past the deadline height (task-contracts note §4.3); ok is false when no chain
 // view is configured.
@@ -142,10 +134,9 @@ const IncoherentWhy = "incoherent line: its ts is earlier than its predecessor's
 // than the ts of the line at its prev is still a valid statement and is still displayed with its flag, but:
 //   - a statement on an incoherent line has no time bound for any use (priority, "existed by T", a deadline):
 //     bound answers NoBound with IncoherentWhy and bounds answers nothing;
-//   - an `anchors` statement on an incoherent line yields no bound for any statement it covers. The anchor is
-//     still shown, and its proof is still handed to the verifier for display (explain); only the bound is
-//     withheld. WithIncoherentAnchorProofKept keeps a bound the proof places (its chain position comes from the
-//     header, not from the anchor's ts) and drops only the local, self-declared one.
+//   - an `anchors` statement on an incoherent line keeps only a bound its proof places (a verified bound, a
+//     verified-historical height): its chain position comes from the header, not from its ts (bitcoin-time
+//     note §1 rule 6). The local, self-declared bound resting on its ts is discarded.
 
 // incoherent reports whether the line with this id is flagged incoherent in its signer's log.
 func (r *Resolver) incoherent(id string) bool {
@@ -160,10 +151,10 @@ func fromProof(b Bound) bool {
 }
 
 // anchorBound is the bound anchor a yields, and false when it yields none: an anchor on an incoherent line yields
-// none (with WithIncoherentAnchorProofKept, only one its proof places).
+// only a bound its proof places.
 func (r *Resolver) anchorBound(a *Placed) (Bound, bool) {
 	b := r.time.Verify(a.St)
-	if a.Incoherent && (!r.incoherentAnchorProofKept || !fromProof(b)) {
+	if a.Incoherent && !fromProof(b) {
 		return Bound{}, false
 	}
 	return b, true
