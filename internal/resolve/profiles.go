@@ -38,6 +38,9 @@ const (
 // MaxProfileLabels bounds a profile's label list.
 const MaxProfileLabels = 4096
 
+// MaxProfileBytes bounds a profile blob a receiver loads.
+const MaxProfileBytes = 1 << 20
+
 // SourceProfile is one parsed `rc-source-profile/1` blob.
 type SourceProfile struct {
 	Digest      string
@@ -52,6 +55,9 @@ type SourceProfile struct {
 // ParseSourceProfile reads a source profile blob. The bytes must be canonical JSON carrying only the members the
 // wire-format note defines, within their constraints; anything else is not a profile, and the error says why.
 func ParseSourceProfile(b []byte) (*SourceProfile, error) {
+	if len(b) > MaxProfileBytes {
+		return nil, fmt.Errorf("larger than %d bytes", MaxProfileBytes)
+	}
 	sum := sha256.Sum256(b)
 	p := &SourceProfile{Digest: "sha256:" + hex.EncodeToString(sum[:]), index: map[string]int{}}
 	v, err := canon.Parse(b)

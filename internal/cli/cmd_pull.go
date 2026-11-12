@@ -253,6 +253,20 @@ func pullCmd(c *Ctx) (*Obj, int, error) {
 	for _, d := range ruleDialects {
 		ropts = append(ropts, resolve.WithDialect(d))
 	}
+	// the source profiles the store-root policy pins, as this store holds them before the pull: a package
+	// cannot bring the profile that judges it (claims-model note §5.3.1a)
+	profiles, err := gate.LoadSourceProfiles(pol.SourceProfiles, func(d string) ([]byte, error) { return storeBlobCapped(c.Store, d) },
+		"policy file "+PolicyFile+" at the store root", "this store")
+	if err != nil {
+		var d *gate.DidNotStart
+		if errors.As(err, &d) {
+			return nil, 0, didNotStart(d)
+		}
+		return nil, 0, err
+	}
+	if profiles != nil {
+		ropts = append(ropts, resolve.WithSegments(resolve.ProfileSegments{Rules: *profiles}))
+	}
 	pol.Resolver = append(ropts, pol.Resolver...)
 	rep, err := gate.Pull(pkg, gate.StoreHeld{S: c.Store}, &pol, opt)
 	if err != nil {
@@ -399,4 +413,25 @@ func heldStatements(pkg gate.Package, st *store.Store) func(string) (*wire.State
 		}
 		return nil, false
 	}
+}
+
+// storeBlobCapped reads blob d as this store holds it, up to the profile size bound: nil when not held. A copy
+// that does not hash to d is an error (OpenBlob checks it).
+func storeBlobCapped(s *store.Store, d string) ([]byte, error) {
+	if !s.HasBlob(store.Digest(d)) {
+		return nil, nil
+	}
+	f, err := s.OpenBlob(store.Digest(d))
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	b, err := io.ReadAll(io.LimitReader(f, resolve.MaxProfileBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(b) > resolve.MaxProfileBytes {
+		return nil, fmt.Errorf("larger than %d bytes", resolve.MaxProfileBytes)
+	}
+	return b, nil
 }

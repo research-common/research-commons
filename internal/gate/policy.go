@@ -162,6 +162,39 @@ func sourceProfiles(v canon.Value) ([]string, string) {
 	return out, ""
 }
 
+// LoadSourceProfiles loads the source profiles a policy pins. get returns a blob's bytes as held where the policy
+// was read (nil when not held there); each must hash to its digest and parse as a profile. Any failure stops
+// before anything is evaluated (*DidNotStart, naming the entry): a pin the receiver cannot honour is never
+// skipped. No digests, no profiles (nil). scope names the policy file, at names where it was read.
+func LoadSourceProfiles(digests []string, get func(d string) ([]byte, error), scope, at string) (*resolve.ProfileRules, error) {
+	if len(digests) == 0 {
+		return nil, nil
+	}
+	var ps []*resolve.SourceProfile
+	for i, d := range digests {
+		bad := func(why string) error {
+			return &DidNotStart{Title: "hub policy file unusable", Detail: fmt.Sprintf("series.source_profiles[%d] %s %s", i, d, why), Scope: scope,
+				Next: "hold the profile blob where the policy is read (for a hub: merge it through its own reviewed change first), then pin it; or fix the policy file through its own review"}
+		}
+		b, err := get(d)
+		switch {
+		case err != nil:
+			return nil, bad("is not readable at " + at + ": " + err.Error())
+		case b == nil:
+			return nil, bad("is not held at " + at)
+		case digest(b) != d:
+			return nil, bad("is held corrupt at " + at + " (its bytes hash elsewhere)")
+		}
+		p, err := resolve.ParseSourceProfile(b)
+		if err != nil {
+			return nil, bad("is not a " + resolve.SourceProfileTag + " profile: " + err.Error())
+		}
+		ps = append(ps, p)
+	}
+	pr := resolve.NewProfileRules(ps...)
+	return &pr, nil
+}
+
 // controlPlaneEntry names why s cannot be a `control_plane` entry, or "". An entry is a relative path (an
 // exact file) or a prefix ending in "/" (a directory and everything under it), with the same path rules the
 // gate applies to package paths, and it may not name or cover the data surface (`blobs/`, `statements/`) or

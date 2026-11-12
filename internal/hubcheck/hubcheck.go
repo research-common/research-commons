@@ -151,38 +151,10 @@ func Check(dir string, cfg Config) (*Result, error) {
 
 // loadProfiles reads the source profiles the policy pins (`series.source_profiles`) from the tree at rev, the
 // revision the policy itself was read at: a change cannot bring the profile that judges it (claims-model note
-// §5.3.1a). Each must be held there as a regular blob file whose bytes hash to its name and parse as a profile;
-// anything else stops the check before it starts, naming the entry. No entry, no profiles (nil).
+// §5.3.1a). A profile must be a regular blob file there; gate.LoadSourceProfiles checks the rest.
 func loadProfiles(r *repo, rev string, digests []string) (*resolve.ProfileRules, error) {
-	if len(digests) == 0 {
-		return nil, nil
-	}
-	var ps []*resolve.SourceProfile
-	for i, d := range digests {
-		bad := func(why string) error {
-			return &gate.DidNotStart{Title: "hub policy file unusable",
-				Detail: fmt.Sprintf("series.source_profiles[%d] %s %s", i, d, why),
-				Scope:  "policy file " + PolicyFile + " at " + rev,
-				Next:   "add the profile blob through its own reviewed change first, then pin it; or fix hub-policy.json through the repository's own review"}
-		}
-		b, err := r.fileAt(rev, gate.BlobPath(d))
-		switch {
-		case err != nil:
-			return nil, bad("is not a regular blob file at the policy revision: " + err.Error())
-		case b == nil:
-			return nil, bad("is not held at the policy revision")
-		}
-		if sum := sha256.Sum256(b); "sha256:"+hex.EncodeToString(sum[:]) != d {
-			return nil, bad("is held corrupt at the policy revision (its bytes hash elsewhere)")
-		}
-		p, err := resolve.ParseSourceProfile(b)
-		if err != nil {
-			return nil, bad("is not a " + resolve.SourceProfileTag + " profile: " + err.Error())
-		}
-		ps = append(ps, p)
-	}
-	pr := resolve.NewProfileRules(ps...)
-	return &pr, nil
+	return gate.LoadSourceProfiles(digests, func(d string) ([]byte, error) { return r.fileAt(rev, gate.BlobPath(d)) },
+		"policy file "+PolicyFile+" at "+rev, "the policy revision")
 }
 
 // checkMarker requires the marker at rev to name the layout this tool implements (H-10).
