@@ -114,7 +114,7 @@ func TestWriterLockTwoProcesses(t *testing.T) {
 		if lines != 4 {
 			t.Fatalf("a fork keeps both writers' lines (2 publishes × authored+holds): %d chained lines", lines)
 		}
-		conformance.Partial(t, "C-core-127", "two OS processes appending one key from one sequence point fork and keep both lines (proved here with the writer lock disabled); the FORK token on the read commands is not asserted here, and the default path now prevents the fork locally")
+		conformance.Partial(t, "C-core-127", "two OS processes appending one key from one sequence point fork and keep both lines (proved here with the writer lock disabled); the FORK display on the read commands is TestLogForkTwoProcesses")
 	})
 }
 

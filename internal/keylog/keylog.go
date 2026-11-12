@@ -179,6 +179,9 @@ type View struct {
 	Retained []*wire.Statement // unverified lines, kept and not placed
 	Forks    []dag.Fork        // over chained lines only
 	Tips     []string          // chained lines with no chained successor
+	// Spans[i] are the lines on Forks[i] (dag.Span): its branches up to its clearing line, sorted. A surface that
+	// marks a line as on a fork reads this, so it agrees with the log display (claims-model note I12).
+	Spans [][]string
 }
 
 // View computes the log's state from its lines.
@@ -251,8 +254,23 @@ func (l *Log) View() View {
 	}
 	slices.SortFunc(v.Retained, func(a, b *wire.Statement) int { return strings.Compare(a.ID+a.Why, b.ID+b.Why) })
 	v.Forks = dag.Forks(graph)
+	for _, f := range v.Forks {
+		v.Spans = append(v.Spans, dag.Span(graph, f))
+	}
 	v.Tips = dag.Tips(graph)
 	return v
+}
+
+// ForksOn returns the forks of the log that line id is on (dag.Span), in v.Forks order: open ones with their tips,
+// cleared ones with their clearing line. A line before the fork point or after the clearing line is on none.
+func (v View) ForksOn(id string) []dag.Fork {
+	var out []dag.Fork
+	for i, f := range v.Forks {
+		if i < len(v.Spans) && slices.Contains(v.Spans[i], id) {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 // relativeRule applies the §7 rules that need other lines. It looks only at lines held (in any log), so it
@@ -468,7 +486,7 @@ func (v View) Render() string {
 			fmt.Fprintf(&b, " [%s: %s]", ln.St.Status, ln.St.Why)
 		}
 		if ln.State == Detached {
-			b.WriteString(" detached: waiting for " + ln.Waiting.describe(v.Key))
+			b.WriteString(" detached: waiting for " + ln.Waiting.Describe(v.Key))
 		}
 		if ln.Incoherent {
 			b.WriteString(" incoherent")
@@ -505,7 +523,9 @@ func (v View) Render() string {
 	return b.String()
 }
 
-func (g Gap) describe(key string) string {
+// Describe names what a detached line waits for, as the log display prints it: the missing seq range of key,
+// then each unheld line by id.
+func (g Gap) Describe(key string) string {
 	var parts []string
 	if g.HasSeq {
 		r := strconv.FormatInt(g.FromSeq, 10)

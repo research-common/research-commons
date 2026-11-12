@@ -59,6 +59,14 @@ func statusCmd(c *Ctx) (*Obj, int, error) {
 		set("history", textV("off")).set("assumes", textV(d.Assumes)))
 	o.set("policy", newObj().set("source", textV(c.Policy.Source)).set("digest", refV(c.Policy.Digest)).set("reader_policy", c.Policy.readerObj()))
 	o.set("key", keyStatus(c))
+	// a marker per open fork of a held key log (forks.go): a state of the store's logs, never a failure of status
+	lines, err := c.Store.Statements()
+	if err != nil {
+		return nil, 0, failed(err, "store", false, "run fsck")
+	}
+	if lf := logForkRows(deliverLogs(lines), true); len(lf) > 0 {
+		o.set("log_forks", lf)
+	}
 	if _, ok := c.Flag("limits"); ok {
 		o.set("limits", limitsTable(c.Policy))
 	}

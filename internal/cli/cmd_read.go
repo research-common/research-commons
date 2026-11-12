@@ -137,12 +137,22 @@ func (v *view) statementCore(id string) (*Obj, *wire.Statement) {
 		why = append(why, p.After...)
 		why = append(why, p.Doubted...)
 		if !p.Chained {
-			why = append(why, "detached: a predecessor in the signer's log is not held")
+			// the gap named as the log display names it: the missing seq range, and each unheld line a prev or
+			// merges entry names by id (C-core-127b, C-core-143)
+			gap := "a predecessor in the signer's log is not held"
+			if ln, ok := v.logLine(st.Signer, id); ok {
+				if d := ln.Waiting.Describe(st.Signer); d != "" {
+					gap = "waiting for " + d
+				}
+			}
+			why = append(why, "detached: "+gap)
 		} else if !p.EvidenceReady() {
 			why = append(why, "status "+string(st.Status))
 		}
 		o.set("reasons", texts(why...))
 	}
+	// a fork of the signer's log is shown beside every line on it; it never changes counted or an exit
+	v.setLogForks(o, st.Signer, id)
 	return o, st
 }
 
@@ -528,7 +538,12 @@ func listCmd(c *Ctx) (*Obj, int, error) {
 	for _, d := range ds {
 		l = append(l, v.artifactCore(v.r.Artifact(d)))
 	}
-	return v.scoped(newObj().set("blobs", l).set("count", intV(int64(len(ds)))).set("resources", v.resourceRows())), ExitOK, nil
+	o := newObj().set("blobs", l).set("count", intV(int64(len(ds)))).set("resources", v.resourceRows())
+	if fs := logForkRows(v.logs, true); len(fs) > 0 {
+		// a marker per open fork of a held key log; show <id> of a line on it prints the fork in full
+		o.set("log_forks", fs)
+	}
+	return v.scoped(o), ExitOK, nil
 }
 
 // resourceRows is list's line per held resource, by genesis id: the resource, its current edition (the genesis

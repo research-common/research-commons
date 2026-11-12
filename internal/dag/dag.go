@@ -69,12 +69,7 @@ func Forks(g map[string]Node) []Fork {
 			continue
 		}
 		f := Fork{At: at, Branches: bs}
-		below := map[string]bool{}
-		for _, b := range bs {
-			for n := range descendants(b, succ) {
-				below[n] = true
-			}
-		}
+		below := belowOf(bs, succ)
 		for n := range below {
 			if len(succ[n]) == 0 {
 				f.Tips = append(f.Tips, n)
@@ -85,6 +80,49 @@ func Forks(g map[string]Node) []Fork {
 		out = append(out, f)
 	}
 	slices.SortFunc(out, func(a, b Fork) int { return strings.Compare(a.At, b.At) })
+	return out
+}
+
+// belowOf is every node a fork's branches reach through any link, the branches included: the set its tips and
+// its clearing are computed over.
+func belowOf(branches []string, succ map[string][]string) map[string]bool {
+	below := map[string]bool{}
+	for _, b := range branches {
+		for n := range descendants(b, succ) {
+			below[n] = true
+		}
+	}
+	return below
+}
+
+// Span returns the nodes of g that are on fork f, sorted: every node its branches reach (the branches, the lines
+// between them and the tips), up to and including its clearing node when it has cleared; a node after the
+// clearing node is past the fork. f is one of Forks(g): Span reads the same reduced graph and the same "below" set,
+// so a surface that marks a node as on a fork agrees with the fork itself (claims-model note I12).
+func Span(g map[string]Node, f Fork) []string {
+	g = reduce(g)
+	succ := map[string][]string{}
+	for n, nd := range g {
+		for _, p := range nd.Branch {
+			succ[p] = append(succ[p], n)
+		}
+		for _, p := range nd.Join {
+			succ[p] = append(succ[p], n)
+		}
+	}
+	below := belowOf(f.Branches, succ)
+	var past map[string]bool
+	if f.ClearedBy != "" {
+		past = descendants(f.ClearedBy, succ)
+		delete(past, f.ClearedBy)
+	}
+	var out []string
+	for n := range below {
+		if _, held := g[n]; held && !past[n] {
+			out = append(out, n)
+		}
+	}
+	slices.Sort(out)
 	return out
 }
 

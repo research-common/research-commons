@@ -64,6 +64,15 @@ func fsckCmd(c *Ctx) (*Obj, int, error) {
 		fs = append(fs, rowObj().set("finding", textV(f.Class)).set("object", peerV(f.Object)).set("fatal", boolV(f.Fatal)).set("detail", peerV(f.Detail)))
 	}
 	o.set("findings", fs)
+	// every fork of a held key log, open (FORK, its tips) or cleared (merged, its clearing line): informational, as
+	// a fork is not corruption and its lines count (claims-model note §12, storage note §4.2); never moves the exit
+	lines, err := c.Store.Statements()
+	if err != nil {
+		return nil, 0, failed(err, "store", false, "run fsck again; if it recurs, check the filesystem")
+	}
+	if lf := logForkRows(deliverLogs(lines), false); len(lf) > 0 {
+		o.set("log_forks", lf)
+	}
 	if len(rep.Rebuilt) > 0 {
 		rb := listV{}
 		for _, r := range rep.Rebuilt {
