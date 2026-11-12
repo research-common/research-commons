@@ -2,6 +2,7 @@ package cli
 
 import (
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -120,7 +121,7 @@ func readinessOf(t *testing.T, sec *canon.Object, ed string) *canon.Object {
 // conflict clears, in both forms: table tokens only, each on the human surface, one footer, one exit, and every
 // id show cites listed by explain.
 func TestTaskSurfaceSweep(t *testing.T) {
-	conformance.Partial(t, "C-core-132", "the task section (show, verify, explain of a task, its editions and approvals) prints only table tokens")
+	conformance.Partial(t, "C-core-132", "the task section is done here (show, verify, explain of a task, its editions and approvals: table tokens only, each condition a typed ok/fail/unchecked state); the case stays open on the gate, whose intended_for rule evaluation is still inside the label detail, not a typed member (TestClosedVocabulary)")
 	w, r := taskWorld(t)
 	sweepRefs(t, w, r.all())
 	r.supersede(w)
@@ -420,4 +421,116 @@ func TestTaskIndependenceAndDivergenceOverTheCLI(t *testing.T) {
 	if rd.Members["state"] != canon.String("ready") || !strings.Contains(string(canon.Encode(rd.Members["reports"])), "divergence report: submission "+late[:12]) {
 		t.Fatalf("divergence: %s", canon.Encode(rd))
 	}
+}
+
+// renderedID finds the abbreviated ids Task.Render prints, in line order: keys (algorithm prefix + 12 hex) and
+// statement ids or digests (12 hex, a digest's "sha256:" dropped).
+var renderedID = regexp.MustCompile(`\bed25519:[0-9a-f]{12}\b|\b[0-9a-f]{12}\b`)
+
+func renderedIDs(line string) []string { return renderedID.FindAllString(line, -1) }
+
+// sectionUnits collects the elements a fact can be carried by, at any depth (the caller drops the root): for
+// every object (a submission, a grant, a decision, an edition, a readiness) the structured strings inside it, refs
+// and tokens, into objs; every prose string (an explain line, a report) into strs. Prose inside an object does not make the
+// object carry a fact: a readiness's report text repeats ids that only the report states. Lists are not units: a
+// list of every grant holds every grant's ids, and would carry any mix of them.
+func sectionUnits(v canon.Value, objs, strs *[]string) []string {
+	switch x := v.(type) {
+	case *canon.Object:
+		var leaves []string
+		for _, k := range x.Keys {
+			leaves = append(leaves, sectionUnits(x.Members[k], objs, strs)...)
+		}
+		*objs = append(*objs, strings.Join(leaves, " "))
+		return leaves
+	case canon.Array:
+		var leaves []string
+		for _, e := range x {
+			leaves = append(leaves, sectionUnits(e, objs, strs)...)
+		}
+		return leaves
+	case canon.String:
+		if strings.Contains(string(x), " ") {
+			*strs = append(*strs, string(x))
+			return nil
+		}
+		return []string{string(x)}
+	}
+	return nil
+}
+
+// TestTaskRenderSectionDrift: the resolver's Task.Render and the CLI's task section are two renderers of one
+// Task (taskview F4). Each Render line that prints an id is a fact. A line the CLI prints verbatim (prose: an
+// explain line, a reason, a report) is carried by that string. Any other line is its ids plus the first id of the
+// line it is indented under (the submission a "refuted by" belongs to, the edition an approval is of), and one
+// object of what explain --json prints for the task (its task section, or the resource view beside it for the
+// resource half of Render) must hold them all. Checked for every task of taskWorld, before and after the
+// conflict clears: an id or a relation printed by Render and by neither form of the CLI fails here. (A fact the
+// CLI states twice, structured and in a report, survives losing one form: the guard is "printed", not "printed
+// in this field".)
+func TestTaskRenderSectionDrift(t *testing.T) {
+	w, r := taskWorld(t)
+	check := func() {
+		t.Helper()
+		v, err := loadView(w.s, nil, resolve.WithContractReader(resolve.ContractProfiles{}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, g := range []string{r.g, r.review, r.unread} {
+			tk, ok := v.r.Task(g)
+			if !ok {
+				t.Fatalf("task %s not resolved", g[:12])
+			}
+			ex := jsonOf(t, w.run("explain", g, "--json"))
+			var objs, strs []string
+			for _, root := range []canon.Value{taskSection(t, ex), ex.Members["resource_view"]} {
+				sectionUnits(root, &objs, &strs)
+				objs = objs[:len(objs)-1] // the root itself (appended last) holds every id and carries nothing
+			}
+			type frame struct {
+				indent int
+				first  string
+			}
+			var stack []frame
+			facts := 0
+			for _, line := range strings.Split(strings.TrimRight(tk.Render(), "\n"), "\n") {
+				indent := len(line) - len(strings.TrimLeft(line, " "))
+				for len(stack) > 0 && stack[len(stack)-1].indent >= indent {
+					stack = stack[:len(stack)-1]
+				}
+				ids := renderedIDs(line)
+				// prose the CLI prints verbatim (an explain line, a reason, a report, a terms line, a grant without
+				// effect: whole, or after its label) is carried by that string; any other line is a structured fact,
+				// its ids with its parent's first id, carried by one object
+				tl := strings.TrimSpace(line)
+				_, tail, _ := strings.Cut(tl, ": ")
+				prose := slices.ContainsFunc(strs, func(u string) bool { return strings.Contains(u, tl) || (tail != "" && strings.Contains(u, tail)) })
+				fact := slices.Clone(ids)
+				if !prose && len(stack) > 0 && stack[len(stack)-1].first != "" {
+					fact = append(fact, stack[len(stack)-1].first)
+				}
+				first := ""
+				if len(ids) > 0 {
+					first = ids[0]
+				}
+				stack = append(stack, frame{indent, first})
+				fact = slices.DeleteFunc(fact, func(id string) bool { return id == g[:12] }) // the ref printed for
+				if len(fact) == 0 {
+					continue
+				}
+				facts++
+				if !prose && !slices.ContainsFunc(objs, func(u string) bool {
+					return !slices.ContainsFunc(fact, func(id string) bool { return !strings.Contains(u, id) })
+				}) {
+					t.Errorf("task %s: Render line %q (ids %v): the CLI section prints it neither verbatim nor in one object", g[:12], tl, fact)
+				}
+			}
+			if facts == 0 {
+				t.Fatalf("task %s: Render printed no id\n%s", g[:12], tk.Render())
+			}
+		}
+	}
+	check()
+	r.supersede(w)
+	check()
 }

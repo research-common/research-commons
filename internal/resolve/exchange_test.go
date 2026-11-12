@@ -250,7 +250,7 @@ func TestHeartbeatsAreNotLeases(t *testing.T) {
 // TestCoordinatorGrants: C-exch-03. K is the coordinator; A holds K's grant, X holds one signed by a
 // non-coordinator, B holds none.
 func TestCoordinatorGrants(t *testing.T) {
-	conformance.Partial(t, "C-exch-03", "grant statement kind pending (wire §5 defines none; read through GrantReader, a test stand-in here); contract grammar pending (coordinator)")
+	// the provisional reading; C-exch-03 is declared by internal/cli.TestTaskShowVerifyExplain (task-contract-v1, CLI)
 	w := newWorld(t)
 	g := w.task("G", "R")
 	e := w.taskEdition("E", "R", g, []string{g}, w.contract("R", "coordinator", w.signer("K"), "quorum", quorum(1, IndependenceNotRequired)))
@@ -284,7 +284,7 @@ func TestCoordinatorGrants(t *testing.T) {
 // controller publishes T2 (stricter rubric, earlier deadline). Both still read T1's terms; T2 applies to later
 // bindings only; neither id changes.
 func TestBindingsToEditions(t *testing.T) {
-	conformance.Partial(t, "C-exch-07", "contract grammar pending (deadline, rubric field names); the deadline is displayed as a term, never evaluated against a self-declared ts")
+	// the provisional reading; C-exch-07 is declared by TestV1BindingsToEditions
 	w := newWorld(t)
 	g := w.task("G", "R")
 	t1 := w.taskEdition("T1", "R", g, []string{g}, w.contract("R", "deadline", "2026-12-01T00:00:00Z",
@@ -329,7 +329,7 @@ func TestBindingsToEditions(t *testing.T) {
 // citing nothing is admitted, shown `cites nothing`, and settles nothing; a non-beneficiary's decision settles
 // nothing.
 func TestDecisionCites(t *testing.T) {
-	conformance.Partial(t, "C-exch-04", "contract grammar pending (beneficiary: the decision authority is read from the provisional contract)")
+	// the provisional reading; C-exch-04 is declared by internal/cli.TestTaskDecisionsOverTheCLI (task-contract-v1, CLI)
 	w := newWorld(t)
 	g := w.task("G", "R")
 	e := w.taskEdition("E", "R", g, []string{g}, w.contract("R"))
@@ -362,7 +362,7 @@ func TestDecisionCites(t *testing.T) {
 // TestDecisionConflict: C-exch-05. accept S1 then reject S1, with equal and with reversed ts, in both file
 // orders: contested, exit 3, identical in every order. A third decision superseding one by hash settles it.
 func TestDecisionConflict(t *testing.T) {
-	conformance.Partial(t, "C-exch-05", "contract grammar pending (beneficiary)")
+	// the provisional reading; C-exch-05 is declared by internal/cli.TestTaskDecisionsOverTheCLI (task-contract-v1, CLI)
 	for _, ts := range [][2]string{{"2026-10-20T00:00:00Z", "2026-10-20T00:00:00Z"}, {"2026-10-21T00:00:00Z", "2026-10-20T00:00:00Z"}} {
 		w := newWorld(t)
 		g := w.task("G", "R")
@@ -418,7 +418,7 @@ func TestSettledByReview(t *testing.T) {
 // TestRubricUnchecked: C-exch-08. A criterion nobody can evaluate is unchecked; the check does not pass; the
 // task exit is 3, never 0, with or without a quorum.
 func TestRubricUnchecked(t *testing.T) {
-	conformance.Partial(t, "C-exch-08", "contract grammar pending (rubric); criteria are evaluated through a RubricEvaluator seam, none ships")
+	// the provisional reading; C-exch-08 is declared by TestV1RubricUnchecked
 	for _, q := range []bool{false, true} {
 		w := newWorld(t)
 		g := w.task("G", "R")
@@ -456,7 +456,7 @@ func (f stmtRubric) Evaluate(c Criterion, st *wire.Statement) (Outcome, string) 
 // needed, so unchecked, exit 3. (c) as (b) with C failing: not ready, exit 0. (d) a lone unchecked submission
 // that could not reach k even if it passed: not ready.
 func TestUndecidedSubmissionIsNoVeto(t *testing.T) {
-	conformance.Partial(t, "C-exch-08", "contract grammar pending (rubric); the undecided-submission rule follows the task-contracts RFC's bracket, itself proposed")
+	// the provisional reading; C-exch-08 is declared by TestV1RubricUnchecked (the bracket: C-exch-08a, TestV1Bracket)
 	type sub struct {
 		name, by, result string
 		o                Outcome
@@ -494,8 +494,7 @@ func TestUndecidedSubmissionIsNoVeto(t *testing.T) {
 // TestIndependenceNotInferred: C-exch-09 and C-btc-19. Quorum 2 requiring independence. Every generator reads
 // `unknown`, never `1 of 2` or 2.
 func TestIndependenceNotInferred(t *testing.T) {
-	conformance.Partial(t, "C-exch-09", "contract grammar pending (quorum.independence); (b) the reveal is shown as possession only, its verification needs a commitment construction the wire format does not define")
-	conformance.Partial(t, "C-btc-19", "readiness unknown whatever the bounds; contract grammar pending (quorum.independence)")
+	// the provisional reading; C-exch-09 and C-btc-19 are declared by TestV1IndependenceNotInferred
 	gens := map[string]func(w *world, g, e string){
 		"a first publication": func(w *world, g, e string) {
 			w.authored("XA", "A", "X")
@@ -570,7 +569,7 @@ func (v indepBy) Independent(st *wire.Statement, _ *Terms) (bool, string) {
 // TestReceiptMismatch: C-exch-10. A receipt valid in itself but bound to another run, or issued by an ineligible
 // key: the verifier is invoked, no slot is filled, and the explanation names the mismatch.
 func TestReceiptMismatch(t *testing.T) {
-	conformance.Partial(t, "C-exch-10", "receipt format and verifier pending (a test verifier stands in); contract grammar pending (quorum.independence, evidence issuers)")
+	// the provisional reading; C-exch-10 (Partial) is TestV1ReceiptMismatch
 	for _, why := range []string{"subject mismatch: receipt bound to run sha256:aaaa, not this result", "issuer outside the task's eligible issuers"} {
 		w := newWorld(t)
 		g := w.task("G", "R")
@@ -592,7 +591,7 @@ func TestReceiptMismatch(t *testing.T) {
 // TestSelfDeclaredIndependence: C-exch-11. The contract accepts self-declared independence; two submitters
 // declare it: ready, and the token and the outcome say so. A contract that does not accept it: unknown.
 func TestSelfDeclaredIndependence(t *testing.T) {
-	conformance.Partial(t, "C-exch-11", "contract grammar pending (quorum.independence)")
+	// the provisional reading; C-exch-11 is declared by internal/cli.TestTaskIndependenceAndDivergenceOverTheCLI (task-contract-v1, CLI)
 	for _, accept := range []bool{true, false} {
 		w := newWorld(t)
 		g := w.task("G", "R")
@@ -622,7 +621,7 @@ func TestSelfDeclaredIndependence(t *testing.T) {
 // TestExplicitGrouping: C-exch-12. Comparator quorum of 3; A≈B, B≈C, A≉C. All-pairs: no group of 3.
 // Reference-based (A): {A,B} groups, C diverges. No rule: unchecked naming the missing rule. Never A–B–C.
 func TestExplicitGrouping(t *testing.T) {
-	conformance.Partial(t, "C-exch-12", "contract grammar pending (quorum.grouping, comparator)")
+	// the provisional reading; C-exch-12 is declared by TestV1ExplicitGrouping
 	cmp := newPairCmp([2]string{"rA", "rB"}, [2]string{"rB", "rC"})
 	for _, variant := range []string{"all-pairs", "reference", "none"} {
 		w := newWorld(t)
@@ -668,7 +667,7 @@ func TestExplicitGrouping(t *testing.T) {
 // TestPinnedTest: C-exch-13. The contract pins an estimand and a test; two batches whose intervals overlap fail
 // it: `diverged` under the named test, its own report; readiness not advanced.
 func TestPinnedTest(t *testing.T) {
-	conformance.Partial(t, "C-exch-13", "contract grammar pending (quorum.estimand, quorum.test); the test runs through the Comparator seam, no statistical dialect ships")
+	// the provisional reading; C-exch-13 is declared by TestV1PinnedTest
 	w := newWorld(t)
 	g := w.task("G", "R")
 	e := w.taskEdition("E", "R", g, []string{g}, w.contract("R", "quorum", quorum(2, IndependenceNotRequired,
@@ -687,7 +686,7 @@ func TestPinnedTest(t *testing.T) {
 // TestDivergenceStaysVisible: C-exch-14. Quorum k; the first k match, a later one diverges: the task view shows
 // the divergence as its own report after readiness is reached.
 func TestDivergenceStaysVisible(t *testing.T) {
-	conformance.Partial(t, "C-exch-14", "contract grammar pending (quorum)")
+	// the provisional reading; C-exch-14 is declared by internal/cli.TestTaskIndependenceAndDivergenceOverTheCLI (task-contract-v1, CLI)
 	for _, comparator := range []bool{false, true} {
 		w := newWorld(t)
 		g := w.task("G", "R")
@@ -773,7 +772,7 @@ func TestPreRegistrationDisclosure(t *testing.T) {
 // TestDepartureCheck: C-exch-17. Declared n=30 runs; deliveries (a)–(d); declared groups A,B,C n>=30;
 // deliveries (e)–(g). Grade and exit identical across all seven.
 func TestDepartureCheck(t *testing.T) {
-	conformance.Partial(t, "C-exch-17", "contract grammar pending (sampling); the delivered side reads wire §5 `sampling`")
+	// the provisional reading; C-exch-17 is declared by TestV1DepartureCheck
 	type c struct {
 		groups bool
 		del    canon.Value
@@ -829,7 +828,7 @@ func TestDepartureCheck(t *testing.T) {
 // TestRefutationTrack: C-exch-18. A `refutes` of an accepted result is admitted and listed as a refutation,
 // graded on its own derivation (exempt from the weakest-link rule) and credited on its own track.
 func TestRefutationTrack(t *testing.T) {
-	conformance.Partial(t, "C-exch-18", "acceptance reads the beneficiary through the provisional contract (grammar pending); a `refutes` names a statement, not a task edition: binding a refutation to a task is by the submission it names")
+	// the provisional reading; C-exch-18 is declared by TestV1RefutationTrack
 	w := newWorld(t)
 	g := w.task("G", "R")
 	e := w.taskEdition("E", "R", g, []string{g}, w.contract("R"))
@@ -863,7 +862,7 @@ func TestRefutationTrack(t *testing.T) {
 // TestCreditProjection: C-exch-19. Credit for A under two reader-chosen windows and denominators; a fresh
 // install computes nothing; nothing transferable is written.
 func TestCreditProjection(t *testing.T) {
-	conformance.Partial(t, "C-exch-19", "the counts' definitions are this reading's (claims §9.5 names them, defines none); acceptance reads the beneficiary through the provisional contract (grammar pending)")
+	// the provisional reading; C-exch-19 (Partial) is TestV1CreditProjection
 	w := newWorld(t)
 	g := w.task("G", "R")
 	e := w.taskEdition("E", "R", g, []string{g}, w.contract("R"))
@@ -916,7 +915,7 @@ func TestCreditProjection(t *testing.T) {
 // TestCreditAfterSupersession: C-exch-20. After acceptance the beneficiary supersedes it with a rejection: the
 // projection changes and cites the superseding decision; the earlier decision stays in explain.
 func TestCreditAfterSupersession(t *testing.T) {
-	conformance.Partial(t, "C-exch-20", "contract grammar pending (beneficiary)")
+	// the provisional reading; C-exch-20 is declared by TestV1CreditAfterSupersession
 	w := newWorld(t)
 	g := w.task("G", "R")
 	e := w.taskEdition("E", "R", g, []string{g}, w.contract("R"))
