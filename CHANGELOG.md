@@ -10,6 +10,19 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 ## [Unreleased]
 
 ### Added
+- **Source profiles for growing series (#111).** A source profile is a content-addressed blob
+  (`rc-source-profile/1`) stating one source's finality order: `ordered-label` (a closed list of run labels,
+  earliest first, for rules written `run >= L`) or `integer-depth` (`confirmations >= N`). A hub pins the profiles
+  it trusts in `hub-policy.json` as `series.source_profiles: [{"digest": "sha256:…"}]` (at most 64); the blobs are
+  read from the base revision (`hub check`) or from what the store holds (`pull`), so a change cannot bring the
+  profile that judges it, and a pin that is not held, corrupt or not a valid profile stops the check (exit 2)
+  naming the entry. With `series.refuse_premature_freeze` on and profiles pinned, a series edition's segments
+  are read at their **asserted** state at capture: the members' boundary is shown `as captured, not re-checked`;
+  a declared `frozen_before` later than it is refused (exit 1: the members themselves do not claim it), and one at
+  or before it is `could not check (as captured)` (exit 3), never a pass. A segment whose state or rule the
+  profile cannot place (a label not in the list, no `rule_source`, a `rule_source` naming no pinned profile or
+  two) leaves the boundary unchecked. Without the member, every verdict is unchanged. The profile is not yet read
+  by observation views (referent status, corroboration), and the state is never re-derived from the captured bytes.
 - **Task view on `show`, `verify` and `explain`.** A task is a resource: `show` of a task (its genesis id), one of its
   edition ids or an approval prints, beside the resource view, a task section: each edition's terms as this reader
   read them (or why it read none), the readiness of the current edition and of every edition a submission binds to
