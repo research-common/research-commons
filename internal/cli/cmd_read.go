@@ -2,6 +2,7 @@ package cli
 
 import (
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/research-common/research-commons/internal/btctime"
@@ -37,10 +38,21 @@ func init() {
 		Run:  listCmd})
 }
 
-// viewOf is the read commands' view: the reader policy, and the production contract reader, so a task's terms
-// are read under the profiles this reader implements (the task section, resource.go and task.go).
+// viewOf is the read commands' view: the reader policy, the production contract reader, so a task's terms
+// are read under the profiles this reader implements (the task section, resource.go and task.go), and the source
+// profiles the store-root policy pins, so an observation's finality rule resolves through the profile its
+// rule_source cites (claims-model note §5.3.1a). A pin this store cannot honour stops the command (exit 2, naming
+// the entry), as it stops pull: it is never read as "no profiles".
 func viewOf(c *Ctx) (*view, error) {
-	v, err := buildView(c.Store, c.Policy.Reader, timeVerifierFor(c), resolve.WithContractReader(resolve.ContractProfiles{}))
+	opts := []resolve.Option{resolve.WithContractReader(resolve.ContractProfiles{})}
+	profiles, err := storeProfiles(c)
+	if err != nil {
+		return nil, err
+	}
+	if profiles != nil {
+		opts = append(opts, resolve.WithFinalityRules(*profiles))
+	}
+	v, err := buildView(c.Store, c.Policy.Reader, timeVerifierFor(c), opts...)
 	if err != nil {
 		return nil, failed(err, "store", false, "run status, then fsck")
 	}
@@ -166,11 +178,36 @@ func (v *view) showStatement(id string) (*Obj, bool) {
 	if st.Kind == "observed" {
 		// corroboration status is a disclosure beside the observation (claims §5.3.2, §13, I6): shown here and on
 		// verify and explain, from the one observation view, and never moves an exit
-		if ob, ok := v.r.Observation(id); ok && ob.Corroboration != nil {
-			o.set("corroboration", corroborationObj(ob.Corroboration, true))
+		if ob, ok := v.r.Observation(id); ok {
+			if ob.BodyUnderstood && ob.ReferentStatus != "" {
+				o.set("referent", referentObj(ob, true))
+			}
+			if ob.Corroboration != nil {
+				o.set("corroboration", corroborationObj(ob.Corroboration, true))
+			}
 		}
 	}
 	return o, true
+}
+
+// referentObj is an observation's referent status as the reader computed it (claims §5.3.1, §7): the token, the
+// states beside it (`provisional (R1; final at RF)` is the token `provisional` with detail `R1; final at RF`) and,
+// in the full form, the history that explains it.
+func referentObj(ob *resolve.Observation, full bool) *Obj {
+	status, detail := ob.ReferentStatus, ""
+	if !IsToken(status) {
+		if i := strings.Index(status, " ("); i > 0 && strings.HasSuffix(status, ")") {
+			status, detail = status[:i], status[i+2:len(status)-1]
+		}
+	}
+	o := newObj().set("status", tokV(tok(status)))
+	if detail != "" {
+		o.set("detail", textV(detail))
+	}
+	if full && len(ob.ReferentHistory) > 0 {
+		o.set("history", texts(ob.ReferentHistory...))
+	}
+	return o
 }
 
 func contentOf(st *wire.Statement) string {
@@ -244,6 +281,10 @@ func verifyCmd(c *Ctx) (*Obj, int, error) {
 			var why []string
 			code, why = ob.VerifyExit()
 			o.set("causes", observationCauses(why))
+			if ob.BodyUnderstood && ob.ReferentStatus != "" {
+				// the reader's referent status (claims §5.3.1, §7): a disclosure beside the exit, like corroboration
+				o.set("referent", referentObj(ob, false))
+			}
 			if ob.Corroboration != nil {
 				// shown beside the exit, never moving it (claims §13, I6)
 				o.set("corroboration", corroborationObj(ob.Corroboration, false))

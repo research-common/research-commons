@@ -374,7 +374,7 @@ func (r *Resolver) finalityAware(e *Evidence, o *Observation, st, q *wire.Statem
 		return
 	}
 	e.Model = "finality-aware (" + o.Finality.Rule + ")"
-	e.Verdict, e.Counted, e.Cause = finalityVerdict(r.obs.finality, o.Finality.Rule, o.Finality.State, captureState(q))
+	e.Verdict, e.Counted, e.Cause = finalityVerdict(r.rulesFor(o.Finality), o.Finality.Rule, o.Finality.State, captureState(q))
 }
 
 // finalityVerdict is the finality-aware agreement model on two captures with different bytes.
@@ -382,6 +382,10 @@ func finalityVerdict(rules FinalityRules, rule string, a, b State) (verdict stri
 	metA, _, knownA := rules.Evaluate(rule, a)
 	metB, _, knownB := rules.Evaluate(rule, b)
 	if !knownA || !knownB {
+		if ordersLabels(rules, rule) {
+			// the cited profile orders the rule; a state it cannot place compares with nothing (§5.3.1a)
+			return "inconclusive", false, NotComparableUnderRule
+		}
 		return "inconclusive", false, "finality rule not evaluable by this reader"
 	}
 	c, ok := rules.Compare(rule, a, b)
@@ -409,7 +413,7 @@ func (r *Resolver) readerCheck(c *Corroboration, o *Observation) {
 		e.Verdict, e.Counted = "contradicts", true
 		if o.Class != "exact-bytes" && o.Finality != nil && (rc.State != State{}) {
 			e.Model = "finality-aware (" + o.Finality.Rule + ")"
-			e.Verdict, e.Counted, e.Cause = finalityVerdict(r.obs.finality, o.Finality.Rule, o.Finality.State, rc.State)
+			e.Verdict, e.Counted, e.Cause = finalityVerdict(r.rulesFor(o.Finality), o.Finality.Rule, o.Finality.State, rc.State)
 		}
 	case ReNotCanonical, ReUnavailable:
 		e.Verdict, e.Cause = "inconclusive", rc.Outcome

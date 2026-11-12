@@ -293,7 +293,7 @@ func TestSchemaSystemKeys(t *testing.T) {
 
 // TestSchemaOneClass: an observed asserting two classes is malformed, and the refusal says what to do.
 func TestSchemaOneClass(t *testing.T) {
-	conformance.Partial(t, "C-core-35", "Read refuses (intrinsic, malformed, this statement only, says to publish separate blobs); publish pinning and appending nothing needs publish")
+	conformance.Partial(t, "C-core-35", "the reader half: Read refuses (intrinsic, malformed, this statement only, says to publish separate blobs); the publish half is internal/cli.TestPublishOneClassPerStatement")
 	_, err := readBody(t, "observed", setField(minimal("observed"), "class", arr(s("exact-bytes"), s("source"))))
 	refused(t, err, refusal.Intrinsic, refusal.MalformedStatement, "publish separate blobs")
 }
@@ -301,7 +301,7 @@ func TestSchemaOneClass(t *testing.T) {
 // TestSchemaUnpinned: an observed whose referent lacks a field its class requires is valid and admitted, with
 // the missing fields named (§5, claims-model §5.3.1). A field present with the wrong type is still malformed.
 func TestSchemaUnpinned(t *testing.T) {
-	conformance.Partial(t, "C-core-30", "admitted and the missing block_hash named as unpinned; the agreement model not applied and corroboration unchecked need the resolver")
+	conformance.Partial(t, "C-core-30", "the admission half: admitted and the missing block_hash named as unpinned; the agreement model not applied and corroboration unchecked are internal/resolve.TestReferentPinsAndUnpinned")
 	obs := func(class string, ref *canon.Object) *canon.Object {
 		return setField(setField(minimal("observed"), "class", s(class)), "referent", ref)
 	}

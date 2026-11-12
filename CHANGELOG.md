@@ -10,6 +10,16 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 ## [Unreleased]
 
 ### Added
+- **Observation views read the pinned source profiles.** `show`, `verify`, `explain` and `pull` read the source
+  profiles the store-root `hub-policy.json` pins (`series.source_profiles`) for an observation's own finality rule,
+  not only for a series boundary: a rule `run >= L` whose `rule_source` names a pinned profile (its digest, or a
+  document it lists) is evaluated through it, so the referent reads `provisional (<state>; final at L)` or
+  `final (as captured, not re-checked)` instead of `finality unchecked`, and corroboration orders two captures by
+  the profile's labels. A profile judges the observer's asserted state, so it never makes a referent plain `final`
+  (only a re-check of the source does). `show`, `verify` and `explain` of an observation now print its referent
+  status (`show` and `explain` with the history behind it). A pin this store does not hold, or that is not a
+  valid profile, stops these commands (exit 2) naming the entry, as it stops `pull`. Without the member every
+  answer is unchanged.
 - **Source profiles for growing series (#111).** A source profile is a content-addressed blob
   (`rc-source-profile/1`) stating one source's finality order: `ordered-label` (a closed list of run labels,
   earliest first, for rules written `run >= L`) or `integer-depth` (`confirmations >= N`). A hub pins the profiles
@@ -21,8 +31,8 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   a declared `frozen_before` later than it is refused (exit 1: the members themselves do not claim it), and one at
   or before it is `could not check (as captured)` (exit 3), never a pass. A segment whose state or rule the
   profile cannot place (a label not in the list, no `rule_source`, a `rule_source` naming no pinned profile or
-  two) leaves the boundary unchecked. Without the member, every verdict is unchanged. The profile is not yet read
-  by observation views (referent status, corroboration), and the state is never re-derived from the captured bytes.
+  two) leaves the boundary unchecked. Without the member, every verdict is unchanged. The profile judges the
+  observer's asserted state: the state is never re-derived from the captured bytes.
 - **Task view on `show`, `verify` and `explain`.** A task is a resource: `show` of a task (its genesis id), one of its
   edition ids or an approval prints, beside the resource view, a task section: each edition's terms as this reader
   read them (or why it read none), the readiness of the current edition and of every edition a submission binds to

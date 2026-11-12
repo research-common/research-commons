@@ -204,6 +204,34 @@ func WithReferentChecker(c ReferentChecker) Option { return func(r *Resolver) { 
 // WithFinalityRules sets the reader's finality-rule evaluator (its source profiles).
 func WithFinalityRules(f FinalityRules) Option { return func(r *Resolver) { r.obs.finality = f } }
 
+// SourceBoundRules is a FinalityRules that binds itself to one statement's `finality.rule_source` (ProfileRules:
+// the source profile the statement cites, claims-model note §5.3.1a). When the reader's rules implement it, every
+// observation view evaluates a statement's rule through For(its rule_source); otherwise through the rules as
+// configured, with no rule_source.
+type SourceBoundRules interface {
+	FinalityRules
+	For(ruleSource string) BoundRules
+}
+
+// rulesFor is the finality rules for one statement's declared finality f.
+func (r *Resolver) rulesFor(f *Finality) FinalityRules {
+	if sb, ok := r.obs.finality.(SourceBoundRules); ok && f != nil {
+		return sb.For(f.RuleSource)
+	}
+	return r.obs.finality
+}
+
+// unevaluableWhy is why rules cannot evaluate rule at state s, when the rules can say (BoundRules); "" otherwise.
+func unevaluableWhy(rules FinalityRules, rule string, s State) string {
+	if c, ok := rules.(interface {
+		Check(rule string, s State) (bool, string, string)
+	}); ok {
+		_, _, why := c.Check(rule, s)
+		return why
+	}
+	return ""
+}
+
 // WithAttestationVerifier sets the reader's attestation verifier.
 func WithAttestationVerifier(v AttestationVerifier) Option {
 	return func(r *Resolver) { r.obs.attest = v }
@@ -581,20 +609,26 @@ func (r *Resolver) referentStatus(o *Observation, st *wire.Statement) {
 	rc := o.ReCheck
 	var status string
 	f := o.Finality
+	rules := r.rulesFor(f)
 	if f != nil {
-		met, final, known := r.obs.finality.Evaluate(f.Rule, f.State)
+		met, final, known := rules.Evaluate(f.Rule, f.State)
 		switch {
 		case !known:
 			status = RefRuleUnchecked
 			o.finalityUnevaluable = true
-			o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("at capture: state %s under rule %q, which this reader cannot evaluate (no source profile for it)", f.State, f.Rule))
+			why := "no source profile for it"
+			if w := unevaluableWhy(rules, f.Rule, f.State); w != "" {
+				why = w
+			}
+			o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("at capture: state %s under rule %q, which this reader cannot evaluate (%s)", f.State, f.Rule, why))
 		case met:
-			// the observer's asserted state is the only evidence so far: final as captured, until a re-check
+			// the observer's asserted state is the only evidence so far: final as captured, until a re-check. A
+			// source profile changes nothing here: it orders the asserted state, it does not re-check the source.
 			status = RefFinalCaptured
-			o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("at capture: state %s meets rule %q: %s (the observer's asserted state)", f.State, f.Rule, RefFinalCaptured))
+			o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("at capture: state %s meets rule %q%s: %s (the observer's asserted state)", f.State, f.Rule, underProfile(rules, f.Rule), RefFinalCaptured))
 		default:
 			status = fmt.Sprintf("%s (%s; final at %s)", RefProvisional, f.State, final)
-			o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("at capture: state %s, rule %q unmet: %s", f.State, f.Rule, status))
+			o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("at capture: state %s, rule %q unmet%s: %s", f.State, f.Rule, underProfile(rules, f.Rule), status))
 			if rev := r.revision(o, st); rev != "" {
 				status = RefRevised
 				o.ReferentHistory = append(o.ReferentHistory, rev)
@@ -610,7 +644,7 @@ func (r *Resolver) referentStatus(o *Observation, st *wire.Statement) {
 		o.ReferentHistory = append(o.ReferentHistory, "reader re-check: source unavailable ("+rc.Why+"); existing corroborations stand")
 	case ReSame:
 		if f != nil {
-			met, final, known := r.obs.finality.Evaluate(f.Rule, rc.State)
+			met, final, known := rules.Evaluate(f.Rule, rc.State)
 			if known && met && status != RefRevised {
 				status = RefFinal
 				o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("reader re-check: state %s, identical bytes: final (asserted state %s shown beside it)", rc.State, f.State))
@@ -665,9 +699,12 @@ func (r *Resolver) revision(o *Observation, st *wire.Statement) string {
 			continue
 		}
 		qs := captureState(q.St)
-		if c, ok := r.obs.finality.Compare(o.Finality.Rule, o.Finality.State, qs); ok && c >= 0 {
+		rules := r.rulesFor(o.Finality)
+		if c, ok := rules.Compare(o.Finality.Rule, o.Finality.State, qs); ok && c >= 0 {
 			continue // not later
-		} else if !ok && qs == o.Finality.State {
+		} else if !ok && (qs == o.Finality.State || ordersLabels(rules, o.Finality.Rule)) {
+			// under a cited profile that orders the rule, a state it cannot place compares with nothing: not
+			// later, so no revision is asserted (§5.3.1a)
 			continue
 		}
 		return fmt.Sprintf("capture %s by %s at state %s holds different bytes for the same referent: revised before finality; this observation stays true of what it pinned",
@@ -735,7 +772,7 @@ func (r *Resolver) finalAt(st, q *wire.Statement) bool {
 	if f == nil {
 		return false
 	}
-	met, _, known := r.obs.finality.Evaluate(f.Rule, captureState(q))
+	met, _, known := r.rulesFor(f).Evaluate(f.Rule, captureState(q))
 	return known && met
 }
 
