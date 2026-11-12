@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/research-common/research-commons/internal/canon"
+	"github.com/research-common/research-commons/internal/conformance"
 	"github.com/research-common/research-commons/internal/keylog"
 	"github.com/research-common/research-commons/internal/resolve"
 )
@@ -100,4 +101,31 @@ func TestObservationReadsPinnedProfile(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestPublishOneClassPerStatement: C-core-35 through the writer. A draft `observed` asserting two classes (one blob
+// mixing chain state and an API read) is refused before signing: intrinsic, malformed statement, scope this
+// statement only, the text says to publish separate blobs, and nothing is pinned or appended. Control: the same
+// draft with one class publishes.
+func TestPublishOneClassPerStatement(t *testing.T) {
+	conformance.Covers(t, "C-core-35")
+	p := newPubWorld(t)
+	draft := func(class string) string {
+		return `{"kind":"observed","body":{"content":{"digest":"` + dig("mixed") + `","size":5},"class":` + class +
+			`,"referent":{"endpoint":"https://api.example/x","parameters":{},"response_digest":"` + dig("mixed") +
+			`"},"capture":{"at":"2026-01-02T00:00:00Z","evidence":"self-asserted"}}}`
+	}
+	before := snapshot(t, p.root)
+	r := p.publish("--draft", p.file("two", draft(`["exact-bytes","source"]`)))
+	o := outObj(t, r)
+	if r.code != ExitDidNotStart || o.Members["class"] != canon.String("intrinsic") || o.Members["scope"] != canon.String("this statement") ||
+		o.Members["committed"] != canon.Bool(false) || !strings.Contains(r.stdout, "malformed statement") || !strings.Contains(r.stdout, "publish separate blobs") {
+		t.Fatalf("two classes: %d %s", r.code, r.stdout)
+	}
+	if snapshot(t, p.root) != before {
+		t.Fatal("a refused draft changed the store")
+	}
+	if r := p.publish("--draft", p.file("one", draft(`"source"`))); r.code != ExitOK {
+		t.Fatalf("control: %d %s", r.code, r.stdout)
+	}
 }
