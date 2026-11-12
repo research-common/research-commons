@@ -9,6 +9,8 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ## [Unreleased]
 
+## [0.5.0-alpha.3] - 2026-11-12
+
 ### Added
 - **A forked key log is shown on the read commands.** When two lines of one key name the same predecessor (two
   machines, or two processes without the writer lock, signing at once), `show`, `verify` and `explain` of a line on
@@ -97,6 +99,17 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   `no bound (incoherent line: …)`. An `anchors` statement on an incoherent line keeps only the bound its proof places (its chain position comes from the block header); its own local bound is discarded. The
   signature is still reported valid and the line is still shown with its flag. Previously the flag was displayed
   but every bound was derived as if the line were coherent.
+
+### Known issues (open at this tag)
+- Every gap in `docs/KNOWN-LIMITS.md` (L-01…L-14). The ones a first user meets:
+  - Block headers come only from a file the operator obtains (`anchor headers sync --from`, L-02); with no header
+    database every rival construction is `contested` and a task contract with a `deadline` never reaches `ready`. (#59)
+  - A source profile orders the states an observer asserted at capture; no profile reads the state out of the
+    captured bytes yet (L-14), so a ledger-label boundary is shown `as captured, not re-checked`.
+  - There is no Windows build (L-11), and `--json` output may change between alphas (L-12).
+- The identity profile is a candidate and inactive (L-07): an `rc/2` line reads as `unsupported`. Activation is
+  planned for the next alpha after a review round.
+- The `next-format` issues are requirements for later stages, not defects in this release.
 
 ## [0.5.0-alpha.2] - 2026-11-11
 
@@ -732,7 +745,8 @@ contributions, landed on top of that baseline.
 - **#12** — COMMONS.md review request from an external hub: the first outside use of the
   template and rubric.
 
-[Unreleased]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.2...next
+[Unreleased]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.3...next
+[0.5.0-alpha.3]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.2...v0.5.0-alpha.3
 [0.5.0-alpha.2]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.1...v0.5.0-alpha.2
 [0.5.0-alpha.1]: https://github.com/research-common/research-commons/releases/tag/v0.5.0-alpha.1
 [0.4.0-alpha.1]: https://github.com/research-common/research-commons/compare/v0.3.0-alpha.1...v0.4.0-alpha.1
