@@ -158,7 +158,7 @@ func TestResignVectors(t *testing.T) {
 // TestEquivalentEncodings: V1's three published encodings are one statement with one id, and the reader
 // stores the canonical one whichever arrived (§4).
 func TestEquivalentEncodings(t *testing.T) {
-	conformance.Partial(t, "C-core-10", "second delivery as a no-op (one log line, one count) needs the log and projections")
+	conformance.Partial(t, "C-core-10", "wire half: one id per body, stored canonical; the delivery outcome is internal/cli.TestPullEquivalentEncodingsOneStatement")
 	conformance.Partial(t, "P-02", "counts not multiplying needs projections; this checks one id per body at the wire layer")
 	v := vectors(t)
 	v1 := v.Positive[0]

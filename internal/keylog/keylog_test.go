@@ -185,7 +185,7 @@ func TestOwnership(t *testing.T) {
 
 // TestDuplicateIsNoOp: a second delivery of a line, in another signature encoding included, is one line.
 func TestDuplicateIsNoOp(t *testing.T) {
-	conformance.Partial(t, "C-core-10", "one log line per statement whatever the encoding; one count in every projection needs projections")
+	conformance.Partial(t, "C-core-10", "log half: one line per statement whatever the encoding reaches the log; the delivery outcome is internal/cli.TestPullEquivalentEncodingsOneStatement")
 	v, _ := conformance.LoadVectors()
 	s := NewStore()
 	v1 := v.Positive[0]
