@@ -266,7 +266,7 @@ func TestOutputsDoc(t *testing.T) {
 func TestOneAnswer(t *testing.T) {
 	conformance.Partial(t, "C-core-134", "authorship, grade, disclosures and labels agree across show, list, verify and explain; corroboration status on every surface is TestCorroborationOnEverySurface")
 	conformance.Partial(t, "C-core-135", "listing exits 0 and verify exits 3, both showing contested; push is not built")
-	conformance.Partial(t, "C-core-66", "show, list, verify and explain print the full disclosure set beside every grade; the hub CI summary is the gate's surface")
+	conformance.Covers(t, "C-core-66") // with TestGradeSurfacesCarryDisclosures: the surfaces that print a grade, and only those
 	w := fixture(t)
 	listing := jsonOf(t, w.run("list", "--json"))
 	if w.run("list").code != 0 {
@@ -528,6 +528,70 @@ func TestHelpMultiWord(t *testing.T) {
 	for _, args := range [][]string{{"help", "hub", "nope"}, {"help", "hub nope"}, {"help", "hub check extra"}} {
 		if r := runIn(d, nil, args...); r.code != 2 {
 			t.Fatalf("%q: want exit 2, got %d", args, r.code)
+		}
+	}
+}
+
+// TestGradeSurfacesCarryDisclosures: C-core-66, every surface. Over the whole sweep (every command that reads a
+// store, over every fixture ref, and the hub CI summary on the fixture as a hub) the JSON members named `grade`
+// appear only on the four view commands; every artifact-level object that has one carries the full disclosure
+// set beside it; and the commands that never print a grade (hub check, status, fsck, gc) have none anywhere, so
+// the hub CI summary is no surface that grades without disclosures. A new command or surface that adds a grade
+// without its disclosures fails here.
+func TestGradeSurfacesCarryDisclosures(t *testing.T) {
+	w := fixture(t)
+	graded := map[string]int{}
+	var walk func(cmd string, v canon.Value)
+	walk = func(cmd string, v canon.Value) {
+		switch x := v.(type) {
+		case *canon.Object:
+			if _, ok := x.Members["grade"]; ok {
+				graded[cmd]++
+				if _, art := x.Members["authorship"]; art {
+					ds, ok := x.Members["disclosures"].(*canon.Object)
+					if !ok {
+						t.Errorf("%s: an artifact object has a grade and no disclosures: %s", cmd, canon.Encode(x))
+					} else {
+						for _, name := range resolve.Disclosures {
+							if _, ok := ds.Members[name]; !ok {
+								t.Errorf("%s: disclosure %s missing beside the grade", cmd, name)
+							}
+						}
+					}
+				}
+			}
+			for _, k := range x.Keys {
+				walk(cmd, x.Members[k])
+			}
+		case canon.Array:
+			for _, e := range x {
+				walk(cmd, e)
+			}
+		}
+	}
+	for _, a := range sweepArgs(w) {
+		r := w.run(append(a, "--json")...)
+		if r.code == ExitDidNotStart {
+			continue
+		}
+		walk(a[0], jsonOf(t, r))
+		if h := w.run(a...); strings.Contains(h.stdout, "\ngrade: ") && !strings.Contains(h.stdout, "\ndisclosures:") {
+			t.Errorf("%v: the human surface prints a grade and no disclosures", a)
+		}
+	}
+	for cmd, n := range graded {
+		if !viewCommands[cmd] {
+			t.Errorf("%s prints %d grade member(s) but is not one of the four view commands", cmd, n)
+		}
+	}
+	for _, cmd := range []string{"show", "list", "verify", "explain"} {
+		if graded[cmd] == 0 {
+			t.Errorf("%s printed no grade over the fixture: the check saw nothing", cmd)
+		}
+	}
+	for _, a := range [][]string{{"hub", "check"}, {"status"}, {"fsck"}, {"gc"}} {
+		if o := w.run(append(a, "--json")...); strings.Contains(o.stdout, `"grade"`) {
+			t.Errorf("%v prints a grade", a)
 		}
 	}
 }
