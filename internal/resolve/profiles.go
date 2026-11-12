@@ -287,6 +287,16 @@ func (b BoundRules) Check(rule string, s State) (met bool, final string, why str
 	return si >= ri, l, ""
 }
 
+// underProfile names the source profile that ordered an ordered-label rule's states, for a history line; "" when
+// no profile did (a depth rule, or rules not bound to a profile).
+func underProfile(rules FinalityRules, rule string) string {
+	b, ok := rules.(BoundRules)
+	if !ok || b.Profile == nil || b.Profile.Dialect != DialectOrderedLabel || !reLabelRule.MatchString(rule) {
+		return ""
+	}
+	return " under source profile " + keylog.Short(b.Profile.Digest)
+}
+
 func stateKind(s State) string {
 	switch {
 	case s.HasDepth:
