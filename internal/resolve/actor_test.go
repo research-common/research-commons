@@ -148,7 +148,9 @@ func TestActorTrustSeam(t *testing.T) {
 	ap := pol(t, nil, []*canon.Object{trustIdentity([]string{"attestation"})})
 	gf := &actorFake{}
 	gf.set(g.ids, "BR", policy.ActorEligible)
-	gf.set(g.ids, "BR2", policy.ActorDenied)
+	// BR2 acts, eligibly, for another identity: it runs (the counting gate) and the `{identity: I}` entry does not
+	// trust it (the trust seam). Trust never decides what counts.
+	gf.rows[g.ids["BR2"]] = actorRow{strings.Repeat("cd", 32), policy.ActorEligible}
 	none := g.store(nil, WithPolicy(ap)).Artifact(dig("X"))
 	has(t, none.Render(), "your trust in this key: trust for attestation of")
 	has(t, none.Render(), "identity profile is not active")
@@ -160,6 +162,12 @@ func TestActorTrustSeam(t *testing.T) {
 	if hook.Step != none.Step || hook.Outcome() != none.Outcome() {
 		t.Fatalf("trust moved a grade: %s %s", none.Step, hook.Step)
 	}
+	// a reproduced run whose actor is denied counts toward nothing in the group, whatever the policy (the counting
+	// gate, as for corroboration above): it is not a run
+	gf.rows[g.ids["BR2"]] = actorRow{actorI, policy.ActorDenied}
+	denied := g.store(nil, WithPolicy(ap), WithActorEligibility(gf)).Artifact(dig("X"))
+	hasNot(t, denied.Render(), "reproduced "+keylog.Short(g.ids["BR2"]))
+	has(t, denied.Render(), "reproduced "+keylog.Short(g.ids["BR"]))
 }
 
 // TestActorHookAbsentIsToday: no hook, a nil hook, and a hook under a key-only policy render every view exactly
