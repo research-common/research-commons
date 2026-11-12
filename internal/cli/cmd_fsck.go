@@ -26,7 +26,7 @@ func init() {
 				return nil
 			}}},
 		Store: true, Before: fsckBefore,
-		Help: "Exit 0 no fatal finding (housekeeping findings are listed), 1 a fatal finding (corruption, an invalid statement, an unresolved reference a record promised, drift), 2 did not start (an unknown projection), 3 the check failed after it started.",
+		Help: "Every fork of a held key log is listed under log_forks (FORK with its tips, or merged with the clearing line): informational, never a finding. Exit 0 no fatal finding (housekeeping findings are listed), 1 a fatal finding (corruption, an invalid statement, an unresolved reference a record promised, drift), 2 did not start (an unknown projection), 3 the check failed after it started.",
 		Run:  fsckCmd})
 }
 
