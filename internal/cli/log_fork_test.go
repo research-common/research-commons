@@ -64,7 +64,10 @@ func logForks(t *testing.T, r result) []*canon.Object {
 	return out
 }
 
-func memberStr(o *canon.Object, k string) string { s, _ := o.Members[k].(canon.String); return string(s) }
+func memberStr(o *canon.Object, k string) string {
+	s, _ := o.Members[k].(canon.String)
+	return string(s)
+}
 
 func memberStrs(o *canon.Object, k string) []string {
 	var out []string
