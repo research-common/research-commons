@@ -103,14 +103,12 @@ func TestFetchByteExact(t *testing.T) {
 	}
 }
 
-// TestFetchHintNextLocation: C-core-118, C-core-119. Two holds for one blob; the first location returns wrong
+// TestFetchHintNextLocation: C-core-118, C-core-119 at the store (through the commands: internal/cli TestFetchHintThroughCommand). Two holds for one blob; the first location returns wrong
 // bytes, the second the right ones. Wrong bytes are refused (hash mismatch, intrinsic), the second succeeds;
 // the first holder's word is never content. Before the fetch, availability is the holder's word; after, the
 // external hold is equivalent to a local one; on the variant, the hold is labelled unavailable (hash
 // mismatch).
 func TestFetchHintNextLocation(t *testing.T) {
-	conformance.Partial(t, "C-core-118", "wrong bytes refused (hash mismatch, intrinsic), next location tried and succeeds, the first holder's word never treated as content: checked at the store; which holds statement is listed first on the command is the resolver's holders list")
-	conformance.Partial(t, "C-core-119", "availability before fetch shown as the holder's word; fetched-and-verified is equivalent to a local blob; the variant is labelled unavailable (hash mismatch): checked at the store; the printed command surface is later")
 	root := t.TempDir()
 	s := open(t, root, Options{NoSync: true})
 	data := []byte("the real dataset bytes")

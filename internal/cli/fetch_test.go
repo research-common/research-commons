@@ -483,3 +483,59 @@ func TestFetchInputsScopedToWhatIsHeld(t *testing.T) {
 		}
 	}
 }
+
+// TestFetchHintThroughCommand: C-core-118 and C-core-119 through the commands. Two `holds` for one blob, the first
+// location serving wrong bytes, the second the right ones. Before any fetch, show says the bytes are not held
+// here and lists both holders (their word, nothing authenticated); fetch refuses the wrong bytes (hash mismatch,
+// intrinsic), takes the second, and the blob is then held and verified, equal to a local one (show: held here);
+// with only the lying location the hold is labelled unavailable (hash mismatch), the blob stays not held and the
+// store is unchanged.
+func TestFetchHintThroughCommand(t *testing.T) {
+	conformance.Covers(t, "C-core-118", "C-core-119")
+	good, bad := []byte("the real dataset bytes"), []byte("the evil dataset bytes")
+	d := shaB(good)
+	w := newWorld(t)
+	h1 := w.holds("H1", "K1", good, len(good), "https://liar.example/blob")
+	h2 := w.holds("H2", "K2", good, len(good), "https://honest.example/blob")
+	before := w.run("show", d).stdout
+	if !strings.Contains(before, "bytes: not held here") || !strings.Contains(before, w.signer("K1")) || !strings.Contains(before, w.signer("K2")) {
+		t.Fatalf("before the fetch:\n%s", before)
+	}
+	// only the liar: refused, labelled, nothing installed
+	w1 := newWorld(t)
+	w1.holds("H1", "K1", good, len(good), "https://liar.example/blob")
+	snap := snapshot(t, filepath.Join(w1.root, "blobs"))
+	f, _, _ := counting(store.MapTransport{"https://liar.example/blob": bad})
+	r := runFetch(w1.root, f, "fetch", d, "--json")
+	row := fetchRows(t, r)[0]
+	if r.code != 1 || stateOf(row) != store.StateMismatch || attemptsOf(row)[0].Members["class"] != canon.String("intrinsic") ||
+		snapshot(t, filepath.Join(w1.root, "blobs")) != snap {
+		t.Fatalf("liar only: %d %s", r.code, r.stdout)
+	}
+	if !strings.Contains(w1.run("show", d).stdout, "bytes: not held here") {
+		t.Fatal("a refused fetch left the blob held")
+	}
+	// both: the liar is tried and refused, the honest one serves
+	// locations are tried in statement-id order (TestFetchMismatchExits), so the liar is whichever holds sorts first
+	liar, honest := "https://liar.example/blob", "https://honest.example/blob"
+	if h2 < h1 {
+		liar, honest = honest, liar
+	}
+	f, _, seen := counting(store.MapTransport{liar: bad, honest: good})
+	r = runFetch(w.root, f, "fetch", d, "--json")
+	row = fetchRows(t, r)[0]
+	states := []string{}
+	for _, a := range attemptsOf(row) {
+		states = append(states, stateOf(a))
+	}
+	if r.code != 0 || stateOf(row) != store.StateFetched || len(states) != 2 || states[0] != store.StateMismatch || states[1] != store.StateFetched {
+		t.Fatalf("both locations: %d %v (asked %v)\n%s", r.code, states, *seen, r.stdout)
+	}
+	if !bytes.Equal(blobBytes(t, w.root, d), good) {
+		t.Fatal("the installed bytes are not the verified ones")
+	}
+	after := w.run("show", d).stdout
+	if !strings.Contains(after, "bytes: held here") || !strings.Contains(after, w.signer("K1")) {
+		t.Fatalf("after the fetch:\n%s", after)
+	}
+}
