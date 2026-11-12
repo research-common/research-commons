@@ -361,7 +361,6 @@ func TestFetchNoTransport(t *testing.T) {
 // reused: fetch reports the corrupt copy, replaces it with verified bytes from a holds, and moves the corrupt
 // file to quarantine; with no location it is reported and left in place, exit 3.
 func TestFetchCorruptReplaced(t *testing.T) {
-	conformance.Partial(t, "C-core-123", "fetch (the command) detects a corrupt local copy, refuses to reuse it, re-fetches the verified bytes and quarantines the corrupt file, or reports it with exit 3 when no location serves it; `run` refusing a corrupt input needs the runner")
 	w := newWorld(t)
 	data := []byte("intact")
 	d := w.blob("v", data)

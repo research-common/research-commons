@@ -239,7 +239,6 @@ func TestFetchUnreachableAndAll(t *testing.T) {
 // filename: a fetch that would reuse it detects the mismatch before reuse, refuses the corrupt copy and
 // re-fetches; with nowhere to fetch from, it reports and the corrupt copy is never read.
 func TestFetchCorruptLocalCopy(t *testing.T) {
-	conformance.Partial(t, "C-core-123", "a fetch that would reuse a corrupt local copy detects it first, refuses it, re-fetches and quarantines the corrupt file; with no hold it reports (and OpenBlob refuses to read it): checked; `run` refusing the corrupt input needs the runner")
 	root := t.TempDir()
 	s := open(t, root, Options{NoSync: true})
 	data := []byte("blob that will rot")
