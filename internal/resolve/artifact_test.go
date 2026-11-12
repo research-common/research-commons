@@ -284,7 +284,6 @@ func TestRivalLicence(t *testing.T) {
 // superseded; both lines stay in their own logs.
 func TestTwoClaimantsContested(t *testing.T) {
 	conformance.Covers(t, "C-core-18")
-	conformance.Partial(t, "C-core-08", "one blob and both lines kept in their own logs, in the resolver; the blob store half needs store+pull")
 	w := newWorld(t)
 	w.authored("A1", "A", "X")
 	w.authored("B1", "BB", "X")
@@ -380,7 +379,6 @@ func TestVerifiedPriority(t *testing.T) {
 // explain lists C's statements as held, not as inputs.
 func TestNonInterference(t *testing.T) {
 	conformance.Covers(t, "C-core-05")
-	conformance.Partial(t, "C-core-13", "defaults, grade and verify exit unchanged by an unknown kind; membership and corroboration land with their views")
 	base := newWorld(t)
 	base.authored("A1", "A", "X", "licence", "CC0-1.0")
 	before := base.store(nil).Artifact(dig("X"))
@@ -456,7 +454,6 @@ func TestDisclosuresMissing(t *testing.T) {
 // standing, claims §4.1). A's authored on a branch its revocation does not include counts toward nothing: B's
 // claim is the sole author, and A's line is still shown, attributed, with why.
 func TestKeyEventsReachAuthorship(t *testing.T) {
-	conformance.Partial(t, "C-core-143a", "edition approvals (resource_test) and authorship here; quorum uses land with tasks")
 	w := newWorld(t)
 	w.authored("A0", "A", "Y")
 	fork, seq := w.head["A"], w.seq["A"]

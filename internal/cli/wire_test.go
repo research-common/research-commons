@@ -367,7 +367,7 @@ func releaseWorld(t *testing.T) (w *world, b, keyFile string) {
 // held here and the holds statements (serving and withdrawn) are both in the log; with no usable key nothing
 // is committed or deleted. --grace for one run is printed in the plan.
 func TestGCRelease(t *testing.T) {
-	conformance.Partial(t, "C-core-145", "through the command: (a) gc keeps B and names the serving holds, (b) gc --release commits the withdrawal and deletes B, show then says not held here and both holds are listed, (d) no usable key: nothing committed or deleted; (c) crash and (e) are the store's and the wire schema's (internal/store)")
+	conformance.Covers(t, "C-core-145") // (a), (b), (d) here; (c) crash at every release point: internal/store TestReleaseCrash; (e) below
 	conformance.Partial(t, "C-core-146", "through the command: (c) gc --grace for one run is used and printed in the plan; the policy-window floor, (a), (b) and (d) are the store's (internal/store) or need history and publish")
 	w, b, keyFile := releaseWorld(t)
 	blobPath := filepath.Join(w.root, "blobs", "sha256", strings.TrimPrefix(b, "sha256:"))
@@ -428,6 +428,25 @@ func TestGCRelease(t *testing.T) {
 	}
 	if strings.Contains(r.stdout+show.stdout, hex.EncodeToString([]byte{})+`"seed"`) {
 		t.Fatal("key material printed")
+	}
+	// (e) a holds carrying both withdrawn: true and locations is intrinsic, malformed statement, at pull
+	src := newWorld(t)
+	src.blob("E", []byte("E"))
+	bad, _ := wire.Sign(wire.Draft{Kind: "holds", Seq: 0, TS: "2026-10-16T02:00:00Z",
+		Body: obj("content", canon.Value(content("E")), "withdrawn", true, "locations", []string{"https://mirror.example/e"})}, src.key("OPR"))
+	pkg := t.TempDir()
+	copyData(t, src.root, pkg)
+	_, id := wire.Sign(wire.Draft{Kind: "holds", Seq: 0, TS: "2026-10-16T02:00:00Z",
+		Body: obj("content", canon.Value(content("E")), "withdrawn", true, "locations", []string{"https://mirror.example/e"})}, src.key("OPR"))
+	sp := filepath.Join(pkg, stmtPath(src.signer("OPR"), id))
+	os.MkdirAll(filepath.Dir(sp), 0o755)
+	os.WriteFile(sp, bad, 0o644)
+	dst := newWorld(t)
+	rr := dst.run("pull", pkg, "--json")
+	row := refusedRow(t, rr)
+	if rr.code != 1 || row.Members["class"] != canon.String("intrinsic") || row.Members["reason"] != canon.String("malformed statement") ||
+		!strings.Contains(string(row.Members["detail"].(canon.String)), "withdrawn") {
+		t.Fatalf("(e): %d %s", rr.code, canon.Encode(row))
 	}
 }
 

@@ -361,7 +361,6 @@ func TestGCCrashMidDeletion(t *testing.T) {
 // is named (C-core-145 (a)), and the reason is named. A withdrawn holds, a superseded one and another key's
 // do not pin it (with Operators set).
 func TestGCHoldsPin(t *testing.T) {
-	conformance.Partial(t, "C-core-145", "(a) gc without --release keeps the blob and names why: checked in TestGCHoldsPin; (b)-(e) in TestRelease*")
 	root := t.TempDir()
 	s := open(t, root, Options{NoSync: true})
 	op, other := testKey("OP"), testKey("OTHER")
@@ -470,7 +469,6 @@ func openedWithServing(t *testing.T, o Options) (root string, s *Store, op wire.
 // blob deleted; the blob then shows unavailable (not held locally); the earlier serving holds is still in
 // the log; the operator's current holds for the blob shows withdrawn.
 func TestReleaseOneOperation(t *testing.T) {
-	conformance.Partial(t, "C-core-145", "(a) keep and name, (b) one operation, (c) crash after the commit point, (d) signing refused: checked on the store; (e) intrinsic malformed withdrawn+locations is the wire schema's (checked in wire); the command surface that renders 'current holds shows withdrawn' is a later layer")
 	conformance.Partial(t, "P-10", "crash injection at every commit point of release as well as publish (TestReleaseCrash)")
 	root, s, op, d, hid, _ := openedWithServing(t, Options{NoSync: true})
 	res, err := s.Release(d, SignerFromKey(op, nil))
@@ -559,7 +557,6 @@ func (f *failingSigner) SignDraft(wire.Draft) ([]byte, error) {
 // under a serving holds. After the next open the withdrawal is installed and the blob is a gc candidate
 // (or already gone); Release again completes it.
 func TestReleaseCrash(t *testing.T) {
-	conformance.Partial(t, "C-core-145", "(c) crash after the commit point and before the blob is removed: checked at every point of the release; the other parts are in TestReleaseOneOperation, TestReleaseRefusals, TestGCHoldsPin")
 	conformance.Partial(t, "P-10", "crash injection at every commit point of release; process crash model")
 	points := []string{AfterBlobs, AfterRecord, AfterStatement, AfterInstall, AfterDone, AfterProject, AfterWithdrawal, AfterBlobRemoved}
 	for _, point := range points {

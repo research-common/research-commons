@@ -103,14 +103,12 @@ func TestFetchByteExact(t *testing.T) {
 	}
 }
 
-// TestFetchHintNextLocation: C-core-118, C-core-119. Two holds for one blob; the first location returns wrong
+// TestFetchHintNextLocation: C-core-118, C-core-119 at the store (through the commands: internal/cli TestFetchHintThroughCommand). Two holds for one blob; the first location returns wrong
 // bytes, the second the right ones. Wrong bytes are refused (hash mismatch, intrinsic), the second succeeds;
 // the first holder's word is never content. Before the fetch, availability is the holder's word; after, the
 // external hold is equivalent to a local one; on the variant, the hold is labelled unavailable (hash
 // mismatch).
 func TestFetchHintNextLocation(t *testing.T) {
-	conformance.Partial(t, "C-core-118", "wrong bytes refused (hash mismatch, intrinsic), next location tried and succeeds, the first holder's word never treated as content: checked at the store; which holds statement is listed first on the command is the resolver's holders list")
-	conformance.Partial(t, "C-core-119", "availability before fetch shown as the holder's word; fetched-and-verified is equivalent to a local blob; the variant is labelled unavailable (hash mismatch): checked at the store; the printed command surface is later")
 	root := t.TempDir()
 	s := open(t, root, Options{NoSync: true})
 	data := []byte("the real dataset bytes")
@@ -202,11 +200,10 @@ func TestFetchHintNextLocation(t *testing.T) {
 	_, _ = first, second
 }
 
-// TestFetchUnreachableAndAll: C-core-120. An artifact whose inputs are held only as external holds; one
+// TestFetchUnreachableAndAll: C-core-120's store half (the command and the derived result's scope are internal/cli TestFetchInputsScopedToWhatIsHeld). An artifact whose inputs are held only as external holds; one
 // location unreachable. Each input is listed fetched-and-verified or unavailable (holder's word); the claim is
 // scoped to what is held; no completeness claim.
 func TestFetchUnreachableAndAll(t *testing.T) {
-	conformance.Partial(t, "C-core-120", "each input listed fetched-and-verified or unavailable (holder's word) with a scoped, non-complete summary: checked at the store (FetchAll, RenderFetch); the derived result's status line belongs to the resolver/command")
 	s := open(t, t.TempDir(), Options{NoSync: true})
 	in1, in2, in3 := []byte("input one"), []byte("input two"), []byte("input three")
 	serveHolds(t, s, "H", in1, "https://h.example/1")
@@ -242,7 +239,6 @@ func TestFetchUnreachableAndAll(t *testing.T) {
 // filename: a fetch that would reuse it detects the mismatch before reuse, refuses the corrupt copy and
 // re-fetches; with nowhere to fetch from, it reports and the corrupt copy is never read.
 func TestFetchCorruptLocalCopy(t *testing.T) {
-	conformance.Partial(t, "C-core-123", "a fetch that would reuse a corrupt local copy detects it first, refuses it, re-fetches and quarantines the corrupt file; with no hold it reports (and OpenBlob refuses to read it): checked; `run` refusing the corrupt input needs the runner")
 	root := t.TempDir()
 	s := open(t, root, Options{NoSync: true})
 	data := []byte("blob that will rot")

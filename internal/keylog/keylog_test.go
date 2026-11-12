@@ -392,7 +392,6 @@ func TestMergeWaitsForUnheldTip(t *testing.T) {
 // TestGap: C-core-143 at the log layer. seq 0–39 and 41 held: 41 is detached waiting for seq 40 of K; then
 // 40 arrives and 41 chains. Variant: 40 never arrives, nothing is refused.
 func TestGap(t *testing.T) {
-	conformance.Partial(t, "C-core-143", "detached naming seq 40 of K, chained once it arrives, no refusal while waiting: checked; the observed counting toward nothing and the edition not applied need the resolver")
 	k := key("K")
 	ls := chain(k, 42)
 	s := NewStore()

@@ -263,3 +263,85 @@ func TestDryRunTakesNoLock(t *testing.T) {
 	}
 
 }
+
+// sameContentHelperEnv: a test run re-executes this binary with it set; TestSameContentHelper then acts as one
+// publisher (its own key) of one shared content file, and prints the command's exit and JSON.
+const sameContentHelperEnv = "RC_TEST_SAME_CONTENT_HELPER"
+
+func TestSameContentHelper(t *testing.T) {
+	spec := os.Getenv(sameContentHelperEnv)
+	if spec == "" {
+		t.Skip("helper process only")
+	}
+	f := strings.Split(spec, "|") // root|keyfile|contentfile|hold-ms
+	hold, _ := strconv.Atoi(f[3])
+	afterHead = func() { time.Sleep(time.Duration(hold) * time.Millisecond) }
+	r := runIn(f[0], nil, "publish", "--key", f[1], "--json", "--kind", "authored", "--content", f[2], "--licence", "CC0-1.0", "--description", "x")
+	fmt.Printf("PUBLISH-EXIT %d %s\n", r.code, r.stdout)
+	os.Exit(0)
+}
+
+// TestConcurrentSameContentPublish: C-core-128 through the command. Two OS processes, with two different keys,
+// publish the same content into one store at the same time (each held after its head is read, so the commits
+// overlap). Each completes, or reports the object already committed; afterwards the store holds exactly one
+// blob under its full hash and two authored statements (one per key, each in its own log), the blob's bytes are
+// the content's, no pending record is left, fsck is clean, and the reader shows both claimants (contested), not
+// a lost or overwritten one.
+func TestConcurrentSameContentPublish(t *testing.T) {
+	conformance.Covers(t, "C-core-128")
+	p := newPubWorld(t)
+	dir := t.TempDir()
+	content := []byte("the very same dataset bytes, published twice at once")
+	cf := filepath.Join(dir, "content.bin")
+	os.WriteFile(cf, content, 0o644)
+	k2, s2 := newKeyFile(t, dir, "eip191-secp256k1")
+	keys := []string{p.key, k2}
+	var cmds [2]*exec.Cmd
+	var outs [2]bytes.Buffer
+	for i := range cmds {
+		cmd := exec.Command(os.Args[0], "-test.run=^TestSameContentHelper$")
+		cmd.Env = append(os.Environ(), sameContentHelperEnv+"="+strings.Join([]string{p.root, keys[i], cf, "200"}, "|"))
+		cmd.Stdout, cmd.Stderr = &outs[i], &outs[i]
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+		cmds[i] = cmd
+	}
+	for i, cmd := range cmds {
+		if err := cmd.Wait(); err != nil {
+			t.Fatalf("publisher %d: %v\n%s", i, err, outs[i].String())
+		}
+		o := outs[i].String()
+		if !strings.Contains(o, "PUBLISH-EXIT 0 ") && !strings.Contains(o, "already") {
+			t.Fatalf("publisher %d neither completed nor reported the object already committed:\n%s", i, o)
+		}
+	}
+	d := dig(string(content))
+	blobs, stmts := dataObjects(t, p.root)
+	if len(blobs) != 1 || filepath.Base(blobs[0]) != strings.TrimPrefix(d, "sha256:") {
+		t.Fatalf("blobs %v, want exactly %s", blobs, d)
+	}
+	if got := mustRead(t, filepath.Join(p.root, blobs[0])); !bytes.Equal(got, content) {
+		t.Fatal("the committed blob's bytes were overwritten")
+	}
+	authored := 0
+	for _, s := range stmts {
+		b := mustRead(t, filepath.Join(p.root, s))
+		if strings.Contains(string(b), `"kind":"authored"`) {
+			authored++
+		}
+	}
+	if authored != 2 {
+		t.Fatalf("%d authored statements, want 2 (one per key)", authored)
+	}
+	if r := p.run("fsck", "--json"); r.code != 0 {
+		t.Fatalf("fsck after the race: %d %s", r.code, r.stdout)
+	}
+	if ents, _ := os.ReadDir(filepath.Join(p.root, "pending")); len(ents) != 0 {
+		t.Fatalf("pending records left: %v", ents)
+	}
+	sh := p.run("show", d)
+	if !strings.Contains(sh.stdout, "authorship: contested") || !strings.Contains(sh.stdout, p.signer) || !strings.Contains(sh.stdout, s2) {
+		t.Fatalf("both claimants are not shown:\n%s", sh.stdout)
+	}
+}

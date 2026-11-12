@@ -186,7 +186,6 @@ func TestEquivalentEncodings(t *testing.T) {
 
 // TestDeliveredNegatives: N1–N4 are bytes handed to the reader as stored lines.
 func TestDeliveredNegatives(t *testing.T) {
-	conformance.Partial(t, "C-core-12", "refusal at pull, no line in any log, state digest unchanged: needs pull and the log")
 	v := vectors(t)
 	want := map[string]struct {
 		class  refusal.Class
@@ -237,7 +236,6 @@ func TestN5WrongLog(t *testing.T) {
 
 // TestSignedStringNegatives: N6–N13 and NE13 pair a signed string with a signature.
 func TestSignedStringNegatives(t *testing.T) {
-	conformance.Partial(t, "C-core-09", "this flips one field (N7); the full case flips every field and runs at pull with the parsed digest logged")
 	v := vectors(t)
 	byName := map[string]conformance.Vector{}
 	for _, x := range append(append([]conformance.Vector{}, v.Negative...), v.EdNegative...) {

@@ -244,3 +244,42 @@ func TestEmptyImageAllowlistAdmitsNothing(t *testing.T) {
 		t.Fatalf("absent allowlist: exit %d, spawned %d\n%s", r.code, f.Spawned, r.stdout)
 	}
 }
+
+// TestRerunRefusesCorruptStoredBlob: C-core-123's run half. In the pinned store, one at a time, the workflow spec,
+// the code and the pinned input are overwritten in place (same file name, wrong bytes). verify --rerun reuses
+// none of them: nothing is spawned, the result is could-not-check (exit 3) naming the blob that is not usable,
+// no output is reported as a match, and the corrupt bytes are never read as the blob's content. A control with
+// every blob intact runs and matches.
+func TestRerunRefusesCorruptStoredBlob(t *testing.T) {
+	conformance.Covers(t, "C-core-123")
+	control := newPinned(t)
+	cf := fake(catStep)
+	if r := control.verify(&Bridge{Runner: cf}, control.output, "--rerun", "--exec-policy", control.policy); r.code != 0 || cf.Spawned != 1 {
+		t.Fatalf("control: exit %d spawned %d\n%s", r.code, cf.Spawned, r.stdout)
+	}
+	for _, name := range []string{"spec", "code", "input"} {
+		t.Run(name, func(t *testing.T) {
+			p := newPinned(t)
+			digest := map[string]string{"spec": p.spec.Digest, "code": run.Digest([]byte("code:s")), "input": run.Digest([]byte("input-v1"))}[name]
+			path := filepath.Join(p.root, "blobs", "sha256", strings.TrimPrefix(digest, "sha256:"))
+			if _, err := os.Stat(path); err != nil {
+				t.Fatalf("fixture: %v", err)
+			}
+			os.Chmod(path, 0o644)
+			if err := os.WriteFile(path, []byte("rotten bytes, same name"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			f := fake(catStep)
+			r := p.verify(&Bridge{Runner: f}, p.output, "--rerun", "--exec-policy", p.policy)
+			if r.code != 3 || f.Spawned != 0 {
+				t.Fatalf("a corrupt %s: exit %d spawned %d\n%s", name, r.code, f.Spawned, r.stdout)
+			}
+			if !strings.Contains(r.stdout, digest) || strings.Contains(r.stdout, `"state":"match"`) || !strings.Contains(r.stdout, "not held here") {
+				t.Fatalf("a corrupt %s is not named as unusable:\n%s", name, r.stdout)
+			}
+			if got, _ := os.ReadFile(path); string(got) != "rotten bytes, same name" {
+				t.Fatal("the corrupt copy was modified by a read-only verify")
+			}
+		})
+	}
+}

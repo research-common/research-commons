@@ -199,7 +199,6 @@ func TestRotationWaitsForMergedTip(t *testing.T) {
 // revocation is in force, reports its reason and last_good, and seq 41 is after it. Variant: 40 never
 // arrives and nothing is refused.
 func TestRevocationWaitsForGap(t *testing.T) {
-	conformance.Partial(t, "C-core-143", "revocation not in force while seq 40 is missing, in force after, seq 41 after it, no refusal while waiting: checked; the observed counting toward nothing and the edition not applied need the resolver")
 	k := key("K")
 	ls := chain(k, 40)
 	rv := revoke(k, 40, ls[39].id, "key_compromise")

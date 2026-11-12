@@ -919,7 +919,6 @@ func TestBindingsAreToEditions(t *testing.T) {
 // signed even by the controller, that names the resource, a predecessor and a member list, changes no membership
 // and no resource view: the diff before and after is empty.
 func TestUnknownKindNoMembership(t *testing.T) {
-	conformance.Partial(t, "C-core-13", "membership and the resource view unchanged by an unknown kind (here); defaults, grade and verify exit in TestNonInterference; corroboration lands with its view")
 	w := newWorld(t)
 	x := w.authored("Xa", "M", "X", "sampling", sampling(40))
 	y := w.authored("Ya", "M", "Y", "sampling", sampling(40))

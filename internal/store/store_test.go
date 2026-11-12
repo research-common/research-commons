@@ -155,7 +155,6 @@ func TestExactBytes(t *testing.T) {
 // TestCorruptReuse: C-core-123. A stored copy corrupted in place under its own name is refused on open,
 // naming both hashes; nothing reads the corrupt bytes.
 func TestCorruptReuse(t *testing.T) {
-	conformance.Partial(t, "C-core-123", "the store refuses the corrupt copy and names both hashes; re-fetch from a hold and run refusing need fetch and the runner")
 	s := open(t, t.TempDir(), Options{NoSync: true})
 	d, _, _ := s.InstallBlob(strings.NewReader("good"), "")
 	p := s.blobPath(d)
@@ -347,7 +346,6 @@ func TestProjectionFailure(t *testing.T) {
 // TestConcurrentSameBlob: C-core-128. Many goroutines publish the same bytes, two keys: one blob, one
 // statement per key (and per distinct body), nothing overwritten.
 func TestConcurrentSameBlob(t *testing.T) {
-	conformance.Partial(t, "C-core-128", "goroutines here and two OS processes in TestTwoProcesses; publish's own reporting (\"already committed\") needs publish")
 	root := t.TempDir()
 	s := open(t, root, Options{NoSync: true})
 	data := bytes.Repeat([]byte("same"), 4096)

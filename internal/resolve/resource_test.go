@@ -3,6 +3,7 @@ package resolve
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/conformance"
 	"github.com/research-common/research-commons/internal/keylog"
+	"github.com/research-common/research-commons/internal/refusal"
 	"github.com/research-common/research-commons/internal/sig"
 	"github.com/research-common/research-commons/internal/wire"
 )
@@ -452,10 +454,9 @@ func reencode(t *testing.T, line []byte) []byte {
 	return nil
 }
 
-// TestEditionFork: C-core-84 (C-core-86 resolver half; the two-hub drill through pull is internal/cli TestTwoStoreDrill). Two editions with one predecessor, by two controllers and by one
+// TestEditionFork: C-core-84's file-order half (timestamps: TestEditionForkIgnoresTimestamps), C-core-86 resolver half; the two-hub drill through pull is internal/cli TestTwoStoreDrill). Two editions with one predecessor, by two controllers and by one
 // controller twice: FORK, no tip, verify exit 3, every order alike.
 func TestEditionFork(t *testing.T) {
-	conformance.Partial(t, "C-core-84", "timestamps tied/skewed/reversed are not read by the resolver at all (no ts in resource.go); file order is covered by delivery permutations")
 	for _, twice := range []bool{false, true} {
 		w := newWorld(t)
 		g := w.genesis("G", "A", 0, "A", "B")
@@ -616,7 +617,6 @@ func TestLostControllerKey(t *testing.T) {
 // revoke_key, seq n+1 an edition. Without seq n the edition is detached and not evaluated (tip unchanged);
 // when seq n arrives, the edition is evaluated under it: after the revocation, so it does not count.
 func TestDetachedEditionWaitsForRevocation(t *testing.T) {
-	conformance.Partial(t, "C-core-143", "the edition half at the resolver; the observed half needs observation resolution, and package scope needs pull")
 	w := newWorld(t)
 	g := w.genesis("G", "K", 0, "K")
 	e1 := w.edition("E1", "K", g, []string{g}, []string{"a"})
@@ -736,7 +736,6 @@ func genHistory(t *testing.T, seed uint64) *world {
 // The edition is contested (it would be authorized but for the key event), never current; E1, in the
 // revocation's history, keeps counting.
 func TestRevocationBranchR3(t *testing.T) {
-	conformance.Partial(t, "C-core-143a", "edition approvals; priority and quorum uses of the sibling rule land with slice 2")
 	for _, reason := range []string{"key_compromise", "superseded"} {
 		w := newWorld(t)
 		g := w.genesis("G", "K", 0, "K")
@@ -791,7 +790,7 @@ func TestRevocationReachesBackwards(t *testing.T) {
 // TestHardSoftAndUnknownReasons: C-core-143c. With last_good = seq 3 of a 6-line history, a hard reason
 // (key_compromise, unspecified, an undocumented token) cuts seq 4–5; a soft one keeps them.
 func TestHardSoftAndUnknownReasons(t *testing.T) {
-	conformance.Partial(t, "C-core-143c", "(e) the malformed token is wire.TestRevokeReasonToken; here (a)–(d) on edition approvals")
+	conformance.Covers(t, "C-core-143c")
 	for _, c := range []struct {
 		reason string
 		hard   bool
@@ -815,6 +814,24 @@ func TestHardSoftAndUnknownReasons(t *testing.T) {
 			wantCurrent(t, res, e5)
 		}
 	}
+	// (e) a token outside the pattern is refused at the reader, intrinsic, malformed statement, and the line is
+	// never delivered into the log: no revocation of any force comes of it, and the history counts in full
+	w := newWorld(t)
+	g := w.genesis("G", "K", 0, "K")
+	e1 := w.edition("E1", "K", g, []string{g}, []string{"a"})
+	lg := w.head["K"]
+	e2 := w.edition("E2", "K", g, []string{e1}, []string{"b"})
+	line, _ := wire.Sign(wire.Draft{Kind: "revoke_key", Seq: w.seq["K"], Prev: w.head["K"], TS: "2026-10-16T03:00:00Z",
+		Body: obj("reason", "Key-Compromise", "last_good", lg)}, w.key("K"))
+	s := newTestStore()
+	_, err := s.Read(line)
+	var rf *refusal.Refusal
+	if !errors.As(err, &rf) || rf.Class != refusal.Intrinsic || rf.Reason != refusal.MalformedStatement {
+		t.Fatalf("(e) Key-Compromise: %v", err)
+	}
+	res, _ := w.resolve(g, nil)
+	wantState(t, res, e2, Authorized, "")
+	wantCurrent(t, res, e2)
 }
 
 // TestLastGoodAndSeveralRevocations: C-core-143d.

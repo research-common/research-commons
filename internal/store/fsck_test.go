@@ -14,7 +14,6 @@ import (
 // TestFsckClasses: §6.3. Each class is reported separately, an intact store reports none of the fatal ones and
 // says what it scanned, and fsck changes nothing authoritative.
 func TestFsckClasses(t *testing.T) {
-	conformance.Partial(t, "C-core-123", "fsck names a corrupt copy (hashes to …) and --quarantine moves it; fetch re-fetches (TestFetchCorruptLocalCopy); run refusing needs the runner")
 	conformance.Partial(t, "C-core-125", "status/fsck list pending and done records and the missing-blob state (committed, needs repair: blob … missing); the publish-level steps remain a later layer")
 	conformance.Partial(t, "C-core-126", "a committed operation whose blob went missing is reported committed, needs repair and repair does not invent it; the index projection remains a later layer")
 	root := t.TempDir()

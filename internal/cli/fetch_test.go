@@ -361,7 +361,6 @@ func TestFetchNoTransport(t *testing.T) {
 // reused: fetch reports the corrupt copy, replaces it with verified bytes from a holds, and moves the corrupt
 // file to quarantine; with no location it is reported and left in place, exit 3.
 func TestFetchCorruptReplaced(t *testing.T) {
-	conformance.Partial(t, "C-core-123", "fetch (the command) detects a corrupt local copy, refuses to reuse it, re-fetches the verified bytes and quarantines the corrupt file, or reports it with exit 3 when no location serves it; `run` refusing a corrupt input needs the runner")
 	w := newWorld(t)
 	data := []byte("intact")
 	d := w.blob("v", data)
@@ -436,5 +435,106 @@ func TestFetchDryRun(t *testing.T) {
 	// the same plan with no transport in the build says so, and still exits 0
 	if r := w.run("fetch", "--dry-run", shaB(far), "--json"); r.code != 0 || stateOf(fetchRows(t, r)[0]) != "unavailable (no transport in this build)" {
 		t.Fatalf("dry run, no transport: %d %s", r.code, r.stdout)
+	}
+}
+
+// TestFetchInputsScopedToWhatIsHeld: C-core-120 through the commands. A synthesis whose three inputs are held only
+// as external `holds`, one location reachable, one dead, one naming none: `fetch` lists each input as
+// fetched-and-verified or unavailable (the holder's word, or not held locally) and says the result is scoped to
+// what is held with no completeness claim; the derived result's own show/verify/explain print the scope footer
+// and every inputs-summary line scoped "within statements you hold"; no surface says the inputs are complete.
+func TestFetchInputsScopedToWhatIsHeld(t *testing.T) {
+	conformance.Covers(t, "C-core-120")
+	w := newWorld(t)
+	w.blob("wf", []byte("wf"))
+	w.workflow("K1", "wf", "bytes", "")
+	w.holds("H:in0", "K3", []byte("in0"), 3, "https://h.example/in0")
+	w.holds("H:in1", "K3", []byte("in1"), 3, "https://h.example/in1-dead")
+	w.holds("H:in2", "K3", []byte("in2"), 3) // the holder's word only: no location
+	w.blob("syn", []byte("syn"))
+	w.authored("S", "K1", "syn", "type", "synthesis", "prov", []string{"wf", "in0", "in1", "in2"})
+	f, _, _ := counting(store.MapTransport{"https://h.example/in0": []byte("in0")})
+	r := runFetch(w.root, f, "fetch", shaB([]byte("in0")), shaB([]byte("in1")), shaB([]byte("in2")), "--json")
+	rows := fetchRows(t, r)
+	got := []string{stateOf(rows[0]), stateOf(rows[1]), stateOf(rows[2])}
+	if r.code != 3 || got[0] != store.StateFetched || !strings.HasPrefix(got[1], "unavailable (holder's word") || got[2] != store.StateNotHeld {
+		t.Fatalf("per-input states %v exit %d\n%s", got, r.code, r.stdout)
+	}
+	sum := string(jsonOf(t, r).Members["summary"].(canon.String))
+	if !strings.Contains(sum, "1 of 3") || !strings.Contains(sum, "no completeness claim") {
+		t.Fatalf("fetch summary: %q", sum)
+	}
+	d := dig("syn")
+	for _, cmd := range []string{"show", "verify", "explain"} {
+		o := w.run(cmd, d)
+		if !strings.HasSuffix(o.stdout, "status scope: within statements you hold\n") {
+			t.Fatalf("%s lacks the scope footer:\n%s", cmd, o.stdout)
+		}
+		for _, bad := range []string{"complete", "all inputs"} {
+			if strings.Contains(strings.ReplaceAll(o.stdout, "no completeness claim", ""), bad) {
+				t.Fatalf("%s makes a completeness claim (%q):\n%s", cmd, bad, o.stdout)
+			}
+		}
+	}
+	for _, line := range strings.Split(w.run("show", d).stdout, "\n") {
+		if strings.Contains(line, "inputs summary:") && !strings.Contains(line, "within statements you hold") {
+			t.Fatalf("inputs summary not scoped: %s", line)
+		}
+	}
+}
+
+// TestFetchHintThroughCommand: C-core-118 and C-core-119 through the commands. Two `holds` for one blob, the first
+// location serving wrong bytes, the second the right ones. Before any fetch, show says the bytes are not held
+// here and lists both holders (their word, nothing authenticated); fetch refuses the wrong bytes (hash mismatch,
+// intrinsic), takes the second, and the blob is then held and verified, equal to a local one (show: held here);
+// with only the lying location the hold is labelled unavailable (hash mismatch), the blob stays not held and the
+// store is unchanged.
+func TestFetchHintThroughCommand(t *testing.T) {
+	conformance.Covers(t, "C-core-118", "C-core-119")
+	good, bad := []byte("the real dataset bytes"), []byte("the evil dataset bytes")
+	d := shaB(good)
+	w := newWorld(t)
+	h1 := w.holds("H1", "K1", good, len(good), "https://liar.example/blob")
+	h2 := w.holds("H2", "K2", good, len(good), "https://honest.example/blob")
+	before := w.run("show", d).stdout
+	if !strings.Contains(before, "bytes: not held here") || !strings.Contains(before, w.signer("K1")) || !strings.Contains(before, w.signer("K2")) {
+		t.Fatalf("before the fetch:\n%s", before)
+	}
+	// only the liar: refused, labelled, nothing installed
+	w1 := newWorld(t)
+	w1.holds("H1", "K1", good, len(good), "https://liar.example/blob")
+	snap := snapshot(t, filepath.Join(w1.root, "blobs"))
+	f, _, _ := counting(store.MapTransport{"https://liar.example/blob": bad})
+	r := runFetch(w1.root, f, "fetch", d, "--json")
+	row := fetchRows(t, r)[0]
+	if r.code != 1 || stateOf(row) != store.StateMismatch || attemptsOf(row)[0].Members["class"] != canon.String("intrinsic") ||
+		snapshot(t, filepath.Join(w1.root, "blobs")) != snap {
+		t.Fatalf("liar only: %d %s", r.code, r.stdout)
+	}
+	if !strings.Contains(w1.run("show", d).stdout, "bytes: not held here") {
+		t.Fatal("a refused fetch left the blob held")
+	}
+	// both: the liar is tried and refused, the honest one serves
+	// locations are tried in statement-id order (TestFetchMismatchExits), so the liar is whichever holds sorts first
+	liar, honest := "https://liar.example/blob", "https://honest.example/blob"
+	if h2 < h1 {
+		liar, honest = honest, liar
+	}
+	f, _, seen := counting(store.MapTransport{liar: bad, honest: good})
+	r = runFetch(w.root, f, "fetch", d, "--json")
+	row = fetchRows(t, r)[0]
+	states := []string{}
+	for _, a := range attemptsOf(row) {
+		states = append(states, stateOf(a))
+	}
+	if r.code != 0 || stateOf(row) != store.StateFetched || len(states) != 2 || states[0] != store.StateMismatch || states[1] != store.StateFetched {
+		t.Fatalf("both locations: %d %v (asked %v)\n%s", r.code, states, *seen, r.stdout)
+	}
+	if !bytes.Equal(blobBytes(t, w.root, d), good) {
+		t.Fatal("the installed bytes are not the verified ones")
+	}
+	after := w.run("show", d).stdout
+	if !strings.Contains(after, "bytes: held here") || !strings.Contains(after, w.signer("K1")) {
+		t.Fatalf("after the fetch:\n%s", after)
 	}
 }
