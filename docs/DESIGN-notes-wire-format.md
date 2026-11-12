@@ -380,7 +380,7 @@ admitted, and shown `unpinned` (claims-model note §5.3.1). A kind not listed he
 | `provenance` | `workflow` digest R · `inputs` list of digest R (order preserved) · `environment` object O (the environment record's standard forms, execution note §4: `image_digest` an OCI digest, `sha256:` + 64 hex; `platform` `<os>/<arch>[/<variant>]` with Go `GOOS`/`GOARCH` and OCI variant values; `harness_commit` full lowercase commit hex) |
 | `window` | `from` ts R · `to` ts R. Half-open, `[from, to)`: an instant equal to `to` is outside. The start-and-end form of an ISO 8601 time interval and of RFC 9581 §5 periods, written as two fields so each is checked as a time value (§1.1). The same shape wherever a window appears |
 | disclosures (on `authored`, `observed`) | `licence` string O (an SPDX license expression, SPDX 3.0.1 Annex B; terms with no SPDX identifier are named by a `LicenseRef-` id whose text is cited in `licence_texts`, below. Stored as written, never case-normalised; an expression the reader cannot parse displays `unknown`, C-core-67) · `attribution` string O · `availability` object O (`redistribution` `"permitted"`/`"restricted"`/`"withheld"` R, `obtainable` boolean R, `withheld_until` string O, a condition in prose or a task or edition reference, claims-model note §7) · `replication` `"bytes"`/`"protocol"`/`"none"` O · `comparator` digest O · `sampling` object O (`n` integer R, the total · `unit` string R, e.g. `runs`, `slots`, `records` · `groups` list of {`name` string R, `n` integer R} O, one per arm, names unique · `window` O · `dispersion` object O) · `shelf_life_days` integer O · `pre_registration` `"exploratory"` or absent O · `fulfills` object O (`resource` id, `edition` edition id) · `intended_for` object O (`resource` id R, `edition` edition id R, `edition_applied` edition id R, `outcome` `"ok"`/`"unchecked"` R) · `description` string O |
-| `finality` | `rule` string R · `rule_source` string O (a digest when the document is held, else a location) · `state_at_capture` object R (`depth` integer, or `run` string, or `captured_at` ts). Depths compare as integers. A `run` label has no order of its own: two runs are ordered only by the source profile the reader resolves the rule against (claims-model note §5.3.1); otherwise two equal labels are the same state and any other pair is `not comparable`, never ordered as text. The same holds for `frozen_before.run` |
+| `finality` | `rule` string R · `rule_source` string O (a digest when the document is held, else a location) · `state_at_capture` object R (`depth` integer, or `run` string, or `captured_at` ts). Depths compare as integers. A `run` label has no order of its own: two runs are ordered only by the source profile the reader resolves the rule against (claims-model note §5.3.1); otherwise two equal labels are the same state and any other pair is `not comparable`, never ordered as text. The same holds for `frozen_before.run`. The two rule dialects the format defines (`confirmations >= N`, `run >= L`) and the source profile blob are below |
 | `licence_texts` (on `authored`, `observed`) | object O mapping each `LicenseRef-` id used in `licence` to its source, as for `rule_source`: a digest when the text is held as a blob, else a location (an RFC 3986 URI). Displayed `cited (text held)` or `cited (location only, unverified)`; an id with no entry is `cited (no source)`. Terms the author may not republish are cited by location |
 
 **Kinds**
@@ -441,6 +441,25 @@ completeness claim can name until a height window and a way to place a block has
 would be a new optional alternative (a minor change, §6). The window bounds are UTC unless `timescale` names
 another scale (§1.1); a reading whose position is recorded in a different scale is not comparable with the
 window.
+
+**Finality rules and source profiles** (claims-model note §5.3.1a). A `finality.rule` the format defines is one
+of two dialects, matched after trimming surrounding whitespace, with `≥` read as `>=`:
+`confirmations >= N` (integer depth: `N` a non-negative decimal integer of at most 18 digits, compared with
+`state_at_capture.depth`) and `run >= L` (ordered label: `L` the rest of the rule, compared with
+`state_at_capture.run` under a source profile's `labels`). Any other rule is a rule dialect this note does not
+define; a reader shows it and leaves it `unchecked`. A source profile is a blob in canonical JSON (§1); its
+digest is how a `rule_source`, a reader or a hub policy names it. A profile that is not canonical, carries an
+undefined member, or breaks a constraint below is not a profile: a reader that names it says why and uses
+nothing from it.
+
+| Object | Fields |
+|---|---|
+| source profile (a blob) | `profile` `"rc-source-profile/1"` R · `source` string R, non-empty (what the profile describes: an endpoint as `endpoint` is compared, §5, or a name) · `dialect` `"ordered-label"`/`"integer-depth"` R · `labels` list of string, R for `ordered-label` and absent for `integer-depth` (earliest state first; 1 to 4096 entries, each non-empty with no surrounding whitespace, no repeats; the list is closed: a label not in it is `not comparable`) · `documents` list of string O (what the profile is built from, each a digest when the document is held, else a location, as for `rule_source`; no repeats) · `description` string O |
+
+A `rule_source` names a profile when it equals the profile's digest or one of its `documents`. An ordered-label
+rule is evaluated only under exactly one chosen profile so named, of dialect `ordered-label`, whose `labels`
+hold `L`; a depth rule needs no profile. These are the only finality semantics a profile carries: a tolerance,
+a timetable's times or where a label sits in a response are not in `rc-source-profile/1`.
 
 **Execution objects**. The workflow spec blob and the environment record are canonical JSON
 (§1) with these members; the execution note fixes their meaning.
@@ -957,6 +976,9 @@ as an optional field (a minor change, §6) modelled on RFC 9581 §3.5.4 and FITS
 - **Content digests** (was Q5, 2026-10-14). Content hashes are OCI digests, `sha256:<hex>`; statement ids
   stay bare, because their algorithm is fixed by the major version (§8).
 - **`frozen_before`** (review, 2026-10-14). Takes the finality-state units (date, height or run) (§5).
+- **Source profiles** (2026-11, #111). Two finality dialects in the format, integer depth and ordered label, and
+  a content-addressed source profile blob (`rc-source-profile/1`, §5) that carries a labelled source's closed
+  order. Where a run label sits in a captured response is a later response-layout dialect, not a profile field.
 - **Licence texts** (review, 2026-10-14). Cited by digest when held, else by location (§5).
 - **Segments are members** (2026-10-16). `edition.contents` has no `segments` field: a segment is a member
   with role `segment`, and its boundary comes from its own statement's finality, which is what the
