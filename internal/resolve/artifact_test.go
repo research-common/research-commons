@@ -455,7 +455,6 @@ func TestDisclosuresMissing(t *testing.T) {
 // standing, claims §4.1). A's authored on a branch its revocation does not include counts toward nothing: B's
 // claim is the sole author, and A's line is still shown, attributed, with why.
 func TestKeyEventsReachAuthorship(t *testing.T) {
-	conformance.Partial(t, "C-core-143a", "edition approvals (resource_test) and authorship here; quorum uses land with tasks")
 	w := newWorld(t)
 	w.authored("A0", "A", "Y")
 	fork, seq := w.head["A"], w.seq["A"]

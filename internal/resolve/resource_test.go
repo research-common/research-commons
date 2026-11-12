@@ -736,7 +736,6 @@ func genHistory(t *testing.T, seed uint64) *world {
 // The edition is contested (it would be authorized but for the key event), never current; E1, in the
 // revocation's history, keeps counting.
 func TestRevocationBranchR3(t *testing.T) {
-	conformance.Partial(t, "C-core-143a", "edition approvals; priority and quorum uses of the sibling rule land with slice 2")
 	for _, reason := range []string{"key_compromise", "superseded"} {
 		w := newWorld(t)
 		g := w.genesis("G", "K", 0, "K")
