@@ -494,6 +494,11 @@ The claims-model note §13 defines `verify` exits; for a task it reads:
 | 0 | the current edition's readiness is `ready`, `not ready` or `settled by review`, and no decision conflict |
 | 3 | the terms are unread; readiness is `unknown` or `unchecked`; or the beneficiary's decisions conflict (C-exch-05) |
 
+Which edition is read follows the id given: `verify` of an edition id, or of the statement id of an approval of
+that edition, reads that edition's readiness; for a non-current edition it reads only the decision conflicts on
+submissions bound to it. The task's genesis id, the current edition's id or an approval of the current edition
+reads the current edition and every conflict.
+
 `not ready` exits 0: it is a completed check whose answer is "not yet", not "checked and wrong". Exit 1 stays
 reserved for a comparison that ran and disagreed (§13); a divergent submission is reported, and the task
 check is not itself a comparison. The claims-model note §13 says so.
