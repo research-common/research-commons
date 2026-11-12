@@ -456,7 +456,8 @@ nothing from it.
 |---|---|
 | source profile (a blob) | `profile` `"rc-source-profile/1"` R · `source` string R, non-empty (what the profile describes: an endpoint as `endpoint` is compared, §5, or a name) · `dialect` `"ordered-label"`/`"integer-depth"` R · `labels` list of string, R for `ordered-label` and absent for `integer-depth` (earliest state first; 1 to 4096 entries, each non-empty with no surrounding whitespace, no repeats; the list is closed: a label not in it is `not comparable`) · `documents` list of string O (what the profile is built from, each a digest when the document is held, else a location, as for `rule_source`; no repeats) · `description` string O |
 
-A `rule_source` names a profile when it equals the profile's digest or one of its `documents`. An ordered-label
+A `rule_source` names a profile when it equals the profile's digest or one of its `documents`, compared as written
+(byte for byte; no location is normalized). An ordered-label
 rule is evaluated only under exactly one chosen profile so named, of dialect `ordered-label`, whose `labels`
 hold `L`; a depth rule needs no profile. These are the only finality semantics a profile carries: a tolerance,
 a timetable's times or where a label sits in a response are not in `rc-source-profile/1`.

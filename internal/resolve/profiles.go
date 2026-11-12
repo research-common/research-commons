@@ -163,7 +163,12 @@ func inertText(s string) string {
 	return q
 }
 
-// names reports whether ruleSource names this profile: its digest, or one of its documents.
+// ProfileMatchExact is how a rule_source is matched to a profile, said wherever a match fails: byte for byte, with
+// no normalization of a location (case, a trailing slash, percent-encoding) or of a digest's spelling.
+const ProfileMatchExact = "rule_source compared as written to each profile's digest and documents"
+
+// names reports whether ruleSource names this profile: it equals, byte for byte, its digest or one of its
+// documents (ProfileMatchExact).
 func (p *SourceProfile) names(ruleSource string) bool {
 	return ruleSource != "" && (ruleSource == p.Digest || slices.Contains(p.Documents, ruleSource))
 }
@@ -211,7 +216,7 @@ func (pr ProfileRules) For(ruleSource string) BoundRules {
 	case ruleSource == "":
 		b.why = "the rule cites no rule_source, so no source profile orders its labels"
 	case len(hits) == 0:
-		b.why = "rule_source " + inertText(ruleSource) + " names no source profile this reader chose"
+		b.why = "rule_source " + inertText(ruleSource) + " names no source profile this reader chose (" + ProfileMatchExact + ")"
 	case len(hits) > 1:
 		b.why = fmt.Sprintf("rule_source %s names %d source profiles this reader chose (%s); none is picked", inertText(ruleSource), len(hits),
 			strings.Join(shortDigests(hits), ", "))

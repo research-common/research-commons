@@ -77,6 +77,23 @@ func TestSourceProfileOrderedLabel(t *testing.T) {
 			t.Errorf("%s: met %v why %q, want %+v", name, met, why, c.w)
 		}
 	}
+	// (d'') a rule_source is compared as written: a location spelled differently from the profile's document, or
+	// a digest in upper case, names no profile, and the reason says the comparison is exact
+	loc := mustProfile(t, canon.Encode(obj("profile", SourceProfileTag, "source", "https://api.example/settlement", "dialect", DialectOrderedLabel,
+		"labels", []string{"R1", "RF"}, "documents", []string{"https://api.example/timetable"})))
+	lr := NewProfileRules(loc)
+	if _, _, why := lr.For("https://api.example/timetable").Check("run >= RF", run("RF")); why != "" {
+		t.Fatalf("(d'') as written: %q", why)
+	}
+	for _, near := range []string{"https://api.example/timetable/", "HTTPS://api.example/timetable", "https://api.example/%74imetable", strings.ToUpper(loc.Digest)} {
+		_, _, why := lr.For(near).Check("run >= RF", run("RF"))
+		if want := "rule_source " + near + " names no source profile this reader chose (" + ProfileMatchExact + ")"; why != want {
+			t.Fatalf("(d'') %s: %q, want %q", near, why, want)
+		}
+	}
+	if ProfileMatchExact != "rule_source compared as written to each profile's digest and documents" {
+		t.Fatalf("the exactness clause changed: %q", ProfileMatchExact)
+	}
 	// (f) two chosen profiles named by one rule_source: unchecked, neither picked, in either order of choice
 	other := mustProfile(t, canon.Encode(obj("profile", SourceProfileTag, "source", "https://api.example/settlement", "dialect", DialectOrderedLabel,
 		"labels", []string{"RF", "SF"}, "documents", []string{timetable})))

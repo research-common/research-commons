@@ -72,6 +72,9 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   not re-checked`), and with `series.refuse_premature_freeze` on a `frozen_before` later than that bound is refused
   (exit 1) on the same evidence as a premature freeze; one at or before it stays `could not check` (exit 3). With no
   placeable provisional segment there is no bound, and the verdict is unchanged.
+- When a finality rule's `rule_source` names no pinned source profile, the reason now says the match is exact:
+  `rule_source compared as written to each profile's digest and documents`. A location spelled differently from the
+  profile's `documents` entry (case, a trailing slash, percent-encoding) does not match, as before.
 
 ## [0.5.0-alpha.2] - 2026-11-11
 
