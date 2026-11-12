@@ -65,6 +65,13 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   only for that pin used to be collected after the grace window, after which every `pull` stopped (exit 2, "not held
   at this store") until it was held again. `gc` now keeps each pinned digest and names the pin in its plan; a policy
   file it cannot use stops it before any work (exit 2), never a run as if nothing were pinned.
+- A series edition whose segments include one the pinned source profile cannot place (a label not in its list, a
+  `rule_source` naming no pinned profile or two) is no longer always `could not check`. When a later placeable
+  segment is provisional, the members' boundary is at most that segment's date whatever the unplaced state is: the
+  view shows it (`members' finality unchecked: final to at most 2025-04-01 (segment … not comparable) as captured,
+  not re-checked`), and with `series.refuse_premature_freeze` on a `frozen_before` later than that bound is refused
+  (exit 1) on the same evidence as a premature freeze; one at or before it stays `could not check` (exit 3). With no
+  placeable provisional segment there is no bound, and the verdict is unchanged.
 
 ## [0.5.0-alpha.2] - 2026-11-11
 

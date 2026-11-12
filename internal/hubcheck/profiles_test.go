@@ -8,6 +8,7 @@ import (
 	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/conformance"
 	"github.com/research-common/research-commons/internal/gate"
+	"github.com/research-common/research-commons/internal/keylog"
 	"github.com/research-common/research-commons/internal/refusal"
 	"github.com/research-common/research-commons/internal/resolve"
 )
@@ -138,28 +139,68 @@ func TestPinnedProfileSplitVerdict(t *testing.T) {
 	}
 }
 
-// TestProfileUnplaceableSegment: C-core-104e. One segment's asserted state is a label the pinned profile does not
-// list: the boundary is unchecked, the explanation says not comparable, and the edition is could not check
-// (exit 3), never refused and never admitted, whichever way the declaration falls.
+// TestProfileUnplaceableSegment: C-core-104e and C-core-104f. One segment's asserted state is a label the pinned
+// profile does not list, so the members' boundary is unknown; but a later segment is provisional (Apr, R2), so the
+// boundary is at most 2025-04-01 whatever the unplaced state is. A declaration later than that bound is refused on
+// the same evidence as C-core-104b (exit 1), the explanation naming the bound and the unplaced segment (104f); one
+// at or before it is could not check (exit 3), never refused and never admitted (104e). Control: with no placeable
+// provisional segment there is no bound, and even a late declaration is could not check.
 func TestProfileUnplaceableSegment(t *testing.T) {
 	conformance.Covers(t, "C-core-104e")
+	conformance.Covers(t, "C-core-104f")
 	pd := dig(settlementProfile)
 	h := newHub(t, profilePolicy(pd))
 	h.write(gate.BlobPath(pd), settlementProfile)
 	s := newSigner()
 	g, segs := profileSeries(h, s, pd, map[int]string{1: "II"})
+	unplaced := keylog.Short(string(segs[1].(*canon.Object).Members["statement"].(canon.String)))
 	h.commit("series")
-	for _, date := range []string{"2025-09-01", "2025-01-01"} {
+	bound := "members' finality unchecked: final to at most 2025-04-01 (segment " + unplaced + " not comparable) as captured, not re-checked"
+
+	// later than the bound: refused, exit 1, naming the bound and the unplaced segment
+	late := freeze(h, s, "e-2025-09-01", g, segs, "2025-09-01")
+	res, err := Check(h.dir, Config{Base: "main"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	refusedAs(t, res, late, refusal.Policy, gate.HubRules+": series.refuse_premature_freeze")
+	r := verdict(t, res, late)
+	if res.Exit() != 1 || r.Series == nil || r.Series.ComputedState != "unchecked" || r.Series.Comparison != "flagged" ||
+		!strings.Contains(r.Refusal.Detail, bound) || !strings.Contains(r.Refusal.Detail, gate.BoundedRefusal) ||
+		!strings.Contains(r.Refusal.Detail, gate.AsCapturedRefusal) || !strings.Contains(r.Series.Render(), `state "II" is not in source profile`) {
+		t.Fatalf("late: exit %d %v\n%s", res.Exit(), r.Refusal, res.Render())
+	}
+
+	// at or before the bound: could not check, exit 3, never refused and never admitted
+	for _, date := range []string{"2025-04-01", "2025-01-01"} {
 		ep := freeze(h, s, "e-"+date, g, segs, date)
 		res, err := Check(h.dir, Config{Base: "main"})
 		if err != nil {
 			t.Fatal(err)
 		}
 		r := verdict(t, res, ep)
-		if r.Verdict != gate.Undecided || res.Exit() != 3 || r.Series == nil || r.Series.ComputedState != "unchecked" ||
-			!strings.Contains(r.Series.Render(), `state "II" is not in source profile`) || !strings.Contains(r.Series.Render(), "not comparable") {
-			t.Fatalf("%s: %s exit %d\n%s", date, r.Verdict, res.Exit(), res.Render())
+		if r.Verdict != gate.Undecided || res.Exit() != 3 || r.Series == nil || r.Series.ComputedState != "unchecked" || r.Series.Comparison != "unchecked" ||
+			!strings.Contains(r.Series.Render(), `state "II" is not in source profile`) || !strings.Contains(r.Series.Render(), "not comparable") ||
+			len(r.Labels) != 1 || !strings.Contains(r.Labels[0].Detail, bound) || !strings.Contains(r.Labels[0].Detail, gate.BoundedUndecided) ||
+			r.Next != gate.BoundedNext {
+			t.Fatalf("%s: %s exit %d %v\n%s", date, r.Verdict, res.Exit(), r.Labels, res.Render())
 		}
+	}
+
+	// control: no placeable provisional segment (Apr and May at or after RF): no bound, a late declaration is exit 3
+	h2 := newHub(t, profilePolicy(pd))
+	h2.write(gate.BlobPath(pd), settlementProfile)
+	s2 := newSigner()
+	g2, segs2 := profileSeries(h2, s2, pd, map[int]string{1: "II", 3: "RF", 4: "DF"})
+	h2.commit("series")
+	ep := freeze(h2, s2, "e-late", g2, segs2, "2025-09-01")
+	res, err = Check(h2.dir, Config{Base: "main"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r = verdict(t, res, ep)
+	if r.Verdict != gate.Undecided || res.Exit() != 3 || r.Series == nil || r.Series.Bound.Unit != "" || strings.Contains(res.Render(), "at most") {
+		t.Fatalf("no bound: %s exit %d\n%s", r.Verdict, res.Exit(), res.Render())
 	}
 }
 

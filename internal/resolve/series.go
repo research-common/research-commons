@@ -147,6 +147,12 @@ type Series struct {
 	Computed          Boundary
 	// ComputedState is "computed", "unchecked" or "no segments"; Why explains unchecked.
 	ComputedState string
+	// Bound is an upper bound on an unchecked members' boundary (the zero Boundary when there is none): every
+	// segment has a rule and a position in one unit, some segments' states cannot be placed (Unplaced), and the
+	// earliest segment that is provisional sits at Bound. Whatever the unplaced segments' states, the boundary is
+	// that segment's position or an earlier one (claims-model note §8, "a boundary as captured").
+	Bound    Boundary
+	Unplaced []string
 	// AsCaptured: the computed boundary rests on at least one segment state as captured, not re-checked.
 	AsCaptured  bool
 	Provisional int
@@ -287,6 +293,7 @@ func (s *Series) compute() {
 		units = append(units, g.From.Unit)
 	}
 	if s.ComputedState == "unchecked" {
+		s.upperBound()
 		return
 	}
 	if distinct := slices.Compact(slices.Sorted(slices.Values(units))); len(distinct) != 1 || distinct[0] == "" {
@@ -313,11 +320,61 @@ func (s *Series) compute() {
 	}
 }
 
+// upperBound sets Bound on an unchecked boundary when one exists. It needs every segment to carry a rule and
+// a position, all in one unit, and no segment left unchecked for want of any re-check (NotRechecked); the
+// segments whose state is unchecked are Unplaced, and the earliest provisional one (segments are sorted by
+// position) is the bound. With no provisional segment there is none.
+func (s *Series) upperBound() {
+	unit := s.Segments[0].From.Unit
+	var bound Boundary
+	var placed, asCaptured bool
+	for _, g := range s.Segments {
+		switch {
+		case !g.Rule, g.From.Unit == "", g.From.Unit != unit, g.Final == "unchecked" && g.Why == NotRechecked:
+			return
+		case g.Final == "unchecked":
+			s.Unplaced = append(s.Unplaced, g.Member)
+		case g.Final == "provisional" && !placed:
+			bound, placed = g.From, true
+		}
+		asCaptured = asCaptured || (g.Final != "unchecked" && g.AsCaptured)
+	}
+	if !placed || len(s.Unplaced) == 0 {
+		s.Unplaced = nil
+		return
+	}
+	s.Bound, s.AsCaptured = bound, asCaptured
+}
+
+// boundNote is the bound's display: "at most 2025-04-01 (segment … not comparable)", then the as-captured mark.
+func (s *Series) boundNote() string {
+	word := "segment"
+	if len(s.Unplaced) > 1 {
+		word = "segments"
+	}
+	n := "at most " + s.Bound.String() + " (" + word + " " + strings.Join(shortMembers(s.Unplaced), ", ") + " not comparable)"
+	if s.AsCaptured {
+		n += " " + BoundaryAsCaptured
+	}
+	return n
+}
+
 func (s *Series) compare() {
 	switch {
 	case s.Declared.Unit == "":
 		s.Comparison = "unchecked"
 		s.Explain = append(s.Explain, "no frozen_before declared")
+	case s.ComputedState != "computed" && s.Bound.Unit != "":
+		// the boundary is unknown but bounded above: only a declaration later than the bound is decided
+		s.Comparison = "unchecked"
+		if c, ok := s.Declared.compare(s.Bound); ok && c > 0 {
+			s.Comparison = "flagged"
+			s.Explain = append(s.Explain, "declared boundary is later than the members' finality boundary can be: "+s.boundNote()+
+				"; whatever the unplaced segments' states, the earliest provisional segment is before the declared boundary")
+			if s.AsCaptured {
+				s.Explain = append(s.Explain, "the members' boundary is their own asserted states at capture: the members themselves do not claim the declared boundary")
+			}
+		}
 	case s.ComputedState != "computed":
 		s.Comparison = "unchecked"
 	case s.Declared.Unit != s.Computed.Unit:
@@ -373,12 +430,17 @@ func (s *Series) Line() string {
 		comp = "members: no segments"
 	default:
 		comp = "members' finality unchecked"
+		if s.Bound.Unit != "" {
+			comp += ": final to " + s.boundNote()
+		}
 	}
 	line := decl + " · " + comp
-	switch s.Comparison {
-	case "flagged":
+	switch {
+	case s.Comparison == "flagged" && s.ComputedState != "computed":
+		line += " · FLAGGED: declared later than the members' bound"
+	case s.Comparison == "flagged":
 		line += " · FLAGGED: declared later than computed"
-	case "not comparable":
+	case s.Comparison == "not comparable":
 		line += " · not comparable"
 	}
 	return line

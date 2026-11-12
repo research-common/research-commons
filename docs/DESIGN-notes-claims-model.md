@@ -708,8 +708,14 @@ immutable editions.
   conclude. A declared boundary later than the asserted one is refusable on the hub's own evidence: the members
   themselves do not claim it. A declared boundary at or before it is `could not check (as captured)`, never a
   pass: the members' word is not the reader's re-check (I4). A segment whose state or rule the profile cannot
-  place leaves the boundary `unchecked`, as a segment with no rule does. A later re-check, or a re-capture added
-  as a member, is new evidence and may move the boundary in either direction (I5).
+  place leaves the boundary `unchecked`, as a segment with no rule does, but not unbounded: when a placeable
+  segment is provisional, the boundary is at most the earliest such segment's position whatever the unplaced
+  states are (one after it cannot move the boundary later, and one before it, if not final, only moves it
+  earlier). That bound is shown, naming the unplaced segments ("members' finality unchecked: final to at most
+  2025-04-01 (segment C not comparable) as captured, not re-checked"). A declared boundary later than the bound is
+  refusable on the same evidence as one later than an asserted boundary; one at or before it is `could not check`,
+  since only the unplaced states could settle it. With no placeable provisional segment there is no bound. A later
+  re-check, or a re-capture added as a member, is new evidence and may move the boundary in either direction (I5).
 
 ## 9. Research exchange
 
