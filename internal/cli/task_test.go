@@ -121,7 +121,7 @@ func readinessOf(t *testing.T, sec *canon.Object, ed string) *canon.Object {
 // conflict clears, in both forms: table tokens only, each on the human surface, one footer, one exit, and every
 // id show cites listed by explain.
 func TestTaskSurfaceSweep(t *testing.T) {
-	conformance.Partial(t, "C-core-132", "the task section (show, verify, explain of a task, its editions and approvals) prints only table tokens")
+	conformance.Partial(t, "C-core-132", "the task section is done here (show, verify, explain of a task, its editions and approvals: table tokens only, each condition a typed ok/fail/unchecked state); the case stays open on the gate, whose intended_for rule evaluation is still inside the label detail, not a typed member (TestClosedVocabulary)")
 	w, r := taskWorld(t)
 	sweepRefs(t, w, r.all())
 	r.supersede(w)
