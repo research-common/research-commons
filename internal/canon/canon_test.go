@@ -8,7 +8,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/research-common/research-commons/internal/canon"
-	"github.com/research-common/research-commons/internal/conformance"
 	"github.com/research-common/research-commons/internal/refusal"
 )
 
@@ -21,9 +20,8 @@ func refusedAs(t *testing.T, in string, class refusal.Class, detail string) {
 	}
 }
 
-// TestParseRefuses covers the input rules of wire-format note §1 one by one.
+// TestParseRefuses covers the input rules of wire-format note §1 one by one (the case, delivered through pull: internal/cli TestPullParserRefusals, C-core-12).
 func TestParseRefuses(t *testing.T) {
-	conformance.Partial(t, "C-core-12", "parser rules only; refusal at pull with the state digest unchanged needs pull")
 	in := refusal.Intrinsic
 	for _, c := range []struct{ in, detail string }{
 		{`{"a":1,"a":2}`, `duplicate key "a"`},

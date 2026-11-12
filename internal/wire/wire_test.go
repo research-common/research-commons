@@ -103,7 +103,6 @@ func TestOneFieldTwoIDs(t *testing.T) {
 // TestFlipEveryByte: flipping any one byte of a stored line either breaks parsing, breaks a field rule, or
 // breaks the signature. No flip yields a valid statement that differs from the original.
 func TestFlipEveryByte(t *testing.T) {
-	conformance.Partial(t, "C-core-09", "every byte at the wire layer; the case's delivery at pull with the parsed digest logged needs pull")
 	k := testKeys("A")["A"]
 	line, id := Sign(authoredDraft(0, "", "licence", "CC-BY-4.0", "x_ext", "v",
 		"provenance", body("workflow", "sha256:"+strings.Repeat("c0", 32), "inputs", canon.Array{canon.String("sha256:" + strings.Repeat("11", 32))})), k)
