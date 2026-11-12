@@ -452,10 +452,9 @@ func reencode(t *testing.T, line []byte) []byte {
 	return nil
 }
 
-// TestEditionFork: C-core-84 (C-core-86 resolver half; the two-hub drill through pull is internal/cli TestTwoStoreDrill). Two editions with one predecessor, by two controllers and by one
+// TestEditionFork: C-core-84's file-order half (timestamps: TestEditionForkIgnoresTimestamps), C-core-86 resolver half; the two-hub drill through pull is internal/cli TestTwoStoreDrill). Two editions with one predecessor, by two controllers and by one
 // controller twice: FORK, no tip, verify exit 3, every order alike.
 func TestEditionFork(t *testing.T) {
-	conformance.Partial(t, "C-core-84", "timestamps tied/skewed/reversed are not read by the resolver at all (no ts in resource.go); file order is covered by delivery permutations")
 	for _, twice := range []bool{false, true} {
 		w := newWorld(t)
 		g := w.genesis("G", "A", 0, "A", "B")
