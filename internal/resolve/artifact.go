@@ -910,6 +910,13 @@ func better(a, b Bound) Bound {
 			return a
 		}
 		return b
+	case a.Quality == NoBound && a.Anchor == "" && b.Anchor == "" && a.Why != b.Why:
+		// neither bounds anything and neither names an anchor; the one saying why (an incoherent line) is shown,
+		// whichever comes first, so the answer stays order-free
+		if a.Why > b.Why {
+			return a
+		}
+		return b
 	case a.Anchor <= b.Anchor:
 		return a
 	}

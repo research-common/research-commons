@@ -44,6 +44,10 @@ type Placed struct {
 	// no usable `last_good`). Such a line may have been the key's legitimate word, so an edition that needed it
 	// is contested, not silently dropped (C-core-143a, b, e).
 	Doubted []string
+	// Incoherent is the key log's flag for a line whose ts is earlier than the ts of the line at its prev (wire
+	// §2, claims-model note §10). The line is still a valid statement and still displayed; it yields no time
+	// bound for any use, either for itself or, when it is an `anchors` line, for what it covers (time.go).
+	Incoherent bool
 }
 
 // Counts preserves the existing bare-key counting contract. It is a compatibility
@@ -61,6 +65,9 @@ type Resolver struct {
 	// time and cmp are the reader's own verifiers (I9): time evidence (§10) and comparator runs (§5.2).
 	time TimeVerifier
 	cmp  Comparator
+	// incoherentAnchorProofKept keeps the proof-placed bound of an `anchors` statement on an incoherent line and
+	// drops only the one resting on its timestamp. false (the default): such an anchor yields no bound (time.go).
+	incoherentAnchorProofKept bool
 	// cmpMu guards cmpRuns: each comparator result this resolver obtained, keyed by comparator and the unordered
 	// pair of outputs, so every pair runs at most once per snapshot whichever blobs are viewed (group.go, pair).
 	cmpMu   sync.Mutex
@@ -125,7 +132,7 @@ func New(s *keylog.Store, opts ...Option) *Resolver {
 			events = append(events, e)
 		}
 		for _, ln := range v.Lines {
-			p := &Placed{St: ln.St, Chained: ln.State == keylog.Chained}
+			p := &Placed{St: ln.St, Chained: ln.State == keylog.Chained, Incoherent: ln.Incoherent}
 			p.Evaluable = p.Chained && ln.St.Verified && ln.St.Status == wire.Valid
 			if p.Chained {
 				for _, e := range events {

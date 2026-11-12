@@ -427,7 +427,7 @@ func TestGap(t *testing.T) {
 
 // TestIncoherent: a line whose ts is earlier than its prev's is flagged incoherent; its signature is valid.
 func TestIncoherent(t *testing.T) {
-	conformance.Partial(t, "C-core-106", "flagged incoherent with the signature still valid; discarding its time bound for every use needs anchors and priority")
+	conformance.Partial(t, "C-core-106", "the key-log half: flagged incoherent with the signature still valid; the resolver half (no bound for any use) is internal/resolve.TestIncoherentLineNoBound")
 	k := key("A")
 	l0 := mk(k, 0, "", 0, "2026-10-15T00:10:00Z")
 	l1 := mk(k, 1, l0.id, 1, "2026-10-15T00:09:59.999999999Z")
