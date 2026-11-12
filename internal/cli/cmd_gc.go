@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/research-common/research-commons/internal/store"
@@ -44,7 +45,7 @@ func init() {
 			{Name: "key", Value: "file", Help: "the signing key file for --release (default: $" + KeyEnv + "); a key file written by commons key new; never printed"},
 		},
 		Store: true, Before: gcBefore,
-		Help: "Exit 0 the plan was made (dry run) or carried out; 2 did not start (an unusable hub-policy.json at the store root, a malformed duration or digest, --release with --apply or --grace, --key without --release, no usable key for --release); 3 the operation failed after work started (the output says whether anything was committed).",
+		Help: "Exit 0 the plan was made (dry run) or carried out; 2 did not start (an unusable hub-policy.json at the store root, a malformed duration or digest, --release with --apply or --grace, --key without --release, no usable key for --release, --release of a source profile the policy pins); 3 the operation failed after work started (the output says whether anything was committed).",
 		Run:  gcCmd})
 }
 
@@ -62,6 +63,10 @@ func gcBefore(c *Ctx) *Problem {
 			"option --key", "drop --key, or add --release <digest>", "")
 	case !rel:
 		return nil
+	}
+	if d, _ := c.Flag("release"); c.Policy != nil && c.Policy.Hub != nil && slices.Contains(c.Policy.Hub.SourceProfiles, d) {
+		return policyProblem("pinned-by-policy", "the blob is a source profile "+PolicyFile+" pins", "blob "+d,
+			"pull reads its source profiles from this store, so releasing a pinned one would stop every later pull; remove the entry from series.source_profiles first, then release", "")
 	}
 	if keyPath == "" && c.Env.Getenv(KeyEnv) == "" {
 		return policyProblem("no-key", "--release needs a signing key", "option --key",

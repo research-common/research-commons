@@ -127,3 +127,20 @@ func TestGCKeepsPinnedProfile(t *testing.T) {
 		t.Fatalf("pull after unpinned gc: exit %d\n%s", r.code, r.stdout)
 	}
 }
+
+// TestReleaseRefusesPinnedProfile: `gc --release` of a blob the store-root policy pins as a source profile does
+// not start (exit 2, naming the pin): releasing it would stop every later pull, the outcome C-core-147 guards gc
+// against. Control: with the pin removed, the same release withdraws and deletes.
+func TestReleaseRefusesPinnedProfile(t *testing.T) {
+	w, b, keyFile := releaseWorld(t)
+	os.WriteFile(filepath.Join(w.root, PolicyFile), []byte(profilePin(b)), 0o644)
+	before := snapshot(t, w.root)
+	r := runIn(w.root, map[string]string{KeyEnv: keyFile}, "gc", "--release", b, "--json")
+	if r.code != 2 || snapshot(t, w.root) != before || !strings.Contains(r.stdout, "pinned-by-policy") || !strings.Contains(r.stdout, "series.source_profiles") {
+		t.Fatalf("pinned release: exit %d\n%s%s", r.code, r.stdout, r.stderr)
+	}
+	os.WriteFile(filepath.Join(w.root, PolicyFile), []byte(`{"policy":"rc-hub-policy/1"}`), 0o644)
+	if r := runIn(w.root, map[string]string{KeyEnv: keyFile}, "gc", "--release", b, "--json"); r.code != 0 || !strings.Contains(r.stdout, `"blob_removed":true`) {
+		t.Fatalf("unpinned release: exit %d\n%s%s", r.code, r.stdout, r.stderr)
+	}
+}

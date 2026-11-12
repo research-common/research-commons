@@ -64,7 +64,7 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 - `gc` no longer deletes a source profile that `hub-policy.json` pins in `series.source_profiles`. A profile blob held
   only for that pin used to be collected after the grace window, after which every `pull` stopped (exit 2, "not held
   at this store") until it was held again. `gc` now keeps each pinned digest and names the pin in its plan; a policy
-  file it cannot use stops it before any work (exit 2), never a run as if nothing were pinned.
+  file it cannot use stops it before any work (exit 2), never a run as if nothing were pinned, and `gc --release` of a pinned profile does not start (exit 2) until the pin is removed.
 - A series edition whose segments include one the pinned source profile cannot place (a label not in its list, a
   `rule_source` naming no pinned profile or two) is no longer always `could not check`. When a later placeable
   segment is provisional, the members' boundary is at most that segment's date whatever the unplaced state is: the
