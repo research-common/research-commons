@@ -64,6 +64,9 @@ type FsckOptions struct {
 	Now      time.Time
 	// OnlyBlob restricts the byte check to one digest (a fetch's pre-reuse check); "" means all.
 	OnlyBlob Digest
+	// PolicyPins are the digests the store-root policy pins (GCConfig.PolicyPins): such a blob is held for the
+	// policy, so it is not reported as unreferenced storage (gc keeps it).
+	PolicyPins []Digest
 }
 
 // FsckReport is the result. It is never "ok" by omission: Clean is true only when there is no finding of any
@@ -309,7 +312,7 @@ func (s *Store) Fsck(opt FsckOptions) (*FsckReport, error) {
 	// Unreferenced storage: GC candidates, not errors.
 	var unref []Digest
 	for d := range held {
-		if !referenced[d] && ri.serving()[d] == nil {
+		if !referenced[d] && ri.serving()[d] == nil && !slices.Contains(opt.PolicyPins, d) {
 			unref = append(unref, d)
 		}
 	}

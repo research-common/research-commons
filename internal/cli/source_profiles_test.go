@@ -101,6 +101,10 @@ func TestGCKeepsPinnedProfile(t *testing.T) {
 	if r := dst.run("pull", src.root, "--dry-run", "--json"); r.code != 1 || !strings.Contains(r.stdout, "as captured, not re-checked") {
 		t.Fatalf("pull after gc: exit %d\n%s", r.code, r.stdout)
 	}
+	// fsck agrees: the pinned profile is not unreferenced storage (not a gc candidate)
+	if r := dst.run("fsck", "--json"); strings.Contains(r.stdout, pd) {
+		t.Fatalf("fsck lists the pinned profile: exit %d\n%s", r.code, r.stdout)
+	}
 
 	// an unusable policy: gc does not start, nothing is deleted
 	bad := `{"policy":"rc-hub-policy/1","series":{"source_profiles":[{"digest":"sha256:nothex"}]}}`
@@ -112,6 +116,9 @@ func TestGCKeepsPinnedProfile(t *testing.T) {
 
 	// control: unpinned, the blob is collected, and the restored pin then names a blob this store no longer holds
 	os.WriteFile(filepath.Join(dst.root, PolicyFile), []byte(`{"policy":"rc-hub-policy/1","series":{"refuse_premature_freeze":true}}`), 0o644)
+	if r := dst.run("fsck", "--json"); !strings.Contains(r.stdout, pd) || !strings.Contains(r.stdout, "unreferenced") {
+		t.Fatalf("fsck, unpinned: exit %d\n%s", r.code, r.stdout)
+	}
 	if r := dst.run("gc", "--apply", "--grace", "0s", "--json"); r.code != 0 || dst.s.HasBlob(store.Digest(pd)) {
 		t.Fatalf("unpinned gc: exit %d\n%s", r.code, r.stdout)
 	}
