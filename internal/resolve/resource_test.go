@@ -617,7 +617,6 @@ func TestLostControllerKey(t *testing.T) {
 // revoke_key, seq n+1 an edition. Without seq n the edition is detached and not evaluated (tip unchanged);
 // when seq n arrives, the edition is evaluated under it: after the revocation, so it does not count.
 func TestDetachedEditionWaitsForRevocation(t *testing.T) {
-	conformance.Partial(t, "C-core-143", "the edition half at the resolver; the observed half needs observation resolution, and package scope needs pull")
 	w := newWorld(t)
 	g := w.genesis("G", "K", 0, "K")
 	e1 := w.edition("E1", "K", g, []string{g}, []string{"a"})
