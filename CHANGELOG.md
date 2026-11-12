@@ -56,6 +56,14 @@ timeout for `fetch`, and content rules that see inside archives. The candidate f
 `subjects`, `list` `resources`); it stays unstable during the alpha (L-12).
 
 ### Changed
+- Identity profile (candidate, not active): every view now asks the same counting question of a statement. Behind the
+  opt-in reader and an actor evaluator, an identity statement counts by its actor's eligibility in membership and
+  edition-rule member records, an observation's own status and its "also observed by" lines, holders, completeness,
+  `describes` claims, corroboration lookups, derivation-group runs, credit, observer records and time anchors. A
+  denied or undecided one says why (no view prints "identity profile not active" when an evaluator is set).
+  A view that counts per key still counts per key: an anchor bounds only its signer's own log, credit and records
+  stay per signing key, and a key's selection or amendments never take in an identity's claim. With no evaluator
+  (every command today), every answer is unchanged.
 - Identity profile (candidate, not active): the candidate `rc/2` reader now reads resources (`genesis`, `edition`, `withdraw_approval`) with typed controllers (`{key: K}` or `{identity: I}`); task roles on an edition are shape-checked only. Behind the opt-in reader and an actor evaluator, a resource rule counts each controller once whoever signs for it (two delegates of one identity fill one slot, a delegate never fills its own key's slot), withdrawal is local to the key and grant that approved, and an approval a grant-history cut removes, or whose eligibility is undecided, leaves the edition `contested`. An `rc/2` edition's id is computed in its own major, so `rc/1` and `rc/2` approvals of the same bytes are different editions. `rc/1` histories read exactly as before.
 - **Task contracts: the `task-contract-v1` profile is read** (task-contracts note). A task edition whose contract names
   `profile: "task-contract-v1"` gets its terms read in full, or not at all: an unknown field (`x_` names included), a

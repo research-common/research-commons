@@ -206,7 +206,7 @@ func (r *Resolver) group(p *Provenance, only string) *Group {
 		}
 	}
 	for _, q := range r.byKind["reproduced"] {
-		if q.Counts() && authored[str(q.St.Body, "of")] && provenance(q.St.Body).key() == p.key() {
+		if r.counts(q) && authored[str(q.St.Body, "of")] && provenance(q.St.Body).key() == p.key() {
 			g.Runs = append(g.Runs, Run{Signer: q.St.Signer, Statement: q.St.ID, Kind: "reproduced", Output: contentDigest(q.St.Body),
 				Says: str(q.St.Body, "result"), Env: envOf(q.St.Body)})
 		}
@@ -275,7 +275,7 @@ func (r *Resolver) group(p *Provenance, only string) *Group {
 func (r *Resolver) amended(q *Placed) bool {
 	d := contentDigest(q.St.Body)
 	for _, o := range r.byKind["authored"] {
-		if o.St.Signer == q.St.Signer && o.Counts() && contentDigest(o.St.Body) == d && r.precedes(q.St.Signer, q.St.ID, o.St.ID) {
+		if o.St.Signer == q.St.Signer && r.countsAsKey(o) && contentDigest(o.St.Body) == d && r.precedes(q.St.Signer, q.St.ID, o.St.ID) {
 			return true
 		}
 	}
@@ -737,7 +737,7 @@ func (r *Resolver) groups(a *Artifact, only string) {
 
 func (r *Resolver) isObservation(d string) bool {
 	for _, p := range r.byKind["observed"] {
-		if p.Counts() && contentDigest(p.St.Body) == d {
+		if r.counts(p) && contentDigest(p.St.Body) == d {
 			return true
 		}
 	}
@@ -746,7 +746,7 @@ func (r *Resolver) isObservation(d string) bool {
 
 func (r *Resolver) isRefutation(d string) bool {
 	for _, p := range r.byKind["refutes"] {
-		if p.Counts() && str(p.St.Body, "evidence") == d {
+		if r.counts(p) && str(p.St.Body, "evidence") == d {
 			return true
 		}
 	}

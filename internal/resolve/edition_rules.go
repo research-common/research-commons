@@ -403,8 +403,8 @@ func (r *Resolver) memberRecord(entry *canon.Object) *Member {
 			m.recordWhy = "statement not held"
 		case p.St.Kind != "authored" && p.St.Kind != "observed":
 			m.recordWhy = "a " + p.St.Kind + " is not a member record"
-		case !p.Counts():
-			m.recordWhy = "statement counts toward nothing (" + notCountedWhy(p) + ")"
+		case !r.counts(p):
+			m.recordWhy = "statement counts toward nothing (" + r.gate(p).Why + ")"
 		default:
 			m.record, m.Statement, m.Signer, m.Digest = p.St.Body, p.St.ID, p.St.Signer, contentDigest(p.St.Body)
 		}

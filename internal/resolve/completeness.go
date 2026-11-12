@@ -95,7 +95,7 @@ func (r *Resolver) Completeness(id, edition string) (*Completeness, bool) {
 		}
 	}
 	for _, p := range r.byKind["observed"] {
-		if !p.Counts() || str(p.St.Body, "class") != c.Class {
+		if !r.counts(p) || str(p.St.Body, "class") != c.Class {
 			continue
 		}
 		in, why := c.inScope(p, from, to)

@@ -536,7 +536,7 @@ func (r *Resolver) withdraw(e *Edition, resource string, auth map[string]authori
 				continue
 			}
 			wctx[p.St.ID] = ctx{p.St.Signer, p.St.Actor.Grant}
-		case p.Counts():
+		case r.countsAsKey(p):
 			wctx[p.St.ID] = ctx{p.St.Signer, ""}
 		default:
 			continue

@@ -127,7 +127,7 @@ func (m *Membership) Render() string {
 func (r *Resolver) partOfClaims(resource, key string) []*Placed {
 	var out []*Placed
 	for _, p := range r.byKind["describes"] {
-		if !p.Counts() {
+		if !r.counts(p) {
 			continue
 		}
 		about, _ := p.St.Body.Get("about")

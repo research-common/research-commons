@@ -479,7 +479,7 @@ func (r *Resolver) successorHints(a *Artifact) []string {
 		if !claimant[s.From] || s.From == s.To {
 			continue
 		}
-		if p, ok := r.byID[s.Event]; !ok || !p.Counts() {
+		if p, ok := r.byID[s.Event]; !ok || !r.counts(p) {
 			continue // a rotation that counts toward nothing names no successor worth a hint
 		}
 		for _, u := range contesting {
@@ -553,7 +553,7 @@ func (a *Artifact) Field(name string) Field {
 func (r *Resolver) holders(d string) []string {
 	byKey := map[string][]*Placed{}
 	for _, p := range r.byKind["holds"] {
-		if p.Counts() && contentDigest(p.St.Body) == d {
+		if r.counts(p) && contentDigest(p.St.Body) == d {
 			byKey[p.St.Signer] = append(byKey[p.St.Signer], p)
 		}
 	}

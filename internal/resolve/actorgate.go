@@ -64,6 +64,21 @@ func (r *Resolver) gate(p *Placed) countGate {
 	return g
 }
 
+// counts is the counting gate's verdict alone (r.gate(p).Counts): whether p counts toward the consumer that asks,
+// whoever it acts for. A consumer that also filters by the signing key keeps that filter beside it: identity
+// context changes whether a line counts, not whose log it is on (a time anchor bounds its signer's own log; a
+// credit or reputation record is one signing key's).
+func (r *Resolver) counts(p *Placed) bool { return r.gate(p).Counts }
+
+// countsAsKey reports whether p counts as a claim of its signing key: a statement the gate counts and binds to no
+// identity. An identity-context statement signed by K is the identity's claim, never K's (identity profile §2.3,
+// §6), so a key principal's current claims and a key's same-key amendments never include it. With no evaluator,
+// and for every statement an evaluator binds to no identity, this is exactly p.Counts().
+func (r *Resolver) countsAsKey(p *Placed) bool {
+	g := r.gate(p)
+	return g.Counts && g.Identity == ""
+}
+
 func whyNot(p *Placed) string {
 	if p.Counts() {
 		return ""
