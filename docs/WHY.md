@@ -152,7 +152,7 @@ root cannot be retrofitted.
 
 ## Status
 
-Alpha preview (`0.5.0-alpha.2`), the second alpha of the next format. The next format is a rewrite: a signed,
+Alpha preview (`0.5.0-alpha.3`), the third alpha of the next format. The next format is a rewrite: a signed,
 append-only statement log per key, a content-addressed store, and a single Go command-line tool (`commons init`,
 `publish`, `pull`, `verify`, `fsck`, and more: see the README). It runs the loop this essay argues for: publish bytes
 with a signed claim of authorship and licence, carry them to another store, and have that store reach the same
