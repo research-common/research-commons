@@ -16,7 +16,9 @@ import (
 // only once the reader holds that edition as an authorized edition of its resource: a pending, contested,
 // invalid or unauthorized proposal declares nothing, and a later edition of the same method never changes how an
 // earlier observation reads (§8, "bindings are to editions"). A declared key the observation lacks leaves its
-// referent `unpinned`, naming `referent.system.<key>`; a present key counts whatever its value.
+// referent `unpinned`, naming `referent.system.<key>`. A present key counts as pinned unless its value is the
+// empty string: that identifies nothing, so it reads as absent (the statement stays admissible; it is never a
+// schema refusal).
 //
 // While the pinned edition is not held as authorized, the reader cannot tell whether a declaration exists: no
 // key is marked `unpinned` on that account, and comparability with another method-class observation is
@@ -128,7 +130,7 @@ func declaredSystemKeys(body *canon.Object) []string {
 func (r *Resolver) methodPins(st *wire.Statement) (d methodDecl, unpinned, declMissing []string) {
 	ref := object(st.Body, "referent")
 	d = r.methodDecl(str(ref, "method_edition"))
-	have := memberKeys(object(ref, "system"))
+	have := pinnedKeys(object(ref, "system"))
 	for _, k := range d.Keys {
 		if !slices.Contains(have, k) {
 			declMissing = append(declMissing, "referent.system."+k)

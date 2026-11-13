@@ -800,7 +800,7 @@ func (r *Resolver) comparability(o *Observation, st *wire.Statement) {
 	ref := object(st.Body, "referent")
 	ed := str(ref, "method_edition")
 	d := r.methodDecl(ed)
-	mine := memberKeys(object(ref, "system"))
+	mine := pinnedKeys(object(ref, "system"))
 	for _, q := range r.byKind["observed"] {
 		if !r.counts(q) || q.St.ID == st.ID || str(q.St.Body, "class") != "method" {
 			continue
@@ -822,7 +822,7 @@ func (r *Resolver) comparability(o *Observation, st *wire.Statement) {
 		if d.read() {
 			// under a declaration, a declared key one side lacks is already in Unpinned; Missing* list only the
 			// keys outside it, shown and never compared
-			theirs := memberKeys(object(qr, "system"))
+			theirs := pinnedKeys(object(qr, "system"))
 			for _, k := range theirs {
 				if !slices.Contains(mine, k) && !slices.Contains(d.Keys, k) {
 					c.MissingHere = append(c.MissingHere, "system."+k)
@@ -847,11 +847,21 @@ func (r *Resolver) comparability(o *Observation, st *wire.Statement) {
 	slices.SortFunc(o.Comparability, func(a, b Comparability) int { return strings.Compare(a.With, b.With) })
 }
 
-func memberKeys(o *canon.Object) []string {
+// pinnedKeys is the sorted keys of a referent.system object that are pinned. A member whose value is the empty
+// string identifies nothing, so it counts as absent, exactly as a missing member does: it is neither a declared
+// key present (systemkeys.go) nor a key two observations "pin" for comparability. The statement stays
+// admissible; only the reader's comparison ignores the member.
+func pinnedKeys(o *canon.Object) []string {
 	if o == nil {
 		return nil
 	}
-	k := append([]string{}, o.Keys...)
+	k := make([]string, 0, len(o.Keys))
+	for _, name := range o.Keys {
+		if s, ok := o.Members[name].(canon.String); ok && s == "" {
+			continue
+		}
+		k = append(k, name)
+	}
 	slices.Sort(k)
 	return k
 }

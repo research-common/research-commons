@@ -270,3 +270,91 @@ func TestMethodSystemKeysUnread(t *testing.T) {
 		}
 	})
 }
+
+// TestMethodSystemKeysEmptyValue: C-core-32b, empty-value variant. An empty string identifies nothing, so a
+// referent.system member whose value is "" counts as absent wherever system keys are compared; the statement
+// itself stays admissible (no schema refusal, and the statement's own unpinned slice is untouched).
+// Declared key: M1 declares model, provider, routing_era; O1 pins routing_era as "" and is unpinned naming
+// referent.system.routing_era (verify exit 3), exactly as if the member were missing (O4); a value that only
+// looks empty (" ") is a pinned key and is not unpinned. Undeclared comparison (C-core-32): M2 declares nothing;
+// an "" member is not a key either side pins, so O5 (era "") and O6 (no era) are comparable, while O5 against O7
+// (era "q3") is not, and the display names system.routing_era as the member O5 does not pin.
+func TestMethodSystemKeysEmptyValue(t *testing.T) {
+	conformance.Covers(t, "C-core-32b")
+	t.Run("declared key", func(t *testing.T) {
+		w := newWorld(t)
+		g := w.genesis("G", "MC", 0, "MC")
+		m1 := w.ed(w.editionWith("M1", "MC", g, []string{g}, "system_keys", []string{"model", "provider", "routing_era"}))
+		o1 := w.observed("O1", "P1", "B1", "method", methodRef(m1, obj("model", "m", "provider", "p", "routing_era", "")))
+		o2 := w.observed("O2", "P2", "B2", "method", methodRef(m1, obj("model", "m", "provider", "p", "routing_era", "q3")))
+		o3 := w.observed("O3", "P3", "B3", "method", methodRef(m1, obj("model", "m", "provider", "p", "routing_era", " ")))
+		o4 := w.observed("O4", "P4", "B4", "method", methodRef(m1, obj("model", "m", "provider", "p")))
+
+		v1 := obsView(t, w, o1)
+		wantRef(t, v1, RefUnpinned)
+		if !slices.Equal(v1.Unpinned, []string{"referent.system.routing_era"}) {
+			t.Fatalf("unpinned %v", v1.Unpinned)
+		}
+		has(t, v1.Render(), "this referent lacks referent.system.routing_era, so it is unpinned")
+		if code, why := v1.VerifyExit(); code != 3 || !strings.Contains(strings.Join(why, ";"), "referent.system.routing_era") {
+			t.Fatalf("verify %d %v", code, why)
+		}
+		// the statement is admitted whole: the schema never saw a defect
+		if p, ok := w.store(nil).Statement(o1); !ok || len(p.St.Unpinned) != 0 {
+			t.Fatalf("statement held=%v unpinned %v", ok, p.St.Unpinned)
+		}
+		// an empty value reads as a missing member: same unpinned set, same verdict
+		v4 := obsView(t, w, o4)
+		wantRef(t, v4, RefUnpinned)
+		if !slices.Equal(v4.Unpinned, v1.Unpinned) {
+			t.Fatalf("missing %v vs empty %v", v4.Unpinned, v1.Unpinned)
+		}
+		// controls: a real value, and a value that is not empty, are pinned
+		for _, id := range []string{o2, o3} {
+			v := obsView(t, w, id)
+			wantRef(t, v, RefPinned)
+			if code, _ := v.VerifyExit(); code != 0 {
+				t.Fatalf("verify %d", code)
+			}
+		}
+		// the unpinned key is named once in a comparison, whether it is missing or empty on the other side
+		v2 := obsView(t, w, o2)
+		for _, c := range v2.Comparability {
+			if (c.With == o1 || c.With == o4) && (c.Comparable || !slices.Equal(c.Unpinned, []string{"referent.system.routing_era"}) || len(c.MissingHere)+len(c.MissingThere) != 0) {
+				t.Fatalf("O2 vs %s: %+v", keylog.Short(c.With), c)
+			}
+		}
+	})
+	t.Run("undeclared comparison", func(t *testing.T) {
+		w := newWorld(t)
+		g := w.genesis("G", "MC", 0, "MC")
+		m2 := w.ed(w.editionWith("M2", "MC", g, []string{g}, "selection", "curated"))
+		o5 := w.observed("O5", "P5", "B5", "method", methodRef(m2, obj("model", "m", "provider", "p", "routing_era", "")))
+		o6 := w.observed("O6", "P6", "B6", "method", methodRef(m2, obj("model", "m", "provider", "p")))
+		o7 := w.observed("O7", "P7", "B7", "method", methodRef(m2, obj("model", "m", "provider", "p", "routing_era", "q3")))
+
+		v5 := obsView(t, w, o5)
+		wantRef(t, v5, RefPinned) // nothing declared, so nothing is unpinned on that account
+		if len(v5.Unpinned) != 0 {
+			t.Fatalf("unpinned %v", v5.Unpinned)
+		}
+		var vs6, vs7 *Comparability
+		for i, c := range v5.Comparability {
+			switch c.With {
+			case o6:
+				vs6 = &v5.Comparability[i]
+			case o7:
+				vs7 = &v5.Comparability[i]
+			}
+		}
+		if vs6 == nil || !vs6.Comparable || len(vs6.MissingHere)+len(vs6.MissingThere) != 0 {
+			t.Fatalf("O5 vs O6 (an empty member is not a pinned key): %+v", v5.Comparability)
+		}
+		if vs7 == nil || vs7.Comparable || !slices.Equal(vs7.MissingThere, []string(nil)) || !slices.Equal(vs7.MissingHere, []string{"system.routing_era"}) {
+			t.Fatalf("O5 vs O7: %+v", v5.Comparability)
+		}
+		has(t, v5.Render(), "this observation does not pin system.routing_era")
+		// the member is still shown as the observer wrote it
+		has(t, v5.Render(), `"routing_era":""`)
+	})
+}

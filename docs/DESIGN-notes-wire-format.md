@@ -426,10 +426,14 @@ observation is `unchecked`, naming the edition not held, never `comparable`; `ve
 (claims-model note §13). The declaration that governs an
 observation is the one in the edition it pins, so a later edition of the same method never changes how an
 earlier observation is read. A declared key absent from the observation's `referent.system` leaves its
-referent `unpinned`, naming `system.<key>` (claims-model note §5.3.1); a present key counts as pinned whatever
-its string value. Two observations under one declaring edition that each pin every declared key are
-comparable; keys outside the declaration are shown, never compared. Without a declaration, two method-class
-observations are comparable only when they pin the same `system` keys (C-core-32).
+referent `unpinned`, naming `system.<key>` (claims-model note §5.3.1). A present key counts as pinned unless its
+string value is `""`: an empty string identifies nothing, so a member with that value counts as **absent**
+everywhere system keys are compared (a declared key given as `""` leaves the referent `unpinned`, and an undeclared
+comparison does not treat it as a key either observation pins). The statement stays admissible, because a refusal
+would turn a missing measurement into a malformed statement; the member is still shown as written. Two
+observations under one declaring edition that each pin every declared key are comparable; keys outside the
+declaration are shown, never compared. Without a declaration, two method-class observations are comparable only
+when they pin the same `system` keys (C-core-32).
 
 `edition.contents.completeness` is the scope of a completeness claim (claims-model note §6 (3)): `class`
 names the observation class, and `source` the value of that class's identifying referent field: `endpoint`
@@ -1015,6 +1019,8 @@ as an optional field (a minor change, §6) modelled on RFC 9581 §3.5.4 and FITS
   holds; empty is malformed (omit the field to declare nothing); an unheld edition leaves comparability
   `unchecked`. No `method` resource type: `genesis.type` is a closed list, and a new value would be malformed
   to an older reader (§6) (§5; C-core-32a – 32d).
+- **Empty system value** (2026-11, #112). A `referent.system` member whose value is `""` counts as absent where
+  system keys are compared, not as a pinned key; it is not a schema refusal (§5; C-core-32b).
 
 **Open.**
 

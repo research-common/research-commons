@@ -364,8 +364,8 @@ Rules:
   members of the measured system an observation under it must pin (`system_keys`, wire-format note §5). The
   declaration is read from the edition the observation pins, and only once the reader holds it as an
   authorized edition (§8), so a later edition never re-judges an earlier observation; a missing declared member
-  is `unpinned`. Without a declaration two method-class observations are comparable only when they pin the
-  same members (C-core-32), and while the pinned edition is not held, comparability is `unchecked`. A fork
+  is `unpinned`, and a member given as the empty string counts as missing (it identifies nothing). Without a declaration two method-class observations are comparable only when they pin the
+  same members (C-core-32; an empty-string member is not a pinned member), and while the pinned edition is not held, comparability is `unchecked`. A fork
   or a vanished API does not make an observation false. It is still true of what it pinned. What changes is
   whether the referent is still canonical or still available, and that is shown separately. It never counts
   against the observer. A statement whose referent lacks a field its class requires is still a valid signed
