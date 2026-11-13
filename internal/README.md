@@ -80,13 +80,16 @@ evidence never becomes eligible just because its signature verifies or a valid c
 the same body. This separation adds no identity profile, actor inference, key fallback or reader
 registration; existing views and legacy snapshots keep their current behavior.
 
-### Candidate identity admission (opt-in, not wired)
+### Identity admission (reader active, no writer)
 
 `wire.NewIdentityReader()` reads rc/1 exactly as `wire.Read` accepts it, plus the candidate rc/2 of
 `docs/DESIGN-notes-fixed-root-identity.md`. It verifies the signature before interpreting signer-chosen
 fields, so an authentic but malformed line is kept as `Invalid` (attributable, never authority) instead of
-being refused. `wire.Read`, the zero `wire.Reader`, `Major`, keylog and resolve are unchanged: for them rc/2
-is still an unverified other-major line.
+being refused. `wire.ReadStored` (the dual reader: rc/1 as `wire.Read`, rc/2 as the identity reader) is the
+production line reader: the store, the gates, `hub check` and every view read through it, and
+`keylog.NewStoredStore()` places lines with it. `wire.Read` and the zero `wire.Reader` stay the rc/1-only reader
+the differential tests compare against (for them rc/2 is an unverified other-major line); `Major` is the writer's
+major (1), `ReaderMajors` the majors read.
 
 `identity.Admit` is the only production constructor of `identitymodel` facts (a test enforces it). A fact is
 authenticated only when this reader verified its signature, or when a verified line of the same key commits to
@@ -98,15 +101,18 @@ read too (`wire.taskBody`), and an rc/2 task edition's roles come from its `task
 bare-key approval, `identity(I)` only through the actor evaluator, never a key fallback; an undecided answer or a
 grant-history cut that removes a needed approval is contested), and edition ids are hashed in their statement's
 major (`resolve.EditionIDOf`).
-`Snapshot.Receipt()` digests the admitted canonical lines; `EvidenceDigest()` is the model's fact digest. No
-consumer (authorship, resources, tasks, policy, time) reads the result yet.
+`Snapshot.Receipt()` digests the admitted canonical lines; `EvidenceDigest()` is the model's fact digest.
+`identity.Evaluator(lines)` is the production evaluator: nil when no line is rc/2 (every answer unchanged),
+`identity.Actors` otherwise, and `identity.Unavailable` (identity questions `unknown`, naming the failure) when
+admission fails as a whole. Every resolver a command builds asks it (`resolve.WithActorEligibility`), as does the
+pull gate's trust floor over the store plus the package; `Resolver.Counted` is the counting gate a surface prints.
 
 ## How tests map to CONFORMANCE.md
 
 Every case id in `docs/CONFORMANCE.md`, and in the profile notes listed in `conformance.ProfileNotes` (today the
 bitcoin-time note's §14 and the candidate fixed-root identity note's §10), is a subtest of `TestConformanceCases`.
-The report counts each profile on its own line; the `id` line belongs to a profile that is not active, so quote it
-separately from the totals of the active profiles. Each id is defined in exactly one table; a note
+The report counts each profile on its own line; the `id` line belongs to a profile whose reader is active and whose
+writer is not, so quote it separately from the totals of the other profiles. Each id is defined in exactly one table; a note
 restating a case defined elsewhere writes its id in backticks. A test declares what it checks:
 
 - `conformance.Covers(t, "C-core-105")`: this test checks the case's whole required outcome. The case passes.

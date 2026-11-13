@@ -26,7 +26,7 @@ import (
 // F1 (high): a valid rc/1 root revoke_key/rotate_key whose prev lineage reaches I is terminal whatever defects its
 // ancestry or merges carry (profile §3 "irrespective of … branch"; user decision 2026-10-22: root_retired).
 func TestReviewTerminalRootEventIgnoresAncestryDefects(t *testing.T) {
-	conformance.Partial(t, "C-id-17", "signed adapter and model, incl. rival and unplaceable events; the profile is not active: no dual-major reader or consumer reads this answer")
+	conformance.Partial(t, "C-id-17", "signed adapter and model, incl. rival and unplaceable events; the production reader asks this evaluator, but this case is not yet run through a command")
 	terminal := func(w *world, kind, parent string, merges ...string) {
 		body := obj("reason", "key_compromise", "last_good", w.ids["G2"])
 		if kind == "rotate_key" {
@@ -169,7 +169,7 @@ func TestReviewCutWithWrongIdentityDeniesItsGrant(t *testing.T) {
 // only its grant): sibling grants stay eligible with a warning; acts under the unsupported grant read unknown,
 // never a definite scope denial built from the entries this reader happened to parse.
 func TestReviewUnsupportedGrantAffectsOnlyItself(t *testing.T) {
-	conformance.Partial(t, "C-id-19", "unknown kind confined to its grant at the adapter, closed registry in the model; registered field dispatch on every kind needs consumers, the profile is not active: no dual-major reader or consumer reads this answer")
+	conformance.Partial(t, "C-id-19", "unknown kind confined to its grant at the adapter, closed registry in the model; registered field dispatch on every kind needs consumers, the production reader asks this evaluator, but this case is not yet run through a command")
 	for _, perms := range [][]canon.Value{
 		{obj("kind", "zz_future")},
 		{authoredAny(), obj("kind", "zz_future")},
@@ -424,7 +424,7 @@ func (w *world) all(except ...string) [][]byte {
 // Re-review N1 (GPT): a cut is addressed by its grant alone. A readable grant with a missing, mistyped or malformed
 // identity denies that grant and leaves sibling grants alone; an unreadable grant stays unknown for every grant.
 func TestReviewCutAddressIsTheGrant(t *testing.T) {
-	conformance.Partial(t, "C-id-13", "signed adapter and model; the profile is not active: no dual-major reader or consumer reads this answer")
+	conformance.Partial(t, "C-id-13", "signed adapter and model; the production reader asks this evaluator, but this case is not yet run through a command")
 	for _, tc := range []struct {
 		name  string
 		field string

@@ -23,7 +23,7 @@ func amendsBody(ids ...string) canon.Value {
 
 // identityWorld: three of I's claims on X by two worker keys. The fake evaluator decides who acts for I; the
 // lines are bare rc/1 statements carrying the identity marker so the default reader holds them evidence-ready
-// (the rc/2 reader that would hold real identity lines is not wired: profile not active).
+// (the signed rc/2 scenarios are TestIdentityAuthorshipSignedRC2 and, through the commands, internal/cli).
 func identityWorld(t *testing.T) (*world, *actorFake) {
 	w := newWorld(t)
 	w.authored("A0", "K1", "X", "licence", "MIT")
@@ -44,8 +44,8 @@ func selectIdentity(t *testing.T, w *world, f *actorFake, check func(*Artifact))
 // sequence, arrival or timestamp tiebreak; an amendment naming both reconciles. Every answer is the same under
 // every sampled delivery order.
 func TestIdentityClaimsGroupByExplicitAmendment(t *testing.T) {
-	conformance.Partial(t, "C-id-21", "the amendment DAG and the contested current view through the resolver with a test-only actor evaluator; the same over signed rc/2 evidence needs the dual-major reader")
-	conformance.Partial(t, "C-id-45", "the resolver applies an eligible cross-key, cross-grant amendment of I's claim (breadth is the evaluator's answer); end to end over signed rc/2 evidence needs the dual-major reader")
+	conformance.Partial(t, "C-id-21", "the amendment DAG and the contested current view through the resolver with a test-only actor evaluator; signed rc/2 end to end through the commands in internal/cli (identity_reader_test.go)")
+	conformance.Partial(t, "C-id-45", "the resolver applies an eligible cross-key, cross-grant amendment of I's claim (breadth is the evaluator's answer); signed rc/2 end to end through the commands in internal/cli (identity_reader_test.go)")
 
 	// Same-key ancestry alone does not amend an identity claim: both are current, none preferred.
 	w, f := identityWorld(t)
@@ -105,8 +105,8 @@ func TestIdentityClaimsGroupByExplicitAmendment(t *testing.T) {
 // current view unknown, while an exact pin to an individually eligible claim still selects it; an outsider's
 // header that binds to nothing changes nothing.
 func TestIdentityAmendmentTargets(t *testing.T) {
-	conformance.Partial(t, "C-id-22", "wrong principal, wrong content and missing target through the resolver with a test-only actor evaluator; the same over signed rc/2 evidence needs the dual-major reader")
-	conformance.Partial(t, "C-id-44", "authorized missing-target amendment makes I's current view unknown (exact pin still met) and an unbound outsider changes nothing, through the resolver with a test-only actor evaluator; signed rc/2 end to end needs the dual-major reader")
+	conformance.Partial(t, "C-id-22", "wrong principal, wrong content and missing target through the resolver with a test-only actor evaluator; signed rc/2 end to end through the commands in internal/cli (identity_reader_test.go)")
+	conformance.Partial(t, "C-id-44", "authorized missing-target amendment makes I's current view unknown (exact pin still met) and an unbound outsider changes nothing, through the resolver with a test-only actor evaluator; signed rc/2 end to end through the commands in internal/cli (identity_reader_test.go)")
 	other := strings.Repeat("cd", 32)
 
 	// Wrong principal: the target is J's claim.

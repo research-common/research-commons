@@ -43,7 +43,7 @@ func scaled(t testing.TB, rootEvents, delegateEdges int) (*Snapshot, ID) {
 // worker with a long linear history are eligible, not unknown (the old 2,048-fact cap
 // made such an identity a permanent brick). The memoized walk keeps the work linear.
 func TestDefaultCapsAdmitLongLivedIdentity(t *testing.T) {
-	conformance.Partial(t, "C-id-39", "model half real (three evaluation caps, deterministic accounting, model_limit naming the cap); exit 3 needs a command")
+	conformance.Partial(t, "C-id-39", "model half real (three evaluation caps, deterministic accounting, model_limit naming the cap); exit 3 is end to end through the commands in internal/cli (identity_reader_test.go)")
 	s, head := scaled(t, 6000, 5000)
 	start := time.Now()
 	r, stats := s.evaluate(head, DefaultLimits())

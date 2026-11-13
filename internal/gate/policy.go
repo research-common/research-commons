@@ -20,7 +20,7 @@ const (
 	// LimitBlobBytes bounds one blob's size in a package.
 	LimitBlobBytes = "blob_bytes"
 	// LimitStatementBytes bounds one statement file's size. It can only lower the format's own bound: a line
-	// longer than wire.MaxLine is refused by wire.Read whatever this is.
+	// longer than wire.MaxLine is refused by wire.ReadStored whatever this is.
 	LimitStatementBytes = "statement_bytes"
 )
 

@@ -89,7 +89,7 @@ func TestScopeIsExplicitAndFailClosed(t *testing.T) {
 }
 
 func TestAmendPermissionIsExplicitAndIdentityWideWithinContentScope(t *testing.T) {
-	conformance.Partial(t, "C-id-45", "grant scope at the model; cross-key amendment of the principal's claims needs the claim consumer")
+	conformance.Partial(t, "C-id-45", "grant scope at the model; cross-key amendment of the principal's claims is end to end through the commands in internal/cli (identity_reader_test.go)")
 	for _, kind := range []Kind{Authored, Observed} {
 		fs := fixture()
 		mutate(fs, "G", func(f *Fact) { f.Grant.Permissions[0].Kind = kind })

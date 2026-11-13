@@ -212,7 +212,7 @@ func (s *Store) Fsck(opt FsckOptions) (*FsckReport, error) {
 			return nil
 		}
 		r.Statements++
-		st, rerr := wire.Read(b)
+		st, rerr := wire.ReadStored(b)
 		switch {
 		case rerr != nil:
 			add(FsckBadStatement, d.Name(), "does not read: "+rerr.Error()+" (never shown as anyone's word)", true)
@@ -295,7 +295,7 @@ func (s *Store) Fsck(opt FsckOptions) (*FsckReport, error) {
 			// A done record whose statements are not all installed is an orphan: replay would fix it, so say so.
 			var missing []string
 			for _, l := range rec.Lines {
-				if st, err := wire.Read(l); err == nil {
+				if st, err := wire.ReadStored(l); err == nil {
 					if _, ok := infos[st.ID]; !ok {
 						missing = append(missing, st.ID)
 					}

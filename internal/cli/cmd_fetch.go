@@ -188,7 +188,7 @@ func fetchTargets(c *Ctx) ([]fetchTarget, error) {
 			t = fetchTarget{via: a}
 			if line, ok := stmts[a]; !ok {
 				t.missing = "no statement held"
-			} else if st, err := wire.Read(line); err != nil || contentOf(st) == "" || !isDigest(contentOf(st)) {
+			} else if st, err := wire.ReadStored(line); err != nil || contentOf(st) == "" || !isDigest(contentOf(st)) {
 				t.missing = "names no blob"
 			} else {
 				t.blob = contentOf(st)

@@ -129,8 +129,20 @@ func (v *view) statementCore(id string) (*Obj, *wire.Statement) {
 	o := newObj().set("statement", refV(id)).set("kind", peerV(st.Kind)).set("signer", refV(st.Signer)).
 		set("seq", intV(st.Seq)).set("ts_signer_declared", refV(st.TS.Text)).
 		set("status", tokV(tok(string(st.Status)))).set("line", tokV(tok(v.lineState(id))))
-	if p.Counts() {
+	if a := v.actorObj(p); a != nil {
+		o.set("actor", a)
+	}
+	// counted is the counting gate every counting consumer asks (resolve.Counted): for a bare-key statement the
+	// key's own status; for an identity statement its actor's eligibility, with the key's status shown beside it
+	c := v.r.Counted(p)
+	if c.Counts {
 		o.set("counted", tokV(tok("counted")))
+		if c.Why != "" {
+			o.set("reasons", texts(c.Why))
+		}
+	} else if p.IdentityContext() && p.Chained && p.EvidenceReady() {
+		o.set("counted", tokV(tok("not counted")))
+		o.set("reasons", texts(c.Why))
 	} else {
 		o.set("counted", tokV(tok("not counted")))
 		var why []string
@@ -406,7 +418,7 @@ func explainCmd(c *Ctx) (*Obj, int, error) {
 		if p, ok := v.r.Statement(id); ok {
 			e.set("signer", refV(p.St.Signer)).set("kind", peerV(p.St.Kind)).set("status", tokV(tok(string(p.St.Status)))).
 				set("line", tokV(tok(v.lineState(id))))
-			if p.Counts() {
+			if v.r.Counted(p).Counts {
 				e.set("counted", tokV(tok("counted")))
 			} else {
 				e.set("counted", tokV(tok("not counted")))

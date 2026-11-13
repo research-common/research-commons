@@ -77,8 +77,11 @@ var vocabulary = []Token{
 	{"unknown kind", "statement", "a validly signed statement of a kind the format does not list; granted nothing"},
 	{"chained", "line", "the line reaches its log's first line through prev and merges"},
 	{"detached", "line", "a predecessor is not held; shown, attributed, counted toward nothing. For an edition: every approval is on a detached line; shown, not evaluated"},
-	{"counted", "statement", "chained, verified, understood and not excluded by a key event"},
+	{"counted", "statement", "chained, verified, understood and not excluded by a key event; for an identity statement, its actor eligible for the identity it names (its key's status shown beside it, not applied)"},
 	{"not counted", "statement", "held and shown, counted toward nothing (the reason is named)"},
+	// an identity statement's actor (fixed-root identity profile §3, §4): the evaluator's answer over held evidence
+	{"eligible", "actor", "the statement's signer acts for the identity it names under the grant it names, on the evidence held"},
+	{"denied", "actor", "the held evidence shows the signer does not act for that identity (the reason is named)"},
 	{"retained", "line", "an unverified line kept and not placed"},
 	{"FORK", "line", "two lines of one key's log from one sequence point, not yet merged; for a resource, two authorized editions with one predecessor and no merge: no edition is current"},
 	{"merged", "line", "a fork of one key's log that has cleared: a later line of the key names every other tip, so every branch is in its history; both branches stay and count"},
@@ -153,7 +156,7 @@ var vocabulary = []Token{
 	{"edition", "edition", "an authorized edition of the resource: every predecessor's controllers approved this body under its rule"},
 	{"unauthorized", "edition", "some predecessor's controllers did not approve this body (nobody elevates themselves)"},
 	{"orphan", "edition", "a predecessor names nothing this reader holds as the genesis or an edition of the resource; never current"},
-	{"invalid", "edition", "authorized approvals, but the body cannot be an edition (a rule no controller set meets, or a merge that does not declare differing controllers and rule)"},
+	{"invalid", "edition", "authorized approvals, but the body cannot be an edition (a rule no controller set meets, or a merge that does not declare differing controllers and rule). For a statement: signature verified, and it breaks a rule of the identity profile (rc/2); counted toward nothing, never read as its key's"},
 	// task readiness (claims-model note §9.2, §9.3)
 	{"settled by review, not by counting", "readiness", "the task edition has no quorum predicate: its beneficiary's decisions settle it; nothing is counted"},
 	{"ready", "readiness", "the quorum is met by distinct signing keys under the edition's terms"},

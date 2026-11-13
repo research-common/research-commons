@@ -9,8 +9,8 @@ import (
 
 // The rc/2 placement of a task edition's roles (fixed-root identity profile §5.3, task-contracts note §3.2): the
 // edition's `body.x_identity_v1.task_roles` names the beneficiary, the eligible issuers (or any issuer) and the
-// counting unit as typed subjects, and the contract carries none of them. The CANDIDATE profile is not active:
-// the default reader never reads an rc/2 edition, so no production view reaches this file.
+// counting unit as typed subjects, and the contract carries none of them. The production reader (wire.ReadStored)
+// reads an rc/2 edition, so a view holding one reaches this file; the rc/1-only wire.Read never does.
 
 // taskRolesPath is where an rc/2 edition carries its roles.
 const taskRolesPath = "body." + wire.IdentityCrit + ".task_roles"

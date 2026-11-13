@@ -243,7 +243,7 @@ func treePackage(r *repo, rev string) (gate.Package, treeContent, error) {
 	return pkg, content, nil
 }
 
-// heldAt is the data surface of the tree at rev: its statements (those wire.Read accepts under their id, at
+// heldAt is the data surface of the tree at rev: its statements (those wire.ReadStored accepts under their id, at
 // their signer's path) and its blobs (regular files whose bytes hash to their name). Nothing else in the tree is
 // history, so a corrupt blob or an unreadable statement file at the base held nothing and may be removed or
 // replaced (gate: not held).
@@ -277,7 +277,7 @@ func heldAt(r *repo, rev string) (gate.MemHeld, treeContent, error) {
 			}
 			continue
 		}
-		if st, err := wire.Read(b); err == nil && gate.StatementPath(st.Signer, st.ID) == e.path {
+		if st, err := wire.ReadStored(b); err == nil && gate.StatementPath(st.Signer, st.ID) == e.path {
 			h.Lines[st.ID] = b
 		}
 	}

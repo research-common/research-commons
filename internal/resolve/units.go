@@ -10,7 +10,7 @@ import (
 )
 
 // Identity authorship units (identity profile §5.1). Only a reader with an actor evaluator reaches this file: with
-// none (every production reader) the counting gate binds nothing to an identity, and authorship is the bare-key
+// none (a reader holding no rc/2 line) the counting gate binds nothing to an identity, and authorship is the bare-key
 // computation of artifact.go unchanged.
 
 // identityNodes are I's claims of kind on content: every evidence-ready statement of the kind on the content the

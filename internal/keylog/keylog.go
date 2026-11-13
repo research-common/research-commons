@@ -30,19 +30,18 @@ import (
 type Store struct {
 	logs  map[string]*Log
 	owner map[string]string // statement id -> signer, over every log
-	// read is the wire reader every Add uses; nil is wire.Read (every production store).
+	// read is the wire reader every Add uses; nil is wire.Read. Production stores use wire.StoredReader (NewStoredStore).
 	read wire.LineReader
 }
 
 // StoreOption configures a Store.
 type StoreOption func(*Store)
 
-// WithReader makes every Add read lines with r instead of wire.Read. It exists for the CANDIDATE dual-major
-// reader (wire.DualReader, fixed-root identity profile §2.4): no production store sets it. A nil r is wire.Read.
+// WithReader makes every Add read lines with r instead of wire.Read. A nil r is wire.Read.
 func WithReader(r wire.LineReader) StoreOption { return func(s *Store) { s.read = r } }
 
-// NewStore returns an empty store. With no option every line is read by wire.Read, exactly as before options
-// existed.
+// NewStore returns an empty store. With no option every line is read by wire.Read (rc/1 only; another major is
+// retained unverified): the reader the differential tests compare the production one against.
 func NewStore(opts ...StoreOption) *Store {
 	s := &Store{logs: map[string]*Log{}, owner: map[string]string{}}
 	for _, o := range opts {
@@ -50,6 +49,10 @@ func NewStore(opts ...StoreOption) *Store {
 	}
 	return s
 }
+
+// NewStoredStore returns an empty store that reads with the production reader (wire.ReadStored: rc/1 and rc/2).
+// Every production view, gate and command builds its logs with it.
+func NewStoredStore() *Store { return NewStore(WithReader(wire.StoredReader)) }
 
 // Read reads one line with this store's reader: what Add would read, without delivering it.
 func (s *Store) Read(line []byte) (*wire.Statement, error) {

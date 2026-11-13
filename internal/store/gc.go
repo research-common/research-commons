@@ -288,7 +288,7 @@ func contentDigest(st *wire.Statement) (Digest, bool) {
 // readFile indexes one file under statements/: every digest it mentions pins, whether or not it reads.
 func (ri *refIndex) readFile(name string, b []byte) {
 	var why string
-	st, err := wire.Read(b)
+	st, err := wire.ReadStored(b)
 	switch {
 	case err != nil || st.ID != name:
 		why = "statement file " + name + " (does not read; kept, never interpreted)"
@@ -672,7 +672,7 @@ func (s *Store) logHead(signer string) (*wire.Statement, error) {
 		if err != nil {
 			return nil, err
 		}
-		st, err := wire.Read(b)
+		st, err := wire.ReadStored(b)
 		if err != nil || st.ID != e.Name() || st.Signer != signer || !st.Verified {
 			continue
 		}

@@ -1,5 +1,5 @@
 {
-  "status": "Scenario handles of the candidate fixed-root identity profile. Handle ID-NN is the registered conformance case C-id-NN (profile note §10); 'conformance' is that case's harness status (covers, partial or pending) and a test in internal/conformance keeps it equal to what the tests declare. The profile is not active: tests check the rc/2 reader, the admission adapter and the reference model, not a consumer, and a case is covered only when its whole required outcome is checked end to end at those layers with signed evidence (profile note §10). Schema vectors are shape checks only.",
+  "status": "Scenario handles of the candidate fixed-root identity profile. Handle ID-NN is the registered conformance case C-id-NN (profile note §10); 'conformance' is that case's harness status (covers, partial or pending) and a test in internal/conformance keeps it equal to what the tests declare. The reader is active and the writer is not: tests check the commands over rc/2 lines signed by the test builders (internal/cli), the rc/2 reader, the admission adapter and the reference model, and a case is covered only when its whole required outcome is checked end to end with signed evidence (profile note §10). Schema vectors are shape checks only.",
   "scenarios": [
     {
       "handle": "ID-01",
@@ -45,10 +45,12 @@
       "isolated_tests": [
         "internal/identity:TestSliceGrantsAuthorizeExplicitActs",
         "internal/wire:TestSignedIdentityPositiveVectors",
-        "internal/identity:TestSignedVectorsGrantCoveredActIsEligible"
+        "internal/identity:TestSignedVectorsGrantCoveredActIsEligible",
+        "internal/cli:TestIdentityReaderVectorsThroughPull",
+        "internal/cli:TestIdentityReaderTrustFloor"
       ],
       "conformance": "covers",
-      "remaining": "Covered at the evaluator: the published signed rc/2 act (both algorithms) is eligible through Admit and the candidate actor evaluator, with I, G, D and the root lineage in its basis. No production reader wires the evaluator: the profile is not active."
+      "remaining": "Covered at the evaluator (the published signed rc/2 act, both algorithms, eligible through Admit and the actor evaluator, with I, G, D and the root lineage in its basis) and through the commands: pulled, `show` prints the actor eligible and counted, `verify` names the identity sole author, and the pull trust floor admits I's act for an {identity: I} entry. No command signs rc/2 yet."
     },
     {
       "handle": "ID-03",
@@ -163,10 +165,11 @@
       "schema_vectors": [],
       "isolated_tests": [
         "internal/identity:TestSliceCutAtExactLine",
-        "internal/identity:TestSignedVectorsCutsAndRetirement"
+        "internal/identity:TestSignedVectorsCutsAndRetirement",
+        "internal/cli:TestIdentityReaderVectorsThroughPull"
       ],
       "conformance": "partial",
-      "remaining": "Set-based ancestry closure including merges; signed wire binding still required."
+      "remaining": "Set-based ancestry closure including merges at the adapter and model; the published cut at last_good and the null cut through pull and `show` (named act kept, descendant `cut_excluded`). Siblings and other grants are checked with synthetic keys at the adapter only."
     },
     {
       "handle": "ID-12",
@@ -247,10 +250,11 @@
         "internal/identity:TestReviewMalformedRootKeyEventIsUnknown",
         "internal/identity:TestReviewUnplaceableTerminalIsUnknownNotRetired",
         "internal/wire:TestSignedIdentityNegativeVectors",
-        "internal/identity:TestRootTerminalEventPlacement"
+        "internal/identity:TestRootTerminalEventPlacement",
+        "internal/cli:TestIdentityReaderVectorsThroughPull"
       ],
       "conformance": "covers",
-      "remaining": "Covered at the evaluator: the published root revoke_key retires I in both algorithms; placement by prev whatever the merges, the same event on a proved rival inception (no effect) and an unplaceable event (unknown) are checked with synthetic keys. No production reader wires the evaluator: the profile is not active."
+      "remaining": "Covered at the evaluator: the published root revoke_key retires I in both algorithms; placement by prev whatever the merges, the same event on a proved rival inception (no effect) and an unplaceable event (unknown) are checked with synthetic keys. Through pull and `show`, the published revoke_key retires I (root_retired)."
     },
     {
       "handle": "ID-18",
@@ -315,10 +319,11 @@
         "internal/wire:TestFixedRootCandidateVectors",
         "internal/resolve:TestIdentityClaimsGroupByExplicitAmendment",
         "internal/resolve:TestIdentityAuthorshipUnits",
-        "internal/resolve:TestIdentityAuthorshipSignedRC2"
+        "internal/resolve:TestIdentityAuthorshipSignedRC2",
+        "internal/cli:TestIdentityReaderAmendmentsThroughCommands"
       ],
-      "conformance": "partial",
-      "remaining": "Covered behind the actor hook, in artifact authorship and selection, with both a test-only evaluator and the real candidate evaluator over signed rc/2 under the dual-major reader. Not active: no production reader wires an actor evaluator (Gate R5)."
+      "conformance": "covers",
+      "remaining": "Covered through the commands: two delegates of I with amend:true sign concurrent cross-key amendments of one claim (signed rc/2, pulled): `verify` reads the licence contested (exit 3) and an amendment naming both reconciles it (exit 0). Also behind the actor hook in internal/resolve."
     },
     {
       "handle": "ID-22",
@@ -327,10 +332,11 @@
       "schema_vectors": [],
       "isolated_tests": [
         "internal/resolve:TestIdentityAmendmentTargets",
-        "internal/resolve:TestIdentityAuthorshipSignedRC2"
+        "internal/resolve:TestIdentityAuthorshipSignedRC2",
+        "internal/cli:TestIdentityReaderAmendmentsThroughCommands"
       ],
-      "conformance": "partial",
-      "remaining": "Covered behind the actor hook, in artifact authorship and selection, with both a test-only evaluator and the real candidate evaluator over signed rc/2 under the dual-major reader. Not active: no production reader wires an actor evaluator (Gate R5)."
+      "conformance": "covers",
+      "remaining": "Covered through the commands: a missing target makes I's licence unknown (exit 3); an amendment naming another principal's claim or I's claim on another blob applies to nothing; under amend \"own\" a cross-key target is a scope denial of the act (`show`: denied, scope_excluded)."
     },
     {
       "handle": "ID-23",
@@ -544,10 +550,12 @@
         "internal/wire:TestDualReaderRC2IsIdentityReader",
         "internal/keylog:TestStoreWithDualReader",
         "internal/resolve:TestDualNoKeyFallback",
-        "internal/resolve:TestDualViewsSurviveCandidateBytes"
+        "internal/resolve:TestDualViewsSurviveCandidateBytes",
+        "internal/cli:TestIdentityReaderNegativeVectorsThroughPull",
+        "internal/cli:TestIdentityReaderStoreRefusesBadRC2"
       ],
       "conformance": "partial",
-      "remaining": "Unchanged reader: wire/keylog retain rc/2 unverified, and every resolver view answers without a panic on the signed vectors plus rc/2 resource/task/invalid lines (internal/resolve:TestDualViewsSurviveCandidateBytes). Dual-major reader built as a candidate store option; under it rc/2 resource/task kinds stay unsupported and an actor line never counts as its key. Remaining: a production reader that wires it (pull, gates, CLI views) and the critical registry."
+      "remaining": "Unchanged reader: wire/keylog retain rc/2 unverified, and every resolver view answers without a panic on the signed vectors plus rc/2 resource/task/invalid lines. The production reader (the dual reader) refuses every published bad-signature negative through pull and a bad rc/2 signature before the store's commit point. Remaining: the critical registry."
     },
     {
       "handle": "ID-37",
@@ -608,10 +616,11 @@
         "internal/identity:TestAdmitCapRefusesWholeSnapshot",
         "internal/identity:TestReviewCandidateMergesCap",
         "internal/identity:TestReviewDelegateSelfEventsBounded",
-        "internal/identitymodel:TestDefaultCapsAdmitLongLivedIdentity"
+        "internal/identitymodel:TestDefaultCapsAdmitLongLivedIdentity",
+        "internal/cli:TestIdentityReaderCapIsUnknown"
       ],
-      "conformance": "partial",
-      "remaining": "PAE/depth syntax bounds and the model evaluation caps are tested; the production exit 3 mapping needs a command."
+      "conformance": "covers",
+      "remaining": "Covered: PAE/depth syntax bounds, the admission cap and the model evaluation caps are tested; through the commands, a reader whose admission fails as a whole answers every identity question unknown naming the cap (`verify` exit 3, `show` actor unknown, not counted), and a bare-key claim keeps its answer."
     },
     {
       "handle": "ID-40",
@@ -633,10 +642,11 @@
       "isolated_tests": [
         "internal/wire:TestFixedRootCandidateSharedEdition",
         "internal/wire:TestFixedRootCandidateCrypto",
-        "internal/identity:TestSliceNegatives"
+        "internal/identity:TestSliceNegatives",
+        "internal/cli:TestIdentityReaderNegativeVectorsThroughPull"
       ],
       "conformance": "partial",
-      "remaining": "Raw context schema/crypto checked; actual mixed controller semantics and production reader integration remain."
+      "remaining": "Raw context schema/crypto checked; through pull a tampered or stripped actor is a bad signature and an rc/2 raw key event is admitted `invalid`, counted toward nothing. Remaining: mixed controller semantics in the resource consumer."
     },
     {
       "handle": "ID-42",
@@ -681,10 +691,11 @@
         "internal/identitymodel:TestAuthenticatedIssuerBoundaryAndNoninterference",
         "internal/resolve:TestIdentityAmendmentTargets",
         "internal/resolve:TestIdentityUnitUnknownCurrentView",
-        "internal/resolve:TestIdentityAuthorshipSignedRC2"
+        "internal/resolve:TestIdentityAuthorshipSignedRC2",
+        "internal/cli:TestIdentityReaderAmendmentsThroughCommands"
       ],
-      "conformance": "partial",
-      "remaining": "Covered behind the actor hook, in artifact authorship and selection, with both a test-only evaluator and the real candidate evaluator over signed rc/2 under the dual-major reader. Not active: no production reader wires an actor evaluator (Gate R5)."
+      "conformance": "covers",
+      "remaining": "Covered through the commands: an authorized amendment naming a missing target makes I's licence unknown (`verify` exit 3); an outsider's self-signed actor naming I with an invented grant leaves `verify` unchanged and is never counted."
     },
     {
       "handle": "ID-45",
@@ -700,10 +711,11 @@
         "internal/identitymodel:TestAmendOwnIsTheActingKeysOwnRecords",
         "internal/identity:TestAmendOwnSignedEvidence",
         "internal/resolve:TestIdentityClaimsGroupByExplicitAmendment",
-        "internal/resolve:TestIdentityAuthorshipSignedRC2"
+        "internal/resolve:TestIdentityAuthorshipSignedRC2",
+        "internal/cli:TestIdentityReaderAmendmentsThroughCommands"
       ],
-      "conformance": "partial",
-      "remaining": "Grant breadth at the model (amend:true identity-wide; amend:\"own\" only the acting key's records of the identity, over signed evidence); the resolver applies an eligible cross-key amendment with a test-only evaluator. Issuer UI acknowledgment and signed rc/2 end to end through the dual-major reader remain."
+      "conformance": "covers",
+      "remaining": "Covered through the commands: amend:true lets K2 amend K1's claim of I across keys and grants (reconciliation applies); a grant with content targets {X} applies inside them and is denied (scope_excluded) outside; amend \"own\" denies a cross-key target. Issuer UI acknowledgment is the writer's (no command signs a grant yet)."
     }
   ]
 }

@@ -1,9 +1,10 @@
 # internal/identity: the admission contract (candidate)
 
-**Status: candidate, not activated.** This package binds the candidate fixed-root identity profile
+**Status: reader active, no writer.** This package binds the candidate fixed-root identity profile
 (`docs/DESIGN-notes-fixed-root-identity.md`, "the profile") to the isolated reference model in
-`internal/identitymodel` through one adapter, `Admit`. No writer, resolver consumer, CLI command or global
-major uses it; `wire.Major` stays 1. Nothing here is frozen wire. The profile's §7 states the evaluation
+`internal/identitymodel` through one adapter, `Admit`. Every production reader builds its actor evaluator here
+(`Evaluator`, `reader.go`) from the lines it holds; no writer signs rc/2 and `wire.Major` (the writer's major)
+stays 1. Nothing here is frozen wire. The profile's §7 states the evaluation
 contract a future resolver must meet; this file states what the adapter does today, section by section, so
 a reviewer can check the code against it.
 
@@ -15,8 +16,11 @@ raw lines ──► wire.NewIdentityReader().Read   verify-first; rc/1 and candi
           ──► identitymodel.Snapshot.Evaluate the reference semantics, unchanged
 ```
 
-`wire.Read`, the zero `wire.Reader`, `keylog` and `resolve` are untouched: for every existing consumer an
-rc/2 line stays an unknown major, retained unverified.
+The production line reader is `wire.ReadStored` (the dual reader: rc/1 as `wire.Read`, rc/2 as the identity
+reader); `wire.Read` and the zero `wire.Reader` stay rc/1-only, so for them an rc/2 line is an unknown major,
+retained unverified. `Evaluator(lines)` is what a production reader passes the resolver: nil when no line is
+rc/2, `Actors` otherwise, `Unavailable` (identity questions `unknown`, naming the failure) when `Admit` fails as
+a whole.
 
 ## 1. Two majors
 

@@ -63,7 +63,7 @@ func absentToken(name string) string {
 	return "undeclared"
 }
 
-// Claim is one subject's authorship claim on the blob: a key's (every production reader), or an identity's when
+// Claim is one subject's authorship claim on the blob: a key's (every reader holding no rc/2 line), or an identity's when
 // an actor evaluator finds its delegates' statements eligible for it (identity profile §5.1; not active).
 type Claim struct {
 	// Subject owns the claim. Signers are the keys that signed its statements, sorted: the key itself for a key
@@ -262,7 +262,7 @@ func (r *Resolver) authorship(d string) *Artifact {
 		if contentDigest(p.St.Body) != d {
 			continue
 		}
-		// the counting gate: with no actor evaluator (every production reader) exactly Counts, and the evaluator
+		// the counting gate: with no actor evaluator (a reader holding no rc/2 line) exactly Counts, and the evaluator
 		// is never asked; with one, a statement it binds to an identity counts for that identity (actorgate.go)
 		g := r.gate(p)
 		switch {

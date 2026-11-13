@@ -10,6 +10,14 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 ## [Unreleased]
 
 ### Added
+- The fixed-root identity profile's **reader is active**: every command reads `rc/2` statements (verified under
+  the profile; a bad `rc/2` signature is refused like an `rc/1` one) and evaluates identity actors from the
+  statements you hold. `show` and `explain` print an identity statement's actor (identity, grant, `eligible` /
+  `denied` / `unknown` with reasons), `counted` follows the actor's eligibility, and every answer that held
+  `rc/2` evidence names the evaluator (version, evidence digest, receipt). A `pull` admission entry naming an
+  identity now admits that identity's eligible acts. Past the evaluator's admission cap identity answers read
+  `unknown` (exit 3). A verified `rc/2` line that breaks the profile is kept and labelled `invalid`. No command
+  writes `rc/2` yet; with no `rc/2` statement held every output is unchanged.
 - **An official Python package, `research-commons`** (`python/`). It runs the `commons` binary with `--json` and
   returns what it printed; it reimplements nothing. A problem object the tool prints becomes an exception chosen by
   the exit code (`DidNotStart`, `CouldNotCheck`, `CheckedAndWrong`, `NothingToRerun`, `EnvironmentMismatch`), with

@@ -50,7 +50,7 @@ func generatedDAG(seed int64) ([]Fact, []ID, map[ID]map[ID]bool) {
 }
 
 func TestSeededCutsMatchIndependentSetOracleAndNeverWiden(t *testing.T) {
-	conformance.Partial(t, "C-id-12", "seeded model property over facts, not signed bytes; the profile is not active: no dual-major reader or consumer reads this answer")
+	conformance.Partial(t, "C-id-12", "seeded model property over facts, not signed bytes; the production reader asks this evaluator, but this case is not yet run through a command")
 	for seed := int64(1); seed <= 60; seed++ {
 		t.Run(fmt.Sprintf("seed-%d", seed), func(t *testing.T) {
 			fs, candidates, closures := generatedDAG(seed)

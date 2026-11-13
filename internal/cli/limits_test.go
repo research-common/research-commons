@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"go/build"
 	"os"
 	"path/filepath"
@@ -172,21 +173,31 @@ var limits = []limit{
 	},
 	{
 		id:  "L-07",
-		gap: "Fixed-root identity (`rc/2`) is a review candidate, not enabled: an `rc/2` line is an unverified other-major line",
+		gap: "No command writes a fixed-root identity (`rc/2`) statement: identities can be read, not created, by this tool (no inception, grant, cut or actor-bearing publish)",
 		sources: []limitSource{
-			{file: "docs/DESIGN-notes-fixed-root-identity.md", says: "**Status: review candidate; not enabled in the production reader or writer.**"},
-			{file: "internal/README.md", says: "### Candidate identity admission (opt-in, not wired)"},
+			{file: "docs/DESIGN-notes-fixed-root-identity.md", says: "**Status: reader active** (`rc/1` + `rc/2` read; no writer yet)."},
+			{file: "internal/README.md", says: "### Identity admission (reader active, no writer)"},
 		},
-		probe:  "the format major is 1, and a signed `rc/2` line reads as `unsupported` and unverified",
-		closes: "activating the profile (the major moves, or the reader verifies `rc/2`)",
+		probe:  "the writer's major is 1, `publish --draft` refuses an `identity_inception` draft and a draft carrying an `rc` or `x_actor_v1` member, while the reader verifies a signed `rc/2` line",
+		closes: "a command that signs `rc/2` (inception, grant, cut, or a publish acting for an identity)",
 		open: func(t *testing.T) (bool, string) {
-			line, _ := wire.Sign(wire.Draft{RC: "rc/2", Kind: "describes", TS: "2026-10-16T00:00:00Z",
-				Body: obj("about", canon.Value(obj("content", dig("x"))), "note", "n")}, testKey("limits"))
-			st, err := wire.Read(line)
-			if err != nil {
-				return false, err.Error()
+			line, _ := wire.Sign(wire.Draft{RC: "rc/2", Kind: "identity_inception", TS: "2026-10-16T00:00:00Z", Crit: []string{wire.IdentityCrit},
+				Body: obj("profile", wire.FixedRootProfile, wire.IdentityCrit, canon.Value(obj()))}, testKey("limits"))
+			st, err := wire.ReadStored(line)
+			if err != nil || !st.Verified || st.Status != wire.Valid {
+				return false, "the reader does not verify rc/2: " + fmt.Sprint(err)
 			}
-			return wire.Major == 1 && st.Status == wire.Unsupported && !st.Verified, string(st.Status) + " " + st.Why
+			p := newPubWorld(t)
+			for _, d := range []string{
+				`{"kind":"identity_inception","body":{"profile":"fixed-root-v1","x_identity_v1":{}}}`,
+				`{"kind":"authored","rc":"rc/2","body":{}}`,
+				`{"kind":"authored","x_actor_v1":{"grant":"g","identity":"i"},"body":{}}`,
+			} {
+				if r := p.publish("--draft", p.file("d.json", d)); r.code == ExitOK {
+					return false, "publish --draft signed " + d
+				}
+			}
+			return wire.Major == 1, "writer major " + fmt.Sprint(wire.Major) + ", reader majors " + fmt.Sprint(wire.ReaderMajors)
 		},
 	},
 	{

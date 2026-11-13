@@ -14,8 +14,8 @@ import (
 // Evaluate. It does no trust evaluation and reads no policy (profile §6: eligibility is authority, trust is the
 // reader's own choice).
 //
-// No production reader wires it: the profile is not active (wire.Major stays 1, no writer). It exists so the
-// resolver's and the pull gate's trust seams can be exercised end to end against real signed evidence in tests.
+// Every production reader builds it over its held lines through Evaluator (nil when none is an rc/2 line), and
+// passes it to the resolver and the pull gate's trust floor. The writer still signs rc/1 only (wire.Major).
 //
 // Statements are looked up by id in the snapshot, never read from the caller's *wire.Statement: the default
 // reader retains an rc/2 line unverified and never sets its Actor, so the caller's copy cannot say what was

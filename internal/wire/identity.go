@@ -11,12 +11,14 @@ import (
 	"github.com/research-common/research-commons/internal/refusal"
 )
 
-// This file is the CANDIDATE fixed-root identity reader (docs/DESIGN-notes-fixed-root-identity.md). It is
-// local and opt-in: Read, the zero Reader, NewReader and Major are unchanged, so every existing consumer still
-// retains rc/2 as an unverified other-major line. Nothing here is a frozen wire format.
+// This file is the fixed-root identity reader (docs/DESIGN-notes-fixed-root-identity.md): the rc/2 half of the
+// production reader (ReadStored, dual.go). Read, the zero Reader, NewReader and Major are unchanged: Read stays
+// the rc/1-only reader (an rc/2 line an unverified other-major line), and Major the writer's major. The profile is
+// still a candidate wire format: nothing here is frozen.
 
 const (
-	// CandidateMajor is the candidate identity major. It is NOT Major: no global flip.
+	// CandidateMajor is the identity profile's major. The production reader reads it (ReaderMajors); it is NOT
+	// Major, the major this tool's writer signs.
 	CandidateMajor = 2
 	// IdentityCrit is the only critical extension the candidate profile recognizes.
 	IdentityCrit = "x_identity_v1"
