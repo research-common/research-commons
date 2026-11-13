@@ -151,7 +151,7 @@ const (
 	// LabelInvalid: a verified rc/2 line that breaks a rule of the identity profile. It is kept, not refused: an
 	// authenticated invalid control is evidence (an invalid cut still denies its grant, profile §3, §4), and it
 	// counts toward nothing.
-	LabelInvalid       = string(wire.Invalid)
+	LabelInvalid = string(wire.Invalid)
 	// The actor labels of `hub check` (Options.ActorLabels): the evaluator's answer about an added statement that
 	// names an identity actor, over the evaluated set. Labels only: admission and exit are never changed by them.
 	LabelActorEligible = "actor: " + policy.ActorEligible

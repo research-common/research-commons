@@ -20,8 +20,8 @@ There is **one** tool version, and one separate format identifier.
 - **Wire major** (`rc/1`): the format tag that appears in the bytes the tool writes and reads.
   It is the constant `Major` in `internal/wire/wire.go`. It is not printed by `--version` or by
   anything else, and it does not move with the tool version: tool `0.5.0` → `0.5.1` → `0.6.0`
-  all keep `rc/1` until a change to the format itself forces `rc/2`. A candidate `rc/2` identity
-  profile exists in the tree but is not active.
+  all keep `rc/1` until a change to the format itself forces `rc/2`. The candidate `rc/2` identity
+  profile's reader is active, but no command writes `rc/2`, so the writer's major stays `rc/1`.
 
 Keep the two independent. Tying the wire major to the tool's SemVer would make every bug-fix
 release imply a format change it doesn't need.

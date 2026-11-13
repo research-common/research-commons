@@ -1,4 +1,4 @@
-# Candidate profile: fixed-root identity
+# Fixed-root identity profile (candidate wire, reader active)
 
 **Status: reader active** (`rc/1` + `rc/2` read; no writer yet). The production reader verifies and
 interprets `rc/2` under this profile and evaluates identity actors from the statements it holds; no command
@@ -178,16 +178,17 @@ possible input. Also, a malicious signer can create nonconforming `rc/1` bytes w
 unmarked envelope actor that an old reader ignores; this proposal does not
 retroactively repair old readers. No conforming candidate writer emits that combination.
 
-**Dual-major reader (candidate, opt-in).** A reader that understands this profile
+**Dual-major reader (active).** A reader that understands this profile
 dispatches each line by its `rc` major and nothing else. `rc/1` goes through the
 unchanged `rc/1` reader: the same refusals, statuses and ids; an `rc/1` envelope actor
 is not read, and an `rc/1` `crit` naming the identity marker is unsupported. `rc/2` goes
 through the candidate reader (verify first; marker and actor read; a verified line that
-breaks a candidate rule is held as invalid). Any other major stays an unknown major.
+breaks a candidate rule is held as `invalid statement`). Any other major stays an unknown major.
 Under it, a corpus of `rc/1` statements only gives the same ids, statuses and every
 resolver answer as the unchanged reader (C-id-01). An `rc/2` line carrying an actor is
-never its signing key's evidence: with no actor evaluator it counts toward nothing and
-reads `unknown (identity profile not active)`; an evaluator that binds it to no identity
+never its signing key's evidence: where a surface has no actor evaluator it counts toward
+nothing and its actor reads `unknown` with the reason `no identity evaluator` (a production
+reader builds one whenever it holds an `rc/2` line); an evaluator that binds it to no identity
 leaves it uncounted as well (§2.3, "never a key fallback"). An `rc/2` line with the
 marker and no actor is a `key(K)` statement and keeps the bare-key gate. The `rc/2`
 resource kinds (genesis, edition, withdraw_approval) and task kinds (intent, progress,
@@ -202,6 +203,25 @@ the package) asks the actor evaluator built from the held lines; with no `rc/2` 
 there is no evaluator and every answer is the unchanged reader's. When admission fails as
 a whole (more authenticated statements than its cap), every identity question reads
 `unknown` naming the cap, never a partial snapshot or a key fallback.
+
+**Whose evidence judges a change.** The evaluator is always built over the statements the reader
+is about to count, so each surface names a different set. A read command (`show`, `verify`,
+`explain`, `list`, `status`) evaluates the lines held in the store. `pull` evaluates the store plus
+the statements of the package, so a grant the package brings judges an act it brings (every line is
+still verified first). `hub check` evaluates the *evaluated set*: the lines held at the base
+revision plus the admitted candidates of the change. A change may therefore bring an identity's
+inception, a grant under it and an act under that grant, and be judged `eligible` by that evidence
+alone. This is deliberate. Authority for an act is the root key's signature on the inception and the
+grant, and a signature is the same evidence whether the hub already held it or the change carries
+it; the hub's held set confers nothing. A hub that wants to refuse such acts says so in its own
+policy (the hub admits, readers count: I8), not by reading less evidence. Source profiles are the
+opposite case on purpose: a profile is the hub's *policy* about what a series boundary means, not
+evidence about who signed, so `hub check` reads it at the base revision, where a change cannot
+bring the profile that judges it. `hub check` prints the evaluator's answer for each added
+statement that names an actor as a label (`actor: eligible`, `actor: denied (<reasons>)` or
+`actor: unknown (<reasons>)`, with the same `identity`, `grant`, `state` and `reasons` members
+`show` prints). The label never refuses, never changes the exit, and an `rc/1` or marker-only
+`rc/2` statement carries none.
 
 ## 3. Administrative vocabulary and permissions
 

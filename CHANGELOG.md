@@ -26,6 +26,27 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   archive against `SHA256SUMS`, byte-for-byte reproducibly. Publishing to PyPI is a manual maintainer step
   (`docs/RELEASING.md`, step 8).
 
+- **`hub check` labels the actor state of an added identity statement.** An added `rc/2` statement that names an
+  actor now prints `actor: eligible`, `actor: denied (<reasons>)` or `actor: unknown (<reasons>)` beside its other
+  labels, with the same `identity`, `grant`, `state` and `reasons` members `show` prints (a new `actor` member on the
+  object's row in `--json`). It is a label only: admission and the exit code do not change. The check judges a change
+  by the evidence of the change and the base together, so a change that carries an identity's inception, a grant and
+  an act under it is `eligible` by that evidence (the root key's signature is the authority, not what the hub already
+  held); the identity design note says why.
+
+### Changed
+- **The `invalid` token is split.** `invalid` keeps meaning an edition whose body cannot be an edition. A statement
+  that is signed correctly but breaks a rule of the identity profile (an `rc/2` line) is now `invalid statement`, in
+  `show`, `verify`, `explain` and the gate's labels (`docs/CLI-OUTPUTS.md` lists both). Scripts that matched
+  `invalid` on a statement's `status` should match `invalid statement`.
+- **Upgrade note (journals written by 0.5.0-alpha.3).** A journal record that holds an `rc/2` line with a bad
+  signature is quarantined whole when the store is opened (`recover`), its good `rc/1` lines included, because a
+  record is installed all or nothing. No released command writes `rc/2`, so a record like that is near-impossible in
+  practice. The record is moved to `quarantine/`, never deleted; the good `rc/1` lines in it can be pulled again from
+  the peer they came from.
+- The identity design note and the reader-policy text no longer call the identity reader a candidate opt-in: the
+  reader is active (the wire format stays a candidate, and no command writes `rc/2`).
+
 ### Fixed
 - **An empty `referent.system` value no longer counts as a pinned key.** A method observation whose
   `referent.system` has a member with the value `""` (an empty string identifies nothing) is now read as if the
