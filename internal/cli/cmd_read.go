@@ -226,6 +226,9 @@ func referentObj(ob *resolve.Observation, full bool) *Obj {
 	if detail != "" {
 		o.set("detail", textV(detail))
 	}
+	if ob.Layout != nil { // the response-layout read beside the status: the read state, or why unchecked (§5.3.1a)
+		o.set("layout", textV(ob.Layout.String()))
+	}
 	if full && len(ob.ReferentHistory) > 0 {
 		o.set("history", texts(ob.ReferentHistory...))
 	}
