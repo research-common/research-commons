@@ -3,6 +3,7 @@ package gate
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -11,6 +12,7 @@ import (
 	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/refusal"
 	"github.com/research-common/research-commons/internal/resolve"
+	"github.com/research-common/research-commons/internal/store"
 	"github.com/research-common/research-commons/internal/wire"
 )
 
@@ -195,7 +197,12 @@ func LoadSourceProfiles(digests []string, get func(d string) ([]byte, error), sc
 		// bring the layout that judges it); a layout that cannot be used reads unchecked, it does not stop the read
 		p.AttachLayouts(func(d string) ([]byte, error) {
 			b, err := get(d)
-			if err != nil || b == nil || digest(b) != d {
+			var r *refusal.Refusal
+			switch {
+			case errors.As(err, &r) && r.Reason == store.CorruptBlob, err == nil && b != nil && digest(b) != d:
+				// a held copy that hashes elsewhere is named, not skipped: the profile's layout cannot be read
+				return nil, resolve.ErrHeldCorrupt
+			case err != nil || b == nil:
 				return nil, err
 			}
 			return b, nil

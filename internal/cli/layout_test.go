@@ -9,6 +9,7 @@ import (
 
 	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/conformance"
+	"github.com/research-common/research-commons/internal/keylog"
 	"github.com/research-common/research-commons/internal/resolve"
 	"github.com/research-common/research-commons/internal/store"
 )
@@ -62,11 +63,12 @@ func layoutStore(t *testing.T, cite bool, resp []byte, asserted string) (w *worl
 }
 
 // TestObservationLayoutThroughCommands: C-core-104g through verify, show and explain. (a) the held response's
-// records agree: the state read from the bytes governs (`final (as held)`; provisional at the read state), and an
-// asserted state that differs is disclosed beside it; (b) the records disagree, a record lacks the field, the bytes
-// are not JSON, or the response is not held: the layout read is unchecked naming why and the referent reads exactly
-// as the same store without a layout (never upgraded); (c) no layout cited: the alpha output, no layout line. The
-// layout read never moves verify's exit.
+// records carry labels in the profile: the least record's state, read from the bytes, governs (`final (as held)`;
+// provisional at the read state), records that differ are disclosed as a spread, and an asserted state that differs
+// is disclosed beside it; (b) a record's label is outside the profile, a record lacks the field, the bytes are not
+// JSON, or the response is not held: the layout read is unchecked naming why and the referent reads exactly as the
+// same store without a layout (never upgraded); (c) no layout cited: the alpha output, no layout line. The layout
+// read never moves verify's exit.
 func TestObservationLayoutThroughCommands(t *testing.T) {
 	conformance.Covers(t, "C-core-104g")
 	for _, c := range []struct {
@@ -83,8 +85,14 @@ func TestObservationLayoutThroughCommands(t *testing.T) {
 		{"(a) agree, asserted differs", true, cliResponse("R1", "R1"), "RF",
 			[]string{"  status: provisional\n  detail: R1; final at RF\n", "the observer asserted RF at capture (disclosed, does not govern)"},
 			[]string{"as captured", "final (as held)"}},
-		{"(b) records disagree", true, cliResponse("R1", "RF"), "RF",
-			[]string{"  status: final (as captured, not re-checked)\n", `unchecked (records disagree: record 0 reads "R1", record 1 reads "RF")`},
+		{"(a) mixed: the least record", true, cliResponse("R1", "RF"), "RF",
+			[]string{"  status: provisional\n  detail: R1; final at RF\n", "state R1 read from the held response (records at R1..RF, read as R1); the observer asserted RF at capture (disclosed, does not govern)"},
+			[]string{"as captured", "final (as held)"}},
+		{"(a) mixed, every record final: final as held at the least", true, cliResponse("DF", "RF"), "DF",
+			[]string{"referent:\n  status: final (as held)\n", "state RF read from the held response (records at RF..DF, read as RF)"},
+			[]string{"as captured"}},
+		{"(b) one record outside the profile", true, cliResponse("R1", "II", "RF"), "RF",
+			[]string{"  status: final (as captured, not re-checked)\n", `unchecked (record 1 reads "II", which is not in the source profile's labels`},
 			[]string{"as held"}},
 		{"(b) field missing", true, cliResponse("RF", ""), "RF",
 			[]string{"  status: final (as captured, not re-checked)\n", `unchecked (record 1: state pointer "/settlementRunType": no member`},
@@ -121,12 +129,40 @@ func TestObservationLayoutThroughCommands(t *testing.T) {
 	}
 	// never upgraded: an unchecked read gives the referent the same store without the layout cited gives
 	for _, asserted := range []string{"RF", "R1"} {
-		with, id1 := layoutStore(t, true, cliResponse("R1", "RF"), asserted)
-		without, id2 := layoutStore(t, false, cliResponse("R1", "RF"), asserted)
+		with, id1 := layoutStore(t, true, cliResponse("R1", "II"), asserted)
+		without, id2 := layoutStore(t, false, cliResponse("R1", "II"), asserted)
 		a, b := referentLines(with.run("verify", id1).stdout), referentLines(without.run("verify", id2).stdout)
 		if a != b {
 			t.Fatalf("asserted %s: with an unchecked layout read %q, without a layout %q", asserted, a, b)
 		}
+	}
+}
+
+// TestLayoutHeldCorruptThroughCommands: the store's copy of the layout the pinned profile cites hashes elsewhere.
+// The layout read names the corrupt held copy (it was skipped silently before, reading as no layout); the referent
+// reads exactly as with no layout cited (never upgraded); verify still exits 0.
+func TestLayoutHeldCorruptThroughCommands(t *testing.T) {
+	w, id := layoutStore(t, true, cliResponse("RF", "RF"), "RF")
+	ld := dig(string(cliLayout))
+	bp := filepath.Join(w.root, "blobs", "sha256", strings.TrimPrefix(ld, "sha256:"))
+	if err := os.Chmod(bp, 0o644); err != nil { // blobs are installed read-only
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bp,
+		canon.Encode(obj("layout", resolve.ResponseLayoutTag, "records", "/data", "state", "/other")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r := w.run("verify", id)
+	if r.code != ExitOK {
+		t.Fatalf("verify: exit %d:\n%s", r.code, r.stdout)
+	}
+	for _, s := range []string{"  status: final (as captured, not re-checked)\n", "unchecked (document " + keylog.Short(ld) + " is held corrupt (its bytes hash elsewhere)"} {
+		if !strings.Contains(r.stdout, s) {
+			t.Fatalf("want %q:\n%s", s, r.stdout)
+		}
+	}
+	if strings.Contains(r.stdout, "as held") {
+		t.Fatalf("a corrupt layout read the bytes:\n%s", r.stdout)
 	}
 }
 
