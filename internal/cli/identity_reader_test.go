@@ -211,11 +211,11 @@ func TestIdentityReaderNegativeVectorsThroughPull(t *testing.T) {
 					if member(o, "actor") != nil {
 						t.Fatalf("an actor read on a line that carries none the reader reads: %s", canon.Encode(member(o, "actor")))
 					}
-					if n.Status == "invalid" {
+					if n.Status == string(wire.Invalid) {
 						if o.Members["counted"] != canon.String("not counted") {
 							t.Fatalf("an invalid line counted: %s", r.stdout)
 						}
-						if row == nil || !strings.Contains(string(canon.Encode(row)), `"invalid"`) {
+						if row == nil || !strings.Contains(string(canon.Encode(row)), `"invalid statement"`) {
 							t.Fatalf("the pull report does not label the invalid line: %s", canon.Encode(row))
 						}
 					}

@@ -30,6 +30,7 @@ import (
 	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/identity"
 	"github.com/research-common/research-commons/internal/keylog"
+	"github.com/research-common/research-commons/internal/policy"
 	"github.com/research-common/research-commons/internal/refusal"
 	"github.com/research-common/research-commons/internal/resolve"
 	"github.com/research-common/research-commons/internal/wire"
@@ -150,7 +151,12 @@ const (
 	// LabelInvalid: a verified rc/2 line that breaks a rule of the identity profile. It is kept, not refused: an
 	// authenticated invalid control is evidence (an invalid cut still denies its grant, profile §3, §4), and it
 	// counts toward nothing.
-	LabelInvalid       = "invalid"
+	LabelInvalid       = string(wire.Invalid)
+	// The actor labels of `hub check` (Options.ActorLabels): the evaluator's answer about an added statement that
+	// names an identity actor, over the evaluated set. Labels only: admission and exit are never changed by them.
+	LabelActorEligible = "actor: " + policy.ActorEligible
+	LabelActorDenied   = "actor: " + policy.ActorDenied
+	LabelActorUnknown  = "actor: " + policy.ActorUnknown
 	LabelUnpinned      = "unpinned"
 	LabelUnreferenced  = "unreferenced"
 	LabelUnavailable   = "unavailable"
@@ -201,11 +207,21 @@ type Result struct {
 	IntendedFor *resolve.Recorded
 	// Series is the series view behind a freeze-policy verdict (C-core-104), when there is one.
 	Series *resolve.Series
+	// Actor is the evaluator's answer about the statement's identity actor, set only under Options.ActorLabels.
+	Actor *ActorAnswer
 	// Completeness is the receiver's check of the edition's completeness claim behind a refuse_incomplete verdict.
 	Completeness *resolve.Completeness
 
 	data []byte
 	st   *wire.Statement
+}
+
+// ActorAnswer is the actor evaluator's answer about one admitted statement that names an identity actor: what
+// `show` prints as `actor`.
+type ActorAnswer struct {
+	Identity, Grant string // as the statement's signed actor names them
+	State           string // policy.ActorEligible, ActorDenied or ActorUnknown
+	Reasons         []string
 }
 
 // Labelled reports whether an admitted object carries labels.
@@ -260,6 +276,11 @@ type Options struct {
 	// Audit marks a package that is what the receiver already holds (a hub checked at one revision), not a
 	// delivery: a blob whose digest is not served is reported (`not served: still present`), not refused.
 	Audit bool
+	// ActorLabels labels every admitted statement that names an identity actor with the actor evaluator's answer
+	// over the evaluated set (`actor: eligible|denied|unknown`, Result.Actor). `hub check` sets it: a change is
+	// judged by its own evidence (the base's held lines plus the change's admitted statements), and the label
+	// tells a maintainer which of its acts a reader would count. A label never refuses and never changes the exit.
+	ActorLabels bool
 }
 
 var (
@@ -463,6 +484,12 @@ func Admit(gate string, pkg Package, held Held, pol *Policy, opt Options) (*Repo
 			evaluated[r.ID] = r.st.Line()
 			addRefs(refsOf(r.st), refBlobs)
 		}
+	}
+
+	// 4a. Actor labels (hub check): the evaluator over the evaluated set answers for every admitted statement that
+	// names an identity actor. Labels only (I8).
+	if opt.ActorLabels {
+		actorLabels(results, cands, evaluated)
 	}
 
 	// 5. Resolver-level policy: intended_for re-application (C-core-98) and the freeze policy (C-core-104).
@@ -812,16 +839,42 @@ func sortedIDs(m map[string][]byte) []string {
 
 func resolver(lines map[string][]byte, pol *Policy) *resolve.Resolver {
 	s := keylog.NewStoredStore()
-	all := make([][]byte, 0, len(lines))
 	for _, id := range sortedIDs(lines) {
-		all = append(all, lines[id])
 		if st, err := wire.ReadStored(lines[id]); err == nil {
 			_, _ = s.Log(st.Signer).Add(lines[id])
 		}
 	}
 	// the identity evaluator over the evaluated set (nil when it holds no rc/2 line); a receiver's own resolver
 	// options come after it
-	return resolve.New(s, append([]resolve.Option{resolve.WithActorEligibility(identity.Evaluator(all))}, pol.Resolver...)...)
+	return resolve.New(s, append([]resolve.Option{resolve.WithActorEligibility(evaluatorOver(lines))}, pol.Resolver...)...)
+}
+
+// evaluatorOver is the identity evaluator over a set of lines in id order (nil when none is an rc/2 line).
+func evaluatorOver(lines map[string][]byte) policy.ActorEligibility {
+	all := make([][]byte, 0, len(lines))
+	for _, id := range sortedIDs(lines) {
+		all = append(all, lines[id])
+	}
+	return identity.Evaluator(all)
+}
+
+// actorLabels labels each admitted candidate that names an identity actor with the evaluator's answer over the
+// evaluated set. The evaluator is the one every reader builds (identity.Evaluator): the authority for an act is the
+// root key's signature on the identity's inception and grant, which a change can bring itself, so a change that
+// carries an identity's inception, a grant and an act under it is judged eligible by that evidence. It is never
+// the hub's held set alone (that is the contrast with source profiles, which are the hub's policy and are read at
+// the base). With no rc/2 line in the evaluated set there is no evaluator and nothing here is labelled `eligible`.
+func actorLabels(results []Result, cands []int, evaluated map[string][]byte) {
+	ev := evaluatorOver(evaluated)
+	for _, i := range cands {
+		r := &results[i]
+		if r.Verdict != Admitted || r.st == nil || r.st.Actor == nil {
+			continue
+		}
+		_, state, why := policy.ActorState(ev, r.st)
+		r.Actor = &ActorAnswer{Identity: r.st.Actor.Identity, Grant: r.st.Actor.Grant, State: state, Reasons: why}
+		r.label("actor: "+state, strings.Join(why, "; "))
+	}
 }
 
 // resolverChecks applies the receiver's resolver-level policy to one admitted statement.

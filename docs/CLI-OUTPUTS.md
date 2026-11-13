@@ -78,6 +78,7 @@ JSON members carrying tokens: `authorship`, `role`, `state`, `grade`, `step`, `q
 | `refused` | time | an anchor refused under a limit of this reader; as a gate verdict, an object not admitted, with its class, reason and narrowest next step named |
 | `valid` | statement | signature verified and every rule this reader implements passed |
 | `unknown kind` | statement | a validly signed statement of a kind the format does not list; granted nothing |
+| `invalid statement` | statement | a statement whose signature verified and that breaks a rule of the identity profile (rc/2): kept as evidence, counted toward nothing, never read as its key's |
 | `chained` | line | the line reaches its log's first line through prev and merges |
 | `detached` | line | a predecessor is not held; shown, attributed, counted toward nothing. For an edition: every approval is on a detached line; shown, not evaluated |
 | `counted` | statement | chained, verified, understood and not excluded by a key event; for an identity statement, its actor eligible for the identity it names (its key's status shown beside it, not applied) |
@@ -124,6 +125,9 @@ JSON members carrying tokens: `authorship`, `role`, `state`, `grade`, `step`, `q
 | `operational` | class | a limit or resource of this reader stopped it; raising the named limit is the next step |
 | `already held` | label | the receiver already holds this statement; nothing new is installed |
 | `incoherent` | label | the key's log is inconsistent at this line; shown, counted toward nothing |
+| `actor: eligible` | label | hub check: an added identity statement whose signer acts for the identity it names under the grant it names, judged by the evidence of the change and the base; a label only, admission and exit are unchanged |
+| `actor: denied` | label | hub check: the evidence of the change and the base shows the signer does not act for that identity (the reason is named); a label only, the statement is still admitted |
+| `actor: unknown` | label | hub check: the evidence of the change and the base cannot decide whether the signer acts for that identity (the reason is named); a label only, the statement is still admitted |
 | `unreferenced` | label | a blob no statement of the evaluated set names |
 | `unavailable` | label | a statement names a blob neither the package nor the receiver holds |
 | `not held here (policy)` | label | the receiver's policy does not serve the blob a statement names (not_served) |
@@ -146,7 +150,7 @@ JSON members carrying tokens: `authorship`, `role`, `state`, `grade`, `step`, `q
 | `edition` | edition | an authorized edition of the resource: every predecessor's controllers approved this body under its rule |
 | `unauthorized` | edition | some predecessor's controllers did not approve this body (nobody elevates themselves) |
 | `orphan` | edition | a predecessor names nothing this reader holds as the genesis or an edition of the resource; never current |
-| `invalid` | edition | authorized approvals, but the body cannot be an edition (a rule no controller set meets, or a merge that does not declare differing controllers and rule). For a statement: signature verified, and it breaks a rule of the identity profile (rc/2); counted toward nothing, never read as its key's |
+| `invalid` | edition | authorized approvals, but the body cannot be an edition (a rule no controller set meets, or a merge that does not declare differing controllers and rule) |
 | `settled by review, not by counting` | readiness | the task edition has no quorum predicate: its beneficiary's decisions settle it; nothing is counted |
 | `ready` | readiness | the quorum is met by distinct signing keys under the edition's terms |
 | `not ready` | readiness | the quorum is not met yet |

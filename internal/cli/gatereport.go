@@ -49,6 +49,14 @@ func gateReport(rep *gate.Report) *Obj {
 				row.set("label_details", ds)
 			}
 		}
+		if x.Actor != nil {
+			// the same member `show` prints for an identity statement; a label only (hub check), never a verdict
+			a := newObj().set("identity", refV(x.Actor.Identity)).set("grant", refV(x.Actor.Grant)).set("state", tokV(tok(x.Actor.State)))
+			if len(x.Actor.Reasons) > 0 {
+				a.set("reasons", texts(x.Actor.Reasons...))
+			}
+			row.set("actor", a)
+		}
 		if x.Scope != "" && x.Verdict != gate.Admitted {
 			row.set("scope", peerV(x.Scope))
 		}

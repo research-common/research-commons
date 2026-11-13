@@ -578,7 +578,7 @@
    "sig_verifies": true,
    "outcome": {
     "result": "read",
-    "status": "invalid",
+    "status": "invalid statement",
     "why": "raw key events stay rc/1 in this profile",
     "actor_read": false
    }
@@ -857,7 +857,7 @@
    "sig_verifies": true,
    "outcome": {
     "result": "read",
-    "status": "invalid",
+    "status": "invalid statement",
     "why": "raw key events stay rc/1 in this profile",
     "actor_read": false
    }

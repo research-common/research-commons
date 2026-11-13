@@ -37,7 +37,7 @@ var reProfile = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
 // Invalid: the signature verified over the exact bytes, but the statement breaks a rule this reader checks
 // (body schema, times, critical marker, actor). It is retained, attributable evidence, never authority. Only
 // IdentityReader produces it; Read still refuses such a line.
-const Invalid Status = "invalid"
+const Invalid Status = "invalid statement"
 
 // Actor is the identity context a signature claims. It is a claim, not authority: an evaluator must still
 // check the grant, the root and the lineage. Fields that did not parse are empty.

@@ -299,7 +299,7 @@ func ivNegs(chain string, root, work Key, pos []*ivPos, t testing.TB) []*ivNeg {
 	rv := by["revoke-key"]
 	rv2 := ivDraft("rc/2", "revoke_key", 4, string(rv.env.Members["prev"].(canon.String)), true, ivObj("reason", "key_compromise"), root)
 	readOK("neg-rc2-revoke-key", "rc/2 revoke_key (correctly signed; raw key events stay rc/1 in this profile)", rv, root,
-		rv2, 2, "invalid", "raw key events stay rc/1 in this profile", false)
+		rv2, 2, "invalid statement", "raw key events stay rc/1 in this profile", false)
 	return out
 }
 

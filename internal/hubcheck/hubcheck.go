@@ -141,7 +141,7 @@ func Check(dir string, cfg Config) (*Result, error) {
 		pol.Resolver = append(pol.Resolver, resolve.WithSegments(resolve.ProfileSegments{Rules: *profiles}))
 	}
 	pol.Resolver = append(pol.Resolver, cfg.Resolver...)
-	rep, err := gate.HubCheck(pkg, held, pol, gate.Options{Overrides: cfg.Overrides, Audit: cfg.Base == ""})
+	rep, err := gate.HubCheck(pkg, held, pol, gate.Options{Overrides: cfg.Overrides, Audit: cfg.Base == "", ActorLabels: true})
 	if err != nil {
 		return nil, err
 	}
