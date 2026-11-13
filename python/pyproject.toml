@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "research-commons"
+version = "0.5.0a3"
+description = "A thin Python wrapper around the Research Commons command-line tool (commons): it runs the binary and returns its --json output."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Apache-2.0" }
+authors = [{ name = "The Research Commons Authors" }]
+keywords = ["research", "provenance", "reproducibility", "signed-statements"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Typing :: Typed",
+]
+# Runtime is the standard library only.
+dependencies = []
+
+[project.urls]
+Source = "https://github.com/research-common/research-commons"
+Issues = "https://github.com/research-common/research-commons/issues"
+
+[project.scripts]
+commons = "research_commons._cli:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+packages = ["research_commons"]
+
+[tool.setuptools.package-data]
+research_commons = ["py.typed"]
