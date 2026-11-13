@@ -97,15 +97,20 @@ jobs:
   python:
     # The thin Python package in python/ (stdlib only) and its wheel builder. Not a required check: it
     # must never gate a Go change. Two legs: the oldest Python the package supports (requires-python
-    # >=3.9, from a pinned setup-python) and the runner's own python3. Go is for the tests that build a
+    # >=3.9, from a pinned setup-python) and the runner's own python3. setup-python ships no 3.9 build
+    # for the newest Ubuntu image, so that leg runs on ubuntu-24.04. Go is for the tests that build a
     # real commons.
     name: python package (${{ matrix.python }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.9", "runner"]
+        include:
+          - python: "3.9"
+            os: ubuntu-24.04
+          - python: runner
+            os: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
