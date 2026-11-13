@@ -44,7 +44,7 @@ JSON members carrying tokens: `authorship`, `role`, `state`, `grade`, `step`, `q
 | `claimant` | role | a claimant of a contested blob |
 | `default` | field | the field's value from the default unit, agreed by its signers |
 | `undeclared` | field | no claimant declared the field; for pre-registration, not the same as exploratory |
-| `unknown` | field | for a licence: none declared, which is never read as open (C-core-67); elsewhere: nothing held establishes it |
+| `unknown` | field | for a licence: none declared, or a declared value that is not an SPDX license expression (the reason is printed beside it); never read as open (C-core-67); elsewhere: nothing held establishes it. A parsed licence is shown as written with `syntax valid; identifiers not checked against the SPDX License List` and, per `LicenseRef-`, `cited (text held)`, `cited (text not held)`, `cited (location only, unverified)` or `cited (no source)`; the tool ships no licence list |
 | `no default (authorship contested)` | field | authorship is contested, so no claimant's value is the default |
 | `T0` | grade | byte-identical re-derivation |
 | `T1` | grade | re-derivation matched under the named comparator, run by this reader |
