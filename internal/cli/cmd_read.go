@@ -232,6 +232,30 @@ func referentObj(ob *resolve.Observation, full bool) *Obj {
 	if full && len(ob.ReferentHistory) > 0 {
 		o.set("history", texts(ob.ReferentHistory...))
 	}
+	if l := ob.RequestLog; l != nil {
+		o.set("request_log", requestLogObj(l))
+	}
+	return o
+}
+
+// requestLogObj is a batch referent's request-log check (claims §5.3.1): the pins as signed, the outcome token,
+// where the log was found, the endpoints and responses held, and each problem named.
+func requestLogObj(l *resolve.RequestLog) *Obj {
+	o := newObj().set("verdict", tokV(tok(l.Outcome))).set("digest", refV(l.Digest)).set("format", textV(l.Format)).
+		set("count", intV(l.Count))
+	if l.Endpoint != "" {
+		o.set("endpoint", textV(l.Endpoint))
+	}
+	if l.Why != "" {
+		o.set("why", textV(l.Why))
+	}
+	if l.Unit != "" {
+		o.set("found_at", textV(l.Unit)).set("entries", intV(int64(l.Entries))).set("endpoints", texts(l.Endpoints...)).
+			set("responses_held", intV(int64(l.Held)))
+	}
+	if len(l.Problems) > 0 {
+		o.set("problems", texts(l.Problems...))
+	}
 	return o
 }
 

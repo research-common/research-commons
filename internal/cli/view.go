@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/research-common/research-commons/internal/btctime"
+	"github.com/research-common/research-commons/internal/gate"
 	"github.com/research-common/research-commons/internal/identity"
 	"github.com/research-common/research-commons/internal/keylog"
 	"github.com/research-common/research-commons/internal/policy"
@@ -100,7 +101,10 @@ func buildView(s *store.Store, rp *policy.Policy, tv *btctime.Verifier, opts ...
 	// its own, so an answer that depends on time (a shelf-life age) is a function of the held set and this
 	// time context (claims-model note I14; storage note §5.1). The blob index re-hashes on every question.
 	base := []resolve.Option{resolve.WithTimeVerifier(btctime.TimeVerifier{V: tv}), resolve.WithPolicy(rp),
-		resolve.WithBlobIndex(verifiedBlobs{s}), resolve.WithReadTime(Now()), resolve.WithActorEligibility(actors)}
+		resolve.WithBlobIndex(verifiedBlobs{s}), resolve.WithReadTime(Now()), resolve.WithActorEligibility(actors),
+		// a batch observation's request log is read from the captured content this store holds (claims §5.3.1);
+		// read only when such an observation is viewed
+		resolve.WithObservedContent(gate.NewMemoContent(prepinContent{st: s}, 0))}
 	r := resolve.New(logs, append(base, opts...)...)
 	return &view{r: r, logs: logs, st: s, timeV: tv, evidence: map[string]btctime.Evidence{}, actors: actors}, nil
 }
