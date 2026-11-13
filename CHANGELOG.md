@@ -18,6 +18,13 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   archive against `SHA256SUMS`, byte-for-byte reproducibly. Publishing to PyPI is a manual maintainer step
   (`docs/RELEASING.md`, step 8).
 
+### Fixed
+- **An empty `referent.system` value no longer counts as a pinned key.** A method observation whose
+  `referent.system` has a member with the value `""` (an empty string identifies nothing) is now read as if the
+  member were missing: under a method edition that declares `system_keys` the referent is `unpinned` naming
+  `referent.system.<key>` and `verify` exits 3, and without a declaration the member is not a key two observations
+  "pin" for comparability. The statement is still admitted and shown as written; nothing is refused.
+
 ## [0.5.0-alpha.3] - 2026-11-12
 
 ### Added
