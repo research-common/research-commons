@@ -193,7 +193,7 @@ type ProfileRules struct {
 // WithBytes is the rules reading held responses through get for the profiles' response layouts, each read within
 // steps (DefaultLayoutSteps when < 1). Without it, every layout read is unchecked (response not held).
 func (pr ProfileRules) WithBytes(get BlobBytes, steps int) ProfileRules {
-	pr.bytes, pr.steps, pr.reads = get, steps, &layoutCache{m: map[[2]string][2]string{}}
+	pr.bytes, pr.steps, pr.reads = get, steps, &layoutCache{m: map[[3]string]StateRead{}}
 	return pr
 }
 

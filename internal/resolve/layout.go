@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -21,10 +22,14 @@ import (
 // layout by digest in `documents`, so a reader that does not implement layouts reads the profile exactly as before
 // (the layout is one more cited document to it).
 //
-// Reading a state is a pure function of the held response bytes and the layout: every record must carry the same
-// non-empty string at the state pointer. Anything else (records that disagree, a pointer that names nothing, a
-// value that is not a string, bytes that are not I-JSON, a response that is not held or exceeds the caps) reads
-// `unchecked`, naming why, and the observer's asserted state is used exactly as without a layout, never upgraded.
+// Reading a state is a pure function of the held response bytes, the layout and the profile's label order: every
+// record must carry a non-empty string at the state pointer that is a label in the profile, and the response reads
+// at its least record (the earliest label in the profile's order among the records). The finality rule is monotone
+// (`run >= L`), so the response meets it exactly when every record does: the least record is the one state the
+// whole response can be relied on at, never an upgrade. When records differ the read discloses the spread. Anything
+// else (a record whose value is missing, not a string, empty or outside the profile, a pointer that names nothing,
+// bytes that are not I-JSON, a response that is not held or exceeds the caps) reads `unchecked`, naming why, and the
+// observer's asserted state is used exactly as without a layout, never upgraded.
 
 // ResponseLayoutTag is the format tag of a response layout blob.
 const ResponseLayoutTag = "rc-response-layout/1"
@@ -215,53 +220,91 @@ func kindOf(v canon.Value) string {
 	return "value"
 }
 
-// ReadState reads the finality state out of a captured response under layout l, within steps (DefaultLayoutSteps
-// when < 1). It returns the state when every record agrees on one non-empty string, else "" and why. Pure: the same
-// bytes and layout give the same answer.
-func ReadState(b []byte, l *ResponseLayout, steps int) (state, why string) {
+// LabelRank places a label in a source profile's order: its index (earliest state first) and whether the profile
+// has the label at all. SourceProfile.Rank is the one a reader passes.
+type LabelRank func(label string) (int, bool)
+
+// StateRead is what ReadState found in one response.
+type StateRead struct {
+	// State is the least record's label under the profile's order ("" when the read is unchecked: Why).
+	State string
+	// Greatest is the latest label among the records: State when every record carries the same one.
+	Greatest string
+	// Records counts the records read (0 for a layout that reads one state).
+	Records int
+	Why     string
+}
+
+// Spread is the disclosure of records that differ, "records at R1..RF, read as R1"; "" when they all carry one
+// label (or the read is unchecked).
+func (s StateRead) Spread() string {
+	if s.State == "" || s.Greatest == s.State {
+		return ""
+	}
+	return "records at " + inertText(s.State) + ".." + inertText(s.Greatest) + ", read as " + inertText(s.State)
+}
+
+// ReadState reads the finality state out of a captured response under layout l, placing each record's label by
+// rank (the profile's order), within steps (DefaultLayoutSteps when < 1). Every record must carry a non-empty
+// string that rank places; the read is then the least record (claims-model note §5.3.1a, "Response layouts"), with
+// the latest beside it. Anything else is unchecked: State "" and Why naming the first record (in array order) that
+// fails and why, with no partial order over labels the profile does not have. Pure: the same bytes, layout and order
+// give the same answer.
+func ReadState(b []byte, l *ResponseLayout, rank LabelRank, steps int) StateRead {
 	if steps < 1 {
 		steps = DefaultLayoutSteps
 	}
+	bad := func(why string) StateRead { return StateRead{Why: why} }
+	if rank == nil {
+		return bad("no source profile order to place the labels by")
+	}
 	if len(b) > MaxResponseBytes {
-		return "", fmt.Sprintf("the response is larger than %d bytes", MaxResponseBytes)
+		return bad(fmt.Sprintf("the response is larger than %d bytes", MaxResponseBytes))
 	}
 	v, err := canon.ParseData(b)
 	if err != nil {
-		return "", "the response is not I-JSON: " + err.Error()
+		return bad("the response is not I-JSON: " + err.Error())
 	}
 	if !l.HasRecords {
-		return stateAt(v, l, -1, &steps)
+		s, w := stateAt(v, l, rank, -1, &steps)
+		if w != "" {
+			return bad(w)
+		}
+		return StateRead{State: s, Greatest: s}
 	}
 	rv, w := lookup(v, l.Records, &steps)
 	if w != "" {
-		return "", "records pointer " + strconv.Quote(l.RecordsText) + ": " + w
+		return bad("records pointer " + strconv.Quote(l.RecordsText) + ": " + w)
 	}
 	arr, ok := rv.(canon.Array)
 	if !ok {
-		return "", "records pointer " + strconv.Quote(l.RecordsText) + " names a " + kindOf(rv) + ", not an array"
+		return bad("records pointer " + strconv.Quote(l.RecordsText) + " names a " + kindOf(rv) + ", not an array")
 	}
 	if len(arr) == 0 {
-		return "", "the record array is empty: no state to read"
+		return bad("the record array is empty: no state to read")
 	}
-	first := -1
+	var out StateRead
+	lo, hi := 0, 0
 	for i, rec := range arr {
-		s, w := stateAt(rec, l, i, &steps)
+		s, w := stateAt(rec, l, rank, i, &steps)
 		if w != "" {
-			return "", w
+			return bad(w)
 		}
-		if first < 0 {
-			state, first = s, i
-			continue
+		r, _ := rank(s) // stateAt placed it
+		if i == 0 || r < lo {
+			out.State, lo = s, r
 		}
-		if s != state {
-			return "", fmt.Sprintf("records disagree: record %d reads %q, record %d reads %q", first, inertText(state), i, inertText(s))
+		if i == 0 || r > hi {
+			out.Greatest, hi = s, r
 		}
 	}
-	return state, ""
+	out.Records = len(arr)
+	return out
 }
 
-// stateAt reads the state pointer in v (record i, or the whole response when i < 0).
-func stateAt(v canon.Value, l *ResponseLayout, i int, steps *int) (string, string) {
+// stateAt reads the state pointer in v (record i, or the whole response when i < 0): a non-empty string rank
+// places.
+func stateAt(v canon.Value, l *ResponseLayout, rank LabelRank, i int, steps *int) (string, string) {
 	where := "the response"
 	if i >= 0 {
 		where = "record " + strconv.Itoa(i)
@@ -283,6 +326,9 @@ func stateAt(v canon.Value, l *ResponseLayout, i int, steps *int) (string, strin
 	if s == "" {
 		return "", where + ": state pointer " + strconv.Quote(l.StateText) + " names an empty string"
 	}
+	if _, ok := rank(string(s)); !ok {
+		return "", where + " reads " + strconv.Quote(inertText(string(s))) + ", which is not in the source profile's labels: not comparable"
+	}
 	return string(s), ""
 }
 
@@ -297,8 +343,11 @@ func isJSONMediaType(mt string) bool {
 type LayoutRead struct {
 	// Layout is the layout's digest ("" when the profile's layouts could not be used; Why says why).
 	Layout string
-	// State is the state read from the held bytes; "" when the read is unchecked (Why).
+	// State is the state read from the held bytes (the least record under the profile's order); "" when the read
+	// is unchecked (Why).
 	State, Why string
+	// Spread discloses records that differ ("records at R1..RF, read as R1"); "" when they carry one label.
+	Spread string
 	// Asserted is the observer's asserted run label at capture ("" when none).
 	Asserted string
 }
@@ -306,7 +355,8 @@ type LayoutRead struct {
 // Disagrees reports a state read from the bytes that differs from the observer's asserted one.
 func (l *LayoutRead) Disagrees() bool { return l != nil && l.State != "" && l.State != l.Asserted }
 
-// String is the read as one line: "RF from the held response (layout 1a2b…)" or "unchecked (why)".
+// String is the read as one line: "response layout 1a2b…: state RF read from the held response", the spread when
+// records differ, the asserted state when it differs from the read one; or "…: unchecked (why)".
 func (l *LayoutRead) String() string {
 	name := "response layout"
 	if l.Layout != "" {
@@ -316,6 +366,9 @@ func (l *LayoutRead) String() string {
 		return name + ": unchecked (" + l.Why + ")"
 	}
 	s := fmt.Sprintf("%s: state %s read from the held response", name, l.State)
+	if l.Spread != "" {
+		s += " (" + l.Spread + ")"
+	}
 	if l.Disagrees() {
 		asserted := l.Asserted
 		if asserted == "" {
@@ -329,10 +382,17 @@ func (l *LayoutRead) String() string {
 // BlobBytes returns a held blob's bytes up to max: nil and why when it cannot ("not held", "larger than …").
 type BlobBytes func(digest string, max int64) ([]byte, string)
 
+// ErrHeldCorrupt marks a getter's answer that the copy it holds under a digest hashes elsewhere (a getter that
+// checks the hash itself, as a store does, reports it this way; a getter that returns the bytes as held leaves the
+// check to AttachLayouts).
+var ErrHeldCorrupt = errors.New("the held copy is corrupt (its bytes hash elsewhere)")
+
 // AttachLayouts reads the documents a profile cites through get (as the profile itself was read: where the policy
-// pinning it was read) and keeps the response layouts among them. A cited document that is not held, not readable,
+// pinning it was read) and keeps the response layouts among them. get returns a document's bytes as held (nil when
+// not held); AttachLayouts checks they hash to the cited digest. A cited document that is not held, not readable,
 // or not a layout is an ordinary document. One valid layout is the profile's layout; a document that claims to be
-// a layout and is not one, or two layouts, leave the profile's layout unusable, naming why (never picked by order).
+// a layout and is not one, two layouts, or a cited document whose held copy is corrupt (which of the documents is
+// the layout cannot then be read) leave the profile's layout unusable, naming why (never picked by order).
 func (p *SourceProfile) AttachLayouts(get func(d string) ([]byte, error)) {
 	var found []*ResponseLayout
 	for _, d := range p.Documents {
@@ -340,6 +400,12 @@ func (p *SourceProfile) AttachLayouts(get func(d string) ([]byte, error)) {
 			continue
 		}
 		b, err := get(d)
+		if errors.Is(err, ErrHeldCorrupt) || (err == nil && b != nil && digestOf(b) != d) {
+			p.layoutWhy = "document " + keylog.Short(d) + " is held corrupt (its bytes hash elsewhere), so whether it is the profile's " +
+				ResponseLayoutTag + " layout cannot be read; refetch it"
+			p.Layout = nil
+			return
+		}
 		if err != nil || b == nil || !IsResponseLayout(b) {
 			continue
 		}
@@ -348,9 +414,6 @@ func (p *SourceProfile) AttachLayouts(get func(d string) ([]byte, error)) {
 			p.layoutWhy = "document " + keylog.Short(d) + " is not a " + ResponseLayoutTag + " layout: " + err.Error()
 			p.Layout = nil
 			return
-		}
-		if l.Digest != d {
-			continue // the getter returned other bytes; never used under another name
 		}
 		found = append(found, l)
 	}
@@ -361,6 +424,18 @@ func (p *SourceProfile) AttachLayouts(get func(d string) ([]byte, error)) {
 	default:
 		p.layoutWhy = fmt.Sprintf("the profile cites %d response layouts; none is picked", len(found))
 	}
+}
+
+// Rank places a label in the profile's order (a LabelRank): its index, earliest state first, and whether the
+// profile has it. An integer-depth profile has no labels.
+func (p *SourceProfile) Rank(label string) (int, bool) {
+	i, ok := p.index[label]
+	return i, ok
+}
+
+func digestOf(b []byte) string {
+	sum := sha256.Sum256(b)
+	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 // HasLayout reports whether the profile cites a response layout (usable or not).
@@ -394,8 +469,8 @@ func (b BoundRules) readLayout(rule string, body *canon.Object, asserted State) 
 		lr.Why = "the capture's media type " + strconv.Quote(inertText(mt)) + " is not JSON; this layout dialect reads JSON only"
 		return lr
 	}
-	if st, why, ok := b.reads.get(p.Layout.Digest, rd); ok {
-		lr.State, lr.Why = st, why
+	if sr, ok := b.reads.get(p.Digest, p.Layout.Digest, rd); ok {
+		lr.State, lr.Why, lr.Spread = sr.State, sr.Why, sr.Spread()
 		return lr
 	}
 	if b.bytes == nil {
@@ -408,42 +483,40 @@ func (b BoundRules) readLayout(rule string, body *canon.Object, asserted State) 
 			why = "not held"
 		}
 		lr.Why = "response " + keylog.Short(rd) + " " + why
-		b.reads.put(p.Layout.Digest, rd, "", lr.Why)
+		b.reads.put(p.Digest, p.Layout.Digest, rd, StateRead{Why: lr.Why})
 		return lr
 	}
-	lr.State, lr.Why = ReadState(data, p.Layout, b.steps)
-	if _, ok := p.index[lr.State]; lr.State != "" && !ok {
-		// a label the profile cannot place is not a state this reader reads by (claims-model note §5.3.1a)
-		lr.State, lr.Why = "", fmt.Sprintf("the records agree on %q, which is not in source profile %s: not comparable", inertText(lr.State), keylog.Short(p.Digest))
-	}
-	b.reads.put(p.Layout.Digest, rd, lr.State, lr.Why)
+	sr := ReadState(data, p.Layout, p.Rank, b.steps)
+	lr.State, lr.Why, lr.Spread = sr.State, sr.Why, sr.Spread()
+	b.reads.put(p.Digest, p.Layout.Digest, rd, sr)
 	return lr
 }
 
-// layoutCache keeps each layout read by (layout, response): a read is a pure function of the two digests, so a
-// response is parsed once per reader however many views and comparisons ask (the bytes behind a digest never
-// change; a store whose copy is corrupt holds nothing under it).
+// layoutCache keeps each layout read by (profile, layout, response): a read is a pure function of the response
+// bytes, the layout and the profile's label order (which the profile's digest fixes), so a response is parsed once
+// per reader however many views and comparisons ask (the bytes behind a digest never change; a store whose copy is
+// corrupt holds nothing under it).
 type layoutCache struct {
 	mu sync.Mutex
-	m  map[[2]string][2]string
+	m  map[[3]string]StateRead
 }
 
-func (c *layoutCache) get(layout, response string) (state, why string, ok bool) {
+func (c *layoutCache) get(profile, layout, response string) (StateRead, bool) {
 	if c == nil {
-		return "", "", false
+		return StateRead{}, false
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	v, ok := c.m[[2]string{layout, response}]
-	return v[0], v[1], ok
+	v, ok := c.m[[3]string{profile, layout, response}]
+	return v, ok
 }
 
-func (c *layoutCache) put(layout, response, state, why string) {
+func (c *layoutCache) put(profile, layout, response string, sr StateRead) {
 	if c == nil {
 		return
 	}
 	c.mu.Lock()
-	c.m[[2]string{layout, response}] = [2]string{state, why}
+	c.m[[3]string{profile, layout, response}] = sr
 	c.mu.Unlock()
 }
 

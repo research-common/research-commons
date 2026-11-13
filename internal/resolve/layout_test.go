@@ -1,11 +1,13 @@
 package resolve
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/conformance"
+	"github.com/research-common/research-commons/internal/keylog"
 )
 
 // Fixtures shaped like a settlement-data response that carries the run per record (synthetic, not real data).
@@ -15,6 +17,8 @@ const (
 	respAllR1   = `{"data":[{"settlementPeriod":1,"settlementRunType":"R1","quantity":1.5},{"settlementPeriod":2,"settlementRunType":"R1","quantity":2}]}`
 	respMissing = `{"data":[{"settlementPeriod":1,"settlementRunType":"RF"},{"settlementPeriod":2}]}`
 	respCSV     = "settlementDate,settlementPeriod,settlementRunType\n2025-01-01,1,RF\n"
+	// one record carries a label the profile does not have (II), beside two it places
+	respOneUnknown = `{"data":[{"settlementPeriod":1,"settlementRunType":"RF"},{"settlementPeriod":2,"settlementRunType":"II"},{"settlementPeriod":3,"settlementRunType":"R1"}]}`
 )
 
 func layoutBytes(records, state string) []byte {
@@ -90,43 +94,111 @@ func TestParseResponseLayout(t *testing.T) {
 	}
 }
 
-// TestReadState: every record agrees → the state; anything else → "" naming why. Pure: a function of the bytes and
-// the layout only, so the answer repeats.
+// settlementRank is the order of profile P in these tests: SF < R1 < R2 < RF < DF.
+func settlementRank(l string) (int, bool) {
+	i := map[string]int{"SF": 0, "R1": 1, "R2": 2, "RF": 3, "DF": 4}
+	r, ok := i[l]
+	return r, ok
+}
+
+// TestReadState: every record carries a label the profile places → the least record under the profile's order,
+// the spread disclosed when records differ; anything else → "" naming the record and why, with no partial order
+// over unknown labels. Pure: a function of the bytes, the layout and the order only, so the answer repeats.
 func TestReadState(t *testing.T) {
 	l := mustLayout(t, layoutBytes("/data", "/settlementRunType"))
-	for _, c := range []struct{ name, resp, state, why string }{
-		{"all RF (fractions and negatives elsewhere)", respAllRF, "RF", ""},
-		{"all R1", respAllR1, "R1", ""},
-		{"records disagree", respMixed, "", `records disagree: record 0 reads "R1", record 1 reads "RF"`},
-		{"field missing", respMissing, "", `record 1: state pointer "/settlementRunType": no member "settlementRunType"`},
-		{"not JSON", respCSV, "", "the response is not I-JSON"},
-		{"duplicate key", `{"data":[{"settlementRunType":"RF","settlementRunType":"R1"}]}`, "", "duplicate key"},
-		{"value not a string", `{"data":[{"settlementRunType":3}]}`, "", "names a number, not a string"},
-		{"empty string", `{"data":[{"settlementRunType":""}]}`, "", "names an empty string"},
-		{"records not an array", `{"data":{"settlementRunType":"RF"}}`, "", "names a object, not an array"},
-		{"records missing", `{"rows":[]}`, "", `records pointer "/data": no member "data"`},
-		{"no records", `{"data":[]}`, "", "the record array is empty"},
-		{"record not an object", `{"data":["RF"]}`, "", "steps into a string"},
+	for _, c := range []struct{ name, resp, state, spread, why string }{
+		{"all RF (fractions and negatives elsewhere)", respAllRF, "RF", "", ""},
+		{"all R1", respAllR1, "R1", "", ""},
+		{"mixed R1, RF: the least record", respMixed, "R1", "records at R1..RF, read as R1", ""},
+		{"mixed, least last in array order", `{"data":[{"settlementRunType":"DF"},{"settlementRunType":"RF"},{"settlementRunType":"R2"}]}`, "R2", "records at R2..DF, read as R2", ""},
+		{"mixed, least in the middle", `{"data":[{"settlementRunType":"RF"},{"settlementRunType":"SF"},{"settlementRunType":"RF"}]}`, "SF", "records at SF..RF, read as SF", ""},
+		{"field missing", respMissing, "", "", `record 1: state pointer "/settlementRunType": no member "settlementRunType"`},
+		{"not JSON", respCSV, "", "", "the response is not I-JSON"},
+		{"duplicate key", `{"data":[{"settlementRunType":"RF","settlementRunType":"R1"}]}`, "", "", "duplicate key"},
+		{"value not a string", `{"data":[{"settlementRunType":3}]}`, "", "", "names a number, not a string"},
+		{"value not a string beside placed labels", `{"data":[{"settlementRunType":"R1"},{"settlementRunType":null}]}`, "", "", "record 1: state pointer \"/settlementRunType\" names a null, not a string"},
+		{"empty string", `{"data":[{"settlementRunType":""}]}`, "", "", "names an empty string"},
+		{"empty string beside placed labels", `{"data":[{"settlementRunType":"RF"},{"settlementRunType":""}]}`, "", "", "record 1: state pointer \"/settlementRunType\" names an empty string"},
+		{"one label outside the profile", `{"data":[{"settlementRunType":"R1"},{"settlementRunType":"II"},{"settlementRunType":"RF"}]}`, "", "",
+			`record 1 reads "II", which is not in the source profile's labels: not comparable`},
+		{"every label outside the profile", `{"data":[{"settlementRunType":"II"},{"settlementRunType":"II"}]}`, "", "", `record 0 reads "II", which is not in`},
+		{"records not an array", `{"data":{"settlementRunType":"RF"}}`, "", "", "names a object, not an array"},
+		{"records missing", `{"rows":[]}`, "", "", `records pointer "/data": no member "data"`},
+		{"no records", `{"data":[]}`, "", "", "the record array is empty"},
+		{"record not an object", `{"data":["RF"]}`, "", "", "steps into a string"},
 	} {
 		for i := 0; i < 2; i++ {
-			s, why := ReadState([]byte(c.resp), l, 0)
-			if s != c.state || !strings.Contains(why, c.why) || (c.why == "") != (why == "") {
-				t.Errorf("%s: %q, %q; want %q, %q", c.name, s, why, c.state, c.why)
+			r := ReadState([]byte(c.resp), l, settlementRank, 0)
+			if r.State != c.state || r.Spread() != c.spread || !strings.Contains(r.Why, c.why) || (c.why == "") != (r.Why == "") {
+				t.Errorf("%s: %q, %q, %q; want %q, %q, %q", c.name, r.State, r.Spread(), r.Why, c.state, c.spread, c.why)
 			}
 		}
 	}
+	// the order is the profile's, passed in: the same bytes under the reverse order read at the other end, and
+	// with no order nothing is read
+	rev := func(s string) (int, bool) { r, ok := settlementRank(s); return -r, ok }
+	if r := ReadState([]byte(respMixed), l, rev, 0); r.State != "RF" || r.Spread() != "records at RF..R1, read as RF" {
+		t.Errorf("reverse order: %+v", r)
+	}
+	if r := ReadState([]byte(respAllRF), l, nil, 0); r.State != "" || !strings.Contains(r.Why, "no source profile order") {
+		t.Errorf("no order: %+v", r)
+	}
 	// a single-position layout reads one pointer into the response
 	one := mustLayout(t, canon.Encode(obj("layout", ResponseLayoutTag, "state", "/meta/run")))
-	if s, why := ReadState([]byte(`{"meta":{"run":"SF"},"data":[1.5]}`), one, 0); s != "SF" || why != "" {
-		t.Errorf("single position: %q %q", s, why)
+	if r := ReadState([]byte(`{"meta":{"run":"SF"},"data":[1.5]}`), one, settlementRank, 0); r.State != "SF" || r.Why != "" || r.Spread() != "" {
+		t.Errorf("single position: %+v", r)
+	}
+	if r := ReadState([]byte(`{"meta":{"run":"II"}}`), one, settlementRank, 0); r.State != "" || !strings.Contains(r.Why, `the response reads "II", which is not in`) {
+		t.Errorf("single position, label outside the profile: %+v", r)
 	}
 	// an index pointer into an array, and the escaped form
 	idx := mustLayout(t, layoutBytes("/a~1b", "/0"))
-	if s, why := ReadState([]byte(`{"a/b":[["RF",1],["RF",2]]}`), idx, 0); s != "RF" || why != "" {
-		t.Errorf("index pointer: %q %q", s, why)
+	if r := ReadState([]byte(`{"a/b":[["RF",1],["RF",2]]}`), idx, settlementRank, 0); r.State != "RF" || r.Why != "" {
+		t.Errorf("index pointer: %+v", r)
 	}
-	if _, why := ReadState([]byte(`{"a/b":[["RF"],[]]}`), idx, 0); !strings.Contains(why, "past the end") {
-		t.Errorf("index past the end: %q", why)
+	if r := ReadState([]byte(`{"a/b":[["RF"],[]]}`), idx, settlementRank, 0); !strings.Contains(r.Why, "past the end") {
+		t.Errorf("index past the end: %+v", r)
+	}
+}
+
+// Root-array fixtures: a streaming endpoint answers with a bare JSON array of records (synthetic, not real data).
+const (
+	respRootMixed = `[{"settlementPeriod":1,"settlementRunType":"RF","quantity":1.5},{"settlementPeriod":2,"settlementRunType":"R2","quantity":-2}]`
+	respRootAllRF = `[{"settlementPeriod":1,"settlementRunType":"RF"},{"settlementPeriod":2,"settlementRunType":"RF"}]`
+)
+
+// TestReadStateRootArray: `records` "" is the RFC 6901 pointer to the whole response, so a bare JSON array at the
+// root is the record array. It is distinct from `records` absent (one state, read with `state` from the root): the
+// same bare array under the absent form steps into an array with a member name and is unchecked.
+func TestReadStateRootArray(t *testing.T) {
+	root := mustLayout(t, layoutBytes("", "/settlementRunType"))
+	if !root.HasRecords || root.Records != nil || root.RecordsText != "" {
+		t.Fatalf("records \"\": %+v", root)
+	}
+	absent := mustLayout(t, canon.Encode(obj("layout", ResponseLayoutTag, "state", "/settlementRunType")))
+	if absent.HasRecords {
+		t.Fatalf("records absent read as present: %+v", absent)
+	}
+	if root.Digest == absent.Digest {
+		t.Fatal("the two forms share a digest")
+	}
+	for _, c := range []struct {
+		name          string
+		l             *ResponseLayout
+		resp          string
+		state, spread string
+		why           string
+	}{
+		{"root array, all RF", root, respRootAllRF, "RF", "", ""},
+		{"root array, mixed: least", root, respRootMixed, "R2", "records at R2..RF, read as R2", ""},
+		{"root array, empty", root, `[]`, "", "", "the record array is empty"},
+		{"root is an object", root, respAllRF, "", "", `records pointer "" names a object, not an array`},
+		{"records absent over a root array", absent, respRootAllRF, "", "", `the response: state pointer "/settlementRunType": reference token 0 "settlementRunType" is not an array index`},
+	} {
+		r := ReadState([]byte(c.resp), c.l, settlementRank, 0)
+		if r.State != c.state || r.Spread() != c.spread || !strings.Contains(r.Why, c.why) || (c.why == "") != (r.Why == "") {
+			t.Errorf("%s: %+v; want %q %q %q", c.name, r, c.state, c.spread, c.why)
+		}
 	}
 }
 
@@ -143,15 +215,15 @@ func TestReadStateLimits(t *testing.T) {
 		b.WriteString(`{"settlementRunType":"RF"}`)
 	}
 	b.WriteString(`]}`)
-	if s, why := ReadState([]byte(b.String()), l, 500); s != "" || why != LayoutStepLimit {
-		t.Fatalf("budget 500: %q %q", s, why)
+	if r := ReadState([]byte(b.String()), l, settlementRank, 500); r.State != "" || r.Why != LayoutStepLimit {
+		t.Fatalf("budget 500: %+v", r)
 	}
-	if s, why := ReadState([]byte(b.String()), l, 0); s != "RF" || why != "" {
-		t.Fatalf("control (default budget): %q %q", s, why)
+	if r := ReadState([]byte(b.String()), l, settlementRank, 0); r.State != "RF" || r.Why != "" {
+		t.Fatalf("control (default budget): %+v", r)
 	}
 	big := make([]byte, MaxResponseBytes+1)
-	if _, why := ReadState(big, l, 0); !strings.Contains(why, "larger than") {
-		t.Fatalf("size cap: %q", why)
+	if r := ReadState(big, l, settlementRank, 0); !strings.Contains(r.Why, "larger than") {
+		t.Fatalf("size cap: %+v", r)
 	}
 }
 
@@ -207,11 +279,12 @@ func (lw *layoutWorld) rules() ProfileRules {
 }
 
 // TestObservationResponseLayout: the observation view under a profile that cites a response layout (claims-model
-// note §5.3.1a, "Response layouts"). (a) the records agree: the state read from the held bytes governs, the
-// referent reads `final (as held)` or provisional at the read state, and an asserted state that differs is shown
-// beside it as a disclosed disagreement; (b) the records disagree, the field is missing, the bytes are not JSON or
-// not held: the layout read is unchecked naming why and the asserted state reads exactly as without a layout
-// (`final (as captured, not re-checked)` at best, never upgraded); (c) no layout: alpha behaviour, unchanged.
+// note §5.3.1a, "Response layouts"). (a) every record carries a label in the profile: the least record's state,
+// read from the held bytes, governs, the referent reads `final (as held)` or provisional at the read state, records
+// that differ are disclosed as a spread, and an asserted state that differs from the read one is shown beside it as
+// a disclosed disagreement; (b) a record's label is outside the profile, the field is missing, the bytes are not
+// JSON or not held: the layout read is unchecked naming why and the asserted state reads exactly as without a
+// layout (`final (as captured, not re-checked)` at best, never upgraded); (c) no layout: alpha behaviour, unchanged.
 func TestObservationResponseLayout(t *testing.T) {
 	conformance.Covers(t, "C-core-104g")
 	lay := layoutBytes("/data", "/settlementRunType")
@@ -225,14 +298,24 @@ func TestObservationResponseLayout(t *testing.T) {
 		{"(a) agree RF, asserted RF", "RF", respAllRF, lay, nil, RefFinalHeld, "state RF read from the held response", false},
 		{"(a) agree RF, asserted R1 (disclosed)", "R1", respAllRF, lay, nil, RefFinalHeld, "the observer asserted R1 at capture (disclosed, does not govern)", false},
 		{"(a) agree R1, asserted RF (disclosed, not final)", "RF", respAllR1, lay, nil, "provisional (R1; final at RF)", "the observer asserted RF at capture (disclosed, does not govern)", false},
-		{"(b) records disagree", "RF", respMixed, lay, nil, RefFinalCaptured, `unchecked (records disagree: record 0 reads "R1", record 1 reads "RF")`, false},
-		{"(b) records disagree, asserted R1 not upgraded", "R1", respMixed, lay, nil, "provisional (R1; final at RF)", "unchecked (records disagree", false},
+		{"(a) mixed R1, RF, asserted RF: the least record", "RF", respMixed, lay, nil, "provisional (R1; final at RF)",
+			"state R1 read from the held response (records at R1..RF, read as R1); the observer asserted RF at capture (disclosed, does not govern)", false},
+		{"(a) mixed R1, RF, asserted R1: agrees with the least", "R1", respMixed, lay, nil, "provisional (R1; final at RF)",
+			"state R1 read from the held response (records at R1..RF, read as R1)", false},
+		{"(a) mixed RF, DF, asserted RF: final as held at the least", "RF", `{"data":[{"settlementRunType":"DF"},{"settlementRunType":"RF"}]}`, lay, nil, RefFinalHeld,
+			"state RF read from the held response (records at RF..DF, read as RF)", false},
+		{"(a) mixed RF, DF, asserted DF: disclosed against the least", "DF", `{"data":[{"settlementRunType":"DF"},{"settlementRunType":"RF"}]}`, lay, nil, RefFinalHeld,
+			"(records at RF..DF, read as RF); the observer asserted DF at capture (disclosed, does not govern)", false},
+		{"(b) one record outside the profile", "RF", respOneUnknown, lay, nil, RefFinalCaptured, `unchecked (record 1 reads "II", which is not in the source profile's labels`, false},
+		{"(b) one record outside the profile, asserted R1 not upgraded", "R1", respOneUnknown, lay, nil, "provisional (R1; final at RF)", `unchecked (record 1 reads "II"`, false},
 		{"(b) field missing", "RF", respMissing, lay, nil, RefFinalCaptured, `unchecked (record 1: state pointer "/settlementRunType": no member`, false},
 		{"(b) not JSON", "RF", respCSV, lay, nil, RefFinalCaptured, "unchecked (the response is not I-JSON", false},
 		{"(b) declared non-JSON media type", "RF", respAllRF, lay, []any{"content", canon.Value(obj("digest", dig("S1"), "size", 2, "media_type", "text/csv"))},
 			RefFinalCaptured, `unchecked (the capture's media type "text/csv" is not JSON`, false},
 		{"(b) response not held", "RF", "", lay, nil, RefFinalCaptured, "not held)", false},
-		{"(b) label outside the profile", "RF", `{"data":[{"settlementRunType":"II"}]}`, lay, nil, RefFinalCaptured, `"II", which is not in source profile`, false},
+		{"(b) label outside the profile", "RF", `{"data":[{"settlementRunType":"II"}]}`, lay, nil, RefFinalCaptured, `record 0 reads "II", which is not in the source profile's labels`, false},
+		{"(a) root array (records \"\"), mixed", "RF", respRootMixed, layoutBytes("", "/settlementRunType"), nil, "provisional (R2; final at RF)",
+			"state R2 read from the held response (records at R2..RF, read as R2)", false},
 		{"(c) no layout (control)", "RF", respAllR1, nil, nil, RefFinalCaptured, "", true},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -257,8 +340,8 @@ func TestObservationResponseLayout(t *testing.T) {
 	}
 	// never upgraded: an unchecked read leaves the referent exactly as the same profile without a layout reads it
 	for _, asserted := range []string{"RF", "R1", "DF"} {
-		with := newLayoutWorld(t, asserted, respMixed, lay)
-		without := newLayoutWorld(t, asserted, respMixed, nil)
+		with := newLayoutWorld(t, asserted, respOneUnknown, lay)
+		without := newLayoutWorld(t, asserted, respOneUnknown, nil)
 		a := obsView(t, with.w, with.id, WithFinalityRules(with.rules())).ReferentStatus
 		b := obsView(t, without.w, without.id, WithFinalityRules(without.rules())).ReferentStatus
 		if a != b {
@@ -281,6 +364,9 @@ func TestLayoutCitedUnusable(t *testing.T) {
 		{"invalid layout", map[string][]byte{dig(string(bad)): bad}, "is not a rc-response-layout/1 layout: state is not an RFC 6901"},
 		{"two layouts", map[string][]byte{dig(string(layoutBytes("/data", "/settlementRunType"))): layoutBytes("/data", "/settlementRunType"), dig(string(l2)): l2},
 			"cites 2 response layouts; none is picked"},
+		{"held corrupt (the getter returns the held bytes)", map[string][]byte{dig(string(layoutBytes("/data", "/settlementRunType"))): layoutBytes("/data", "/other")},
+			"is held corrupt (its bytes hash elsewhere), so whether it is the profile's rc-response-layout/1 layout cannot be read"},
+		{"held corrupt beside a valid layout", map[string][]byte{dig(string(l2)): l2, dig("a document"): []byte("other bytes")}, "is held corrupt"},
 		{"not held", map[string][]byte{dig("absent"): nil}, ""},
 		{"not a layout", map[string][]byte{dig(`{"a":1}`): []byte(`{"a":1}`)}, ""},
 	} {
@@ -304,6 +390,108 @@ func TestLayoutCitedUnusable(t *testing.T) {
 				t.Fatalf("got %+v, want unchecked %q", lr, c.why)
 			}
 		})
+	}
+}
+
+// TestLayoutHeldCorruptNamed: a getter that checks the hash itself (a store) reports a corrupt held copy as
+// ErrHeldCorrupt; the layout is then unusable naming that document, where before it was skipped silently. Control:
+// the same getter reporting the document not held leaves the profile with no layout.
+func TestLayoutHeldCorruptNamed(t *testing.T) {
+	lb := layoutBytes("/data", "/settlementRunType")
+	ld := dig(string(lb))
+	for _, corrupt := range []bool{true, false} {
+		p := mustProfile(t, canon.Encode(obj("profile", SourceProfileTag, "source", "s", "dialect", DialectOrderedLabel, "labels", []string{"R1", "RF"},
+			"documents", []string{ld})))
+		p.AttachLayouts(func(d string) ([]byte, error) {
+			if corrupt {
+				return nil, ErrHeldCorrupt
+			}
+			return nil, nil
+		})
+		lr := NewProfileRules(p).For(p.Digest).readLayout("run >= RF", obj("class", "source", "referent", obj("response_digest", dig("r"))), State{Run: "RF"})
+		if !corrupt {
+			if lr != nil || p.HasLayout() {
+				t.Fatalf("not held read as a layout: %+v", lr)
+			}
+			continue
+		}
+		if lr == nil || lr.State != "" || !strings.Contains(lr.Why, "document "+keylog.Short(ld)+" is held corrupt") {
+			t.Fatalf("corrupt: %+v", lr)
+		}
+	}
+}
+
+// TestLayoutLeastNeverUpgrades: seeded property. For any response whose records all carry labels in the profile,
+// the read state meets `run >= L` exactly when every record does (the rule is monotone, so the least record is the
+// one state the whole response can be relied on at), the read state is one of the records' labels, the spread is
+// disclosed exactly when records differ, and the read does not depend on the records' order.
+func TestLayoutLeastNeverUpgrades(t *testing.T) {
+	l := mustLayout(t, layoutBytes("/data", "/settlementRunType"))
+	labels := []string{"SF", "R1", "R2", "RF", "DF"}
+	rng := uint64(0x5eed1113)
+	next := func(n int) int {
+		rng ^= rng << 13
+		rng ^= rng >> 7
+		rng ^= rng << 17
+		return int(rng % uint64(n))
+	}
+	build := func(rs []string) []byte {
+		var b strings.Builder
+		b.WriteString(`{"data":[`)
+		for i, r := range rs {
+			if i > 0 {
+				b.WriteByte(',')
+			}
+			b.WriteString(`{"settlementRunType":"` + r + `"}`)
+		}
+		b.WriteString(`]}`)
+		return []byte(b.String())
+	}
+	for iter := 0; iter < 2000; iter++ {
+		rs := make([]string, 1+next(8))
+		for i := range rs {
+			rs[i] = labels[next(len(labels))]
+		}
+		r := ReadState(build(rs), l, settlementRank, 0)
+		if r.Why != "" {
+			t.Fatalf("%v: %q", rs, r.Why)
+		}
+		ri, _ := settlementRank(r.State)
+		distinct := map[string]bool{}
+		for _, x := range rs {
+			distinct[x] = true
+		}
+		if !distinct[r.State] {
+			t.Fatalf("%v: read %q is no record's label", rs, r.State)
+		}
+		for li, L := range labels {
+			all := true
+			for _, x := range rs {
+				xi, _ := settlementRank(x)
+				all = all && xi >= li
+			}
+			if (ri >= li) != all {
+				t.Fatalf("%v: read %s meets run >= %s is %v, every record meets it is %v", rs, r.State, L, ri >= li, all)
+			}
+		}
+		if (r.Spread() != "") != (len(distinct) > 1) {
+			t.Fatalf("%v: spread %q", rs, r.Spread())
+		}
+		sh := append([]string(nil), rs...)
+		for i := len(sh) - 1; i > 0; i-- {
+			j := next(i + 1)
+			sh[i], sh[j] = sh[j], sh[i]
+		}
+		if r2 := ReadState(build(sh), l, settlementRank, 0); r2 != r {
+			t.Fatalf("%v vs %v: %+v vs %+v (order changed the read)", rs, sh, r, r2)
+		}
+		// one record outside the profile, anywhere, and nothing is read
+		bad := append([]string(nil), rs...)
+		k := next(len(bad))
+		bad[k] = "XX"
+		if r3 := ReadState(build(bad), l, settlementRank, 0); r3.State != "" || !strings.Contains(r3.Why, "record "+strconv.Itoa(k)+` reads "XX"`) {
+			t.Fatalf("%v: %+v", bad, r3)
+		}
 	}
 }
 
