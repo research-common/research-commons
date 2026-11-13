@@ -85,6 +85,9 @@ type Resolver struct {
 	// readTime is the reader's evaluation time for time-dependent answers (shelf-life age); nil when none is
 	// given (disclosure.go). The resolver never reads a clock of its own (I14).
 	readTime *time.Time
+	// provDepth is the bound on how many derivation steps the weakest-link grade follows (provenance.go);
+	// DefaultProvenanceDepth when unset.
+	provDepth int
 	// sysMu guards the method-edition declaration cache (systemkeys.go), filled lazily from the snapshot.
 	sysMu      sync.Mutex
 	sysDecl    map[string]methodDecl

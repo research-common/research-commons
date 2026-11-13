@@ -28,6 +28,14 @@ func (v *view) artifactCore(a *resolve.Artifact) *Obj {
 		o.set("step", tokV(tok(a.Step.Token())))
 	}
 	o.set("disclosures", disclosures(a))
+	if len(a.Incomplete) > 0 {
+		// a traversal stopped by a limit of this reader: operational, the limit and the scope it cut (C-core-131)
+		l := listV{}
+		for _, f := range a.Incomplete {
+			l = append(l, newObj().set("class", tokV(tok(string(f.Class)))).set("reason", textV(f.Reason)).set("detail", textV(f.Detail)))
+		}
+		o.set("incomplete", l)
+	}
 	if a.Inputs != nil {
 		// the derived result's scoped summary over its inputs, declared beside computed (claims-model note §7)
 		o.set("inputs_summary", texts(a.Inputs.Lines()...))

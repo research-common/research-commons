@@ -657,7 +657,12 @@ func (r *Resolver) grade(a *Artifact, visiting map[string]bool) {
 			}
 			continue
 		}
+		if len(visiting) >= r.provenanceDepth() {
+			a.cutProvenance(in, r.provenanceDepth())
+			continue
+		}
 		sub := r.artifact(in, visiting)
+		a.Incomplete = mergeRefusals(a.Incomplete, sub.Incomplete)
 		switch {
 		case sub.State == NoClaim:
 			missing++
