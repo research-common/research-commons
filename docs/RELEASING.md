@@ -63,7 +63,7 @@ A plan, not a schedule; the maintainers make the final call and may revise this 
 1. **Changelog.** In `CHANGELOG.md`, turn `[Unreleased]` into a dated entry for the target
    version, and refresh "Known issues" against
    `gh issue list -R research-common/research-commons --state open`.
-2. **Version.** Set `VERSION` to the new version string. The binary embeds it (root
+2. **Version.** Set `VERSION` to the new version string (and the Python package's two version declarations, step 8). The binary embeds it (root
    `version.go`), so an unstamped `go build ./cmd/commons` reports it; release builds may still
    override it with `-ldflags "-X main.version=…"`.
 3. **PR.** Open a PR into `next` and get it merged. It is squash-merged; the PR title and
@@ -101,7 +101,23 @@ A plan, not a schedule; the maintainers make the final call and may revise this 
    ```
    A dry run (Actions → release → Run workflow) builds and checksums without attesting or
    uploading.
-8. **Hub template pin.** In `research-commons-hub-template`, on its `next` branch, set
+8. **Python wheels** (manual; nothing in CI builds or uploads them). The Python package in `python/` carries the
+   binary in one platform wheel per release archive. Its version must already equal `VERSION` mapped to
+   PEP 440 (`0.5.0-alpha.3` → `0.5.0a3`): set `version` in `python/pyproject.toml` and `__version__` in
+   `python/src/research_commons/__init__.py` in the step-2 version PR, or the build refuses. After step 7,
+   with the checks passed:
+   ```bash
+   mkdir rel && cd rel
+   gh release download <tag> --repo research-common/research-commons \
+     --pattern 'SHA256SUMS' --pattern '*.tar.gz'
+   cd .. && python3 python/scripts/build_wheels.py rel --out dist/wheels
+   ```
+   The script checks every archive against `SHA256SUMS` before opening it, refuses a version, platform or
+   binary-format mismatch, and prints a digest per wheel; building twice gives identical bytes. Install one
+   wheel in a clean virtualenv and run `commons --version` before uploading. **Publishing to PyPI is a
+   maintainer action** (a trusted publisher configured on the `research-commons` project; no API token in
+   the repository), done from the tagged commit.
+9. **Hub template pin.** In `research-commons-hub-template`, on its `next` branch, set
    `TOOL_REF` to the tag's **full 40-character commit SHA** (immutable), with the tag as a
    trailing comment (`# v0.5.0-alpha.1`).
 
