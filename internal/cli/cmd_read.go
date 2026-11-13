@@ -507,6 +507,16 @@ func (v *view) answerInputs(a *resolve.Artifact) []string {
 		for _, cl := range v.r.Artifact(g.Provenance.Workflow).Claims {
 			ids = append(ids, cl.Statements...)
 		}
+		// the scoped summary of a derived result reads each direct input's disclosures (replication, shelf life,
+		// sampling, finality): the statements that declared them are inputs of the summary (C-core-73, I14)
+		for _, in := range g.Provenance.Inputs {
+			for _, ob := range v.r.Observations(in) {
+				ids = append(ids, ob.Statement)
+			}
+			for _, cl := range v.r.Artifact(in).Claims {
+				ids = append(ids, cl.Statements...)
+			}
+		}
 	}
 	return ids
 }

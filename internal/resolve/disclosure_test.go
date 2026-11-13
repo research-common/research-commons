@@ -275,7 +275,7 @@ func TestSamplingDeclaredBesideComputed(t *testing.T) {
 // disclosures on its inputs. The finality half is the observation leaf summary's (`rests on …`), checked here as
 // it renders. Each input observes its own block, so no two inputs share a referent.
 func TestDerivedScopedSummary(t *testing.T) {
-	conformance.Partial(t, "C-core-73", "weakest replication, shortest shelf life, per-input n with denominators and the contradicted count beside an unchanged grade, scoped; the leaf summary counts captures per referent status (`2 final (as captured, not re-checked); 1 provisional`) without the case's `until RF` horizon wording, and `explain` lists the derivation's statements but not each input's disclosure sources")
+	// covered through the commands by internal/cli.TestDerivedScopedSummarySurfaces; this is the resolver half
 	build := func(disclose bool) (*world, *Artifact) {
 		w := newWorld(t)
 		spec := []struct {
@@ -303,7 +303,7 @@ func TestDerivedScopedSummary(t *testing.T) {
 	has(t, out, "inputs replication: protocol (weakest; 3 of 3 inputs declare one) (within statements you hold)")
 	has(t, out, "inputs shelf life: 7 days (shortest; 3 of 3 inputs declare one) (within statements you hold)")
 	has(t, out, "inputs sampling per input (3 of 3 declare): "+shortDigest(dig("O1"))+" 10 blocks, "+shortDigest(dig("O2"))+" 20 blocks, "+shortDigest(dig("O3"))+" 5 blocks")
-	has(t, out, "rests on 3 observation(s): 2 final (as captured, not re-checked); 1 provisional; 1 contradicted within statements you hold")
+	has(t, out, "rests on 3 observation(s): 2 final (as captured, not re-checked); 1 provisional until 6; 1 contradicted within statements you hold")
 	_, base := build(false)
 	ac, _ := a.VerifyExit()
 	bc, _ := base.VerifyExit()

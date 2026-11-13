@@ -624,12 +624,17 @@ func (r *Resolver) obsNotes(d string) (contradicted bool, status string) {
 		if o.Corroboration.Contradicted > 0 && !o.Corroboration.Unchecked {
 			contradicted = true
 		}
-		s := o.ReferentStatus
+		s, shown := o.ReferentStatus, o.ReferentStatus
 		if strings.HasPrefix(s, RefProvisional) {
-			s = RefProvisional
+			// the horizon travels with the count: `provisional until <final state>` (claims §5.3.1, "derived
+			// results inherit the horizon"); the status string is `provisional (<state>; final at <final>)`
+			s, shown = RefProvisional, RefProvisional
+			if i := strings.Index(o.ReferentStatus, "; final at "); i > 0 && strings.HasSuffix(o.ReferentStatus, ")") {
+				shown += " until " + strings.TrimSuffix(o.ReferentStatus[i+len("; final at "):], ")")
+			}
 		}
 		if rank[s] > best {
-			best, status = rank[s], s
+			best, status = rank[s], shown
 		}
 	}
 	return contradicted, status

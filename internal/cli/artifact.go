@@ -36,6 +36,14 @@ func (v *view) artifactCore(a *resolve.Artifact) *Obj {
 		}
 		o.set("incomplete", l)
 	}
+	if len(a.RestsOn) > 0 {
+		// what a derived result's grade rests on, scoped, beside the grade (claims-model note §7, C-core-73)
+		on := make([]string, len(a.RestsOn))
+		for i, x := range a.RestsOn {
+			on[i] = "rests on " + x
+		}
+		o.set("rests_on", texts(on...))
+	}
 	if a.Inputs != nil {
 		// the derived result's scoped summary over its inputs, declared beside computed (claims-model note §7)
 		o.set("inputs_summary", texts(a.Inputs.Lines()...))
