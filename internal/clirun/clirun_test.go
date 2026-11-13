@@ -45,6 +45,7 @@ func catStep(_ context.Context, in, out string, _ map[string]string) (int, run.R
 type pinned struct {
 	root, policy, signer string
 	output               string
+	resultStmt           string // the statement id of the authored that publishes the run's output
 	spec                 *run.Spec
 }
 
@@ -94,7 +95,7 @@ func newPinned(t *testing.T) *pinned {
 		}
 		prev = id
 	}
-	p := &pinned{root: root, signer: k.Signer(), output: res.Outputs[0].Digest, spec: spec}
+	p := &pinned{root: root, signer: k.Signer(), output: res.Outputs[0].Digest, spec: spec, resultStmt: prev}
 	p.policy = p.writePolicy(t, `{"format":"`+cli.ExecPolicyFormat+`","exec_signers":["`+k.Signer()+`"],"ceiling":{"memory":1073741824,"wall_time":60000,"pids":256,"disk":1073741824}}`)
 	return p
 }
@@ -281,5 +282,50 @@ func TestRerunRefusesCorruptStoredBlob(t *testing.T) {
 				t.Fatal("the corrupt copy was modified by a read-only verify")
 			}
 		})
+	}
+}
+
+// TestCorroborationRerun: C-core-45, the reader's own re-run. A corroboration names a derived result; the result
+// is an ordinary derived result, so `verify --rerun` on it re-runs its workflow in the pinned environment and the
+// corroboration changes nothing about that: the re-run matches (exit 0, the same output bytes) with and without
+// the corroboration held, and a diverging re-run diverges (exit 1) the same way. The corroboration's own grade is
+// the grade of the result's derivation, shown beside it (internal/cli.TestCorroborationIsDerivationSurfaces).
+func TestCorroborationRerun(t *testing.T) {
+	conformance.Covers(t, "C-core-45")
+	p := newPinned(t)
+	before := p.verify(&Bridge{Runner: fake(catStep)}, p.output, "--rerun", "--exec-policy", p.policy)
+	if before.code != 0 || !strings.Contains(before.stdout, `"state":"match"`) {
+		t.Fatalf("control re-run: %d %s", before.code, before.stdout)
+	}
+	// an observation by another key, and its corroboration naming the derived result
+	k := wire.Ed25519Key{Seed: func() []byte { h := sha256.Sum256([]byte("clirun observer")); return h[:] }()}
+	s, err := store.Open(p.root, store.Options{NoSync: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	obsBlob := []byte("observed bytes")
+	if _, _, err := s.InstallBlob(bytes.NewReader(obsBlob), ""); err != nil {
+		t.Fatal(err)
+	}
+	ref := object("chain_id", canon.String("bip122:000000000019d6689c085ae165831e93"), "block_hash", canon.String(strings.Repeat("a1", 32)), "depth", canon.Int(3))
+	oline, oid := wire.Sign(wire.Draft{Kind: "observed", Seq: 0, TS: "2026-10-16T01:00:00Z", Body: object(
+		"content", object("digest", canon.String(run.Digest(obsBlob)), "size", canon.Int(int64(len(obsBlob)))), "class", canon.String("exact-bytes"),
+		"referent", ref, "capture", object("at", canon.String("2026-10-16T00:00:00Z"), "evidence", canon.String("self-asserted")))}, k)
+	cline, _ := wire.Sign(wire.Draft{Kind: "corroborates", Seq: 1, Prev: oid, TS: "2026-10-16T01:00:01Z", Body: object(
+		"of", canon.String(oid), "result", canon.String(p.resultStmt), "verdict", canon.String("supports"), "model", canon.String("M/1"),
+		"cohort", object("rule", canon.String("every station in R")))}, k)
+	if _, err := s.Commit("publish", [][]byte{oline, cline}, nil); err != nil {
+		t.Fatal(err)
+	}
+	after := p.verify(&Bridge{Runner: fake(catStep)}, p.output, "--rerun", "--exec-policy", p.policy)
+	if after.code != 0 || !strings.Contains(after.stdout, `"state":"match"`) {
+		t.Fatalf("re-run of a corroborated result: %d %s", after.code, after.stdout)
+	}
+	div := fake(func(_ context.Context, _, out string, _ map[string]string) (int, run.Resources) {
+		os.WriteFile(filepath.Join(out, "result.txt"), []byte("other bytes"), 0o644)
+		return 0, run.Resources{run.CapMemory: 1000, run.CapWallTime: 5}
+	})
+	if d := p.verify(&Bridge{Runner: div}, p.output, "--rerun", "--exec-policy", p.policy); d.code != 1 || !strings.Contains(d.stdout, `"state":"diverged"`) {
+		t.Fatalf("a diverging re-run of a corroborated result: %d %s", d.code, d.stdout)
 	}
 }
