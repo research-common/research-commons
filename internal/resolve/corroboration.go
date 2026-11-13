@@ -374,7 +374,9 @@ func (r *Resolver) finalityAware(e *Evidence, o *Observation, st, q *wire.Statem
 		return
 	}
 	e.Model = "finality-aware (" + o.Finality.Rule + ")"
-	e.Verdict, e.Counted, e.Cause = finalityVerdict(r.rulesFor(o.Finality), o.Finality.Rule, o.Finality.State, captureState(q))
+	rules := r.rulesFor(o.Finality)
+	e.Verdict, e.Counted, e.Cause = finalityVerdict(rules, o.Finality.Rule, r.heldCaptureState(rules, o.Finality.Rule, st),
+		r.heldCaptureState(rules, o.Finality.Rule, q))
 }
 
 // finalityVerdict is the finality-aware agreement model on two captures with different bytes.

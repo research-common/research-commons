@@ -386,7 +386,7 @@ and a `gc` (§6) does not invalidate anything, because `gc` removes no input of 
 | blob referenced by no installed statement and no `pending/` record | yes | outside the grace window (§6.1.1) |
 | blob referenced by an installed statement | **no** | — |
 | blob referenced only by the operator's own `holds` | only on explicit request naming the hash | §6.2 |
-| blob the store-root policy pins (a source profile in `series.source_profiles`, claims-model note §5.3.1a) | **no**, while the policy names it | an unusable policy file stops `gc` before any work; it never runs as if nothing were pinned |
+| blob the store-root policy pins (a source profile in `series.source_profiles`, and the response layout such a profile, held here, cites; claims-model note §5.3.1a) | **no**, while the policy names it | an unusable policy file stops `gc` before any work; it never runs as if nothing were pinned |
 | statement, any | **never** | — |
 | `pending/` journal record | **never** by `gc`; only recovery or quarantine (§3.4) | — |
 

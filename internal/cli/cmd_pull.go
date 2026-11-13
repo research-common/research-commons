@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/research-common/research-commons/internal/gate"
@@ -261,6 +262,9 @@ func pullCmd(c *Ctx) (*Obj, int, error) {
 		return nil, 0, err
 	}
 	if profiles != nil {
+		// a response layout reads the package's responses (and this store's): the data, judged by the store's pins
+		pc := newPullContent(pkg, c.Store)
+		*profiles = profiles.WithBytes(pc.responseBytes, 0)
 		ropts = append(ropts, resolve.WithSegments(resolve.ProfileSegments{Rules: *profiles}), resolve.WithFinalityRules(*profiles))
 	}
 	pol.Resolver = append(ropts, pol.Resolver...)
@@ -446,7 +450,44 @@ func loadStoreProfiles(s *store.Store, digests []string) (*resolve.ProfileRules,
 		}
 		return nil, err
 	}
+	if profiles != nil {
+		// the read commands' response-layout reads come from the blobs this store holds intact
+		*profiles = profiles.WithBytes(func(d string, max int64) ([]byte, string) { return storeBlobUpTo(s, d, max) }, 0)
+	}
 	return profiles, nil
+}
+
+// storeBlobUpTo reads blob d as this store holds it, up to max bytes, for a response layout: nil and why when it is
+// not held, its copy is corrupt, or it is larger than max.
+func storeBlobUpTo(s *store.Store, d string, max int64) ([]byte, string) {
+	if !s.HasBlob(store.Digest(d)) {
+		return nil, "not held"
+	}
+	f, err := s.OpenBlob(store.Digest(d))
+	if err != nil {
+		return nil, "not readable (" + err.Error() + ")"
+	}
+	defer f.Close()
+	b, err := io.ReadAll(io.LimitReader(f, max+1))
+	switch {
+	case err != nil:
+		return nil, "not readable (" + err.Error() + ")"
+	case int64(len(b)) > max:
+		return nil, "larger than " + strconv.FormatInt(max, 10) + " bytes, the response-layout read limit"
+	}
+	return b, ""
+}
+
+// responseBytes is pullContent as a response-layout byte reader: the package's own blob (hashing to its name), else
+// this store's.
+func (c pullContent) responseBytes(d string, max int64) ([]byte, string) {
+	if b, ok := c.pkg[d]; ok {
+		if int64(len(b)) > max {
+			return nil, "larger than " + strconv.FormatInt(max, 10) + " bytes, the response-layout read limit"
+		}
+		return b, ""
+	}
+	return storeBlobUpTo(c.held.st, d, max)
 }
 
 // storeBlobCapped reads blob d as this store holds it, up to the profile size bound: nil when not held. A copy

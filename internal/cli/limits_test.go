@@ -323,19 +323,23 @@ var limits = []limit{
 	},
 	{
 		id:  "L-14",
-		gap: "No source profile reads a finality state out of the captured bytes: an observation's state is the observer's asserted `state_at_capture`, so a rule resolved through a pinned profile is at best `final (as captured, not re-checked)`, and a captured response whose own run label contradicts the asserted state is not noticed",
+		gap: "A response layout reads JSON only, through one JSON pointer to the record array and one to the state: a CSV, XML, compressed or archived response, or a state spread over several fields, is not read, so its observation's state stays the observer's asserted `state_at_capture` and a rule resolved through a pinned profile is at best `final (as captured, not re-checked)`",
 		sources: []limitSource{
-			{file: "CHANGELOG.md", says: "the state is never re-derived from the captured bytes"},
-			{file: "docs/DESIGN-notes-claims-model.md", says: "Reading the state out of the captured bytes (where the run label sits in a response) needs a response-layout dialect and is not part of a profile yet."},
+			{file: "CHANGELOG.md", says: "Other formats (CSV, XML, a compressed or archived response) are not read yet"},
+			{file: "docs/DESIGN-notes-claims-model.md", says: "Other formats (CSV, XML, a compressed or archived response) stay `unchecked`, naming why, until another layout dialect is specified (§15)."},
 		},
-		probe:  "with a profile pinned in the store-root policy and held, `verify` of an observation whose rule `run >= RF` cites it at asserted state `RF`, over captured bytes whose run label is `R1`, exits 0 with referent `final (as captured, not re-checked)`",
-		closes: "a response-layout dialect reads the run label out of the captured bytes, so the asserted state is checked against them",
+		probe:  "with a profile pinned in the store-root policy, citing a response layout, and held, `verify` of an observation whose rule `run >= RF` cites it at asserted state `RF`, over a held CSV response whose run column is `R1`, exits 0 with referent `final (as captured, not re-checked)` and the layout read `unchecked` (not I-JSON)",
+		closes: "a layout dialect for another response format reads the state out of such a response, so the asserted state is checked against it",
 		open: func(t *testing.T) (bool, string) {
-			prof := canon.Encode(obj("profile", resolve.SourceProfileTag, "source", "s", "dialect", resolve.DialectOrderedLabel, "labels", []string{"SF", "R1", "RF"}))
+			lay := canon.Encode(obj("layout", resolve.ResponseLayoutTag, "records", "", "state", "/run"))
+			ld := dig(string(lay))
+			prof := canon.Encode(obj("profile", resolve.SourceProfileTag, "source", "s", "dialect", resolve.DialectOrderedLabel, "labels", []string{"SF", "R1", "RF"},
+				"documents", []string{ld}))
 			pd := dig(string(prof))
 			w := newWorld(t)
 			w.blob("p", prof)
-			captured := `{"run":"R1","value":1}`
+			w.blob("l", lay)
+			captured := "run,value\nR1,1\n"
 			w.blob(captured, []byte(captured))
 			os.WriteFile(filepath.Join(w.root, PolicyFile), []byte(`{"policy":"rc-hub-policy/1","series":{"source_profiles":[{"digest":"`+pd+`"}]}}`), 0o644)
 			ref := obj("endpoint", "https://api.example/settlement", "parameters", obj("period", "x"), "response_digest", dig(captured))
@@ -343,7 +347,8 @@ var limits = []limit{
 				"capture", obj("at", "2026-01-02T00:00:00Z", "evidence", "self-asserted"),
 				"finality", obj("rule", "run >= RF", "rule_source", pd, "state_at_capture", obj("run", "RF"))))
 			r := w.run("verify", id)
-			return r.code == ExitOK && strings.Contains(r.stdout, "status: final (as captured, not re-checked)"), r.stdout[:min(len(r.stdout), 400)]
+			return r.code == ExitOK && strings.Contains(r.stdout, "status: final (as captured, not re-checked)") &&
+				strings.Contains(r.stdout, "unchecked (the response is not I-JSON"), r.stdout[:min(len(r.stdout), 600)]
 		},
 	},
 }

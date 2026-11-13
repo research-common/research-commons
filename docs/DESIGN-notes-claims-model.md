@@ -445,14 +445,65 @@ Rules:
 - **A profile evaluates asserted states, not the source.** What it decides is whether the observer's asserted
   `state_at_capture` meets the rule. That is `final (as captured, not re-checked)` at best (I4): the reader's own
   re-check at a state that meets the rule is still what makes a referent `final`, and a later re-check that
-  moves a state is new evidence (I5). Reading the state out of the captured bytes (where the run label sits in
-  a response) needs a response-layout dialect and is not part of a profile yet.
+  moves a state is new evidence (I5). A profile that cites a response layout reads the state out of the held
+  bytes instead (below): `final (as held)` at best, still not `final`.
 - **A hub pins its profiles in its own policy, read at the base revision**, as it reads the rest of its
   policy (§11): a change cannot bring the profile that judges it, and the blob must be held at the base. The
   series boundary a hub computes from the pinned profiles is §8's `as captured` boundary. A store's own policy
   pins the profiles its reads choose, from the blobs it holds: the same pins judge each observation's rule
   (referent status, the finality-aware comparisons) and a series' boundary, and a pin the store cannot honour
   stops the read rather than reading as no profile.
+
+**Response layouts.** An observer's `state_at_capture` is its word about the bytes it captured. When the source
+writes the state into the response itself (a settlement API that carries the run on every record), a reader holding
+those bytes can check that word rather than take it. A **response layout** says where the state sits in a captured
+JSON response: a content-addressed blob (wire-format note §5) carrying an RFC 6901 JSON pointer to the array of
+records (`records`) and an RFC 6901 pointer to the state within each record (`state`). `records` `""` is the whole
+response: a bare JSON array at the root, the shape a streaming endpoint answers with. With `records` absent (which
+is not `""`) the layout reads one state: `state` points into the response itself. A profile cites its layout by digest in its
+`documents`, so a reader that does not implement layouts reads the profile as before, the layout one more cited
+document. A layout applies to an ordered-label rule over a source-class capture that pins one `response_digest`;
+the reader reads the bytes it holds under that digest, and nothing else (no fetch, no re-request: H-14).
+
+| the held response, read under the layout | the layout read | the referent |
+|---|---|---|
+| (a) parses as I-JSON within the reader's caps, and every record carries a non-empty string at `state` that is a label in the profile | the **least** record's state (the earliest label in the profile's order among the records), **read from the held bytes**; when records differ, the spread is disclosed (`records at R1..RF, read as R1`) | read by that state: `final (as held)` when it meets the rule, else `provisional (<state>; final at L)`. An asserted `state_at_capture` that differs from the read state is shown beside it as a disclosed disagreement; it does not govern |
+| (b) any record's value is missing, not a string, empty, or a label outside the profile; a pointer names nothing; the record array is empty; the bytes are not I-JSON or are over the caps; the capture declares a media type that is not JSON; the response is not held; the cited layout is not a valid layout, its held copy is corrupt, or the profile cites two | `unchecked`, naming the record (or the response, or the layout) and why | read by the asserted state exactly as with no layout: `final (as captured, not re-checked)` at best, never upgraded by the layout |
+| (c) the profile cites no layout | none | as above (§5.3.1a), unchanged |
+
+Rules:
+
+- **The read governs, and is still not a re-check.** In (a) the reader has checked the observer's assertion against
+  the bytes and trusts neither alone (I4): the bytes are the state the source wrote at capture, so the read state
+  is what the referent's status, a revision (§5.3.1) and a finality-aware comparison use, and the asserted state
+  is shown, never substituted. But the bytes are what the observer captured, not the source now: a re-check at a
+  state that meets the rule is still the only thing that makes a referent `final`, and `final (as held)` is a
+  distinct token for that reason (I5). A layout read never moves `verify`'s exit; it is shown beside the
+  status, as the referent status is.
+- **A response reads at its least record.** A response spanning a run step carries two states (records already
+  at the later run beside records not yet re-run), so this is the normal case for a long capture, not an anomaly.
+  The rule is monotone (`run >= L`): the response meets it exactly when every record does. So the least record's
+  state under the profile's order is not a pick among equals (which I14 forbids: not the latest, not the most
+  common, not the first in the array) but the one state the whole response can be relied on at, the same move as
+  weakest-link grading (§7). It never upgrades: a response reads `final (as held)` only when every record meets the
+  rule. The spread is disclosed whenever records differ, and the asserted state is compared with the least. The
+  order is the profile's and nothing else: a record whose label is outside the profile (or missing, not a string,
+  or empty) makes the whole read `unchecked`, naming the record; there is no partial order over labels the profile
+  does not have. The read does not depend on the order of the records in the array.
+- **JSON only in this dialect.** The response is read as I-JSON (RFC 7493): the wire-format note's input rules
+  (UTF-8, no duplicate names, the depth limit), except that a number is any finite IEEE 754 double, since a
+  captured response is the source's data, not a signed body; it is never re-encoded or signed. Other formats
+  (CSV, XML, a compressed or archived response) stay `unchecked`, naming why, until another layout dialect is
+  specified (§15).
+- **Reader caps** bound the read and are documented limits: the layout blob, each pointer, the response read
+  (a larger response is `unchecked`, naming the cap) and a step budget over records visited and pointer tokens
+  followed. The read is a pure function of the response bytes, the layout and the profile's label order: the same
+  three give the same answer in every reader.
+- **The layout comes with the profile, read where the profile is read.** A hub reads the layout its pinned
+  profile cites from its base revision, as it reads the profile (§11); a store reads it from the blobs it holds.
+  Unlike an unusable pin, an unusable layout does not stop the read: the profile is still valid without it, and the
+  reads it would have made are `unchecked` (b). A cited document whose held copy does not hash to its digest is
+  named (the held copy is corrupt), never skipped as if not held: whether it is the layout cannot be read.
 
 #### 5.3.2 Corroboration is a derivation
 
@@ -719,6 +770,12 @@ immutable editions.
   refusable on the same evidence as one later than an asserted boundary; one at or before it is `could not check`,
   since only the unplaced states could settle it. With no placeable provisional segment there is no bound. A later
   re-check, or a re-capture added as a member, is new evidence and may move the boundary in either direction (I5).
+  When a profile cites a response layout (§5.3.1a) and every segment state the boundary rests on was read from
+  that segment's held response, the boundary is marked `as held` instead ("members final to 2025-04-01 as held
+  (2 segments provisional)"), and a freeze policy concludes the same way on it: later is refusable, at or before
+  is `could not check (as held)`, never a pass (still no re-check of the source). One segment whose read is
+  `unchecked`, so that its asserted state is used, makes the boundary the weaker `as captured, not re-checked`;
+  each segment's own state is shown with its mark.
 
 ## 9. Research exchange
 
@@ -957,7 +1014,8 @@ that note exists: a member schema under no dialect the reader implements is load
 `unchecked`, and every dialect states its cost model: evaluation runs under the reader's step budget, each
 primitive is charged against it, and regular expressions are linear-time (RE2-class) or charged per
 backtracking step, so C-core-94's limit binds whatever the dialect computes);
-response-layout dialects (reading a finality state out of captured bytes, §5.3.1a);
+response-layout dialects beyond the JSON-pointer dialect of §5.3.1a (CSV, XML, a compressed or archived response;
+a state spread over several fields or derived from them);
 attestation verifiers (receipts, TEEs); receiver-local Bitcoin verification (#59); size policy (#9); hub
 conventions (discovery #66; the hub-template and `COMMONS.md` rubric, which still use alpha vocabulary);
 task-contract profiles (§9.1).

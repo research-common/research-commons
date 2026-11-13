@@ -224,7 +224,7 @@ func TestClosedVocabulary(t *testing.T) {
 		"committed, pending install", "committed, needs repair", "replayed", "projected", "needs repair", "quarantined",
 		"replaced statement", "removed temporary", string(resolve.RuleOK), string(resolve.RuleFail), string(resolve.RuleUnchecked),
 		resolve.RefUnpinned, resolve.RefNotCanonical, resolve.RefUnavailable, resolve.RefRevised, resolve.RefFinal,
-		resolve.RefFinalCaptured, resolve.RefProvisional, resolve.RefCanonical, resolve.RefAvailable, resolve.RefUnknown,
+		resolve.RefFinalCaptured, resolve.RefFinalHeld, resolve.RefProvisional, resolve.RefCanonical, resolve.RefAvailable, resolve.RefUnknown,
 		resolve.RefPinned, resolve.RefNoneYet, resolve.RefRuleUnchecked)
 	for _, s := range []btctime.State{btctime.StateVerified, btctime.StateVerifiedHistorical, btctime.StatePending, btctime.StateInsufficient,
 		btctime.StateMissingProof, btctime.StateInvalidProof, btctime.StateInvalidAnchor, btctime.StateUnknownHeight, btctime.StateOrphaned,

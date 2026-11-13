@@ -6,6 +6,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/research-common/research-commons/internal/resolve"
 	"github.com/research-common/research-commons/internal/store"
 	"github.com/research-common/research-commons/internal/wire"
 )
@@ -84,7 +85,7 @@ func gcCmd(c *Ctx) (*Obj, int, error) {
 	if d, ok := c.Flag("release"); ok {
 		return releaseCmd(c, store.Digest(d), c.state.(wire.Key))
 	}
-	cfg := gcConfig(c.Policy)
+	cfg := gcConfig(c.Policy, c.Store)
 	if g, ok := c.Flag("grace"); ok {
 		d, _ := time.ParseDuration(g)
 		cfg.PerRun = &d
@@ -130,15 +131,43 @@ func gcCmd(c *Ctx) (*Obj, int, error) {
 	return o, ExitOK, nil
 }
 
-// gcConfig is the gc configuration the store-root policy implies: its source profile pins.
-func gcConfig(p *Policy) store.GCConfig {
+// gcConfig is the gc configuration the store-root policy implies: its source profile pins, and the response layout
+// each pinned profile this store holds cites (collecting it would leave the profile's layout reads unchecked).
+func gcConfig(p *Policy, st *store.Store) store.GCConfig {
 	cfg := store.GCConfig{PolicyPinSource: PolicyFile + " series.source_profiles"}
 	if p != nil && p.Hub != nil {
 		for _, d := range p.Hub.SourceProfiles {
 			cfg.PolicyPins = append(cfg.PolicyPins, store.Digest(d))
+			cfg.PolicyPins = append(cfg.PolicyPins, profileLayoutPins(st, d)...)
 		}
 	}
 	return cfg
+}
+
+// profileLayoutPins is the response layout the profile d (as this store holds it) cites, if any.
+func profileLayoutPins(st *store.Store, d string) []store.Digest {
+	if st == nil {
+		return nil
+	}
+	b, err := storeBlobCapped(st, d)
+	if err != nil || b == nil {
+		return nil
+	}
+	p, err := resolve.ParseSourceProfile(b)
+	if err != nil {
+		return nil
+	}
+	p.AttachLayouts(func(x string) ([]byte, error) {
+		b, why := storeBlobUpTo(st, x, resolve.MaxLayoutBytes)
+		if why != "" {
+			return nil, nil
+		}
+		return b, nil
+	})
+	if p.Layout == nil {
+		return nil
+	}
+	return []store.Digest{store.Digest(p.Layout.Digest)}
 }
 
 func releaseCmd(c *Ctx, d store.Digest, k wire.Key) (*Obj, int, error) {

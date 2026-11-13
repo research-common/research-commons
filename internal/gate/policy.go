@@ -3,6 +3,7 @@ package gate
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -11,6 +12,7 @@ import (
 	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/refusal"
 	"github.com/research-common/research-commons/internal/resolve"
+	"github.com/research-common/research-commons/internal/store"
 	"github.com/research-common/research-commons/internal/wire"
 )
 
@@ -163,7 +165,9 @@ func sourceProfiles(v canon.Value) ([]string, string) {
 }
 
 // LoadSourceProfiles loads the source profiles a policy pins. get returns a blob's bytes as held where the policy
-// was read (nil when not held there); each must hash to its digest and parse as a profile. Any failure stops
+// was read (nil when not held there); each must hash to its digest and parse as a profile. The response layouts a
+// profile cites in its documents are read through the same get (resolve.SourceProfile.AttachLayouts); a cited
+// layout that is not held or not valid leaves that profile's layout reads unchecked and stops nothing. Any failure stops
 // before anything is evaluated (*DidNotStart, naming the entry): a pin the receiver cannot honour is never
 // skipped. No digests, no profiles (nil). scope names the policy file, at names where it was read.
 func LoadSourceProfiles(digests []string, get func(d string) ([]byte, error), scope, at string) (*resolve.ProfileRules, error) {
@@ -189,6 +193,20 @@ func LoadSourceProfiles(digests []string, get func(d string) ([]byte, error), sc
 		if err != nil {
 			return nil, bad("is not a " + resolve.SourceProfileTag + " profile: " + err.Error())
 		}
+		// the response layouts the profile cites in its documents, read where the profile was read (a change cannot
+		// bring the layout that judges it); a layout that cannot be used reads unchecked, it does not stop the read
+		p.AttachLayouts(func(d string) ([]byte, error) {
+			b, err := get(d)
+			var r *refusal.Refusal
+			switch {
+			case errors.As(err, &r) && r.Reason == store.CorruptBlob, err == nil && b != nil && digest(b) != d:
+				// a held copy that hashes elsewhere is named, not skipped: the profile's layout cannot be read
+				return nil, resolve.ErrHeldCorrupt
+			case err != nil || b == nil:
+				return nil, err
+			}
+			return b, nil
+		})
 		ps = append(ps, p)
 	}
 	pr := resolve.NewProfileRules(ps...)

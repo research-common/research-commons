@@ -49,7 +49,7 @@ func fsckCmd(c *Ctx) (*Obj, int, error) {
 			return nil, 0, failed(err, "cache", false, "report the bug")
 		}
 	}
-	opt := store.FsckOptions{Cache: cache, PolicyPins: gcConfig(c.Policy).PolicyPins}
+	opt := store.FsckOptions{Cache: cache, PolicyPins: gcConfig(c.Policy, c.Store).PolicyPins}
 	if n, ok := c.Flag("rebuild"); ok {
 		opt.Rebuild = []string{n}
 	}

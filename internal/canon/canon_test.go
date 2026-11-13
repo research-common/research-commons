@@ -122,3 +122,45 @@ func FuzzParse(f *testing.F) {
 		}
 	})
 }
+
+// TestParseData: captured data is read as I-JSON, not as the signed-body subset. A fraction, an exponent, -0 and an
+// integer past 2^53-1 are kept as Number (Parse refuses each, the control); everything else Parse refuses is still
+// refused, and a number past the double range is refused.
+func TestParseData(t *testing.T) {
+	for in, want := range map[string]canon.Value{
+		`1.5`:                    canon.Number("1.5"),
+		`-0`:                     canon.Number("-0"),
+		`1e3`:                    canon.Number("1e3"),
+		`9007199254740992`:       canon.Number("9007199254740992"),
+		`9007199254740991`:       canon.Int(9007199254740991),
+		`-12`:                    canon.Int(-12),
+		`"RF"`:                   canon.String("RF"),
+		`1.7976931348623157e308`: canon.Number("1.7976931348623157e308"),
+	} {
+		v, err := canon.ParseData([]byte(in))
+		if err != nil || v != want {
+			t.Errorf("ParseData(%s) = %#v, %v; want %#v", in, v, err, want)
+		}
+		if _, err := canon.Parse([]byte(in)); (err == nil) != (want == canon.Int(-12) || want == canon.Int(9007199254740991) || want == canon.String("RF")) {
+			t.Errorf("Parse(%s): err %v (control: the signed-body subset)", in, err)
+		}
+	}
+	for _, c := range []struct{ in, detail string }{
+		{`{"a":1,"a":2}`, `duplicate key "a"`},
+		{`{"a":1e400}`, "IEEE 754 double range"},
+		{`{"a":01.5}`, "leading zero"},
+		{`{"a":NaN}`, "non-finite"},
+		{`{"a":"\ud800"}`, "lone surrogate"},
+		{"\xef\xbb\xbf{}", "byte order mark"},
+		{`{"a":1.}`, "malformed number"},
+	} {
+		_, err := canon.ParseData([]byte(c.in))
+		rf, ok := err.(*refusal.Refusal)
+		if !ok || rf.Class != refusal.Intrinsic || !strings.Contains(rf.Detail, c.detail) {
+			t.Errorf("ParseData(%q): %v, want intrinsic %q", c.in, err, c.detail)
+		}
+	}
+	if _, err := canon.ParseData([]byte(strings.Repeat("[", canon.MaxDepth+1) + strings.Repeat("]", canon.MaxDepth+1))); err == nil {
+		t.Error("ParseData: depth limit not applied")
+	}
+}

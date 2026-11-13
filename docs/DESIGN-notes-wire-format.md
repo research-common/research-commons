@@ -467,13 +467,17 @@ nothing from it.
 
 | Object | Fields |
 |---|---|
-| source profile (a blob) | `profile` `"rc-source-profile/1"` R · `source` string R, non-empty (what the profile describes: an endpoint as `endpoint` is compared, §5, or a name) · `dialect` `"ordered-label"`/`"integer-depth"` R · `labels` list of string, R for `ordered-label` and absent for `integer-depth` (earliest state first; 1 to 4096 entries, each non-empty with no surrounding whitespace, no repeats; the list is closed: a label not in it is `not comparable`) · `documents` list of string O (what the profile is built from, each a digest when the document is held, else a location, as for `rule_source`; no repeats) · `description` string O |
+| source profile (a blob) | `profile` `"rc-source-profile/1"` R · `source` string R, non-empty (what the profile describes: an endpoint as `endpoint` is compared, §5, or a name) · `dialect` `"ordered-label"`/`"integer-depth"` R · `labels` list of string, R for `ordered-label` and absent for `integer-depth` (earliest state first; 1 to 4096 entries, each non-empty with no surrounding whitespace, no repeats; the list is closed: a label not in it is `not comparable`) · `documents` list of string O (what the profile is built from, each a digest when the document is held, else a location, as for `rule_source`; no repeats; a digest naming a response layout is the profile's layout, below) · `description` string O |
+| response layout (a blob) | `layout` `"rc-response-layout/1"` R · `records` string O (an RFC 6901 JSON pointer to the array of records in the response; `""` is the whole response, a bare JSON array at the root; absent, which is not `""`: the layout reads one state) · `state` string R (an RFC 6901 JSON pointer to the state, within each record, or within the response when `records` is absent) · `description` string O. Each pointer is at most 1024 bytes; `records` and `state` together name at most 16 reference tokens (the depth limit, §1). A blob whose `layout` member begins `rc-response-layout/` is judged as a layout; one that is not canonical, carries an undefined member, or has a pointer that is not RFC 6901 syntax (a non-empty pointer not starting `/`, a `~` not followed by `0` or `1`) is not a layout |
 
 A `rule_source` names a profile when it equals the profile's digest or one of its `documents`, compared as written
 (byte for byte; no location is normalized). An ordered-label
 rule is evaluated only under exactly one chosen profile so named, of dialect `ordered-label`, whose `labels`
-hold `L`; a depth rule needs no profile. These are the only finality semantics a profile carries: a tolerance,
-a timetable's times or where a label sits in a response are not in `rc-source-profile/1`.
+hold `L`; a depth rule needs no profile. These are the only finality semantics a profile carries: a tolerance or a
+timetable's times are not in `rc-source-profile/1`. Where a label sits in a response is a response layout the
+profile cites in `documents` (one at most: a profile citing two has no usable layout), read under the claims-model
+note §5.3.1a; a reader that does not implement layouts reads that digest as one more document, so a profile citing a
+layout is a valid `rc-source-profile/1` to every reader.
 
 **Execution objects**. The workflow spec blob and the environment record are canonical JSON
 (§1) with these members; the execution note fixes their meaning.

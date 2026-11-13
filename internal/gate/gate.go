@@ -872,13 +872,14 @@ func resolverChecks(r *Result, res *resolve.Resolver, pol *Policy) {
 		case s.Comparison == "flagged" && s.AsCaptured:
 			// the members' own asserted states put the boundary earlier: refusable on the receiver's evidence
 			r.refuse(&refusal.Refusal{Class: refusal.Policy, Reason: HubRules + ": series.refuse_premature_freeze",
-				Detail: rf.Detail + "; the edition stays a valid statement elsewhere; " + AsCapturedRefusal + bounded}, "object "+r.Path)
+				Detail: rf.Detail + "; the edition stays a valid statement elsewhere; " + asCaptured(s, AsCapturedRefusal, AsHeldRefusal) + bounded}, "object "+r.Path)
 		case s.Comparison == "flagged":
 			r.refuse(&refusal.Refusal{Class: refusal.Policy, Reason: HubRules + ": series.refuse_premature_freeze",
 				Detail: rf.Detail + "; the edition stays a valid statement elsewhere; " + ReaderRecheck + bounded}, "object "+r.Path)
 		case s.Comparison == "agrees" && s.AsCaptured:
 			r.Verdict, r.Scope = Undecided, "object "+r.Path
-			r.label(LabelSeriesUnknown, "could not check (as captured): "+s.Line()+"; "+AsCapturedUndecided)
+			r.label(LabelSeriesUnknown, asCaptured(s, "could not check (as captured): ", "could not check (as held): ")+s.Line()+"; "+
+				asCaptured(s, AsCapturedUndecided, AsHeldUndecided))
 			r.Next = AsCapturedNext
 		default:
 			r.Verdict, r.Scope = Undecided, "object "+r.Path
@@ -948,6 +949,21 @@ const AsCapturedRefusal = "the members' boundary is their own asserted states at
 
 // AsCapturedUndecided says why a declaration at or before an as-captured boundary is not endorsed.
 const AsCapturedUndecided = "the members' asserted states at capture support the declaration, and no re-check of the source confirmed them; never a pass (I4)"
+
+// AsHeldRefusal is AsCapturedRefusal for a boundary computed from states read out of the members' held responses
+// under the pinned profiles' response layouts (claims-model note §8): checked against the bytes, not the source.
+const AsHeldRefusal = "the members' boundary is the states read from their own held responses under the pinned source profiles' response layouts: the members themselves do not claim the declared boundary; a later re-check or re-capture is new evidence"
+
+// AsHeldUndecided is AsCapturedUndecided for an as-held boundary.
+const AsHeldUndecided = "the states read from the members' held responses support the declaration, and no re-check of the source confirmed them; never a pass (I4)"
+
+// asCaptured picks the as-captured or the as-held text for s.
+func asCaptured(s *resolve.Series, captured, held string) string {
+	if s.AsHeld {
+		return held
+	}
+	return captured
+}
 
 // AsCapturedNext is the next step of a series edition left could-not-check on an as-captured boundary.
 const AsCapturedNext = "a maintainer reviews the edition against the source, or turns series.refuse_premature_freeze off through the maintainers' own review"
