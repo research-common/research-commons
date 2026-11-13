@@ -964,7 +964,7 @@ func subset(w *world, drop ...string) []int {
 func TestScopedStatus(t *testing.T) {
 	conformance.Covers(t, "C-core-57", "C-core-58")
 	conformance.Covers(t, "C-core-63")
-	conformance.Partial(t, "C-core-01", "the relayer delivery itself needs pull")
+	// C-core-01 is covered through pull and the commands by internal/cli.TestRelayerOmissionIsScoped; this is the resolver half
 	w, x := hotReading(t)
 	hub := subset(w, "C3")
 	hb, _ := w.store(hub, WithScope(ScopeHub)).Observation(x)
