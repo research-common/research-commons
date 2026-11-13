@@ -285,3 +285,28 @@ func TestGCKeepsPinnedProfileLayout(t *testing.T) {
 		}
 	}
 }
+
+// TestGCKeepsCorruptCitedLayout: the store's copy of the layout a pinned profile cites hashes elsewhere. gc keeps it
+// (named as pinned by the policy) rather than reading it as "no layout" and collecting it: which document is the
+// layout cannot be read from a corrupt copy, and the copy is to be refetched. fsck still reports the corruption.
+func TestGCKeepsCorruptCitedLayout(t *testing.T) {
+	w, _ := layoutStore(t, true, cliResponse("RF"), "RF")
+	ld := dig(string(cliLayout))
+	bp := filepath.Join(w.root, "blobs", "sha256", strings.TrimPrefix(ld, "sha256:"))
+	if err := os.Chmod(bp, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bp, []byte(`{"layout":"tampered"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r := w.run("gc", "--apply", "--grace", "0s", "--json")
+	if r.code != 0 || !w.s.HasBlob(store.Digest(ld)) {
+		t.Fatalf("gc exit %d, corrupt cited layout held %v:\n%s", r.code, w.s.HasBlob(store.Digest(ld)), r.stdout)
+	}
+	if !strings.Contains(r.stdout, ld) || !strings.Contains(r.stdout, "pinned by "+PolicyFile+" series.source_profiles") {
+		t.Fatalf("the kept corrupt layout is not named as pinned:\n%s", r.stdout)
+	}
+	if f := w.run("fsck", "--json"); !strings.Contains(f.stdout, ld) {
+		t.Fatalf("fsck does not report the corrupt copy:\n%s", f.stdout)
+	}
+}

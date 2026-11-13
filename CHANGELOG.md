@@ -62,6 +62,8 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   reader is active (the wire format stays a candidate, and no command writes `rc/2`).
 
 ### Fixed
+- `gc` keeps a document a pinned source profile cites when the held copy is corrupt, instead of reading it as
+  "no layout" and collecting it (`fsck` still reports the corruption; refetch the copy).
 - **An empty `referent.system` value no longer counts as a pinned key.** A method observation whose
   `referent.system` has a member with the value `""` (an empty string identifies nothing) is now read as if the
   member were missing: under a method edition that declares `system_keys` the referent is `unpinned` naming
