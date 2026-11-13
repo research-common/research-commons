@@ -10,6 +10,7 @@ import (
 	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/conformance"
 	"github.com/research-common/research-commons/internal/resolve"
+	"github.com/research-common/research-commons/internal/store"
 )
 
 // Response layouts through the commands (claims-model note §5.3.1a, "Response layouts"). Fixtures are synthetic
@@ -195,6 +196,30 @@ func TestPullLayoutAsHeld(t *testing.T) {
 		if r.code != 1 || !strings.Contains(r.stdout, "series.refuse_premature_freeze") ||
 			!strings.Contains(r.stdout, "members final to 2025-04-01 as held (2 segments provisional)") || !strings.Contains(r.stdout, src.ids["E"]) {
 			t.Fatalf("as held: exit %d\n%s", r.code, r.stdout)
+		}
+	}
+}
+
+// TestGCKeepsPinnedProfileLayout: the response layout a pinned profile cites is kept by `gc --apply` past the grace
+// window (named as pinned by the policy) and is not unreferenced to fsck, so the profile's layout reads survive gc
+// (C-core-147 extended to the layout). Control: the same layout blob under a pinned profile that does not cite it is
+// collected.
+func TestGCKeepsPinnedProfileLayout(t *testing.T) {
+	ld := dig(string(cliLayout))
+	for _, cite := range []bool{true, false} {
+		w, _ := layoutStore(t, cite, cliResponse("RF"), "RF")
+		r := w.run("gc", "--apply", "--grace", "0s", "--json")
+		if r.code != 0 || w.s.HasBlob(store.Digest(ld)) != cite {
+			t.Fatalf("cite %v: gc exit %d, layout held %v\n%s", cite, r.code, w.s.HasBlob(store.Digest(ld)), r.stdout)
+		}
+		if !cite {
+			continue
+		}
+		if !strings.Contains(r.stdout, ld) || !strings.Contains(r.stdout, "pinned by "+PolicyFile+" series.source_profiles") {
+			t.Fatalf("the kept layout is not named as pinned:\n%s", r.stdout)
+		}
+		if f := w.run("fsck", "--json"); strings.Contains(f.stdout, ld) {
+			t.Fatalf("fsck lists the pinned profile's layout:\n%s", f.stdout)
 		}
 	}
 }
