@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/research-common/research-commons/internal/gate"
@@ -136,9 +137,10 @@ func Check(dir string, cfg Config) (*Result, error) {
 	}
 	pol.Resolver = []resolve.Option{resolve.WithContent(gate.NewMemoContent(content, 0))}
 	if profiles != nil {
-		// the pinned profiles judge the series boundary as captured; a reader's own re-check, if it passes one,
-		// still wins (it comes after)
-		pol.Resolver = append(pol.Resolver, resolve.WithSegments(resolve.ProfileSegments{Rules: *profiles}))
+		// the pinned profiles judge the series boundary as captured (as held, where a profile's response layout reads
+		// the members' responses in the tree); a reader's own re-check, if it passes one, still wins (it comes after)
+		rules := profiles.WithBytes(content.responseBytes, 0)
+		pol.Resolver = append(pol.Resolver, resolve.WithSegments(resolve.ProfileSegments{Rules: rules}))
 	}
 	pol.Resolver = append(pol.Resolver, cfg.Resolver...)
 	rep, err := gate.HubCheck(pkg, held, pol, gate.Options{Overrides: cfg.Overrides, Audit: cfg.Base == ""})
@@ -194,6 +196,18 @@ func (c treeContent) Units(d string) ([]resolve.ContentUnit, bool) {
 	}
 	// An archive is walked member by member by the store's scanner (C-core-95); any other blob is one unit.
 	return gate.ScanUnits(d, b, store.DefaultLimits()), true
+}
+
+// responseBytes is the tree's blobs as a response-layout byte reader.
+func (c treeContent) responseBytes(d string, max int64) ([]byte, string) {
+	b, ok := c[d]
+	switch {
+	case !ok:
+		return nil, "not held"
+	case int64(len(b)) > max:
+		return nil, "larger than " + strconv.FormatInt(max, 10) + " bytes, the response-layout read limit"
+	}
+	return b, ""
 }
 
 func (c treeContent) add(path string, b []byte) {
