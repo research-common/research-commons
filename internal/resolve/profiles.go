@@ -50,6 +50,10 @@ type SourceProfile struct {
 	Documents   []string
 	Description string
 	index       map[string]int
+	// Layout is the response layout the profile cites in its documents (layout.go), nil when none or unusable;
+	// layoutWhy says why a cited layout is unusable.
+	Layout    *ResponseLayout
+	layoutWhy string
 }
 
 // ParseSourceProfile reads a source profile blob. The bytes must be canonical JSON carrying only the members the
@@ -180,6 +184,17 @@ var reLabelRule = regexp.MustCompile(`^\s*run\s*(>=|≥)\s*(\S(?:.*\S)?)\s*$`)
 // statement's rule_source.
 type ProfileRules struct {
 	profiles []*SourceProfile
+	// bytes reads a held response for a profile's response layout (WithBytes); nil holds nothing.
+	bytes BlobBytes
+	steps int
+	reads *layoutCache
+}
+
+// WithBytes is the rules reading held responses through get for the profiles' response layouts, each read within
+// steps (DefaultLayoutSteps when < 1). Without it, every layout read is unchecked (response not held).
+func (pr ProfileRules) WithBytes(get BlobBytes, steps int) ProfileRules {
+	pr.bytes, pr.steps, pr.reads = get, steps, &layoutCache{m: map[[2]string][2]string{}}
+	return pr
 }
 
 // NewProfileRules is the reader's profile set; repeats of one digest are one profile.
@@ -205,7 +220,7 @@ func (pr ProfileRules) Profiles() []string {
 
 // For binds the rules to one statement's rule_source.
 func (pr ProfileRules) For(ruleSource string) BoundRules {
-	b := BoundRules{RuleSource: ruleSource}
+	b := BoundRules{RuleSource: ruleSource, bytes: pr.bytes, steps: pr.steps, reads: pr.reads}
 	var hits []*SourceProfile
 	for _, p := range pr.profiles {
 		if p.names(ruleSource) {
@@ -249,6 +264,9 @@ type BoundRules struct {
 	RuleSource string
 	Profile    *SourceProfile
 	why        string
+	bytes      BlobBytes
+	steps      int
+	reads      *layoutCache
 }
 
 // Check evaluates rule at state s: whether it is met, the final state's display, and, when the rule cannot be
@@ -347,9 +365,10 @@ func (b BoundRules) Compare(rule string, x, y State) (int, bool) {
 }
 
 // ProfileSegments is a SegmentReader that reads each segment's finality from its own statement's asserted state at
-// capture, under the reader's chosen source profiles. It re-checks no source: every state it reports final or
-// provisional is as captured, and the series boundary it yields is marked so (claims-model note §8, "a boundary as
-// captured"). The position is read as RecordSegments reads it.
+// capture, under the reader's chosen source profiles, or, when the profile cites a response layout and the segment's
+// held response reads under it, from the held bytes (Held). It re-checks no source: every state it reports final or
+// provisional is as captured or as held, and the series boundary it yields is marked so (claims-model note §8, "a
+// boundary as captured"). The position is read as RecordSegments reads it.
 type ProfileSegments struct {
 	Rules ProfileRules
 }
@@ -366,12 +385,15 @@ func (ps ProfileSegments) Segment(m *Member) SegmentState {
 	}
 	fo := object(m.record, "finality")
 	rule := str(fo, "rule")
-	met, _, why := ps.Rules.For(str(fo, "rule_source")).Check(rule, stateOf(object(fo, "state_at_capture")))
+	b := ps.Rules.For(str(fo, "rule_source"))
+	state, lr := heldState(b, rule, m.record, stateOf(object(fo, "state_at_capture")))
+	met, _, why := b.Check(rule, state)
 	if why != "" {
 		s.Final, s.Why = "unchecked", why
 		return s
 	}
-	s.Final, s.Why, s.AsCaptured = "provisional", "", true
+	// read from the held response under the profile's layout, or the asserted state: neither re-checks the source
+	s.Final, s.Why, s.AsCaptured, s.Held = "provisional", "", true, lr != nil && lr.State != ""
 	if met {
 		s.Final = "final"
 	}

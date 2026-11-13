@@ -88,6 +88,9 @@ type SegmentState struct {
 	// AsCaptured marks a Final read from the observer's asserted state at capture under a source profile, not
 	// from a re-check of the source (claims-model note §8, "a boundary as captured"; I4).
 	AsCaptured bool
+	// Held marks an AsCaptured state read from the segment's held response under the profile's response layout
+	// rather than asserted: still not a re-check (AsCaptured stays true), shown `as held`.
+	Held bool
 }
 
 // SegmentReader is the reader's re-check of a segment's position and finality.
@@ -154,7 +157,10 @@ type Series struct {
 	Bound    Boundary
 	Unplaced []string
 	// AsCaptured: the computed boundary rests on at least one segment state as captured, not re-checked.
-	AsCaptured  bool
+	AsCaptured bool
+	// AsHeld: AsCaptured, and every such segment state was read from its held response (SegmentState.Held), so the
+	// boundary is shown `as held`; one asserted state makes it the weaker `as captured, not re-checked`.
+	AsHeld      bool
 	Provisional int
 	// Comparison is "agrees", "flagged" (declared later than computed), "not comparable", or "unchecked".
 	Comparison string
@@ -302,8 +308,10 @@ func (s *Series) compute() {
 		return
 	}
 	s.ComputedState = "computed"
+	held := true
 	for _, g := range s.Segments {
 		s.AsCaptured = s.AsCaptured || g.AsCaptured
+		held = held && (!g.AsCaptured || g.Held)
 		if g.Final == "provisional" {
 			s.Provisional++
 			if s.Provisional == 1 {
@@ -311,6 +319,7 @@ func (s *Series) compute() {
 			}
 		}
 	}
+	s.AsHeld = s.AsCaptured && held
 	if s.Provisional == 0 {
 		last := s.Segments[len(s.Segments)-1]
 		s.Computed = last.To
@@ -328,6 +337,7 @@ func (s *Series) upperBound() {
 	unit := s.Segments[0].From.Unit
 	var bound Boundary
 	var placed, asCaptured bool
+	held := true
 	for _, g := range s.Segments {
 		switch {
 		case !g.Rule, g.From.Unit == "", g.From.Unit != unit, g.Final == "unchecked" && g.Why == NotRechecked:
@@ -338,12 +348,30 @@ func (s *Series) upperBound() {
 			bound, placed = g.From, true
 		}
 		asCaptured = asCaptured || (g.Final != "unchecked" && g.AsCaptured)
+		held = held && (g.Final == "unchecked" || !g.AsCaptured || g.Held)
 	}
 	if !placed || len(s.Unplaced) == 0 {
 		s.Unplaced = nil
 		return
 	}
-	s.Bound, s.AsCaptured = bound, asCaptured
+	s.Bound, s.AsCaptured, s.AsHeld = bound, asCaptured, asCaptured && held
+}
+
+// basis says what the boundary was computed from, for an explanation.
+func (s *Series) basis() string {
+	if s.AsHeld {
+		return "states read from their held responses under the profiles' response layouts"
+	}
+	return "asserted states at capture"
+}
+
+// mark is the boundary's not-re-checked mark: `as held` when every such state was read from held bytes, else
+// `as captured, not re-checked`.
+func (s *Series) mark() string {
+	if s.AsHeld {
+		return BoundaryAsHeld
+	}
+	return BoundaryAsCaptured
 }
 
 // boundNote is the bound's display: "at most 2025-04-01 (segment … not comparable)", then the as-captured mark.
@@ -354,7 +382,7 @@ func (s *Series) boundNote() string {
 	}
 	n := "at most " + s.Bound.String() + " (" + word + " " + strings.Join(shortMembers(s.Unplaced), ", ") + " not comparable)"
 	if s.AsCaptured {
-		n += " " + BoundaryAsCaptured
+		n += " " + s.mark()
 	}
 	return n
 }
@@ -372,7 +400,7 @@ func (s *Series) compare() {
 			s.Explain = append(s.Explain, "declared boundary is later than the members' finality boundary can be: "+s.boundNote()+
 				"; whatever the unplaced segments' states, the earliest provisional segment is before the declared boundary")
 			if s.AsCaptured {
-				s.Explain = append(s.Explain, "the members' boundary is their own asserted states at capture: the members themselves do not claim the declared boundary")
+				s.Explain = append(s.Explain, "the members' boundary is their own "+s.basis()+": the members themselves do not claim the declared boundary")
 			}
 		}
 	case s.ComputedState != "computed":
@@ -390,12 +418,12 @@ func (s *Series) compare() {
 			s.Comparison = "flagged"
 			s.Explain = append(s.Explain, "declared boundary is later than the members' finality boundary")
 			if s.AsCaptured {
-				s.Explain = append(s.Explain, "the members' boundary is their own asserted states at capture: the members themselves do not claim the declared boundary")
+				s.Explain = append(s.Explain, "the members' boundary is their own "+s.basis()+": the members themselves do not claim the declared boundary")
 			}
 		default:
 			s.Comparison = "agrees"
 			if s.AsCaptured {
-				s.Explain = append(s.Explain, "the members' boundary is their asserted states at capture, not re-checked: the declaration is not confirmed (I4)")
+				s.Explain = append(s.Explain, "the members' boundary is their "+s.basis()+", not re-checked at the source: the declaration is not confirmed (I4)")
 			}
 		}
 	}
@@ -403,6 +431,10 @@ func (s *Series) compare() {
 
 // BoundaryAsCaptured marks a members' boundary computed from asserted states at capture (claims-model note §8).
 const BoundaryAsCaptured = "as captured, not re-checked"
+
+// BoundaryAsHeld marks a members' boundary computed from states read out of each member's held response under its
+// profile's response layout (claims-model note §8): checked against the bytes, not re-checked at the source.
+const BoundaryAsHeld = "as held"
 
 // NoRecheck reports whether the boundary is unchecked because some segment had no finality re-check at all
 // (the default RecordSegments reader), rather than for a reason in the series' own data.
@@ -421,7 +453,7 @@ func (s *Series) Line() string {
 	case "computed":
 		comp = "members final to " + s.Computed.String()
 		if s.AsCaptured {
-			comp += " " + BoundaryAsCaptured
+			comp += " " + s.mark()
 		}
 		if s.Provisional > 0 {
 			comp += " (" + plural(s.Provisional, "segment") + " provisional)"
@@ -452,7 +484,10 @@ func (s *Series) Render() string {
 	fmt.Fprintf(&b, "series %s at %s\n  %s\n", keylog.Short(s.Resource), keylog.Short(s.Edition), s.Line())
 	for _, g := range s.Segments {
 		st := g.Final
-		if g.AsCaptured {
+		switch {
+		case g.Held:
+			st += " (" + BoundaryAsHeld + ")"
+		case g.AsCaptured:
 			st += " (" + BoundaryAsCaptured + ")"
 		}
 		fmt.Fprintf(&b, "  segment %s from %s: %s\n", shortMember(g.Member), g.From, st)

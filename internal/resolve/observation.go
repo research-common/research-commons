@@ -41,7 +41,9 @@ var referentOrder = map[string][]string{
 // Referent statuses (claims §5.3.1, §7 table). Provisional is rendered with its states. Final is the reader's
 // computation: `final` when the reader's own re-check found the referent at a state that meets the rule, and
 // `final (as captured, not re-checked)` when only the observer's asserted state at capture meets it (I4: an
-// asserted state is shown beside a re-check, never in place of one).
+// asserted state is shown beside a re-check, never in place of one), and `final (as held)` when the state read out
+// of the held response under the cited profile's response layout meets it (layout.go): the reader checked the
+// assertion against the bytes, and nothing re-checked the source.
 const (
 	RefUnpinned      = "unpinned"
 	RefNotCanonical  = "not canonical"
@@ -49,6 +51,7 @@ const (
 	RefRevised       = "revised"
 	RefFinal         = "final"
 	RefFinalCaptured = "final (as captured, not re-checked)"
+	RefFinalHeld     = "final (as held)"
 	RefProvisional   = "provisional"
 	RefCanonical     = "still canonical"
 	RefAvailable     = "source still available"
@@ -310,6 +313,9 @@ type Observation struct {
 	// PreRegistration is the `fulfills` / `pre_registration` disclosure (prereg.go, claims §9.4).
 	PreRegistration PreRegistration
 	Explain         []string
+	// Layout is the response-layout read of the held response (layout.go), nil when the cited profile has no layout:
+	// the state read from the bytes, or why the read is unchecked, beside the asserted state.
+	Layout *LayoutRead
 	// finalityUnevaluable: the declared finality rule was read and this reader cannot evaluate it.
 	finalityUnevaluable bool
 	// methodUnread is, for a method-class observation, why the reader could not read the pinned method edition's
@@ -611,7 +617,12 @@ func (r *Resolver) referentStatus(o *Observation, st *wire.Statement) {
 	f := o.Finality
 	rules := r.rulesFor(f)
 	if f != nil {
-		met, final, known := rules.Evaluate(f.Rule, f.State)
+		state, lr := heldState(rules, f.Rule, st.Body, f.State)
+		o.Layout = lr
+		if lr != nil {
+			o.ReferentHistory = append(o.ReferentHistory, "at capture: "+lr.String())
+		}
+		met, final, known := rules.Evaluate(f.Rule, state)
 		switch {
 		case !known:
 			status = RefRuleUnchecked
@@ -621,14 +632,26 @@ func (r *Resolver) referentStatus(o *Observation, st *wire.Statement) {
 				why = w
 			}
 			o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("at capture: state %s under rule %q, which this reader cannot evaluate (%s)", f.State, f.Rule, why))
+		case met && state != f.State:
+			// the state read from the held bytes governs (the asserted one is disclosed beside it): final as held,
+			// until a re-check; the bytes are the observer's capture, not the source now (I4, I5)
+			status = RefFinalHeld
+			o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("at capture: state %s read from the held response meets rule %q%s: %s", state, f.Rule, underProfile(rules, f.Rule), RefFinalHeld))
+		case met && lr != nil && lr.State != "":
+			status = RefFinalHeld
+			o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("at capture: state %s, read from the held response and asserted, meets rule %q%s: %s", state, f.Rule, underProfile(rules, f.Rule), RefFinalHeld))
 		case met:
 			// the observer's asserted state is the only evidence so far: final as captured, until a re-check. A
 			// source profile changes nothing here: it orders the asserted state, it does not re-check the source.
 			status = RefFinalCaptured
 			o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("at capture: state %s meets rule %q%s: %s (the observer's asserted state)", f.State, f.Rule, underProfile(rules, f.Rule), RefFinalCaptured))
 		default:
-			status = fmt.Sprintf("%s (%s; final at %s)", RefProvisional, f.State, final)
-			o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("at capture: state %s, rule %q unmet%s: %s", f.State, f.Rule, underProfile(rules, f.Rule), status))
+			status = fmt.Sprintf("%s (%s; final at %s)", RefProvisional, state, final)
+			src := ""
+			if lr != nil && lr.State != "" {
+				src = " (read from the held response)"
+			}
+			o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("at capture: state %s%s, rule %q unmet%s: %s", state, src, f.Rule, underProfile(rules, f.Rule), status))
 			if rev := r.revision(o, st); rev != "" {
 				status = RefRevised
 				o.ReferentHistory = append(o.ReferentHistory, rev)
@@ -650,7 +673,7 @@ func (r *Resolver) referentStatus(o *Observation, st *wire.Statement) {
 				o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("reader re-check: state %s, identical bytes: final (asserted state %s shown beside it)", rc.State, f.State))
 				break
 			}
-			if known && status == RefFinalCaptured {
+			if known && (status == RefFinalCaptured || status == RefFinalHeld) {
 				// the reader's own re-check puts the referent below the rule: its evidence, not the observer's
 				// asserted state, is the status (I4)
 				status = fmt.Sprintf("%s (%s; final at %s)", RefProvisional, rc.State, final)
@@ -698,11 +721,12 @@ func (r *Resolver) revision(o *Observation, st *wire.Statement) string {
 		if !r.counts(q) || q.St.ID == st.ID || contentDigest(q.St.Body) == o.Digest || !sameReferent(st, q.St) {
 			continue
 		}
-		qs := captureState(q.St)
 		rules := r.rulesFor(o.Finality)
-		if c, ok := rules.Compare(o.Finality.Rule, o.Finality.State, qs); ok && c >= 0 {
+		qs := r.heldCaptureState(rules, o.Finality.Rule, q.St)
+		mine, _ := heldState(rules, o.Finality.Rule, st.Body, o.Finality.State)
+		if c, ok := rules.Compare(o.Finality.Rule, mine, qs); ok && c >= 0 {
 			continue // not later
-		} else if !ok && (qs == o.Finality.State || ordersLabels(rules, o.Finality.Rule)) {
+		} else if !ok && (qs == mine || ordersLabels(rules, o.Finality.Rule)) {
 			// under a cited profile that orders the rule, a state it cannot place compares with nothing: not
 			// later, so no revision is asserted (§5.3.1a)
 			continue
@@ -772,8 +796,16 @@ func (r *Resolver) finalAt(st, q *wire.Statement) bool {
 	if f == nil {
 		return false
 	}
-	met, _, known := r.rulesFor(f).Evaluate(f.Rule, captureState(q))
+	rules := r.rulesFor(f)
+	met, _, known := rules.Evaluate(f.Rule, r.heldCaptureState(rules, f.Rule, q))
 	return known && met
+}
+
+// heldCaptureState is the state q's capture is read at under rules for rule: from its held response under the bound
+// profile's response layout when that read succeeds, else its asserted state (captureState).
+func (r *Resolver) heldCaptureState(rules FinalityRules, rule string, q *wire.Statement) State {
+	s, _ := heldState(rules, rule, q.Body, captureState(q))
+	return s
 }
 
 // captureState is the state a capture saw: its declared finality state, else, for an exact-bytes referent, the
