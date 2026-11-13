@@ -35,6 +35,9 @@ go install github.com/research-common/research-commons/cmd/commons@v0.5.0-alpha.
 commons --version
 ```
 
+From Python (a thin wrapper that bundles the binary in platform wheels and gives you the `commons` command; see
+[`python/README.md`](python/README.md)): `pip install research-commons`. Not on PyPI until the maintainers publish a release's wheels.
+
 From source:
 
 ```bash

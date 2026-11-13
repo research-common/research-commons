@@ -9,6 +9,15 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ## [Unreleased]
 
+### Added
+- **An official Python package, `research-commons`** (`python/`). It runs the `commons` binary with `--json` and
+  returns what it printed; it reimplements nothing. A problem object the tool prints becomes an exception chosen by
+  the exit code (`DidNotStart`, `CouldNotCheck`, `CheckedAndWrong`, `NothingToRerun`, `EnvironmentMismatch`), with
+  the problem's fields on it. Standard library only, Python 3.9+. Platform wheels carry the binary and install a
+  `commons` command; `python/scripts/build_wheels.py` builds them from a release's archives after checking every
+  archive against `SHA256SUMS`, byte-for-byte reproducibly. Publishing to PyPI is a manual maintainer step
+  (`docs/RELEASING.md`, step 8).
+
 ## [0.5.0-alpha.3] - 2026-11-12
 
 ### Added

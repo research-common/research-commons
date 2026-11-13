@@ -93,3 +93,23 @@ jobs:
         with:
           go-version-file: go.mod
       - run: CGO_ENABLED=0 go build ./...
+
+  python:
+    # The thin Python package in python/ (stdlib only) and its wheel builder. Not a required check: it
+    # must never gate a Go change. Uses the runner's own python3 (no setup action, so no extra pin);
+    # Go is for the tests that build a real commons.
+    name: python package
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: python3 -m unittest
+        working-directory: python
+        run: |
+          python3 --version
+          python3 -m unittest -v
