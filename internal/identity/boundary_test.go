@@ -67,7 +67,7 @@ func TestOnlyAdapterImportsModel(t *testing.T) {
 // cut, the documented evidence-relative limit; it must not be worse than that), and the mutated bytes never read
 // Valid under the victim's id.
 func TestByteMutationsNeverCreateAuthority(t *testing.T) {
-	conformance.Partial(t, "C-id-37", "adapter and model, sampled mutations; the production critical registry is not enabled, the profile is not active: no dual-major reader or consumer reads this answer")
+	conformance.Partial(t, "C-id-37", "adapter and model, sampled mutations; the production critical registry is not enabled, the production reader asks this evaluator, but this case is not yet run through a command")
 	w := base(t)
 	w.sign(stmt{name: "C1", by: "R", parent: "G2", kind: "identity_cut", body: cutBody(w, "G1", "A1")})
 	targets := []string{"I", "G1", "G2", "C1", "A1", "A2", "B2"}
@@ -178,7 +178,7 @@ func TestUnchangedReaderStackOnCandidateBytes(t *testing.T) {
 // Over the admission cap the whole snapshot is refused: no partial evidence set can produce a pass. Unverified
 // future-major lines are cheap distinct statements, so the cap is reached without signing 100k lines.
 func TestAdmitCapRefusesWholeSnapshot(t *testing.T) {
-	conformance.Partial(t, "C-id-39", "the admission cap and the model's evaluation caps (100,000 dependencies, 100,000 path edges, 1,000,000 inspections) are enforced; the exit 3 mapping needs a command")
+	conformance.Partial(t, "C-id-39", "the admission cap and the model's evaluation caps (100,000 dependencies, 100,000 path edges, 1,000,000 inspections) are enforced; the exit 3 mapping is end to end through the commands in internal/cli (identity_reader_test.go)")
 	// Unproven (unverified, unvouched) lines cost nothing to mint and affect nothing: over their own cap they are
 	// dropped deterministically, never failing the snapshot (review O-F8).
 	signer := key("cap", false).Signer()

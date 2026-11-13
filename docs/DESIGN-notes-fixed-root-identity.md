@@ -1,6 +1,9 @@
 # Candidate profile: fixed-root identity
 
-**Status: review candidate; not enabled in the production reader or writer.**
+**Status: reader active** (`rc/1` + `rc/2` read; no writer yet). The production reader verifies and
+interprets `rc/2` under this profile and evaluates identity actors from the statements it holds; no command
+signs an `rc/2` line, so identities can be read, not created, by this tool. The wire format is still a
+candidate: nothing here is frozen.
 This document selects one wire proposal, `fixed-root-v1` on **`rc/2`**, rather than
 changing `rc/1` fields through a critical-extension handler. It does not change
 `wire.Major`, the current release version, old design notes, or any existing conformance
@@ -191,8 +194,14 @@ resource kinds (genesis, edition, withdraw_approval) and task kinds (intent, pro
 withdraw, submit, decide) are read: a task edition's roles come from its `task_roles`,
 and task statements count through the actor evaluator as every other identity-context
 statement does (§5.3). An `rc/2` kind the reader does not implement stays verified and
-unsupported and counts toward nothing. Nothing in a production reader uses this dispatch
-yet.
+unsupported and counts toward nothing. This dispatch is the production reader: every
+statement a store commits or installs, a gate admits, `hub check` reads, and every view
+resolves is read through it, so a bad `rc/2` signature is refused exactly as a bad `rc/1`
+one. Every resolver a command builds (and the pull gate's trust floor, over the store plus
+the package) asks the actor evaluator built from the held lines; with no `rc/2` line held
+there is no evaluator and every answer is the unchanged reader's. When admission fails as
+a whole (more authenticated statements than its cap), every identity question reads
+`unknown` naming the cap, never a partial snapshot or a key fallback.
 
 ## 3. Administrative vocabulary and permissions
 
@@ -757,24 +766,27 @@ correctly re-signed malformed body is rejected despite the recognized marker.
 
 ### Completion boundary
 
-This candidate is useful input to an authority model and wire integration, not a
-claim that all 45 semantic scenarios pass. Still required: independent review of this
-major transition/domain choice; wiring the candidate dual-major reader into a production
-reader (pull, gates, views) and the critical registry (the reader itself, its `rc/1`
-differential and resolver-wide mixed-input tests exist, §2.4); typed snapshot binding to the pure model; all claim,
-resource, time and task consumers; concrete task-contract profile; policy evaluation;
-transport/explanations and snapshot digest; deterministic evaluation caps; differential
-and full end-to-end signed authority tests; detached signing packages/connectors and
-custody/hardware usability drills. No writer enablement, release, deployment, live keys
-or devices are implied by these artifacts.
+Done: the dual-major reader is the production reader (pull, the gates, `hub check`,
+the store and every view, §2.4); the actor evaluator is built from held statements and
+asked by every resolver and the pull trust floor; `show`/`explain` print an identity
+statement's actor, the evaluator's state and reasons, and the evaluator context (version,
+evidence digest, receipt); `counted` is the counting gate's answer; the admission cap
+reads `unknown` (exit 3). Signed end-to-end tests run the published vectors and the
+amendment scenarios through the commands. Still required: the writer (inception, grant,
+cut and actor-bearing publish: no command signs `rc/2`); the critical registry; a
+concrete identity task-contract profile; the production evidence-snapshot serialization,
+caches and replay; independent review of the major transition; detached signing
+packages/connectors and custody/hardware usability drills. No release, deployment, live
+keys or devices are implied by these artifacts.
 
 ## 10. Conformance cases
 
 The 45 scenario handles of §9 are registered conformance cases, one to one: handle `ID-NN` is case `C-id-NN`.
 The conformance harness reads them from this table, like the bitcoin-time profile's supplementary cases. They are
-cases **of this candidate profile**: while the profile is not active (no writer, no resolver consumer, `wire.Major`
-1) a case can be checked only at the layers that exist (the rc/2 reader, the admission adapter and the reference
-model), so most are partial. A case is covered only when its whole required outcome is checked by a signed,
+cases **of this candidate profile**: the reader is active and the writer is not (no command signs `rc/2`;
+`wire.Major` is the writer's major, 1), so a case is checked through the commands over `rc/2` lines signed by the
+test builders, or at the layers below (the rc/2 reader, the admission adapter and the reference model); a case whose
+remaining outcome needs the writer or a custody drill stays partial. A case is covered only when its whole required outcome is checked by a signed,
 end-to-end test that does not depend on a consumer that does not exist yet. A schema vector is a shape check, not
 a scenario.
 

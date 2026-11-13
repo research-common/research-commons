@@ -15,7 +15,7 @@ import (
 // revocation filter; §6 "Requirements on consumers"). An identity-context statement whose actor is denied or
 // undecided is not counted, under any counting unit (§5.3: key counting never bypasses a missing grant).
 //
-// With no evaluator (every production reader) this is Counts, and the evaluator is never asked.
+// With no evaluator (a reader holding no rc/2 line) this is Counts, and the evaluator is never asked.
 type countGate struct {
 	// Identity is the identity the evaluator binds the statement to; "" for a bare-key statement.
 	Identity string

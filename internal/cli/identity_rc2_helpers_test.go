@@ -65,16 +65,22 @@ func (w *world) identityOf(name, root string, amend canon.Value, workers ...stri
 	i := w.signRC2(name, root, "identity_inception", obj("profile", wire.FixedRootProfile), [2]string{})
 	actors := map[string][2]string{}
 	for _, wk := range workers {
-		if w.seq[wk] == 0 {
-			w.t.Fatalf("%s has no first line for a grant to name", wk)
-		}
-		first := w.ids["first:"+wk]
-		perms := canon.Array{obj("kind", "authored", "targets", obj("any_content", true), "amend", amend)}
-		g := w.signRC2(name+":grant:"+wk, root, "identity_grant", obj("identity", i,
-			"delegate", obj("key", w.signer(wk), "inception", first), "permissions", perms), [2]string{})
-		actors[wk] = [2]string{i, g}
+		actors[wk] = w.grantTo(name, root, i, wk, obj("any_content", true), amend)
 	}
 	return i, actors
+}
+
+// grantTo signs root's grant of identity i to worker wk: `authored` within targets, amend mode amend. It returns
+// the worker's actor for that grant.
+func (w *world) grantTo(name, root, i, wk string, targets *canon.Object, amend canon.Value) [2]string {
+	w.t.Helper()
+	if w.seq[wk] == 0 {
+		w.t.Fatalf("%s has no first line for a grant to name", wk)
+	}
+	perms := canon.Array{obj("kind", "authored", "targets", targets, "amend", amend)}
+	g := w.signRC2(name+":grant:"+wk+fmt.Sprint(w.seq[root]), root, "identity_grant", obj("identity", i,
+		"delegate", obj("key", w.signer(wk), "inception", w.ids["first:"+wk]), "permissions", perms), [2]string{})
+	return [2]string{i, g}
 }
 
 // worker signs key n's first line (an rc/1 authored of its own blob), the inception a grant names.

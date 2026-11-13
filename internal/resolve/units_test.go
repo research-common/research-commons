@@ -300,10 +300,10 @@ func (w *world) identityAmending(name, root string, workers ...string) (string, 
 // another principal's claim applies to nothing; an outsider's self-signed header naming I with an invented grant
 // changes nothing. Without the evaluator every identity statement counts toward nothing (hook-absent text).
 func TestIdentityAuthorshipSignedRC2(t *testing.T) {
-	conformance.Partial(t, "C-id-21", "artifact authorship over signed rc/2 lines with the real candidate evaluator under the dual reader: concurrent cross-key amendments contested, reconciliation by an amendment naming both; the profile is not active (no production reader wires the evaluator)")
-	conformance.Partial(t, "C-id-22", "artifact authorship over signed rc/2 with the real evaluator: a missing target makes I's fields unknown, another principal's target makes the amendment apply to nothing and not a claim; not active in production")
-	conformance.Partial(t, "C-id-44", "artifact authorship over signed rc/2 with the real evaluator: authorized missing-target amendment makes I's fields unknown (verify 3); an outsider's self-signed header with an invented grant changes nothing; not active in production")
-	conformance.Partial(t, "C-id-45", "artifact authorship over signed rc/2 with the real evaluator: amend:true lets K2 amend K1's claim of I across keys and grants; not active in production")
+	conformance.Partial(t, "C-id-21", "artifact authorship over signed rc/2 lines with the real candidate evaluator under the dual reader: concurrent cross-key amendments contested, reconciliation by an amendment naming both; end to end through the commands in internal/cli (identity_reader_test.go)")
+	conformance.Partial(t, "C-id-22", "artifact authorship over signed rc/2 with the real evaluator: a missing target makes I's fields unknown, another principal's target makes the amendment apply to nothing and not a claim; end to end through the commands in internal/cli (identity_reader_test.go)")
+	conformance.Partial(t, "C-id-44", "artifact authorship over signed rc/2 with the real evaluator: authorized missing-target amendment makes I's fields unknown (verify 3); an outsider's self-signed header with an invented grant changes nothing; end to end through the commands in internal/cli (identity_reader_test.go)")
+	conformance.Partial(t, "C-id-45", "artifact authorship over signed rc/2 with the real evaluator: amend:true lets K2 amend K1's claim of I across keys and grants; end to end through the commands in internal/cli (identity_reader_test.go)")
 	ghost := strings.Repeat("e", 64)
 	lic := func(l string) *canon.Object {
 		return obj("content", contentOf("X"), "type", "dataset", "licence", l)

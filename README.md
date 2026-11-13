@@ -17,8 +17,9 @@ New here? Read [`docs/WHY.md`](docs/WHY.md): the motivation and the epistemics, 
 **0.5.0-alpha.3: the third alpha of the next format.** The next format is a clean break from the 0.4 alpha: a
 signed, append-only statement log per key, a store directory (`rc-store/1`), and a Go command-line tool. It is
 alpha: **the format may still change between alpha releases**, and so may `--json` output, key files and execution
-policy files (all marked provisional). The fixed-root identity profile is a candidate under review and is **not
-enabled**. There is no importer from the old format.
+policy files (all marked provisional). The fixed-root identity profile is a candidate under review: its **reader is
+active** (`rc/2` statements are verified and identity actors evaluated from the statements you hold), and **no
+command writes `rc/2` yet**. There is no importer from the old format.
 
 The previous alpha (Python CLI, hubs, ledgers) lives on the `main` branch and the `v0.4.0-alpha.1` tag. It gets
 security fixes only. This README and everything under `docs/` marked otherwise describe the new format.
@@ -118,7 +119,7 @@ least one commit.
 | [`docs/DESIGN-notes-storage.md`](docs/DESIGN-notes-storage.md) | the store layout, journal, recovery, locking |
 | [`docs/DESIGN-notes-execution.md`](docs/DESIGN-notes-execution.md) | sandboxed re-execution |
 | [`docs/DESIGN-notes-bitcoin-time.md`](docs/DESIGN-notes-bitcoin-time.md) | time evidence from Bitcoin |
-| [`docs/DESIGN-notes-fixed-root-identity.md`](docs/DESIGN-notes-fixed-root-identity.md) | the candidate identity profile (not enabled) |
+| [`docs/DESIGN-notes-fixed-root-identity.md`](docs/DESIGN-notes-fixed-root-identity.md) | the candidate identity profile (reader active, no writer) |
 | [`docs/CONFORMANCE.md`](docs/CONFORMANCE.md) | the test plan: every required outcome and what covers it |
 | [`docs/CLI-OUTPUTS.md`](docs/CLI-OUTPUTS.md) | exit codes, state tokens, error shape |
 | [`docs/KNOWN-LIMITS.md`](docs/KNOWN-LIMITS.md) | open gaps, each with a test |

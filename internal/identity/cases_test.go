@@ -16,7 +16,7 @@ import (
 // One key, grants from two identities: each statement acts for exactly the actor it names, and cutting the grant
 // of one identity changes nothing for the other.
 func TestCaseOneKeyTwoIdentities(t *testing.T) {
-	conformance.Partial(t, "C-id-06", "signed adapter and model; the profile is not active: no dual-major reader or consumer reads this answer")
+	conformance.Partial(t, "C-id-06", "signed adapter and model; the production reader asks this evaluator, but this case is not yet run through a command")
 	w := base(t)
 	w.keys["RJ"] = key("root-j", false)
 	w.sign(stmt{name: "J", by: "RJ", kind: "identity_inception", body: obj("profile", "fixed-root-v1")})
@@ -52,7 +52,7 @@ func TestCaseOneKeyTwoIdentities(t *testing.T) {
 // A new grant cannot relabel bytes signed under an older one: after G1 is cut to nothing, K1's acts under G1 stay
 // excluded even though a second grant G3 to the same key and inception is valid, and acts under G3 are eligible.
 func TestCaseNewGrantCannotRelabel(t *testing.T) {
-	conformance.Partial(t, "C-id-14", "signed adapter and model; the profile is not active: no dual-major reader or consumer reads this answer")
+	conformance.Partial(t, "C-id-14", "signed adapter and model; the production reader asks this evaluator, but this case is not yet run through a command")
 	w := base(t)
 	w.sign(stmt{name: "C1", by: "R", parent: "G2", kind: "identity_cut", body: cutBody(w, "G1", "")})
 	w.sign(stmt{name: "G3", by: "R", parent: "C1", kind: "identity_grant", body: w.grantBody("K1", authoredAny())})
@@ -76,7 +76,7 @@ func TestCaseNewGrantCannotRelabel(t *testing.T) {
 //	R: I ── G1 ── G2 ── C1(cut G1, null) ── M(merges F)
 //	     └── F(grant G4 to K1, fork at seq 1)
 func TestCaseRootForkGrantsCoexist(t *testing.T) {
-	conformance.Partial(t, "C-id-16", "signed adapter and model; the profile is not active: no dual-major reader or consumer reads this answer")
+	conformance.Partial(t, "C-id-16", "signed adapter and model; the production reader asks this evaluator, but this case is not yet run through a command")
 	w := base(t)
 	w.sign(stmt{name: "F", by: "R", parent: "I", kind: "identity_grant", body: w.grantBody("K1",
 		obj("kind", "authored", "targets", obj("contents", []string{digest(6)}), "amend", false))})

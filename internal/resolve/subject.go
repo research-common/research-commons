@@ -7,7 +7,7 @@ import "github.com/research-common/research-commons/internal/keylog"
 type SubjectKind string
 
 const (
-	// SubjectKey: the claim is the key's own word (claims §5.1). Every claim of every production reader.
+	// SubjectKey: the claim is the key's own word (claims §5.1). Every claim of a reader holding no rc/2 line.
 	SubjectKey SubjectKind = "key"
 	// SubjectIdentity: the claim is an identity's, made by delegate keys an actor evaluator finds eligible for it.
 	// Only a reader with an evaluator has one (identity profile not active).

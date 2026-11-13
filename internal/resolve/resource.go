@@ -457,7 +457,7 @@ func (r *Resolver) evaluate(e *Edition, auth, contested map[string]authority, pr
 // I (identity profile §5.2), through the counting gate: eligible counts; unknown, or denied by a grant-history cut
 // that removes it, is doubted (an edition that needs it is contested, never authorized and never silently
 // unauthorized); any other denial counts toward nothing. It never fills its key's slot, whatever the answer, and
-// with no evaluator (every production reader) it counts toward nothing with the hook-absent text.
+// with no evaluator (a reader holding no rc/2 line) it counts toward nothing with the hook-absent text.
 func (r *Resolver) approval(p *Placed) Approval {
 	a := Approval{Statement: p.St.ID, Signer: p.St.Signer, Counted: true, Subject: Controller{Key: p.St.Signer}}
 	switch {

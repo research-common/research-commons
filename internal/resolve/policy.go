@@ -23,9 +23,9 @@ import (
 //     amendment or the key's latest. A pin that is missing or ineligible stays unmet and non-passing: nothing is
 //     substituted. A principal selection `{key: K}` follows K's eligible current claims only; when they disagree
 //     the disagreement is shown (a contested field, an unmet workflow selection), never settled by arrival. An
-//     `{identity: I}` principal is unknown: the identity profile is not active, unless an ActorEligibility hook
-//     is configured (WithActorEligibility; none is in any production reader), which then decides which claims
-//     are I's. A selection may change a
+//     `{identity: I}` principal is unknown unless an ActorEligibility hook is configured (WithActorEligibility:
+//     every production reader configures one when it holds an rc/2 line), which then decides which claims are
+//     I's. A selection may change a
 //     recomputed grade because the declaration changed; it never adds a run, a comparison or a statement.
 //   - trust entries answer "does this reader trust key K for purpose P over content C" (package policy,
 //     Policy.Trusts). Corroboration status counts only evidence from keys trusted for `corroboration` over the
@@ -46,8 +46,8 @@ func WithPolicy(p *policy.Policy) Option { return func(r *Resolver) { r.policy =
 type ActorEligibility = policy.ActorEligibility
 
 // WithActorEligibility sets the identity evaluator the policy consumers ask. With none (the default, and
-// every production reader today) an `{identity: I}` principal answers unknown (identity profile not active),
-// exactly as before the hook existed. A nil evaluator is none.
+// a production reader holding no rc/2 line) an `{identity: I}` principal answers unknown (identity profile not
+// active), exactly as before the hook existed. A nil evaluator is none.
 func WithActorEligibility(a ActorEligibility) Option { return func(r *Resolver) { r.actors = a } }
 
 // trusts is the one trust question every caller asks: does this reader trust the placed statement p for

@@ -231,8 +231,10 @@ func TestIdentityReaderNegativeVectorsThroughPull(t *testing.T) {
 // production reader and the commands (no fake evaluator, no test-only resolver): two delegates of I with
 // amend:true; concurrent cross-key amendments of one claim leave the licence contested (verify 3) and an amendment
 // naming both reconciles it (verify 0); an authorized amendment naming a missing target makes I's licence unknown
-// (verify 3) while the claim stays I's; an amendment naming another principal's claim applies to nothing and is
-// not a claim of I; an outsider's self-signed actor naming I with an invented grant changes nothing.
+// (verify 3) while the claim stays I's; an amendment naming another principal's claim, or I's claim on another
+// blob, applies to nothing; under amend "own" a cross-key amendment is a scope denial; under amend:true with
+// content targets, an amendment inside the targets applies and one outside is denied; an outsider's self-signed
+// actor naming I with an invented grant changes nothing.
 func TestIdentityReaderAmendmentsThroughCommands(t *testing.T) {
 	conformance.Covers(t, "C-id-21", "C-id-22", "C-id-44", "C-id-45")
 	ghost := strings.Repeat("e", 64)
@@ -286,6 +288,47 @@ func TestIdentityReaderAmendmentsThroughCommands(t *testing.T) {
 	d = w.pullInto()
 	if ex := d.run("explain", dig("X")); !strings.Contains(ex.stdout, "amends nothing") {
 		t.Fatalf("wrong principal: %s", ex.stdout)
+	}
+
+	// C-id-22: wrong content: an amendment of X naming I's own claim on another blob applies to nothing
+	w, a, _ = build()
+	w.signRC2("A0", "K1", "authored", licBody("X", "MIT"), a["K1"])
+	w.signRC2("Y0", "K1", "authored", licBody("Y", "MIT"), a["K1"])
+	w.signRC2("B1", "K2", "authored", amendingBody("X", "CC0-1.0", w.ids["Y0"]), a["K2"])
+	d = w.pullInto()
+	if ex := d.run("explain", dig("X")); !strings.Contains(ex.stdout, "amends nothing") || !strings.Contains(ex.stdout, "about another blob") {
+		t.Fatalf("wrong content: %s", ex.stdout)
+	}
+	if st, o, code := licence(d); st != "default" || code != ExitOK || !strings.Contains(string(canon.Encode(o)), `"MIT"`) {
+		t.Fatalf("wrong content moved I's licence: %s %d\n%s", st, code, canon.Encode(o))
+	}
+
+	// C-id-22 / C-id-45: under amend "own", K2 amending K1's claim of I is a scope denial of the act; under
+	// amend:true with content targets {X}, K2's amendment of I's claim on Y (outside its targets) is denied
+	w = newWorld(t)
+	w.worker("K1")
+	w.worker("K2")
+	i, a = w.identityOf("I", "IR", canon.Bool(true), "K1")
+	own := w.grantTo("I", "IR", i, "K2", obj("any_content", true), canon.String("own"))
+	onlyX := w.grantTo("I", "IR", i, "K2", obj("contents", []string{dig("X")}), canon.Bool(true))
+	w.signRC2("A0", "K1", "authored", licBody("X", "MIT"), a["K1"])
+	w.signRC2("Y0", "K1", "authored", licBody("Y", "MIT"), a["K1"])
+	ownAct := w.signRC2("B1", "K2", "authored", amendingBody("X", "CC0-1.0", w.ids["A0"]), own)
+	outAct := w.signRC2("B2", "K2", "authored", amendingBody("Y", "CC0-1.0", w.ids["Y0"]), onlyX)
+	inAct := w.signRC2("B3", "K2", "authored", amendingBody("X", "Apache-2.0", w.ids["A0"]), onlyX)
+	d = w.pullInto()
+	for _, x := range []struct{ id, want string }{{ownAct, "denied"}, {outAct, "denied"}, {inAct, "eligible"}} {
+		o := showJSON(t, d, x.id)
+		if member(o, "actor", "state") != canon.String(x.want) || (x.want == "denied" && !strings.Contains(string(canon.Encode(o)), "scope_excluded")) {
+			t.Fatalf("%s: %s, want %s", x.id[:12], canon.Encode(member(o, "actor")), x.want)
+		}
+	}
+	if st, o, code := licence(d); st != "default" || code != ExitOK || !strings.Contains(string(canon.Encode(o)), "Apache-2.0") {
+		t.Fatalf("the in-target amendment does not apply alone: %s %d\n%s", st, code, canon.Encode(o))
+	}
+	r := d.run("verify", dig("Y"), "--json")
+	if r.code != ExitOK || !strings.Contains(r.stdout, `"MIT"`) {
+		t.Fatalf("an out-of-target amendment moved Y: %d\n%s", r.code, r.stdout)
 	}
 
 	// C-id-44: an outsider S signs an actor naming I with an invented grant: I's answer is unchanged
