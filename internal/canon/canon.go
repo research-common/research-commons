@@ -14,6 +14,7 @@
 package canon
 
 import (
+	"math"
 	"strconv"
 	"unicode/utf16"
 	"unicode/utf8"
@@ -45,6 +46,11 @@ type String string
 // Int is an integer in the I-JSON range.
 type Int int64
 
+// Number is a JSON number outside the integer subset (a fraction, an exponent, -0, or an integer past 2^53-1),
+// as its source text. Only ParseData returns one: captured data a reader looks into, never a signed body (Parse
+// refuses every such number).
+type Number string
+
 // Bool is true or false.
 type Bool bool
 
@@ -55,6 +61,7 @@ func (*Object) isValue() {}
 func (Array) isValue()   {}
 func (String) isValue()  {}
 func (Int) isValue()     {}
+func (Number) isValue()  {}
 func (Bool) isValue()    {}
 func (Null) isValue()    {}
 
@@ -66,13 +73,25 @@ func (o *Object) Get(k string) (Value, bool) {
 
 // Parse reads exactly one JSON value from b under the rules above. Trailing non-whitespace is malformed.
 func Parse(b []byte) (Value, error) {
+	return parse(&parser{b: b})
+}
+
+// ParseData reads captured data (a source's response a reader looks into) as I-JSON (RFC 7493): Parse's rules,
+// except that a number outside the integer subset is accepted when it is finite as an IEEE 754 double, and
+// returned as Number. Duplicate keys, invalid UTF-8, lone surrogates and the depth limit are refused as Parse
+// refuses them. The values are for reading only: they are never re-encoded as a signed body.
+func ParseData(b []byte) (Value, error) {
+	return parse(&parser{b: b, data: true})
+}
+
+func parse(p *parser) (Value, error) {
+	b := p.b
 	if len(b) >= 3 && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF {
 		return nil, refusal.Malformed("byte order mark")
 	}
 	if !utf8.Valid(b) {
 		return nil, refusal.Malformed("invalid UTF-8")
 	}
-	p := &parser{b: b}
 	p.ws()
 	v, err := p.value(1)
 	if err != nil {
@@ -88,6 +107,8 @@ func Parse(b []byte) (Value, error) {
 type parser struct {
 	b []byte
 	i int
+	// data: ParseData's number rule (I-JSON, not the integer subset).
+	data bool
 }
 
 func (p *parser) fail(what string) error {
@@ -269,6 +290,20 @@ func (p *parser) number() (Value, error) {
 		}
 	}
 	text := string(p.b[start:p.i])
+	if p.data {
+		if len(intPart) > 1 && intPart[0] == '0' {
+			return nil, refusal.Malformed("leading zero in number %s", text)
+		}
+		if !frac && text != "-0" {
+			if n, err := strconv.ParseInt(text, 10, 64); err == nil && n <= MaxInt && n >= -MaxInt {
+				return Int(n), nil
+			}
+		}
+		if f, err := strconv.ParseFloat(text, 64); err != nil || math.IsInf(f, 0) {
+			return nil, refusal.Malformed("number %s is outside the IEEE 754 double range (I-JSON)", text)
+		}
+		return Number(text), nil
+	}
 	if frac {
 		return nil, refusal.Malformed("non-integer number %s", text)
 	}

@@ -38,6 +38,9 @@ func appendValue(b []byte, v Value) []byte {
 		return appendString(b, string(x))
 	case Int:
 		return strconv.AppendInt(b, int64(x), 10)
+	case Number:
+		// only ParseData returns a Number, and its values are never a signed body: written as read
+		return append(b, x...)
 	case Bool:
 		return strconv.AppendBool(b, bool(x))
 	case Null:
