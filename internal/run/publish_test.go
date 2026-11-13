@@ -11,6 +11,7 @@ import (
 	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/conformance"
 	"github.com/research-common/research-commons/internal/keylog"
+	"github.com/research-common/research-commons/internal/reqlog"
 	"github.com/research-common/research-commons/internal/wire"
 )
 
@@ -243,6 +244,43 @@ func TestPublishAcceptsEveryDisclosure(t *testing.T) {
 // (decided 2), with the capture record filled from the run and a multi-request capture pinned as one request log;
 // it joins no derivation group. The comparison of two captures is a `network: none` workflow: it runs with no
 // network, and a step that opens a connection fails inside the sandbox (`failed`, never match).
+// acqLog is a two-request rc-request-log/1 log.
+var acqLog = reqlog.Encode([]reqlog.Entry{
+	{Endpoint: "https://api.example/v1/settlements", Parameters: object("period", canon.String("2026-08")), Status: 200, Time: "2026-10-16T04:59:30Z", ResponseDigest: Digest([]byte("a"))},
+	{Endpoint: "https://api.example/v1/settlements", Parameters: object("period", canon.String("2026-09")), Status: 200, Time: "2026-10-16T04:59:40Z", ResponseDigest: Digest([]byte("b"))},
+})
+
+// TestAcquisitionRequestLogDialect: the request log `run --publish` pins must be rc-request-log/1, and its pins
+// are read from it: a log in another layout publishes nothing, naming the line.
+func TestAcquisitionRequestLogDialect(t *testing.T) {
+	specBytes := specB("acq", nil, "network", object("required", strings2array([]string{"https://api.example/v1/settlements"})),
+		"outputs", object("data", canon.String("data.json"), "log", canon.String("requests.jsonl")))
+	s := mustSpec(t, specBytes)
+	for _, c := range []struct {
+		log  []byte
+		want string
+	}{{[]byte("r1\nr2\n"), "line 1"}, {acqLog, ""}} {
+		f := newFake().step("acq", func(_ context.Context, _, out string, _ map[string]string) (int, Resources) {
+			os.WriteFile(filepath.Join(out, "data.json"), []byte(`{}`), 0o644)
+			os.WriteFile(filepath.Join(out, "requests.jsonl"), c.log, 0o644)
+			return 0, Resources{CapMemory: 1}
+		})
+		pol := grantAll()
+		pol.Network = []string{s.Digest}
+		res, err := Execute(context.Background(), pol, f, Invocation{Request: Request{Spec: s, Signer: ownerKey}, Blobs: blobsFor(s, "acq", nil)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = PlanPublish(PublishInput{Spec: s, Result: res, CaptureAt: "2026-10-16T05:00:00Z", RequestLog: &RequestLog{Output: "log"}})
+		if c.want == "" && err != nil || c.want != "" && (err == nil || !strings.Contains(err.Error(), c.want)) {
+			t.Fatalf("log %q: %v", c.log, err)
+		}
+	}
+	if _, err := PlanPublish(PublishInput{Spec: s, Result: &Result{Token: Token{Kind: Unchecked}, Record: &Record{}}, RequestLog: &RequestLog{Output: "nope"}}); err == nil {
+		t.Fatal("an undeclared log output must refuse")
+	}
+}
+
 func TestAcquisitionEmitsObserved(t *testing.T) {
 	conformance.Partial(t, "C-exec-14", "the corroborates emission and a real refused connection: the corroboration slice and the OCI backend (network none)")
 	specBytes := specB("acq", nil, "network", object("required", strings2array([]string{"https://api.example/v1/settlements"})),
@@ -250,7 +288,7 @@ func TestAcquisitionEmitsObserved(t *testing.T) {
 	s := mustSpec(t, specBytes)
 	f := newFake().step("acq", func(_ context.Context, _, out string, _ map[string]string) (int, Resources) {
 		os.WriteFile(filepath.Join(out, "data.json"), []byte(`{"period":"2026-09"}`), 0o644)
-		os.WriteFile(filepath.Join(out, "requests.jsonl"), []byte("r1\nr2\n"), 0o644)
+		os.WriteFile(filepath.Join(out, "requests.jsonl"), acqLog, 0o644)
 		return 0, Resources{CapMemory: 1}
 	})
 	pol := grantAll()
@@ -263,7 +301,7 @@ func TestAcquisitionEmitsObserved(t *testing.T) {
 		t.Fatal(err)
 	}
 	plan, err := PlanPublish(PublishInput{Spec: s, Result: res, CaptureAt: "2026-10-16T05:00:00Z", WindowFrom: "2026-10-16T04:59:00Z", WindowTo: "2026-10-16T05:00:00Z",
-		RequestLog: &RequestLog{Output: "log", Format: "jsonl-v1", Count: 2}})
+		RequestLog: &RequestLog{Output: "log"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -275,6 +313,8 @@ func TestAcquisitionEmitsObserved(t *testing.T) {
 		body := string(canon.Encode(pl.Body))
 		has(t, body, `"class":"source"`)
 		has(t, body, `"count":2`)
+		has(t, body, `"format":"rc-request-log/1"`)
+		has(t, body, `"endpoint":"https://api.example/v1/settlements","format"`) // every logged request shares it
 		has(t, body, `"endpoints":["https://api.example/v1/settlements"]`)
 		hasNot(t, body, `"provenance"`)
 		w.sign("O1", "observed", pl.Body)
