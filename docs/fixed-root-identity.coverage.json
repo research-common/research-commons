@@ -631,9 +631,11 @@
       "case": "C-id-40",
       "scenario": "Root backup / compromised operational host",
       "schema_vectors": [],
-      "isolated_tests": [],
-      "conformance": "pending",
-      "remaining": "Pending: no test. A recorded custody drill (profile §8): restore of the root key file from backup, and a compromised operational host; not a unit test. No drill is recorded and no signer adapter is claimed."
+      "isolated_tests": [
+        "internal/cli:TestIdentitySimplePathDrill"
+      ],
+      "conformance": "partial",
+      "remaining": "Partial: the simple path (profile §8, rc-key/0 files, the CLI signs) is drilled through the commands on separate stores, both algorithms: inception, grant, acts counted, a stolen worker key cut at last_good, aborts leave nothing appended, a root key file restored from backup signs as the same root. A compromised operational host and hardware or connector signing are not drilled; no signer adapter is claimed."
     },
     {
       "handle": "ID-41",
