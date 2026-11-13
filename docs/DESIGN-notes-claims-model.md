@@ -356,7 +356,14 @@ Rules:
 - **The observation pins its referent.** For chain data that means chain id, block hash (not height) and
   confirmation depth at capture. For APIs: endpoint, parameters and response hash; for a batch capture, the hash, format and count of a
   request log carried inside the captured content, listing each request's endpoint, parameters, status, time
-  and response hash. For instruments: instrument
+  and response hash. The format defines one request-log layout, `rc-request-log/1` (wire-format note §5); a
+  log in any other layout is shown and its check is `unchecked`, naming the layout. A reader locates the log
+  by its hash among the content's units (the content blob itself, or a member of a content archive), checks
+  the pinned count against its entries and a pinned shared endpoint against each entry's, and checks that each
+  logged response is held in the same content (when the log is the whole content, among the blobs the reader
+  holds). A response that is not held is named by entry and endpoint: inside a fully read archive it is
+  `fail` (mutated or missing; `verify` exits 1), otherwise `unchecked`. A log hash matching nothing in fully
+  read content leaves the referent `unpinned`: it pins no request the capture carries. For instruments: instrument
   identity, location and time. For methods: the method edition followed, the execution environment record
   (image digest, platform, harness commit), the measured system's identity and state (model and provider pin,
   and whatever changes the apparatus under the observer, such as a routing era), the protocol's pinned inputs

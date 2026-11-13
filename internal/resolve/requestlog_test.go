@@ -33,7 +33,6 @@ func newBatch(n int) *batchFixture {
 	return f
 }
 
-
 func (f *batchFixture) units() []ContentUnit {
 	us := []ContentUnit{{Name: "capture.tar!/requests.jsonl", Data: f.log}}
 	for i, r := range f.responses {

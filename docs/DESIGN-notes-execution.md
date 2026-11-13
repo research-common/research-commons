@@ -60,8 +60,8 @@ Rules:
 3. **A network requirement makes the workflow an acquisition.** Its outputs are observations, not derivations:
    `run --publish` emits `observed` statements whose capture record is filled from the run (endpoint list,
    time window, environment record). A run that makes more than one request writes a request log into its
-   output (endpoint, parameters, status, time and response hash per request) and the statement pins it by
-   hash, format and count (wire-format note §5, source referent), so a capture of thousands of requests is
+   output (endpoint, parameters, status, time and response hash per request, as `rc-request-log/1`) and the
+   statement pins it by hash, format and count (read from the log, with the endpoint when every request shares it) (wire-format note §5, source referent), so a capture of thousands of requests is
    one statement, never `authored` with provenance (§11, decided 2). They join no derivation group and
    carry no T0/T1. This is the mechanical form of "network access lives in `observed`, determinism in
    `corroborates`" (claims-model note, appendix; C-exec-14). A `network: none` workflow whose step opens a
