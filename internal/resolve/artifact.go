@@ -236,6 +236,8 @@ type Artifact struct {
 	// has no default value.
 	Availability *Availability
 	ShelfLife    *ShelfLife
+	// Licence is the reading of the declared licence expression (licence.go); nil when the field has no default.
+	Licence *Licence
 	// Inputs is the scoped summary of the disclosures of the inputs of the derivation the grade comes from, with
 	// the declared sampling n beside the computed one (disclosure.go); nil without a derivation group.
 	Inputs *InputSummary
@@ -332,6 +334,7 @@ func (r *Resolver) authorship(d string) *Artifact {
 	a.Holders = r.holders(d)
 	a.Held = r.held(a)
 	a.Availability, a.ShelfLife = r.availability(a), r.shelfLife(a)
+	a.Licence = r.licence(a)
 	return a
 }
 

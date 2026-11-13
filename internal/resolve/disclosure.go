@@ -190,6 +190,8 @@ func (a *Artifact) renderDisclosure(name string) (string, bool) {
 		return a.Availability.Display, true
 	case name == "shelf_life_days" && a.ShelfLife != nil:
 		return a.ShelfLife.Display, true
+	case name == "licence" && a.Licence != nil:
+		return a.Licence.Display, true
 	}
 	return "", false
 }
