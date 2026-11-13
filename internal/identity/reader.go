@@ -44,11 +44,12 @@ func mayBeCandidate(l []byte) bool { return bytes.Contains(l, []byte(`"rc/2"`)) 
 // decides nothing about any identity.
 type Unavailable struct{ Err error }
 
-// Eligible implements policy.ActorEligibility: unknown naming the failure for a statement with an identity actor;
-// the certain no_identity_actor denial for every other statement (it acts for no identity, whatever the evidence).
+// Eligible implements policy.ActorEligibility: for a statement with an identity actor, unknown for the identity
+// it names, naming the failure (the identity's question is undecided, not answered for its key); the certain
+// no_identity_actor denial for every other statement (it acts for no identity, whatever the evidence).
 func (u Unavailable) Eligible(st *wire.Statement) (string, string, []string) {
 	if st != nil && st.Actor != nil {
-		return "", policy.ActorUnknown, []string{"model_limit: " + u.Err.Error()}
+		return st.Actor.Identity, policy.ActorUnknown, []string{"model_limit: " + u.Err.Error()}
 	}
 	return "", policy.ActorDenied, []string{"no_identity_actor"}
 }

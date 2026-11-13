@@ -39,8 +39,12 @@ func heldActors(lines map[string][]byte, extra ...[]byte) policy.ActorEligibilit
 	for _, id := range slices.Sorted(maps.Keys(lines)) {
 		all = append(all, lines[id])
 	}
-	return identity.Evaluator(append(all, extra...))
+	return newEvaluator(append(all, extra...))
 }
+
+// newEvaluator builds the identity evaluator over held lines; a variable only so a test can stand in the
+// evaluator a reader gets when admission fails as a whole (identity.Unavailable) without signing past the cap.
+var newEvaluator = identity.Evaluator
 
 // storeBlobs lets the time verifier read proof blobs from the store: re-hashed on open, never fetched.
 type storeBlobs struct{ s *store.Store }
