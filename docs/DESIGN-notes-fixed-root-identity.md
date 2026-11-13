@@ -1,9 +1,11 @@
 # Fixed-root identity profile (candidate wire, reader active)
 
-**Status: reader active** (`rc/1` + `rc/2` read; no writer yet). The production reader verifies and
-interprets `rc/2` under this profile and evaluates identity actors from the statements it holds; no command
-signs an `rc/2` line, so identities can be read, not created, by this tool. The wire format is still a
-candidate: nothing here is frozen.
+**Status: reader and writer active** (`rc/1` + `rc/2` read and written). The production reader verifies and
+interprets `rc/2` under this profile and evaluates identity actors from the statements it holds. The writer
+signs `rc/2` for the administrative kinds (`identity new`, `identity grant`, `identity cut`) and for an act
+for an identity (`publish --as <I> --grant <G>`); every other statement, raw `rotate_key`/`revoke_key`
+included, is still written `rc/1` (§2.1). No external-signing package or hardware connector is built (§8).
+The wire format is still a candidate: nothing here is frozen.
 This document selects one wire proposal, `fixed-root-v1` on **`rc/2`**, rather than
 changing `rc/1` fields through a critical-extension handler. It does not change
 `wire.Major`, the current release version, old design notes, or any existing conformance
