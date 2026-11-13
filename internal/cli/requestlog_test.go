@@ -35,7 +35,7 @@ func (w *world) batch(name string, archive []byte, logDigest string, count int) 
 // response mutated after logging is named by entry and endpoint and `verify` exits 1; a log digest that matches
 // nothing in the content reads `unpinned` (exit 3). Control: the intact capture verifies (exit 0).
 func TestBatchRequestLogCommands(t *testing.T) {
-	conformance.Partial(t, "C-core-31", "batch variant through the commands; the single-request half (each pinned field shown as the observer's statement, a different endpoint never agreement) is shown by the resolver only, not yet asserted through explain")
+	conformance.Partial(t, "C-core-31", "batch variant through the commands; the single-request and phenomenon halves are TestSingleRequestReferentCommands")
 	w := newWorld(t)
 	good, log := batchCapture(t, false)
 	ok := w.batch("OK", good, dig(string(log)), 2)

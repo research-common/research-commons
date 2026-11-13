@@ -229,6 +229,13 @@ func referentObj(ob *resolve.Observation, full bool) *Obj {
 	if ob.Layout != nil { // the response-layout read beside the status: the read state, or why unchecked (§5.3.1a)
 		o.set("layout", textV(ob.Layout.String()))
 	}
+	if full && len(ob.Referent) > 0 { // each pinned field, as the observer signed it (claims §5.3.1, I2)
+		pinned := make([]string, 0, len(ob.Referent))
+		for _, f := range ob.Referent {
+			pinned = append(pinned, "referent."+f[0]+": "+f[1]+" (observer's statement)")
+		}
+		o.set("pinned", texts(pinned...))
+	}
 	if full && len(ob.ReferentHistory) > 0 {
 		o.set("history", texts(ob.ReferentHistory...))
 	}
