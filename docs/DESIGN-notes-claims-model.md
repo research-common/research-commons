@@ -458,16 +458,17 @@ Rules:
 writes the state into the response itself (a settlement API that carries the run on every record), a reader holding
 those bytes can check that word rather than take it. A **response layout** says where the state sits in a captured
 JSON response: a content-addressed blob (wire-format note §5) carrying an RFC 6901 JSON pointer to the array of
-records (`records`) and an RFC 6901 pointer to the state within each record (`state`). With `records` absent the
-layout reads one state: `state` points into the response itself. A profile cites its layout by digest in its
+records (`records`) and an RFC 6901 pointer to the state within each record (`state`). `records` `""` is the whole
+response: a bare JSON array at the root, the shape a streaming endpoint answers with. With `records` absent (which
+is not `""`) the layout reads one state: `state` points into the response itself. A profile cites its layout by digest in its
 `documents`, so a reader that does not implement layouts reads the profile as before, the layout one more cited
 document. A layout applies to an ordered-label rule over a source-class capture that pins one `response_digest`;
 the reader reads the bytes it holds under that digest, and nothing else (no fetch, no re-request: H-14).
 
 | the held response, read under the layout | the layout read | the referent |
 |---|---|---|
-| (a) parses as I-JSON within the reader's caps, and every record carries the same non-empty string at `state`, a label in the profile | that state, **read from the held bytes** | read by that state: `final (as held)` when it meets the rule, else `provisional (<state>; final at L)`. An asserted `state_at_capture` that differs is shown beside it as a disclosed disagreement; it does not govern |
-| (b) the records disagree; a pointer names nothing; the value is not a string, or is empty, or is a label outside the profile; the record array is empty; the bytes are not I-JSON or are over the caps; the capture declares a media type that is not JSON; the response is not held; the cited layout is not a valid layout, or the profile cites two | `unchecked`, naming why | read by the asserted state exactly as with no layout: `final (as captured, not re-checked)` at best, never upgraded by the layout |
+| (a) parses as I-JSON within the reader's caps, and every record carries a non-empty string at `state` that is a label in the profile | the **least** record's state (the earliest label in the profile's order among the records), **read from the held bytes**; when records differ, the spread is disclosed (`records at R1..RF, read as R1`) | read by that state: `final (as held)` when it meets the rule, else `provisional (<state>; final at L)`. An asserted `state_at_capture` that differs from the read state is shown beside it as a disclosed disagreement; it does not govern |
+| (b) any record's value is missing, not a string, empty, or a label outside the profile; a pointer names nothing; the record array is empty; the bytes are not I-JSON or are over the caps; the capture declares a media type that is not JSON; the response is not held; the cited layout is not a valid layout, its held copy is corrupt, or the profile cites two | `unchecked`, naming the record (or the response, or the layout) and why | read by the asserted state exactly as with no layout: `final (as captured, not re-checked)` at best, never upgraded by the layout |
 | (c) the profile cites no layout | none | as above (§5.3.1a), unchanged |
 
 Rules:
@@ -479,8 +480,16 @@ Rules:
   state that meets the rule is still the only thing that makes a referent `final`, and `final (as held)` is a
   distinct token for that reason (I5). A layout read never moves `verify`'s exit; it is shown beside the
   status, as the referent status is.
-- **Every record agrees, or nothing is read.** A response whose records carry two states is not a response at one
-  state: the reader does not pick the earliest, the latest or the most common (I14), and reads `unchecked`.
+- **A response reads at its least record.** A response spanning a run step carries two states (records already
+  at the later run beside records not yet re-run), so this is the normal case for a long capture, not an anomaly.
+  The rule is monotone (`run >= L`): the response meets it exactly when every record does. So the least record's
+  state under the profile's order is not a pick among equals (which I14 forbids: not the latest, not the most
+  common, not the first in the array) but the one state the whole response can be relied on at, the same move as
+  weakest-link grading (§7). It never upgrades: a response reads `final (as held)` only when every record meets the
+  rule. The spread is disclosed whenever records differ, and the asserted state is compared with the least. The
+  order is the profile's and nothing else: a record whose label is outside the profile (or missing, not a string,
+  or empty) makes the whole read `unchecked`, naming the record; there is no partial order over labels the profile
+  does not have. The read does not depend on the order of the records in the array.
 - **JSON only in this dialect.** The response is read as I-JSON (RFC 7493): the wire-format note's input rules
   (UTF-8, no duplicate names, the depth limit), except that a number is any finite IEEE 754 double, since a
   captured response is the source's data, not a signed body; it is never re-encoded or signed. Other formats
@@ -488,12 +497,13 @@ Rules:
   specified (§15).
 - **Reader caps** bound the read and are documented limits: the layout blob, each pointer, the response read
   (a larger response is `unchecked`, naming the cap) and a step budget over records visited and pointer tokens
-  followed. The read is a pure function of the response bytes and the layout: the same pair gives the same answer
-  in every reader.
+  followed. The read is a pure function of the response bytes, the layout and the profile's label order: the same
+  three give the same answer in every reader.
 - **The layout comes with the profile, read where the profile is read.** A hub reads the layout its pinned
   profile cites from its base revision, as it reads the profile (§11); a store reads it from the blobs it holds.
   Unlike an unusable pin, an unusable layout does not stop the read: the profile is still valid without it, and the
-  reads it would have made are `unchecked` (b).
+  reads it would have made are `unchecked` (b). A cited document whose held copy does not hash to its digest is
+  named (the held copy is corrupt), never skipped as if not held: whether it is the layout cannot be read.
 
 #### 5.3.2 Corroboration is a derivation
 

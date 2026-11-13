@@ -27,13 +27,16 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   (`docs/RELEASING.md`, step 8).
 - **Response layouts: the finality state read from the held response.** A source profile can now cite, in its
   `documents`, a response layout (`rc-response-layout/1`): an RFC 6901 JSON pointer to the records of a captured
-  JSON response and one to the state within each record. When every record of the held response carries the same
-  state, a label in the profile, that state governs: the referent reads `final (as held)` (or provisional at the
-  read state), and an asserted `state_at_capture` that differs is shown beside it as a disclosed disagreement. The
-  same read drives revisions, the finality-aware comparison and the series boundary, which is `as held` when every
-  segment's state was read from its bytes (`hub check` and `pull` decide a premature freeze on it). Records that
-  disagree, a missing field, bytes that are not JSON, or a response that is not held read `unchecked`, naming why,
-  and the asserted state is used exactly as before, never upgraded. A layout read never moves an exit. A profile
+  JSON response (`""` for a bare array at the root) and one to the state within each record. When every record of
+  the held response carries a label in the profile, the response reads at its least record (the earliest label in
+  the profile's order, the one state the whole response meets the rule at), and that state governs: the referent
+  reads `final (as held)` (or provisional at the read state); records that differ are disclosed as a spread
+  (`records at R1..RF, read as R1`), and an asserted `state_at_capture` that differs is shown beside it as a
+  disclosed disagreement. The same read drives revisions, the finality-aware comparison and the series boundary,
+  which is `as held` when every segment's state was read from its bytes (`hub check` and `pull` decide a premature
+  freeze on it). A record whose label is outside the profile, a missing field, bytes that are not JSON, a response
+  that is not held, or a held layout copy that is corrupt read `unchecked`, naming why, and the asserted state is
+  used exactly as before, never upgraded. A layout read never moves an exit. A profile
   citing a layout stays a valid `rc-source-profile/1`: an older reader reads the layout as one more document.
   Other formats (CSV, XML, a compressed or archived response) are not read yet.
 
