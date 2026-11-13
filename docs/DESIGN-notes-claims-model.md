@@ -943,8 +943,11 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
   divergent submission is reported, and the task check is not itself a comparison (task-contracts note §5.7).
 - **`verify` of an observation** checks its signature and its pins: exit 0 when they hold, exit 3
   when the referent is `unpinned` or its finality rule cannot be evaluated, or, for a method-class observation,
-  the method edition it pins is not held as authorized (whether it declares `system_keys` cannot be read).
-  Corroboration status and capture evidence are disclosures (I6) shown beside it and never change the exit,
+  the method edition it pins is not held as authorized (whether it declares `system_keys` cannot be read);
+  exit 1 when a batch referent's request log was read in full and is false of the content (a wrong count, an
+  endpoint other than the pinned one, a logged response the read archive does not hold), since that is a pin
+  checked against held bytes and found wrong (§5.3.1); exit 3 when the log is in another layout or a response
+  could not be looked for. Corroboration status and capture evidence are disclosures (I6) shown beside it and never change the exit,
   so no exit rests on a capture level the reader did not verify (C-core-52).
 - **`verify` of a resource or an edition.** A resource (named by its genesis id): exit 0 with one current
   edition, exit 3 under an uncleared `FORK` or with a `contested` edition. A pinned edition: exit 0 when it is an
