@@ -24,8 +24,8 @@ func (f ReadFunc) Read(line []byte) (*Statement, error) { return f(line) }
 //     candidate rule held as Invalid.
 //
 // A line whose rc cannot be read at all is Read's to refuse. The dispatch never looks at anything but the major,
-// so an rc/1 corpus reads byte for byte as under Read. Major stays 1: it is the major this tool's writer signs,
-// not the set of majors its reader reads (ReaderMajors).
+// so an rc/1 corpus reads byte for byte as under Read. Major stays 1: it is Read's major and the major this tool's
+// writer signs bare-key statements in (WriterMajor), not the set of majors its reader reads (ReaderMajors).
 type DualReader struct {
 	id *IdentityReader
 }
@@ -49,7 +49,7 @@ func (r *DualReader) Read(line []byte) (*Statement, error) {
 }
 
 // ReaderMajors are the format majors the production reader (ReadStored) verifies and interprets: rc/1, and rc/2
-// under the fixed-root identity profile. Major is the writer's major only.
+// under the fixed-root identity profile. The writer signs both too, each statement in its WriterMajor.
 var ReaderMajors = []int{Major, CandidateMajor}
 
 var stored = NewDualReader()

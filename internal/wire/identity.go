@@ -13,12 +13,13 @@ import (
 
 // This file is the fixed-root identity reader (docs/DESIGN-notes-fixed-root-identity.md): the rc/2 half of the
 // production reader (ReadStored, dual.go). Read, the zero Reader, NewReader and Major are unchanged: Read stays
-// the rc/1-only reader (an rc/2 line an unverified other-major line), and Major the writer's major. The profile is
+// the rc/1-only reader (an rc/2 line an unverified other-major line). The writer signs a statement in rc/2 when it
+// acts for an identity or administers one (WriterMajor, IdentityDraft: write.go), rc/1 otherwise. The profile is
 // still a candidate wire format: nothing here is frozen.
 
 const (
-	// CandidateMajor is the identity profile's major. The production reader reads it (ReaderMajors); it is NOT
-	// Major, the major this tool's writer signs.
+	// CandidateMajor is the identity profile's major. The production reader reads it (ReaderMajors) and the writer
+	// signs identity statements in it (WriterMajor); it is NOT Major, the rc/1 major of bare-key statements.
 	CandidateMajor = 2
 	// IdentityCrit is the only critical extension the candidate profile recognizes.
 	IdentityCrit = "x_identity_v1"
