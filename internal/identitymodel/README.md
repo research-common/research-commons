@@ -1,7 +1,8 @@
 # Fixed-root authority reference model
 
-**Status: isolated semantic model, not enabled identity support.** This package is
-not imported by the wire reader, writer, key log, resolver, CLI, or storage path.
+**Status: isolated semantic model.** This package is not imported by the wire reader, writer, key
+log, resolver, CLI, or storage path directly: the production reader reaches it only through the
+`internal/identity` adapter, which feeds it admitted facts.
 It uses only the Go standard library. Its enums are model tags, not a wire-format
 proposal. There is no production format-version change or reinterpretation of
 existing signed bytes.

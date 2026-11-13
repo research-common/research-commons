@@ -1,4 +1,4 @@
-# internal/identity: the admission contract (candidate)
+# internal/identity: the admission contract (candidate wire, reader active)
 
 **Status: reader active, no writer.** This package binds the candidate fixed-root identity profile
 (`docs/DESIGN-notes-fixed-root-identity.md`, "the profile") to the isolated reference model in
@@ -145,14 +145,15 @@ The rc/2 task kinds are read; the task consumer (`internal/resolve`, `task_roles
 from its `task_roles` (typed subjects) and asks this evaluator about every identity-context task statement through
 the counting gate: an intent opens an attempt for its actor, an exactly pinned `progress`/`withdraw` by any delegate
 of that identity continues it, a `decide` settles only for the typed beneficiary (and, identity-context, under a
-`decide` grant for the task), and `counting_unit: identity` counts eligible identities. Without this evaluator
-(every production reader) identity-context task statements count toward nothing and identity counting is
-`unknown`.
+`decide` grant for the task), and `counting_unit: identity` counts eligible identities. Where no evaluator is
+configured (a reader that holds no rc/2 line has none; library callers may pass none) identity-context task
+statements count toward nothing and identity counting is `unknown`.
 
-## 8a. Actor evaluator (candidate, not wired)
+## 8a. Actor evaluator (production)
 
 `Actors` (`actors.go`) implements the trust seam's `policy.ActorEligibility` over one admitted `Snapshot`
-(`NewActors(lines)` or `Snapshot.Actors()`). No production reader constructs it.
+(`NewActors(lines)` or `Snapshot.Actors()`). Every production reader builds it through `Evaluator` (`reader.go`) over the lines
+it holds (and, at a gate, the package's).
 
 - It answers by statement **id** from its own evidence, never from the caller's `*wire.Statement`: the default
   reader retains an rc/2 line unverified with no actor. An unheld id is `unknown`.

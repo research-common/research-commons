@@ -185,17 +185,8 @@ func (v *view) actorObj(p *resolve.Placed) *Obj {
 		return nil
 	}
 	a := newObj().set("identity", refV(p.St.Actor.Identity)).set("grant", refV(p.St.Actor.Grant))
-	if v.actors == nil {
-		return a.set("state", tokV(tok("unknown"))).set("reasons", texts("no identity evaluator"))
-	}
-	id, state, why := v.actors.Eligible(p.St)
-	if id == "" && state == policy.ActorEligible {
-		state = policy.ActorUnknown
-	}
+	_, state, why := policy.ActorState(v.actors, p.St)
 	a.set("state", tokV(tok(state)))
-	if id == "" {
-		why = append(why, "binds to no identity")
-	}
 	if len(why) > 0 {
 		a.set("reasons", texts(why...))
 	}

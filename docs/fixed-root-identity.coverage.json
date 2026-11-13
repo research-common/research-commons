@@ -47,7 +47,9 @@
         "internal/wire:TestSignedIdentityPositiveVectors",
         "internal/identity:TestSignedVectorsGrantCoveredActIsEligible",
         "internal/cli:TestIdentityReaderVectorsThroughPull",
-        "internal/cli:TestIdentityReaderTrustFloor"
+        "internal/cli:TestIdentityReaderTrustFloor",
+        "internal/hubcheck:TestActorLabels",
+        "internal/cli:TestHubCheckLabelsActor"
       ],
       "conformance": "covers",
       "remaining": "Covered at the evaluator (the published signed rc/2 act, both algorithms, eligible through Admit and the actor evaluator, with I, G, D and the root lineage in its basis) and through the commands: pulled, `show` prints the actor eligible and counted, `verify` names the identity sole author, and the pull trust floor admits I's act for an {identity: I} entry. No command signs rc/2 yet."
@@ -88,7 +90,8 @@
         "admin-kind-cannot-have-actor"
       ],
       "isolated_tests": [
-        "internal/identity:TestSliceNegatives"
+        "internal/identity:TestSliceNegatives",
+        "internal/hubcheck:TestActorLabels"
       ],
       "conformance": "partial",
       "remaining": "Self-grant/actor shapes checked; root/delegate signature and referent bindings require authority evaluation."
@@ -166,7 +169,8 @@
       "isolated_tests": [
         "internal/identity:TestSliceCutAtExactLine",
         "internal/identity:TestSignedVectorsCutsAndRetirement",
-        "internal/cli:TestIdentityReaderVectorsThroughPull"
+        "internal/cli:TestIdentityReaderVectorsThroughPull",
+        "internal/cli:TestHubCheckLabelsActor"
       ],
       "conformance": "partial",
       "remaining": "Set-based ancestry closure including merges at the adapter and model; the published cut at last_good and the null cut through pull and `show` (named act kept, descendant `cut_excluded`). Siblings and other grants are checked with synthetic keys at the adapter only."

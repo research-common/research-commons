@@ -94,7 +94,7 @@ func LoadCaseIDs(root string) ([]string, map[string]string, error) {
 }
 
 // Profile returns the scope a case belongs to: core, exec, exch, btc, id (the candidate fixed-root identity
-// profile, not active) or property.
+// profile: reader active, no writer) or property.
 func Profile(id string) string {
 	if id[0] == 'P' {
 		return "property"

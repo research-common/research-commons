@@ -157,7 +157,7 @@ append-only statement log per key, a content-addressed store, and a single Go co
 `publish`, `pull`, `verify`, `fsck`, and more: see the README). It runs the loop this essay argues for: publish bytes
 with a signed claim of authorship and licence, carry them to another store, and have that store reach the same
 answer from the statements it holds. The format may still change between alpha releases, and the fixed-root identity
-profile is a candidate that is not yet enabled. The earlier Python alpha (`0.4.0-alpha.1`, on the `main` branch) gets
+profile is a candidate whose reader is active and whose writer does not exist yet. The earlier Python alpha (`0.4.0-alpha.1`, on the `main` branch) gets
 security fixes only, and there is no importer.
 
 What we're honest about: today it runs at trusted-circle scale, with peers and remotes

@@ -40,19 +40,19 @@ invocation error: the command exits 2 before any work and nothing is evaluated (
 
 A principal is `{"key": K}`: one signing key, `ed25519:` + 64 lowercase hex, or `0x` + 40 lowercase hex.
 
-The schema also admits `{"identity": I}`, reserved for an identity profile that this reader does not activate. An
-entry naming an identity parses; it is never treated as a key. A selection that names one is unmet, labelled
-`unknown (identity profile not active)`, and no key's claims are followed in its place. A trust entry that names
-one trusts no key; an answer it would have decided reads `unknown (identity profile not active)`, which counts as
-not trusted.
+The schema also admits `{"identity": I}`: the principal is the identity, never one of its keys. Trust is asked of a
+statement: only a statement the reader's identity evaluator finds eligible for I is I's, and a bare statement by one
+of I's worker keys never is. The reader builds that evaluator from the `rc/2` statements it holds (a corpus with none
+has no evaluator). An entry naming an identity is never treated as a key. Where there is no evaluator, a selection
+that names an identity is unmet, labelled `unknown (identity profile not active)` (the text of the evaluator-absent
+answer: no `rc/2` evidence is held), and no key's claims are followed in its place; a trust entry that names one
+trusts no key, and an answer it would have decided reads the same and counts as not trusted. With an evaluator, a
+statement it finds eligible for I is trusted as I's, one it finds denied is not trusted, and one it cannot decide
+reads `unknown (actor eligibility not established)` with the evaluator's reasons.
 
-(Internally, trust is asked of a statement, so that a reader that one day evaluates identity actors can decide an
-`{identity: I}` entry per statement: only a statement found eligible for I is I's, and a bare statement by one of
-I's worker keys never is. This reader has no such evaluation, so none of this is reachable from the command line.)
-
-Activating identity evaluation will not change this policy's version: `reader-policy-v1` already fixes what an
-`{identity: I}` entry means, and what changes is the reader's evaluator. An answer that consults one cites it beside
-the policy digest, so two readers with the same policy and different evaluators can be told apart.
+Identity evaluation did not change this policy's version: `reader-policy-v1` already fixes what an `{identity: I}`
+entry means, and what changed is the reader's evaluator. An answer that consults one cites it beside the policy
+digest, so two readers with the same policy and different evaluators can be told apart.
 
 ## Selections
 
