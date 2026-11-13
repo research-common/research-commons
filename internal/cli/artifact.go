@@ -28,6 +28,22 @@ func (v *view) artifactCore(a *resolve.Artifact) *Obj {
 		o.set("step", tokV(tok(a.Step.Token())))
 	}
 	o.set("disclosures", disclosures(a))
+	if len(a.Incomplete) > 0 {
+		// a traversal stopped by a limit of this reader: operational, the limit and the scope it cut (C-core-131)
+		l := listV{}
+		for _, f := range a.Incomplete {
+			l = append(l, newObj().set("class", tokV(tok(string(f.Class)))).set("reason", textV(f.Reason)).set("detail", textV(f.Detail)))
+		}
+		o.set("incomplete", l)
+	}
+	if len(a.RestsOn) > 0 {
+		// what a derived result's grade rests on, scoped, beside the grade (claims-model note §7, C-core-73)
+		on := make([]string, len(a.RestsOn))
+		for i, x := range a.RestsOn {
+			on[i] = "rests on " + x
+		}
+		o.set("rests_on", texts(on...))
+	}
 	if a.Inputs != nil {
 		// the derived result's scoped summary over its inputs, declared beside computed (claims-model note §7)
 		o.set("inputs_summary", texts(a.Inputs.Lines()...))
@@ -59,6 +75,9 @@ func disclosures(a *resolve.Artifact) *Obj {
 		if f.State == resolve.FieldAbsent && name == "licence" {
 			state = "unknown" // a missing licence is never read as open (C-core-67)
 		}
+		if name == "licence" && a.Licence != nil && !a.Licence.Valid {
+			state = "unknown" // an expression this reader cannot parse is unknown, never open (C-core-67)
+		}
 		d.set("state", tokV(tok(state)))
 		if val, ok := f.Default(); ok {
 			if cv, err := canon.Parse([]byte(val)); err == nil {
@@ -80,10 +99,35 @@ func disclosures(a *resolve.Artifact) *Obj {
 			availabilityObj(d, a.Availability)
 		case name == "shelf_life_days" && a.ShelfLife != nil:
 			shelfLifeObj(d, a.ShelfLife)
+		case name == "licence" && a.Licence != nil:
+			licenceObj(d, a.Licence)
 		}
 		o.set(name, d)
 	}
 	return o
+}
+
+// licenceObj adds the reader's reading of a declared licence: whether the expression parses (never whether its
+// identifiers are on the SPDX list, which this tool does not ship) and where each LicenseRef's text is cited from
+// (claims-model note §7, C-core-67). An expression it cannot parse is `unknown`, the reason beside it.
+func licenceObj(d *Obj, l *resolve.Licence) {
+	if !l.Valid {
+		d.set("parse", textV(l.Why))
+		return
+	}
+	d.set("parse", textV(resolve.LicenceChecked))
+	if len(l.Refs) == 0 {
+		return
+	}
+	rs := listV{}
+	for _, r := range l.Refs {
+		e := newObj().set("id", peerV(r.ID)).set("citation", textV(r.Citation))
+		if r.Source != "" {
+			e.set("source", peerV(r.Source))
+		}
+		rs = append(rs, e)
+	}
+	d.set("refs", rs)
 }
 
 // availabilityObj adds the reader's reading of a declared availability: redistribution and obtainability as two

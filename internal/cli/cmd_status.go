@@ -5,6 +5,7 @@ import (
 
 	"github.com/research-common/research-commons/internal/gate"
 	"github.com/research-common/research-commons/internal/policy"
+	"github.com/research-common/research-commons/internal/resolve"
 	"github.com/research-common/research-commons/internal/store"
 	"github.com/research-common/research-commons/internal/wire"
 )
@@ -112,6 +113,7 @@ func limitsTable(p *Policy) listV {
 	} {
 		l = append(l, row("scan."+r.n, r.v, r.unit, "tool default", r.what))
 	}
+	l = append(l, row(resolve.ProvenanceDepthLimit, resolve.DefaultProvenanceDepth, "levels", "tool default", "derivation steps the weakest-link grade follows from one blob; past it the result is incomplete and unchecked"))
 	l = append(l, row("archive_bytes", store.MaxArchiveFileBytes(sl), "bytes", "tool default", "one pulled archive file: scan.total_bytes plus per-member overhead for scan.members"))
 	l = append(l,
 		row("fetch_bytes", store.DefaultMaxFetchBytes, "bytes", "tool default", "a fetch with no declared size"),

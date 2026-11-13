@@ -7,6 +7,7 @@ import (
 
 	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/keylog"
+	"github.com/research-common/research-commons/internal/refusal"
 	"github.com/research-common/research-commons/internal/wire"
 )
 
@@ -236,6 +237,12 @@ type Artifact struct {
 	// has no default value.
 	Availability *Availability
 	ShelfLife    *ShelfLife
+	// Incomplete is set when the reader's provenance depth bound stopped the grade's traversal: one refusal per
+	// cut (class operational, the limit and its value, the scope it cut). The grade is then `unchecked` at the
+	// cut and so, by the weakest-link rule, on every result resting on it (provenance.go; C-core-131).
+	Incomplete []*refusal.Refusal
+	// Licence is the reading of the declared licence expression (licence.go); nil when the field has no default.
+	Licence *Licence
 	// Inputs is the scoped summary of the disclosures of the inputs of the derivation the grade comes from, with
 	// the declared sampling n beside the computed one (disclosure.go); nil without a derivation group.
 	Inputs *InputSummary
@@ -332,6 +339,7 @@ func (r *Resolver) authorship(d string) *Artifact {
 	a.Holders = r.holders(d)
 	a.Held = r.held(a)
 	a.Availability, a.ShelfLife = r.availability(a), r.shelfLife(a)
+	a.Licence = r.licence(a)
 	return a
 }
 
@@ -619,6 +627,9 @@ func (r *Resolver) Verify(d string) (int, []string) {
 	a := r.authorship(d)
 	if a.State != NoClaim {
 		r.groups(a, d)
+		if a.Group != nil && r.provenanceMayCut(d) {
+			a.Incomplete = r.Artifact(d).Incomplete // the grade's traversal, which a limit of this reader may stop
+		}
 	}
 	return a.VerifyExit()
 }
@@ -643,6 +654,9 @@ func (a *Artifact) VerifyExit() (int, []string) {
 	}
 	if len(unresolvedDefault(a)) > 0 {
 		why = append(why, "authorship: unknown")
+	}
+	if len(a.Incomplete) > 0 {
+		why = append(why, "provenance: "+UncheckedToken) // a traversal stopped by a limit of this reader (C-core-131)
 	}
 	if a.Selection != nil && !a.Selection.Met() {
 		why = append(why, "reader's authorship selection: "+a.Selection.State)
@@ -791,6 +805,9 @@ func (a *Artifact) Render() string {
 	}
 	for _, p := range a.Held {
 		fmt.Fprintf(&b, "  held %s %s by %s%s (not an input to any default)\n", p.St.Kind, keylog.Short(p.St.ID), shortKey(p.St.Signer), heldDetail(p))
+	}
+	for _, f := range a.Incomplete {
+		fmt.Fprintf(&b, "  incomplete: %s: %s (%s)\n", f.Class, f.Reason, f.Detail)
 	}
 	code, why := a.VerifyExit()
 	fmt.Fprintf(&b, "  verify %d", code)

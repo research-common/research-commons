@@ -439,7 +439,7 @@ func TestAmendment(t *testing.T) {
 // TestNoInputSamplingNoAggregate). Missing licence reads unknown,
 // never open; missing sampling reads undeclared; no default licence text is written.
 func TestDisclosuresMissing(t *testing.T) {
-	conformance.Partial(t, "C-core-67", "(a) missing licence shows unknown; (b) unparsable SPDX and (c) LicenseRef citation need the licence parser")
+	// C-core-67 is covered through the commands (internal/cli.TestLicenceSurfaces); this is the resolver's half.
 	w := newWorld(t)
 	w.authored("A1", "A", "X")
 	a := w.store(nil).Artifact(dig("X"))
@@ -448,6 +448,15 @@ func TestDisclosuresMissing(t *testing.T) {
 	has(t, out, "sampling: undeclared")
 	has(t, out, "pre_registration: undeclared")
 	hasNot(t, out, "CC0")
+	// (b) unparsable: `unknown` with the reason, the declared text kept as written inside the reason's absence;
+	// (c) a LicenseRef cited by location only: the expression, with the citation state
+	w = newWorld(t)
+	w.authored("B1", "A", "B", "licence", "not spdx")
+	w.authored("C1", "A", "C", "licence", "LicenseRef-X AND CC-BY-4.0", "licence_texts", obj("LicenseRef-X", "https://example.org/x"))
+	b := w.store(nil).Artifact(dig("B")).Render()
+	has(t, b, "licence: unknown (not an SPDX license expression")
+	c := w.store(nil).Artifact(dig("C")).Render()
+	has(t, c, "licence: LicenseRef-X AND CC-BY-4.0 (syntax valid; identifiers not checked against the SPDX License List; LicenseRef-X cited (location only, unverified))")
 }
 
 // TestKeyEventsReachAuthorship: C-core-143a for authorship (the sibling rule applies to every use that grants

@@ -229,7 +229,7 @@ func TestPropertyDisclosuresNeverGrade(t *testing.T) {
 // the fixture's seed: each level is run by 1–2 keys under bytes/protocol/undeclared, with outputs that match
 // or differ.
 func TestPropertyWeakestLinkMonotone(t *testing.T) {
-	conformance.Partial(t, "C-core-72", "weakest-link and monotonicity over generated chains of derivation steps (levels re-derived or not, under bytes, protocol-with-comparator and undeclared workflows); the T2 tier needs tasks and the grade of observation leaves is not ranked")
+	// (this property is the weakest-link rule, C-core-64's; the asserted-beside-computed finality case C-core-72 is checked in props_p09_test.go)
 	rank := func(g Grade) int { return g.rank() }
 	fixture.Check(t, propBaseSeed+8000, 60, fixture.Extended, func(f fixture.Fixture) string {
 		mode := []string{"bytes", "protocol", ""}[f.Seed%3]

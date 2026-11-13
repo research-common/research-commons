@@ -214,7 +214,8 @@ func assertIncomplete(t *testing.T, r *ScanResult) {
 // total-bytes budget each stop or mark the run; the refusal is operational and names the limit, its value
 // and the scope it cut; partial results stay incomplete; nothing past the bound reads as checked.
 func TestScanLimitHitMidRun(t *testing.T) {
-	conformance.Partial(t, "C-core-131", "nested archive depth, member count and byte budget of the archive scanner: checked here; the provenance-graph traversal bound is the resolver's (checked there)")
+	// the archive half of C-core-131; the provenance-graph traversal bound is internal/cli.TestProvenanceDepthBound
+	conformance.Covers(t, "C-core-131")
 	insp := KeyScan{}
 	leaf := tarMember{"leaf.txt", []byte("fine"), false}
 

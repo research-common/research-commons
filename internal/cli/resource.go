@@ -405,6 +405,20 @@ func corroborationObj(c *resolve.Corroboration, full bool) *Obj {
 		if e.Cause != "" {
 			eo.set("reason", textV(e.Cause))
 		}
+		// the corroboration is an ordinary derived result (claims §5.3.2): the result it names, the grade of its
+		// own derivation, its comparison data, and the reader's re-application of its declared cohort rule
+		if e.Result != "" {
+			eo.set("result", refV(e.Result))
+		}
+		if e.Grade != "" {
+			eo.set("result_grade", textV(e.Grade))
+		}
+		if len(e.Comparison) > 0 {
+			eo.set("comparison_data", refs(e.Comparison...))
+		}
+		if len(e.CohortCheck) > 0 {
+			eo.set("cohort_check", texts(e.CohortCheck...))
+		}
 		el = append(el, eo)
 	}
 	o.set("evidence", el)

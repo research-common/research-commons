@@ -593,7 +593,7 @@ func TestCopyIsNotCapture(t *testing.T) {
 // TestCorroborationIsADerivation: C-core-45 (resolver half). The corroboration names its derived result; the
 // result's grade (T0 here: a second run under a bytes workflow) is shown beside it.
 func TestCorroborationIsADerivation(t *testing.T) {
-	conformance.Partial(t, "C-core-45", "the corroboration carries its result's grade from the runs held; the reader's own re-run of the corroboration workflow needs the execution layer")
+	// C-core-45 is covered by internal/cli.TestCorroborationIsDerivationSurfaces and internal/clirun.TestCorroborationRerun; this is the resolver half
 	w := newWorld(t)
 	o1 := w.observed("O1", "O1", "X", "phenomenon", obj("instrument", "urn:station:DEN-1", "location", "geo:39.74,-104.99", "at", "2026-07-01T12:00:00Z"))
 	w.workflow("WA", "W", "bytes", "")
@@ -964,7 +964,7 @@ func subset(w *world, drop ...string) []int {
 func TestScopedStatus(t *testing.T) {
 	conformance.Covers(t, "C-core-57", "C-core-58")
 	conformance.Covers(t, "C-core-63")
-	conformance.Partial(t, "C-core-01", "the relayer delivery itself needs pull")
+	// C-core-01 is covered through pull and the commands by internal/cli.TestRelayerOmissionIsScoped; this is the resolver half
 	w, x := hotReading(t)
 	hub := subset(w, "C3")
 	hb, _ := w.store(hub, WithScope(ScopeHub)).Observation(x)
@@ -1000,7 +1000,7 @@ func TestScopedStatus(t *testing.T) {
 // TestNoReferenceByDefault: C-core-61 (resolver half). With no reference collection chosen, re-applying a
 // cohort rule is inconclusive with cause `no reference collection chosen`; the resolver ships none.
 func TestNoReferenceByDefault(t *testing.T) {
-	conformance.Partial(t, "C-core-61", "the resolver's re-application with no collection chosen; running a corroboration workflow and scanning the install tree need the CLI")
+	// C-core-61 is covered by internal/cli.TestNoReferenceCollectionShipped and TestInstallTreeShipsNoReferenceCollection; this is the resolver half
 	w, x := hotReading(t)
 	o, _ := w.store(nil).Observation(x)
 	has(t, o.Render(), "reader re-application of the cohort rule: inconclusive (no reference collection chosen)")

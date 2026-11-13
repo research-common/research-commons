@@ -121,7 +121,7 @@ func TestPropertyWithheldStatementsScopeTheStatus(t *testing.T) {
 // state is the older answer, scoped; the withheld statement is absent from every surface (not reported as
 // nonexistent, not counted as missing); delivering it later changes the answer in the expected direction.
 func TestWithheldStatementsAreAbsentNotNonexistent(t *testing.T) {
-	conformance.Partial(t, "C-core-01", "resolver half: a retraction, a contradiction, a refutation and a newer edition withheld in turn; the relayer's serving of a history minus statements needs pull")
+	// C-core-01 is covered through pull and the commands by internal/cli.TestRelayerOmissionIsScoped; this is the resolver half
 	w := newWorld(t)
 	// an observation corroborated twice, contradicted by a third key, retracted by its observer, refuted by another
 	x := w.observed("X", "OX", "X", "phenomenon", obj("instrument", "urn:DEN", "location", "geo:39.7,-105.0", "at", "2026-07-01T12:00:00Z"))
