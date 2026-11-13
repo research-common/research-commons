@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import os
+import shutil
 import stat
+import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+REPO = ROOT.parent
 SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
@@ -67,3 +70,15 @@ class FakeCase(unittest.TestCase):
 
     def argv(self) -> list:
         return self.log.read_text().split("\n") if self.log.read_text() else []
+
+
+def build_real(dest: Path) -> str:
+    """A real ``commons``: ``$COMMONS_TEST_BINARY``, else built from this tree (skips when it cannot be)."""
+    pre = os.environ.get("COMMONS_TEST_BINARY")
+    if pre:
+        return pre
+    if not shutil.which("go") or not (REPO / "cmd" / "commons").is_dir():
+        raise unittest.SkipTest("no Go toolchain or source tree to build commons from")
+    out = dest / "commons"
+    subprocess.run(["go", "build", "-o", str(out), "./cmd/commons"], cwd=REPO, check=True)
+    return str(out)

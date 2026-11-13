@@ -5,36 +5,22 @@ Set ``COMMONS_TEST_BINARY`` to a built binary to skip the build; otherwise the t
 """
 
 import os
-import shutil
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
-from tests.helpers import ROOT  # noqa: F401  (puts src/ on sys.path)
+from tests.helpers import REPO, ROOT, build_real  # noqa: F401  (also puts src/ on sys.path)
 
 import research_commons as rc
 from research_commons import errors
-
-REPO = ROOT.parent
-
-
-def _build(dest: Path) -> str:
-    pre = os.environ.get("COMMONS_TEST_BINARY")
-    if pre:
-        return pre
-    if not shutil.which("go") or not (REPO / "cmd" / "commons").is_dir():
-        raise unittest.SkipTest("no Go toolchain or source tree to build commons from")
-    out = dest / "commons"
-    subprocess.run(["go", "build", "-o", str(out), "./cmd/commons"], cwd=REPO, check=True)
-    return str(out)
 
 
 class RealBinaryTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._tmp = tempfile.TemporaryDirectory()
-        cls.binary = _build(Path(cls._tmp.name))
+        cls.binary = build_real(Path(cls._tmp.name))
         cls._saved = os.environ.get("COMMONS_BIN")
         os.environ["COMMONS_BIN"] = cls.binary
 
