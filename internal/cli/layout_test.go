@@ -36,7 +36,13 @@ func cliResponse(runs ...string) []byte {
 // at asserted state; the store-root policy pins P.
 func layoutStore(t *testing.T, cite bool, resp []byte, asserted string) (w *world, id string) {
 	t.Helper()
-	ld := dig(string(cliLayout))
+	return layoutStoreWith(t, cliLayout, cite, resp, asserted)
+}
+
+// layoutStoreWith is layoutStore with layout lay.
+func layoutStoreWith(t *testing.T, lay []byte, cite bool, resp []byte, asserted string) (w *world, id string) {
+	t.Helper()
+	ld := dig(string(lay))
 	kv := []any{"profile", resolve.SourceProfileTag, "source", "https://api.example/settlement", "dialect", resolve.DialectOrderedLabel,
 		"labels", []string{"SF", "R1", "R2", "RF", "DF"}}
 	if cite {
@@ -46,7 +52,7 @@ func layoutStore(t *testing.T, cite bool, resp []byte, asserted string) (w *worl
 	pd := dig(string(prof))
 	w = newWorld(t)
 	w.blob("p", prof)
-	w.blob("l", cliLayout)
+	w.blob("l", lay)
 	rd := dig("a response this store does not hold")
 	if resp != nil {
 		rd = w.blob("r", resp)
@@ -134,6 +140,26 @@ func TestObservationLayoutThroughCommands(t *testing.T) {
 		a, b := referentLines(with.run("verify", id1).stdout), referentLines(without.run("verify", id2).stdout)
 		if a != b {
 			t.Fatalf("asserted %s: with an unchecked layout read %q, without a layout %q", asserted, a, b)
+		}
+	}
+}
+
+// TestLayoutRootArrayThroughCommands: C-core-104g variant. A layout whose `records` is "" reads a bare JSON array at
+// the root (a streaming endpoint's response) as the record array; mixed records read at the least, spread disclosed.
+func TestLayoutRootArrayThroughCommands(t *testing.T) {
+	conformance.Covers(t, "C-core-104g")
+	root := canon.Encode(obj("layout", resolve.ResponseLayoutTag, "records", "", "state", "/settlementRunType"))
+	resp := []byte(`[{"settlementPeriod":1,"settlementRunType":"RF","quantity":0.5},{"settlementPeriod":2,"settlementRunType":"R2","quantity":0.5}]`)
+	w, id := layoutStoreWith(t, root, true, resp, "RF")
+	for _, cmd := range []string{"verify", "show", "explain"} {
+		r := w.run(cmd, id)
+		if cmd == "verify" && r.code != ExitOK {
+			t.Fatalf("verify: exit %d:\n%s", r.code, r.stdout)
+		}
+		for _, s := range []string{"  status: provisional\n  detail: R2; final at RF\n", "state R2 read from the held response (records at R2..RF, read as R2)"} {
+			if !strings.Contains(r.stdout, s) {
+				t.Fatalf("%s: want %q:\n%s", cmd, s, r.stdout)
+			}
 		}
 	}
 }
