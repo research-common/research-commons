@@ -48,6 +48,19 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   an act under it is `eligible` by that evidence (the root key's signature is the authority, not what the hub already
   held); the identity design note says why.
 
+- **Licences are read as SPDX license expressions.** A declared licence is parsed under the SPDX expression grammar
+  (identifiers, `AND` / `OR` / `WITH`, parentheses, `+`, `LicenseRef-` / `DocumentRef-…:LicenseRef-`), syntax only: no
+  licence list ships and identifiers are not checked. A value that does not parse reads `unknown` with the reason, and
+  every `LicenseRef` is listed with whether its text is cited. `show`, `verify`, `explain` and `list` carry a `licence`
+  member.
+- **A provenance depth bound.** The weakest-link grade follows a result's derivation inputs at most 128 steps
+  (`status --limits` row `provenance_depth`). A longer chain is not followed past the bound: the result is
+  `incomplete`, its grade `unchecked`, and `verify` exits 3 naming the limit.
+- `explain` of a derived result lists the input observations and statements its scoped summary read, and the summary
+  (`rests_on`) is a JSON member on every surface; a provisional input shows its horizon (`1 provisional until 6`). A
+  corroboration's evidence rows on `show` / `explain` carry its result, the grade of its own derivation, comparison data
+  and the cohort check.
+
 ### Changed
 - **The `invalid` token is split.** `invalid` keeps meaning an edition whose body cannot be an edition. A statement
   that is signed correctly but breaks a rule of the identity profile (an `rc/2` line) is now `invalid statement`, in
