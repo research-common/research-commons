@@ -916,9 +916,9 @@ func publishTaskCmd(c *Ctx) (*Obj, int, error) {
 // be settled (by counting a quorum, by review, or unchecked when the contract cannot be read).
 func (v *view) readinessWith(c *Ctx, sts []signed, task, edition string) (*Obj, string, string) {
 	lines, _ := c.Store.Statements()
-	logs := keylog.NewStore()
+	logs := keylog.NewStoredStore()
 	add := func(l []byte) {
-		if st, err := wire.Read(l); err == nil {
+		if st, err := wire.ReadStored(l); err == nil {
 			logs.Log(st.Signer).Add(l)
 		}
 	}
@@ -928,7 +928,11 @@ func (v *view) readinessWith(c *Ctx, sts []signed, task, edition string) (*Obj, 
 	for _, s := range sts {
 		add(s.line)
 	}
-	ropts := []resolve.Option{resolve.WithContractReader(resolve.ContractProfiles{})}
+	var extra [][]byte
+	for _, s := range sts {
+		extra = append(extra, s.line)
+	}
+	ropts := []resolve.Option{resolve.WithContractReader(resolve.ContractProfiles{}), resolve.WithActorEligibility(heldActors(lines, extra...))}
 	if v.timeV.View != nil {
 		// the view's time verifier, over the persisted chain: a deadline reads its tip and verified bounds. With no
 		// chain the resolver keeps its default, so the answer is the one it was before the header database existed.

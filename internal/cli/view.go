@@ -2,9 +2,11 @@ package cli
 
 import (
 	"io"
+	"maps"
 	"slices"
 
 	"github.com/research-common/research-commons/internal/btctime"
+	"github.com/research-common/research-commons/internal/identity"
 	"github.com/research-common/research-commons/internal/keylog"
 	"github.com/research-common/research-commons/internal/policy"
 	"github.com/research-common/research-commons/internal/resolve"
@@ -26,6 +28,18 @@ type view struct {
 	evidence map[string]btctime.Evidence
 	// logViews caches each key's log view for the invocation (forks.go): the held set does not change under it.
 	logViews map[string]keylog.View
+	// actors is the identity evaluator over the held statements (heldActors); nil when none is an rc/2 line.
+	actors policy.ActorEligibility
+}
+
+// heldActors is the actor evaluator over a set of held lines (identity.Evaluator): nil when no line is an rc/2
+// line, so a store with none answers exactly as a reader without the identity profile.
+func heldActors(lines map[string][]byte, extra ...[]byte) policy.ActorEligibility {
+	all := make([][]byte, 0, len(lines)+len(extra))
+	for _, id := range slices.Sorted(maps.Keys(lines)) {
+		all = append(all, lines[id])
+	}
+	return identity.Evaluator(append(all, extra...))
 }
 
 // storeBlobs lets the time verifier read proof blobs from the store: re-hashed on open, never fetched.
@@ -75,13 +89,16 @@ func buildView(s *store.Store, rp *policy.Policy, tv *btctime.Verifier, opts ...
 		return nil, err
 	}
 	logs := deliverLogs(lines)
+	// The identity evaluator over the same held set, built once per invocation: every consumer the resolver asks
+	// (counting, trust, identity selections) and every surface that prints an actor read this one.
+	actors := heldActors(lines)
 	// The read time is the writer/reader clock Now (tests replace it), passed in: the resolver reads no clock of
 	// its own, so an answer that depends on time (a shelf-life age) is a function of the held set and this
 	// time context (claims-model note I14; storage note §5.1). The blob index re-hashes on every question.
 	base := []resolve.Option{resolve.WithTimeVerifier(btctime.TimeVerifier{V: tv}), resolve.WithPolicy(rp),
-		resolve.WithBlobIndex(verifiedBlobs{s}), resolve.WithReadTime(Now())}
+		resolve.WithBlobIndex(verifiedBlobs{s}), resolve.WithReadTime(Now()), resolve.WithActorEligibility(actors)}
 	r := resolve.New(logs, append(base, opts...)...)
-	return &view{r: r, logs: logs, st: s, timeV: tv, evidence: map[string]btctime.Evidence{}}, nil
+	return &view{r: r, logs: logs, st: s, timeV: tv, evidence: map[string]btctime.Evidence{}, actors: actors}, nil
 }
 
 // deliverLogs delivers every installed statement into its signer's log: the per-key logs every read surface
@@ -92,9 +109,9 @@ func deliverLogs(lines map[string][]byte) *keylog.Store {
 		ids = append(ids, id)
 	}
 	slices.Sort(ids) // order changes no answer (every answer is a function of the held set); sorted for repeatability
-	logs := keylog.NewStore()
+	logs := keylog.NewStoredStore()
 	for _, id := range ids {
-		st, err := wire.Read(lines[id])
+		st, err := wire.ReadStored(lines[id])
 		if err != nil {
 			continue // Statements already verified it; a line that no longer reads is fsck's to report
 		}
@@ -133,5 +150,50 @@ func (v *view) lineState(id string) string {
 // state and the other tokens are printed bare; the scope is printed once per view, not inside each token, so
 // the tokens stay closed and one scope line covers them all.
 func (v *view) scoped(o *Obj) *Obj {
+	if e := v.evaluatorObj(); e != nil {
+		o.set("identity_evaluator", e)
+	}
 	return o.set("status_scope", tokV(tok(v.r.Scope())))
+}
+
+// evaluatorObj is the identity evaluator context every identity answer of the view rests on (profile §6, §7): the
+// evaluator version, the evidence digest over the normalized facts and the receipt over the exact admitted lines.
+// Printed once per view, beside the scope; nil when the reader holds no rc/2 line (no evaluator).
+func (v *view) evaluatorObj() *Obj {
+	switch a := v.actors.(type) {
+	case nil:
+		return nil
+	case *identity.Actors:
+		c := a.Context()
+		return newObj().set("version", textV(c.Version)).set("evidence_digest", refV(c.EvidenceDigest)).set("receipt", refV(c.Receipt))
+	case policy.ActorEvaluator:
+		return newObj().set("version", textV(a.Evaluator()))
+	}
+	return nil
+}
+
+// actorObj is the signed actor of an identity statement and the evaluator's answer about it: the identity and grant
+// it names, the state (`eligible`, `denied`, `unknown`) and the evaluator's reasons. An actor the evaluator binds
+// to no identity is never `eligible` (it acts for no one; never its key's either). Nil for a statement with no
+// actor (every rc/1 line).
+func (v *view) actorObj(p *resolve.Placed) *Obj {
+	if p == nil || !p.IdentityContext() {
+		return nil
+	}
+	a := newObj().set("identity", refV(p.St.Actor.Identity)).set("grant", refV(p.St.Actor.Grant))
+	if v.actors == nil {
+		return a.set("state", tokV(tok("unknown"))).set("reasons", texts("no identity evaluator"))
+	}
+	id, state, why := v.actors.Eligible(p.St)
+	if id == "" && state == policy.ActorEligible {
+		state = policy.ActorUnknown
+	}
+	a.set("state", tokV(tok(state)))
+	if id == "" {
+		why = append(why, "binds to no identity")
+	}
+	if len(why) > 0 {
+		a.set("reasons", texts(why...))
+	}
+	return a
 }

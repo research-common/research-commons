@@ -85,3 +85,32 @@ func whyNot(p *Placed) string {
 	}
 	return notCountedWhy(p)
 }
+
+// Counting is the counting gate's answer for one placed statement, as a surface prints it (Counted).
+type Counting struct {
+	// Counts: whether the statement counts toward the consumers that count it.
+	Counts bool
+	// Identity is the identity the actor evaluator binds the statement to; "" for a bare-key statement (or one no
+	// evaluator binds).
+	Identity string
+	// Why is why it does not count, or, for a counted identity statement whose key the bare-key gate would leave
+	// out, that key's status shown beside it; "" otherwise.
+	Why string
+	// State and Reasons are the evaluator's answer when it was asked about an identity statement
+	// (policy.ActorEligible, ActorDenied or ActorUnknown, with its reasons); "" and nil otherwise.
+	State   string
+	Reasons []string
+}
+
+// Counted is the counting gate (the one every counting consumer asks) for p: what a surface prints as `counted`.
+// With no actor evaluator (no identity evidence held) it is p.Counts() exactly, with the bare-key reason.
+func (r *Resolver) Counted(p *Placed) Counting {
+	if p == nil {
+		return Counting{}
+	}
+	g := r.gate(p)
+	return Counting{Counts: g.Counts, Identity: g.Identity, Why: g.Why, State: g.State, Reasons: g.Reasons}
+}
+
+// Actors is the actor evaluator this resolver asks (WithActorEligibility); nil when none is configured.
+func (r *Resolver) Actors() ActorEligibility { return r.actors }

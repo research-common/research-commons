@@ -11,7 +11,7 @@
 // reviews). Refusing one object never changes another object's verdict, and never touches what the receiver
 // already holds (C-core-121).
 //
-// Statements are read only through wire.Read and placed only through keylog: the gate adds no rule of its
+// Statements are read only through wire.ReadStored and placed only through keylog: the gate adds no rule of its
 // own about what a statement is. The rules it adds are about paths (the data surface), bytes (canonical
 // form, hash = name), the receiver's policy (limits, hub rules, hooks, the freeze policy, intended_for) and
 // overrides. Nothing here reads the network, runs code, or writes anywhere; Commit is the only write, and it
@@ -28,6 +28,7 @@ import (
 	"strings"
 
 	"github.com/research-common/research-commons/internal/canon"
+	"github.com/research-common/research-commons/internal/identity"
 	"github.com/research-common/research-commons/internal/keylog"
 	"github.com/research-common/research-commons/internal/refusal"
 	"github.com/research-common/research-commons/internal/resolve"
@@ -140,12 +141,16 @@ func (m MemHeld) HasBlob(d string) bool         { return m.Blobs[d] }
 
 // Label tokens (closed vocabulary, claims-model note §13). Detail carries the specifics.
 const (
-	LabelAlreadyHeld   = "already held"
-	LabelDetached      = "detached"
-	LabelFork          = "FORK"
-	LabelIncoherent    = "incoherent"
-	LabelUnsupported   = "unsupported"
-	LabelUnknownKind   = "unknown kind"
+	LabelAlreadyHeld = "already held"
+	LabelDetached    = "detached"
+	LabelFork        = "FORK"
+	LabelIncoherent  = "incoherent"
+	LabelUnsupported = "unsupported"
+	LabelUnknownKind = "unknown kind"
+	// LabelInvalid: a verified rc/2 line that breaks a rule of the identity profile. It is kept, not refused: an
+	// authenticated invalid control is evidence (an invalid cut still denies its grant, profile §3, §4), and it
+	// counts toward nothing.
+	LabelInvalid       = "invalid"
 	LabelUnpinned      = "unpinned"
 	LabelUnreferenced  = "unreferenced"
 	LabelUnavailable   = "unavailable"
@@ -399,9 +404,9 @@ func Admit(gate string, pkg Package, held Held, pol *Policy, opt Options) (*Repo
 
 	// 3. Placement: every held line and every candidate in one set of per-key logs. keylog decides ownership
 	// and every log-relative rule over the whole set, so delivery order changes nothing (I14).
-	logs := keylog.NewStore()
+	logs := keylog.NewStoredStore()
 	for _, id := range sortedIDs(heldLines) {
-		if st, err := wire.Read(heldLines[id]); err == nil {
+		if st, err := wire.ReadStored(heldLines[id]); err == nil {
 			_, _ = logs.Log(st.Signer).Add(heldLines[id])
 		}
 	}
@@ -595,7 +600,7 @@ func heldPath(r *Result, held Held, heldLines map[string][]byte) bool {
 		if !ok {
 			return false
 		}
-		st, err := wire.Read(line)
+		st, err := wire.ReadStored(line)
 		return err == nil && StatementPath(st.Signer, st.ID) == r.Path
 	}
 	return false
@@ -639,7 +644,7 @@ func checkBlob(r *Result, pol *Policy, scope string, audit bool) {
 	r.Verdict = Admitted
 }
 
-// checkStatement runs the object-level checks: the size limit, wire.Read (the one statement validator), the
+// checkStatement runs the object-level checks: the size limit, wire.ReadStored (the one statement validator), the
 // canonical stored form and id = file name. It reports whether the statement goes on to placement.
 func checkStatement(r *Result, pol *Policy, scope string) bool {
 	r.ID = lastSeg(r.Path)
@@ -647,7 +652,7 @@ func checkStatement(r *Result, pol *Policy, scope string) bool {
 		r.refuse(sizeLimit(LimitStatementBytes, lim, len(r.data), scope), scope)
 		return false
 	}
-	st, err := wire.Read(r.data)
+	st, err := wire.ReadStored(r.data)
 	if err != nil {
 		rf, ok := err.(*refusal.Refusal)
 		if !ok {
@@ -678,8 +683,8 @@ func checkStatement(r *Result, pol *Policy, scope string) bool {
 	return true
 }
 
-// isDraft reports whether bytes that wire.Read refused are a JSON object carrying no signature: an unsigned
-// draft. This only names the refusal wire.Read already made; it validates nothing.
+// isDraft reports whether bytes that wire.ReadStored refused are a JSON object carrying no signature: an unsigned
+// draft. This only names the refusal wire.ReadStored already made; it validates nothing.
 func isDraft(b []byte) bool {
 	v, err := canon.Parse(b)
 	if err != nil {
@@ -742,6 +747,8 @@ func placeLabels(r *Result, v keylog.View) {
 		r.label(LabelUnsupported, st.Why)
 	case wire.UnknownKind:
 		r.label(LabelUnknownKind, st.Why)
+	case wire.Invalid:
+		r.label(LabelInvalid, st.Why)
 	}
 	// Schema-level pins only: a method edition's system_keys declaration (a missing declared key is unpinned too)
 	// is read by the resolver from the authorized edition the observation pins. The gate resolves no editions,
@@ -780,9 +787,9 @@ func refsOf(st *wire.Statement) []string {
 	return wire.ScanDigests(st.Line())
 }
 
-// lineRefs is refsOf for a held line that may not read at all: a line wire.Read refuses is scanned.
+// lineRefs is refsOf for a held line that may not read at all: a line wire.ReadStored refuses is scanned.
 func lineRefs(line []byte) []string {
-	if st, err := wire.Read(line); err == nil {
+	if st, err := wire.ReadStored(line); err == nil {
 		return refsOf(st)
 	}
 	return wire.ScanDigests(line)
@@ -804,13 +811,17 @@ func sortedIDs(m map[string][]byte) []string {
 }
 
 func resolver(lines map[string][]byte, pol *Policy) *resolve.Resolver {
-	s := keylog.NewStore()
+	s := keylog.NewStoredStore()
+	all := make([][]byte, 0, len(lines))
 	for _, id := range sortedIDs(lines) {
-		if st, err := wire.Read(lines[id]); err == nil {
+		all = append(all, lines[id])
+		if st, err := wire.ReadStored(lines[id]); err == nil {
 			_, _ = s.Log(st.Signer).Add(lines[id])
 		}
 	}
-	return resolve.New(s, pol.Resolver...)
+	// the identity evaluator over the evaluated set (nil when it holds no rc/2 line); a receiver's own resolver
+	// options come after it
+	return resolve.New(s, append([]resolve.Option{resolve.WithActorEligibility(identity.Evaluator(all))}, pol.Resolver...)...)
 }
 
 // resolverChecks applies the receiver's resolver-level policy to one admitted statement.

@@ -446,23 +446,27 @@ func revokeCut(c *Ctx, signer string, sts []signed) listV {
 		return nil
 	}
 	build := func(extra []signed) *resolve.Resolver {
-		logs := keylog.NewStore()
+		logs := keylog.NewStoredStore()
 		for _, l := range lines {
-			if st, err := wire.Read(l); err == nil && st.Signer == signer {
+			if st, err := wire.ReadStored(l); err == nil && st.Signer == signer {
 				logs.Log(signer).Add(l)
 			}
 		}
+		var more [][]byte
 		for _, s := range extra {
 			logs.Log(signer).Add(s.line)
+			more = append(more, s.line)
 		}
-		return resolve.New(logs)
+		// the counting gate as every read surface asks it: an identity statement of this key is the identity's,
+		// counted by its actor's eligibility, so a revocation of the key does not take it away (profile §4.1)
+		return resolve.New(logs, resolve.WithActorEligibility(heldActors(lines, more...)))
 	}
 	before, after := build(nil), build(sts)
 	var ids []string
 	for id := range lines {
 		b, ok1 := before.Statement(id)
 		a, ok2 := after.Statement(id)
-		if ok1 && ok2 && b.Counts() && !a.Counts() {
+		if ok1 && ok2 && before.Counted(b).Counts && !after.Counted(a).Counts {
 			ids = append(ids, id)
 		}
 	}

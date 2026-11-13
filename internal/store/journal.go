@@ -118,7 +118,7 @@ type Outcome struct {
 
 // Commit runs the protocol of §3.1 for one operation: blobs (already installed by the caller through
 // InstallBlob, and listed here so the record names them), then the record (the commit point), then the
-// statements, then done, then projections. Every line is read through wire.Read first: nothing that a reader
+// statements, then done, then projections. Every line is read through wire.ReadStored first (rc/1 and rc/2 verified): nothing that a reader
 // would refuse is committed. A blob a statement depends on must already be held.
 //
 // An error with Outcome.Committed false means nothing was committed. An error with Committed true means the
@@ -128,7 +128,7 @@ func (s *Store) Commit(kind string, lines [][]byte, blobs []Digest) (Outcome, er
 	var out Outcome
 	canonical := make([][]byte, len(lines))
 	for i, l := range lines {
-		st, err := wire.Read(l)
+		st, err := wire.ReadStored(l)
 		if err != nil {
 			return out, err
 		}
@@ -232,13 +232,13 @@ func (s *Store) finish(r Record, out *Outcome) error {
 }
 
 // installStatement places one verified line under statements/<signer>/<id>, create-exclusive (§3.1 step 3).
-// A file already under the id that reads (wire.Read, signature verified) to that same id is the same
+// A file already under the id that reads (wire.ReadStored, signature verified) to that same id is the same
 // statement (wire §2: the id is the statement; any valid signature over one signed string is one statement),
 // so it stays and this is success. A file that does not read to the id is a corrupt stored copy: it is moved
 // to quarantine and the verified line installed in its place, as §2 does for blobs. Either way a corrupt file
 // never makes the store unopenable (I15).
 func (s *Store) installStatement(line []byte) (string, BlobResult, error) {
-	st, err := wire.Read(line)
+	st, err := wire.ReadStored(line)
 	if err != nil {
 		return "", "", err
 	}
@@ -268,7 +268,7 @@ func (s *Store) installStatement(line []byte) (string, BlobResult, error) {
 		if bytes.Equal(have, st.Line()) {
 			return st.ID, Reused, nil
 		}
-		if hs, herr := wire.Read(have); herr == nil && hs.ID == st.ID && (hs.Verified || !st.Verified) {
+		if hs, herr := wire.ReadStored(have); herr == nil && hs.ID == st.ID && (hs.Verified || !st.Verified) {
 			return st.ID, Reused, nil
 		}
 		if err := s.quarantine(dst, "statement"); err != nil {
@@ -349,7 +349,7 @@ type RecoveryEvent struct {
 }
 
 // recover replays the journal (§3.4): every pending record is finished, every done record is re-projected.
-// A record that fails to decode, or any of whose statements fails wire.Read, is quarantined and none of its
+// A record that fails to decode, or any of whose statements fails wire.ReadStored, is quarantined and none of its
 // statements is installed (C-core-126).
 func (s *Store) recover() error {
 	for _, sub := range []string{"pending", "done"} {
@@ -370,7 +370,7 @@ func (s *Store) recover() error {
 			r, derr := decodeRecord(b, e.Name())
 			if derr == nil {
 				for _, l := range r.Lines {
-					if _, err := wire.Read(l); err != nil {
+					if _, err := wire.ReadStored(l); err != nil {
 						derr = err
 						break
 					}
@@ -450,7 +450,7 @@ func (s *Store) Repair() ([]RecoveryEvent, error) {
 	return out, nil
 }
 
-// Statements returns every installed statement line, verified through wire.Read, keyed by id. Readers
+// Statements returns every installed statement line, verified through wire.ReadStored, keyed by id. Readers
 // resolve from installed statements only: a statement in a pending record is not here (§3.3).
 func (s *Store) Statements() (map[string][]byte, error) {
 	out := map[string][]byte{}
@@ -463,7 +463,7 @@ func (s *Store) Statements() (map[string][]byte, error) {
 		if err != nil {
 			return err
 		}
-		st, rerr := wire.Read(b)
+		st, rerr := wire.ReadStored(b)
 		if rerr != nil || st.ID != d.Name() {
 			return nil // fsck reports it; never shown as anyone's word
 		}

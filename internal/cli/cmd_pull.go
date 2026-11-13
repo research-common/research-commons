@@ -141,10 +141,10 @@ func readHead(p string, n int) ([]byte, error) {
 type trustFloor struct {
 	p     *policy.Policy
 	floor policy.Floor
-	// actors is the identity evaluator's hook; nil in every production reader today, so an `{identity: I}`
-	// admission entry reads unknown (identity profile not active), as before the hook existed. The gate asks
-	// about a statement it has just read, before any resolver holds it, so the question is statement-level
-	// (policy.AdmitTarget over policy.ResolveTarget), not a resolve.Placed one.
+	// actors is the identity evaluator over this store's statements and the package's (packageActors); nil when
+	// neither holds an rc/2 line, so an `{identity: I}` admission entry reads unknown, as before the reader read
+	// rc/2. The gate asks about a statement it has just read, before any resolver holds it, so the question is
+	// statement-level (policy.AdmitTarget over policy.ResolveTarget), not a resolve.Placed one.
 	actors policy.ActorEligibility
 	// held finds a statement the package or this store holds, so a statement that reaches its content through a
 	// reference (a corroborates, refutes or retracts `of`; a describes of a statement) is judged by that content,
@@ -243,7 +243,8 @@ func pullCmd(c *Ctx) (*Obj, int, error) {
 		if v, _ := c.Flag("below-floor"); v == "refuse" {
 			floor = policy.FloorRefuse
 		}
-		pol.Hooks = append(append([]gate.StatementHook{}, pol.Hooks...), trustFloor{p: c.Policy.Reader, floor: floor, held: heldStatements(pkg, c.Store)})
+		pol.Hooks = append(append([]gate.StatementHook{}, pol.Hooks...), trustFloor{p: c.Policy.Reader, floor: floor,
+			held: heldStatements(pkg, c.Store), actors: packageActors(pkg, c.Store)})
 		pol.Name += " + reader policy " + c.Policy.ReaderSource
 		pol.Digest = digestPair(pol.Digest, c.Policy.Reader.Digest)
 	}
@@ -401,13 +402,27 @@ func heldStatements(pkg gate.Package, st *store.Store) func(string) (*wire.State
 		}
 		for _, m := range []map[string][]byte{pkgLines, storeLines} {
 			if l, ok := m[id]; ok {
-				if s, err := wire.Read(l); err == nil && s.ID == id {
+				if s, err := wire.ReadStored(l); err == nil && s.ID == id {
 					return s, true
 				}
 			}
 		}
 		return nil, false
 	}
+}
+
+// packageActors is the identity evaluator the trust floor asks: over this store's statements and the package's
+// statement files, so a grant the package brings judges an act it brings (each line still has to read and be
+// authenticated: Admit verifies). Nil when neither holds an rc/2 line.
+func packageActors(pkg gate.Package, st *store.Store) policy.ActorEligibility {
+	lines, _ := st.Statements()
+	var extra [][]byte
+	for _, o := range pkg.Objects {
+		if o.Mode == gate.Regular && strings.HasPrefix(o.Path, "statements/") {
+			extra = append(extra, o.Data)
+		}
+	}
+	return heldActors(lines, extra...)
 }
 
 // storeProfiles loads the source profiles the store-root policy pins (nil when it pins none).
