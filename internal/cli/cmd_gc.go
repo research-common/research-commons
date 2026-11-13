@@ -3,9 +3,11 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"io"
 	"slices"
 	"time"
 
+	"github.com/research-common/research-commons/internal/refusal"
 	"github.com/research-common/research-commons/internal/resolve"
 	"github.com/research-common/research-commons/internal/store"
 	"github.com/research-common/research-commons/internal/wire"
@@ -144,7 +146,9 @@ func gcConfig(p *Policy, st *store.Store) store.GCConfig {
 	return cfg
 }
 
-// profileLayoutPins is the response layout the profile d (as this store holds it) cites, if any.
+// profileLayoutPins is the response layout the profile d (as this store holds it) cites, if any. A cited document
+// whose held copy is corrupt is kept too: which document is the layout cannot be read from a corrupt copy, and the
+// copy is to be refetched, not collected (the read commands name it the same way, resolve.ErrHeldCorrupt).
 func profileLayoutPins(st *store.Store, d string) []store.Digest {
 	if st == nil {
 		return nil
@@ -157,13 +161,30 @@ func profileLayoutPins(st *store.Store, d string) []store.Digest {
 	if err != nil {
 		return nil
 	}
+	var corrupt []store.Digest
 	p.AttachLayouts(func(x string) ([]byte, error) {
-		b, why := storeBlobUpTo(st, x, resolve.MaxLayoutBytes)
-		if why != "" {
+		if !st.HasBlob(store.Digest(x)) {
 			return nil, nil
+		}
+		f, err := st.OpenBlob(store.Digest(x)) // re-hashes: a corrupt copy is refused, never read
+		var r *refusal.Refusal
+		switch {
+		case errors.As(err, &r) && r.Reason == store.CorruptBlob:
+			corrupt = append(corrupt, store.Digest(x))
+			return nil, resolve.ErrHeldCorrupt
+		case err != nil:
+			return nil, nil
+		}
+		defer f.Close()
+		b, err := io.ReadAll(io.LimitReader(f, resolve.MaxLayoutBytes+1))
+		if err != nil || int64(len(b)) > resolve.MaxLayoutBytes {
+			return nil, nil // not a layout this reader reads: an ordinary document
 		}
 		return b, nil
 	})
+	if len(corrupt) > 0 {
+		return corrupt
+	}
 	if p.Layout == nil {
 		return nil
 	}
