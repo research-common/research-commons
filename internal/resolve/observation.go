@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/keylog"
@@ -194,6 +195,11 @@ type obsConfig struct {
 	cohorts   CohortRules
 	counter   Counter
 	scope     string
+	// content reads captured content for a batch referent's request log (requestlog.go); logs memoizes the check
+	// per statement for this snapshot.
+	content ContentReader
+	logMu   sync.Mutex
+	logs    map[string]*RequestLog
 }
 
 func defaultObsConfig() *obsConfig {
@@ -297,7 +303,11 @@ type Observation struct {
 	// Referent is each pinned field as the observer signed it (canonical JSON), in display order.
 	Referent [][2]string
 	Unpinned []string
-	Finality *Finality
+	// RequestLog is, for a batch source referent, the reader's check of the request log the referent pins inside
+	// the content (requestlog.go); nil for any other referent. A log digest matching nothing in the content adds
+	// `referent.requests.digest` to Unpinned.
+	RequestLog *RequestLog
+	Finality   *Finality
 	// ReferentStatus is the reader's computation; ReferentHistory explains it.
 	ReferentStatus  string
 	ReferentHistory []string
@@ -343,6 +353,13 @@ func (o *Observation) VerifyExit() (int, []string) {
 	}
 	if o.finalityUnevaluable {
 		why = append(why, "referent: "+RefRuleUnchecked+" (rule "+strconv.Quote(o.Finality.Rule)+")")
+	}
+	if l := o.RequestLog; l != nil && l.Outcome == RequestLogFail {
+		// a pin read against the content and found not to hold: checked and wrong
+		return 1, append(why, "request log: "+RequestLogFail+" ("+strings.Join(l.Problems, "; ")+")")
+	}
+	if l := o.RequestLog; l != nil && l.Outcome == RequestLogUnchecked {
+		why = append(why, "request log: "+RequestLogUnchecked+" ("+l.Why+")")
 	}
 	if o.methodUnread != "" {
 		why = append(why, "referent: method edition "+keylog.Short(o.methodEdition)+" "+o.methodUnread+": whether it declares system_keys cannot be read")
@@ -462,6 +479,13 @@ func (r *Resolver) observationBase(p *Placed) *Observation {
 		if d.Edition != "" {
 			o.ReferentHistory = append(o.ReferentHistory, d.history(missing))
 			o.methodUnread, o.methodEdition = d.Unread, d.Edition
+		}
+	}
+	if l := r.requestLogOf(st, o.Unpinned); l != nil {
+		o.RequestLog = l
+		if l.Outcome == RequestLogUnpinned {
+			// a fresh slice, never the statement's own
+			o.Unpinned = append(slices.Clone(o.Unpinned), "referent.requests.digest")
 		}
 	}
 	return o
@@ -596,6 +620,13 @@ func (r *Resolver) capture(st *wire.Statement) Capture {
 // re-check and the other captures of the same referent the reader holds (§5.3.1). A fork or a vanished source
 // never counts against the observer: it is a status, not a corroboration (C-core-33, C-core-34).
 func (r *Resolver) referentStatus(o *Observation, st *wire.Statement) {
+	if l := o.RequestLog; l != nil && l.Outcome == RequestLogUnpinned {
+		o.ReferentStatus = RefUnpinned
+		o.ReferentHistory = append(o.ReferentHistory, "the request log the referent pins ("+shortDigest(l.Digest)+
+			") matches nothing in the content: it pins no request the capture carries; admitted, no class-specific agreement model applied (claims §5.3.1)")
+		o.ReCheck = ReCheck{Outcome: ReUnchecked, Why: "referent unpinned"}
+		return
+	}
 	if len(o.Unpinned) > 0 {
 		o.ReferentStatus = RefUnpinned
 		o.ReferentHistory = append(o.ReferentHistory, "the referent lacks "+strings.Join(o.Unpinned, ", ")+
@@ -928,6 +959,11 @@ func (o *Observation) Render() string {
 	fmt.Fprintf(&b, "  class %s (asserted by %s in %s)\n", o.Class, shortKey(o.Signer), keylog.Short(o.Statement))
 	for _, f := range o.Referent {
 		fmt.Fprintf(&b, "  referent.%s: %s (observer's statement)\n", f[0], f[1])
+	}
+	if o.RequestLog != nil {
+		for _, x := range o.RequestLog.lines() {
+			fmt.Fprintf(&b, "  %s\n", x)
+		}
 	}
 	fmt.Fprintf(&b, "  referent status: %s\n", o.ReferentStatus)
 	for _, h := range o.ReferentHistory {
