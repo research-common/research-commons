@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/research-common/research-commons/internal/canon"
+	"github.com/research-common/research-commons/internal/conformance"
 	"github.com/research-common/research-commons/internal/store"
 	"github.com/research-common/research-commons/internal/wire"
 )
@@ -26,6 +27,7 @@ func idSetup(t *testing.T, alg, perms string) (root, worker *idHome, ident, d, g
 // named), one it cannot decide (exit 3), a kind that takes no actor (exit 2), --as without --grant (exit 2); each
 // leaves the store byte-identical.
 func TestPublishAs(t *testing.T) {
+	conformance.Covers(t, "C-id-02") // written by the commands: identity new, identity grant, publish --as; eligible and counted on show
 	for _, alg := range []string{wire.AlgEd25519, wire.AlgEIP191} {
 		t.Run(alg, func(t *testing.T) {
 			root, worker, ident, _, grant := idSetup(t, alg, `[{"kind":"authored","targets":{"any_content":true},"amend":true}]`)

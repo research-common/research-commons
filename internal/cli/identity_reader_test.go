@@ -89,7 +89,7 @@ func member(o *canon.Object, path ...string) canon.Value {
 // denies the amending act, the null cut denies both, and the root's rc/1 revoke_key retires the identity: each
 // answer bound to I and named.
 func TestIdentityReaderVectorsThroughPull(t *testing.T) {
-	conformance.Partial(t, "C-id-02", "end to end through pull, show and verify on the published vectors, both algorithms: actor eligible, counted, the content's sole author the identity; the basis is the evaluator's (identity package); no writer signs rc/2 yet")
+	conformance.Partial(t, "C-id-02", "end to end through pull, show and verify on the published vectors, both algorithms: actor eligible, counted, the content's sole author the identity; the basis is the evaluator's (identity package); the writer half is TestPublishAs")
 	conformance.Partial(t, "C-id-11", "end to end through pull and show on the published vectors: the cut at last_good keeps the named act and denies its descendant, the null cut denies both (cut_excluded); siblings and merges are checked at the adapter")
 	conformance.Partial(t, "C-id-17", "end to end through pull and show: the root's rc/1 revoke_key placed on I's lineage retires I (root_retired) for every act; the rival-lineage and unplaceable halves are the adapter's")
 	for _, chain := range []string{"ed", "eip"} {
