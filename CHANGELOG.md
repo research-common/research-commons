@@ -17,6 +17,12 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   check is not `ok`, or any logged response is not held or not readable under the layout, the read is `unchecked`,
   naming the first such entry by index and endpoint, and the observer's asserted state is used exactly as without
   a layout. Single-response observations print exactly what they printed before.
+- **Series segments read batch captures.** Under a pinned source profile that cites a response layout, `hub check`
+  and `pull` now read a series segment that is a batch capture the way `show` reads the same observation: through
+  its request log, at the least state over every logged response. The members' boundary is `as held` when every
+  segment's state came from held bytes; one segment whose log check is not `ok`, or whose responses are not all held
+  and readable, is read at its asserted state with the same reason `show` gives, and the boundary is the weaker
+  `as captured, not re-checked`. Before, every batch segment was read at its asserted state.
 - **A synced header chain re-checks where an observed block is.** After `anchor headers sync`, `show`, `verify`
   and `explain` look up an exact-bytes observation's pinned block hash in this reader's header chain (only a
   `bip122:` referent naming the chain's genesis): on the accepted chain its depth now is what the finality rule

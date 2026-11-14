@@ -511,8 +511,10 @@ Rules:
   `ok` (a response missing or mutated is `fail`, and `verify` exits 1 on the log check, not on the layout read), or
   one logged response not held or not readable under the layout, makes the whole read `unchecked`, naming the first
   such entry, and the asserted state reads exactly as with no layout. A batch read is a pure function of the
-  responses' bytes, which their logged digests fix, the layout and the profile's order. A series segment's record
-  (§8) carries no content to locate a log in, so a batch segment's layout read is `unchecked` there.
+  responses' bytes, which their logged digests fix, the layout and the profile's order. A series segment (§8) that
+  is a batch capture is read the same way, through its request log in the content the reader holds, so it gives the
+  same read as the observation itself for the same held set; a reader with no content to locate the log in (the
+  segment's record alone) leaves the segment's layout read `unchecked`, saying so, and uses the asserted state.
 - **JSON only in this dialect.** The response is read as I-JSON (RFC 7493): the wire-format note's input rules
   (UTF-8, no duplicate names, the depth limit), except that a number is any finite IEEE 754 double, since a
   captured response is the source's data, not a signed body; it is never re-encoded or signed. Other formats
