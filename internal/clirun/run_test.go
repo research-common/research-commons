@@ -39,11 +39,24 @@ func seedKey(name string) wire.Ed25519Key {
 // newRunWorld: spec is built from kv (code, image and resources filled in); held are the input bytes to install.
 func newRunWorld(t *testing.T, policyExtra string, held [][]byte, kv ...any) *runWorld {
 	t.Helper()
-	w := &runWorld{t: t, code: []byte("code:s")}
-	m := []any{"code", canon.String(run.Digest(w.code)), "interpreter", canon.String("sh >=1"),
-		"image", object("reference", canon.String("registry.example/step:1"), "digest", canon.String(imgDigest)),
-		"resources", object("memory", canon.Int(1<<20), "wall_time", canon.Int(10_000))}
-	specBytes := canon.Encode(object(append(m, kv...)...))
+	return newRunWorldCode(t, []byte("code:s"), policyExtra, held, kv...)
+}
+
+// newRunWorldCode is newRunWorld with the workflow's code bytes given; kv overrides the filled-in members.
+func newRunWorldCode(t *testing.T, code []byte, policyExtra string, held [][]byte, kv ...any) *runWorld {
+	t.Helper()
+	w := &runWorld{t: t, code: code}
+	m := map[string]canon.Value{"code": canon.String(run.Digest(w.code)), "interpreter": canon.String("sh >=1"),
+		"image":     object("reference", canon.String("registry.example/step:1"), "digest", canon.String(imgDigest)),
+		"resources": object("memory", canon.Int(1<<20), "wall_time", canon.Int(10_000))}
+	for i := 0; i < len(kv); i += 2 {
+		m[kv[i].(string)] = kv[i+1].(canon.Value)
+	}
+	var flat []any
+	for k, v := range m {
+		flat = append(flat, k, v)
+	}
+	specBytes := canon.Encode(object(flat...))
 	if _, err := run.ParseSpec(specBytes); err != nil {
 		t.Fatal(err)
 	}
