@@ -51,6 +51,21 @@ type RequestLog struct {
 	// Problems names each pin that does not hold: the count, the endpoint, and every response not held, by entry
 	// index (1-based, the log's line) and endpoint.
 	Problems []string
+	// responses are the logged responses in log order, with the bytes of each one the content holds (nil when the
+	// log is the whole content: the response is then a blob the reader may hold). A response layout reads them.
+	responses []loggedResponse
+	// nProblems counts every problem, named or only counted (Problems names at most maxNamedProblems responses).
+	nProblems int
+}
+
+// loggedResponse is one logged request's response: its endpoint and digest as logged, and its bytes when the
+// content holds them.
+type loggedResponse struct {
+	Endpoint, Digest string
+	data             []byte
+	// held: the content holds the response (data), or the log is the whole content and the reader holds it as a
+	// blob (data nil: a layout reads it through the reader's blob bytes).
+	held bool
 }
 
 // maxNamedProblems bounds the responses named one by one; the rest are counted.
@@ -143,7 +158,7 @@ func (r *Resolver) requestLog(st *wire.Statement, unpinned []string) *RequestLog
 		return l
 	}
 	// every unit's digest, and the units the scanner could not read
-	have := map[string]bool{}
+	have := map[string][]byte{}
 	var unscanned []string
 	var logUnit *ContentUnit
 	for i := range units {
@@ -154,7 +169,9 @@ func (r *Resolver) requestLog(st *wire.Statement, unpinned []string) *RequestLog
 		}
 		h := sha256.Sum256(u.Data)
 		ud := "sha256:" + hex.EncodeToString(h[:])
-		have[ud] = true
+		if _, ok := have[ud]; !ok {
+			have[ud] = u.Data
+		}
 		if ud == l.Digest && logUnit == nil {
 			logUnit = u
 		}
@@ -179,7 +196,7 @@ func (r *Resolver) requestLog(st *wire.Statement, unpinned []string) *RequestLog
 			return l
 		}
 		l.Outcome, l.Why = RequestLogFail, err.Error()
-		l.Problems = append(l.Problems, err.Error())
+		l.Problems, l.nProblems = append(l.Problems, err.Error()), 1
 		return l
 	}
 	l.Entries = len(entries)
@@ -195,7 +212,10 @@ func (r *Resolver) requestLog(st *wire.Statement, unpinned []string) *RequestLog
 			endpointBad = true
 			l.Problems = append(l.Problems, fmt.Sprintf("entry %d: endpoint %s, the referent pins %s for every request", i+1, strconv.Quote(e.Endpoint), strconv.Quote(l.Endpoint)))
 		}
-		if have[e.ResponseDigest] || (whole && r.obs.blobs.Has(e.ResponseDigest)) {
+		data, inContent := have[e.ResponseDigest]
+		held := inContent || (whole && r.obs.blobs.Has(e.ResponseDigest))
+		l.responses = append(l.responses, loggedResponse{Endpoint: e.Endpoint, Digest: e.ResponseDigest, data: data, held: held})
+		if held {
 			l.Held++
 			continue
 		}
@@ -205,6 +225,7 @@ func (r *Resolver) requestLog(st *wire.Statement, unpinned []string) *RequestLog
 			l.Problems = append(l.Problems, fmt.Sprintf("entry %d, endpoint %s: response %s not held in the content, mutated or missing", i+1, e.Endpoint, shortDigest(e.ResponseDigest)))
 		}
 	}
+	l.nProblems = len(l.Problems) + missing - named
 	if missing > named {
 		l.Problems = append(l.Problems, fmt.Sprintf("%d more responses not held in the content", missing-named))
 	}

@@ -469,14 +469,17 @@ records (`records`) and an RFC 6901 pointer to the state within each record (`st
 response: a bare JSON array at the root, the shape a streaming endpoint answers with. With `records` absent (which
 is not `""`) the layout reads one state: `state` points into the response itself. A profile cites its layout by digest in its
 `documents`, so a reader that does not implement layouts reads the profile as before, the layout one more cited
-document. A layout applies to an ordered-label rule over a source-class capture that pins one `response_digest`;
-the reader reads the bytes it holds under that digest, and nothing else (no fetch, no re-request: H-14).
+document. A layout applies to an ordered-label rule over a source-class capture that pins one `response_digest`,
+or a batch capture whose request log is checked (§5.3.1); the reader reads the bytes it holds under each such
+digest, and nothing else (no fetch, no re-request: H-14).
 
 | the held response, read under the layout | the layout read | the referent |
 |---|---|---|
 | (a) parses as I-JSON within the reader's caps, and every record carries a non-empty string at `state` that is a label in the profile | the **least** record's state (the earliest label in the profile's order among the records), **read from the held bytes**; when records differ, the spread is disclosed (`records at R1..RF, read as R1`) | read by that state: `final (as held)` when it meets the rule, else `provisional (<state>; final at L)`. An asserted `state_at_capture` that differs from the read state is shown beside it as a disclosed disagreement; it does not govern |
 | (b) any record's value is missing, not a string, empty, or a label outside the profile; a pointer names nothing; the record array is empty; the bytes are not I-JSON or are over the caps; the capture declares a media type that is not JSON; the response is not held; the cited layout is not a valid layout, its held copy is corrupt, or the profile cites two | `unchecked`, naming the record (or the response, or the layout) and why | read by the asserted state exactly as with no layout: `final (as captured, not re-checked)` at best, never upgraded by the layout |
 | (c) the profile cites no layout | none | as above (§5.3.1a), unchanged |
+| (d) a batch capture: its request-log check is `ok` and every logged response reads as in (a) | the **least** state over every response's least record, **read from the held responses**; when records differ, the spread across the responses is disclosed (`records at R1..RF across 3 responses, read as R1`) | as in (a) |
+| (e) a batch capture: its request-log check is not `ok`, or any logged response is not held or reads as in (b) | `unchecked`, naming the first such entry (its index in the log and its endpoint) and why, the rest counted; never a partial read | as in (b) |
 
 Rules:
 
@@ -497,6 +500,16 @@ Rules:
   order is the profile's and nothing else: a record whose label is outside the profile (or missing, not a string,
   or empty) makes the whole read `unchecked`, naming the record; there is no partial order over labels the profile
   does not have. The read does not depend on the order of the records in the array.
+- **A batch reads at its least response.** A batch capture (§5.3.1) pins a request log, not one response: its
+  responses are the logged ones, held in the captured content (or, when the log is the whole content, among the blobs
+  the reader holds). The same monotone argument applies one level up: the batch meets `run >= L` exactly when every
+  logged response does, so it reads at the least state over every response's least record (d), and it does not
+  depend on the order of the responses in the log. There is no partial read (e): a request-log check that is not
+  `ok` (a response missing or mutated is `fail`, and `verify` exits 1 on the log check, not on the layout read), or
+  one logged response not held or not readable under the layout, makes the whole read `unchecked`, naming the first
+  such entry, and the asserted state reads exactly as with no layout. A batch read is a pure function of the
+  responses' bytes, which their logged digests fix, the layout and the profile's order. A series segment's record
+  (§8) carries no content to locate a log in, so a batch segment's layout read is `unchecked` there.
 - **JSON only in this dialect.** The response is read as I-JSON (RFC 7493): the wire-format note's input rules
   (UTF-8, no duplicate names, the depth limit), except that a number is any finite IEEE 754 double, since a
   captured response is the source's data, not a signed body; it is never re-encoded or signed. Other formats

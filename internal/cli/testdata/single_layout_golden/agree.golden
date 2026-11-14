@@ -1,0 +1,102 @@
+$ verify 
+exit 0
+statement: bd5554dcf4ae250041d866dac74640280d71ea7575e2085723853aa11b6cf643
+kind: "observed"
+signer: ed25519:d3ebd568b56d7abf7528796940ea4be9e72a88ddaa9397fe502bc0f5ae71ae34
+seq: 0
+ts signer declared: 2026-10-16T02:00:00Z
+status: valid
+line: chained
+counted: counted
+causes: (none)
+referent:
+  status: final (as held)
+  layout: response layout sha256:e4f61: state RF read from the held response
+corroboration:
+  summary: unchecked within statements you hold
+  corroborated: 0
+  contradicted: 0
+  state: unchecked
+  counting unit: distinct signing keys (not people; independence unknown)
+  independence: unknown (distinct keys prove nothing about independence)
+  trust: your trust in these keys: not configured (every counted statement is counted)
+exit: 0
+exit name: ok
+status scope: within statements you hold
+$ show 
+exit 0
+statement: bd5554dcf4ae250041d866dac74640280d71ea7575e2085723853aa11b6cf643
+kind: "observed"
+signer: ed25519:d3ebd568b56d7abf7528796940ea4be9e72a88ddaa9397fe502bc0f5ae71ae34
+seq: 0
+ts signer declared: 2026-10-16T02:00:00Z
+status: valid
+line: chained
+counted: counted
+body: {"capture":{"at":"2026-01-02T00:00:00Z","evidence":"self-asserted"},"class":"source","content":{"digest":"sha256:2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881","size":1},"finality":{"rule":"run >= RF","rule_source":"sha256:5fe7a6f15798c99616dfab61a6e96e6286d8d7161e9d1f5218cac4f13d601286","state_at_capture":{"run":"RF"}},"referent":{"endpoint":"https://api.example/settlement","parameters":{"period":"x"},"response_digest":"sha256:1be48403deca2307c8e0b89282bed796d183e3b6979ad58ea286f7010c217c7e"}}
+referent:
+  status: final (as held)
+  layout: response layout sha256:e4f61: state RF read from the held response
+  pinned: referent.endpoint: "https://api.example/settlement" (observer's statement), referent.parameters: {"period":"x"} (observer's statement), referent.response_digest: "sha256:1be48403deca2307c8e0b89282bed796d183e3b6979ad58ea286f7010c217c7e" (observer's statement)
+  history: at capture: response layout sha256:e4f61: state RF read from the held response, at capture: state RF, read from the held response and asserted, meets rule "run >= RF" under source profile sha256:5fe7a: final (as held), reader re-check: unchecked (no referent checker configured)
+corroboration:
+  summary: unchecked within statements you hold
+  corroborated: 0
+  contradicted: 0
+  state: unchecked
+  counting unit: distinct signing keys (not people; independence unknown)
+  independence: unknown (distinct keys prove nothing about independence)
+  trust: your trust in these keys: not configured (every counted statement is counted)
+  evidence: (none)
+status scope: within statements you hold
+$ explain 
+exit 0
+statement: bd5554dcf4ae250041d866dac74640280d71ea7575e2085723853aa11b6cf643
+kind: "observed"
+signer: ed25519:d3ebd568b56d7abf7528796940ea4be9e72a88ddaa9397fe502bc0f5ae71ae34
+seq: 0
+ts signer declared: 2026-10-16T02:00:00Z
+status: valid
+line: chained
+counted: counted
+body: {"capture":{"at":"2026-01-02T00:00:00Z","evidence":"self-asserted"},"class":"source","content":{"digest":"sha256:2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881","size":1},"finality":{"rule":"run >= RF","rule_source":"sha256:5fe7a6f15798c99616dfab61a6e96e6286d8d7161e9d1f5218cac4f13d601286","state_at_capture":{"run":"RF"}},"referent":{"endpoint":"https://api.example/settlement","parameters":{"period":"x"},"response_digest":"sha256:1be48403deca2307c8e0b89282bed796d183e3b6979ad58ea286f7010c217c7e"}}
+referent:
+  status: final (as held)
+  layout: response layout sha256:e4f61: state RF read from the held response
+  pinned: referent.endpoint: "https://api.example/settlement" (observer's statement), referent.parameters: {"period":"x"} (observer's statement), referent.response_digest: "sha256:1be48403deca2307c8e0b89282bed796d183e3b6979ad58ea286f7010c217c7e" (observer's statement)
+  history: at capture: response layout sha256:e4f61: state RF read from the held response, at capture: state RF, read from the held response and asserted, meets rule "run >= RF" under source profile sha256:5fe7a: final (as held), reader re-check: unchecked (no referent checker configured)
+corroboration:
+  summary: unchecked within statements you hold
+  corroborated: 0
+  contradicted: 0
+  state: unchecked
+  counting unit: distinct signing keys (not people; independence unknown)
+  independence: unknown (distinct keys prove nothing about independence)
+  trust: your trust in these keys: not configured (every counted statement is counted)
+  evidence: (none)
+statements:
+  - statement: bd5554dcf4ae250041d866dac74640280d71ea7575e2085723853aa11b6cf643
+    signer: ed25519:d3ebd568b56d7abf7528796940ea4be9e72a88ddaa9397fe502bc0f5ae71ae34
+    kind: "observed"
+    status: valid
+    line: chained
+    counted: counted
+policy:
+  source: hub-policy.json
+  digest: sha256:e78ef0c38a9fdd148445a031e2b0a6d0cfea63e921e09b82db4790d57bd2cfd0
+  time policy fingerprint: sha256:2d1cebc79ada34604c16640959e54f97c582dc2cb66cb8e8229f69ed01b0ae50
+  reader policy:
+    source: none configured (no --policy, no COMMONS_POLICY): every answer is the no-policy answer
+evaluator:
+  tool: test
+  commit: 0000000
+  time verifier: research-commons btctime/1
+time context: none: this answer does not depend on the reader's clock (no shelf life, finality or freshness is evaluated, and no chain backend is configured)
+explained: bd5554dcf4ae250041d866dac74640280d71ea7575e2085723853aa11b6cf643
+status scope: within statements you hold
+$ verify --json
+exit 0
+{"causes":[],"corroboration":{"contradicted":0,"corroborated":0,"counting_unit":"distinct signing keys (not people; independence unknown)","independence":"unknown (distinct keys prove nothing about independence)","state":"unchecked","summary":"unchecked within statements you hold","trust":"your trust in these keys: not configured (every counted statement is counted)"},"counted":"counted","exit":0,"exit_name":"ok","kind":"observed","line":"chained","referent":{"layout":"response layout sha256:e4f61: state RF read from the held response","status":"final (as held)"},"seq":0,"signer":"ed25519:d3ebd568b56d7abf7528796940ea4be9e72a88ddaa9397fe502bc0f5ae71ae34","statement":"bd5554dcf4ae250041d866dac74640280d71ea7575e2085723853aa11b6cf643","status":"valid","status_scope":"within statements you hold","ts_signer_declared":"2026-10-16T02:00:00Z"}
+$ explain --json
+exit 0
+{"body":{"capture":{"at":"2026-01-02T00:00:00Z","evidence":"self-asserted"},"class":"source","content":{"digest":"sha256:2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881","size":1},"finality":{"rule":"run >= RF","rule_source":"sha256:5fe7a6f15798c99616dfab61a6e96e6286d8d7161e9d1f5218cac4f13d601286","state_at_capture":{"run":"RF"}},"referent":{"endpoint":"https://api.example/settlement","parameters":{"period":"x"},"response_digest":"sha256:1be48403deca2307c8e0b89282bed796d183e3b6979ad58ea286f7010c217c7e"}},"corroboration":{"contradicted":0,"corroborated":0,"counting_unit":"distinct signing keys (not people; independence unknown)","evidence":[],"independence":"unknown (distinct keys prove nothing about independence)","state":"unchecked","summary":"unchecked within statements you hold","trust":"your trust in these keys: not configured (every counted statement is counted)"},"counted":"counted","evaluator":{"commit":"0000000","time_verifier":"research-commons btctime/1","tool":"test"},"explained":"bd5554dcf4ae250041d866dac74640280d71ea7575e2085723853aa11b6cf643","kind":"observed","line":"chained","policy":{"digest":"sha256:e78ef0c38a9fdd148445a031e2b0a6d0cfea63e921e09b82db4790d57bd2cfd0","reader_policy":{"source":"none configured (no --policy, no COMMONS_POLICY): every answer is the no-policy answer"},"source":"hub-policy.json","time_policy_fingerprint":"sha256:2d1cebc79ada34604c16640959e54f97c582dc2cb66cb8e8229f69ed01b0ae50"},"referent":{"history":["at capture: response layout sha256:e4f61: state RF read from the held response","at capture: state RF, read from the held response and asserted, meets rule \"run >= RF\" under source profile sha256:5fe7a: final (as held)","reader re-check: unchecked (no referent checker configured)"],"layout":"response layout sha256:e4f61: state RF read from the held response","pinned":["referent.endpoint: \"https://api.example/settlement\" (observer's statement)","referent.parameters: {\"period\":\"x\"} (observer's statement)","referent.response_digest: \"sha256:1be48403deca2307c8e0b89282bed796d183e3b6979ad58ea286f7010c217c7e\" (observer's statement)"],"status":"final (as held)"},"seq":0,"signer":"ed25519:d3ebd568b56d7abf7528796940ea4be9e72a88ddaa9397fe502bc0f5ae71ae34","statement":"bd5554dcf4ae250041d866dac74640280d71ea7575e2085723853aa11b6cf643","statements":[{"counted":"counted","kind":"observed","line":"chained","signer":"ed25519:d3ebd568b56d7abf7528796940ea4be9e72a88ddaa9397fe502bc0f5ae71ae34","statement":"bd5554dcf4ae250041d866dac74640280d71ea7575e2085723853aa11b6cf643","status":"valid"}],"status":"valid","status_scope":"within statements you hold","time_context":"none: this answer does not depend on the reader's clock (no shelf life, finality or freshness is evaluated, and no chain backend is configured)","ts_signer_declared":"2026-10-16T02:00:00Z"}

@@ -648,7 +648,7 @@ func (r *Resolver) referentStatus(o *Observation, st *wire.Statement) {
 	f := o.Finality
 	rules := r.rulesFor(f)
 	if f != nil {
-		state, lr := heldState(rules, f.Rule, st.Body, f.State)
+		state, lr := r.heldStateOf(rules, f.Rule, st, f.State)
 		o.Layout = lr
 		if lr != nil {
 			o.ReferentHistory = append(o.ReferentHistory, "at capture: "+lr.String())
@@ -667,10 +667,10 @@ func (r *Resolver) referentStatus(o *Observation, st *wire.Statement) {
 			// the state read from the held bytes governs (the asserted one is disclosed beside it): final as held,
 			// until a re-check; the bytes are the observer's capture, not the source now (I4, I5)
 			status = RefFinalHeld
-			o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("at capture: state %s read from the held response meets rule %q%s: %s", state, f.Rule, underProfile(rules, f.Rule), RefFinalHeld))
+			o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("at capture: state %s read from %s meets rule %q%s: %s", state, lr.from(), f.Rule, underProfile(rules, f.Rule), RefFinalHeld))
 		case met && lr != nil && lr.State != "":
 			status = RefFinalHeld
-			o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("at capture: state %s, read from the held response and asserted, meets rule %q%s: %s", state, f.Rule, underProfile(rules, f.Rule), RefFinalHeld))
+			o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("at capture: state %s, read from %s and asserted, meets rule %q%s: %s", state, lr.from(), f.Rule, underProfile(rules, f.Rule), RefFinalHeld))
 		case met:
 			// the observer's asserted state is the only evidence so far: final as captured, until a re-check. A
 			// source profile changes nothing here: it orders the asserted state, it does not re-check the source.
@@ -680,7 +680,7 @@ func (r *Resolver) referentStatus(o *Observation, st *wire.Statement) {
 			status = fmt.Sprintf("%s (%s; final at %s)", RefProvisional, state, final)
 			src := ""
 			if lr != nil && lr.State != "" {
-				src = " (read from the held response)"
+				src = " (read from " + lr.from() + ")"
 			}
 			o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("at capture: state %s%s, rule %q unmet%s: %s", state, src, f.Rule, underProfile(rules, f.Rule), status))
 			if rev := r.revision(o, st); rev != "" {
@@ -754,7 +754,7 @@ func (r *Resolver) revision(o *Observation, st *wire.Statement) string {
 		}
 		rules := r.rulesFor(o.Finality)
 		qs := r.heldCaptureState(rules, o.Finality.Rule, q.St)
-		mine, _ := heldState(rules, o.Finality.Rule, st.Body, o.Finality.State)
+		mine, _ := r.heldStateOf(rules, o.Finality.Rule, st, o.Finality.State)
 		if c, ok := rules.Compare(o.Finality.Rule, mine, qs); ok && c >= 0 {
 			continue // not later
 		} else if !ok && (qs == mine || ordersLabels(rules, o.Finality.Rule)) {
@@ -835,7 +835,7 @@ func (r *Resolver) finalAt(st, q *wire.Statement) bool {
 // heldCaptureState is the state q's capture is read at under rules for rule: from its held response under the bound
 // profile's response layout when that read succeeds, else its asserted state (captureState).
 func (r *Resolver) heldCaptureState(rules FinalityRules, rule string, q *wire.Statement) State {
-	s, _ := heldState(rules, rule, q.Body, captureState(q))
+	s, _ := r.heldStateOf(rules, rule, q, captureState(q))
 	return s
 }
 
