@@ -149,14 +149,30 @@ func TestDialRules(t *testing.T) {
 	if _, err := c.client(t, true).Submit(digest); err != nil {
 		t.Fatalf("loopback with AllowPrivate: %v", err)
 	}
-	// a redirect to the same server under another host name (localhost vs 127.0.0.1) is another host
-	r := newCal(t, func(w http.ResponseWriter, _ []byte) {})
-	r.srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		r.hits.Add(1)
-		http.Redirect(w, req, strings.Replace(c.srv.URL, "127.0.0.1", "localhost", 1)+"/digest", http.StatusTemporaryRedirect)
-	})
+	// a redirect to another origin (the working calendar, on another port of the same address, whose certificate the
+	// client trusts) is refused; the control redirect to the same origin is followed
+	redirector := func(to string) *calServer {
+		r := newCal(t, func(w http.ResponseWriter, _ []byte) {})
+		r.srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			r.hits.Add(1)
+			if req.URL.Path == "/digest" {
+				http.Redirect(w, req, strings.Replace(to, "SELF", "https://"+req.Host, 1), http.StatusTemporaryRedirect)
+				return
+			}
+			io.ReadAll(req.Body)
+			w.Write(pendingTimestamp("https://cal.test"))
+		})
+		return r
+	}
+	before := c.hits.Load()
+	r := redirector(c.srv.URL + "/digest")
 	cl, _ := New(r.srv.URL, Config{AllowPrivate: true, RootCAs: r.pool()})
-	if _, err := cl.Submit(digest); err == nil || !strings.Contains(err.Error(), "only to https on its own host") {
-		t.Fatalf("cross-host redirect: %v", err)
+	if _, err := cl.Submit(digest); err == nil || !strings.Contains(err.Error(), "only to https on its own host") || c.hits.Load() != before {
+		t.Fatalf("cross-origin redirect: %v", err)
+	}
+	same := redirector("SELF/v2")
+	cl, _ = New(same.srv.URL, Config{AllowPrivate: true, RootCAs: same.pool()})
+	if _, err := cl.Submit(digest); err != nil {
+		t.Fatalf("same-origin redirect: %v", err)
 	}
 }

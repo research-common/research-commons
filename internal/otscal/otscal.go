@@ -176,6 +176,8 @@ func Assemble(d [32]byte, timestamp []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("the response is not a timestamp for the digest submitted: %v", err)
 	}
+	// unreachable while the root is the one written above; kept so a change to how the file is built cannot return a
+	// proof for another digest
 	if p.FileDigest != d {
 		return nil, errors.New("the proof roots at another digest")
 	}

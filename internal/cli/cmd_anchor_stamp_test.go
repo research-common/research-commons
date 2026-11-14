@@ -355,7 +355,11 @@ func TestAnchorStampExitTwo(t *testing.T) {
 	if snapshot(t, p.root) != before || cal.hits.Load() != 0 {
 		t.Fatal("dry run dialled or wrote")
 	}
-	// a build without a calendar client
+	// a build without a calendar client: an http calendar is still refused before anything else (exit 2), and an
+	// https one answers that calendars are not available here (exit 3)
+	if r := runStamp(p.root, nil, nil, "--key", p.key, "--calendar", "http://cal.test"); r.code != ExitDidNotStart || !strings.Contains(r.stdout, "calendar-refused") {
+		t.Fatalf("http calendar, no client: %d %s", r.code, r.stdout)
+	}
 	r = runStamp(p.root, nil, nil, "--key", p.key, "--calendar", cal.srv.URL)
 	if r.code != ExitCouldNot || !strings.Contains(r.stdout, "not available in this build") || snapshot(t, p.root) != before {
 		t.Fatalf("no calendars in the build: %d %s", r.code, r.stdout)

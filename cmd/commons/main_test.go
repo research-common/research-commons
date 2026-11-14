@@ -54,3 +54,24 @@ func TestLdflagsStampOverrides(t *testing.T) {
 		t.Fatalf("embedded VERSION leaked past the stamp: %q", out)
 	}
 }
+
+// TestCalendarsWired: the binary wires the calendar client `anchor stamp` submits through. A calendar on a loopback
+// address without --allow-private is refused by the client's dial guard at connect time (so nothing is dialled);
+// a build without the wiring would answer "not available in this build" instead.
+func TestCalendarsWired(t *testing.T) {
+	bin := build(t)
+	dir := t.TempDir()
+	st, key, data := filepath.Join(dir, "s"), filepath.Join(dir, "k.key"), filepath.Join(dir, "d")
+	os.WriteFile(data, []byte("bytes"), 0o644)
+	for _, args := range [][]string{{"init", st}, {"key", "new", "--out", key}, {"publish", "--store", st, "--key", key, "--kind", "authored", "--content", data}} {
+		if out, err := exec.Command(bin, args...).CombinedOutput(); err != nil {
+			t.Fatalf("%v: %v\n%s", args, err, out)
+		}
+	}
+	cmd := exec.Command(bin, "anchor", "stamp", "--store", st, "--key", key, "--calendar", "https://127.0.0.1:9", "--json")
+	cmd.Env = append(os.Environ(), "COMMONS_CALENDARS=")
+	out, err := cmd.CombinedOutput()
+	if ee, ok := err.(*exec.ExitError); !ok || ee.ExitCode() != 3 || !strings.Contains(string(out), "refusing to connect to 127.0.0.1") {
+		t.Fatalf("anchor stamp: %v\n%s", err, out)
+	}
+}
