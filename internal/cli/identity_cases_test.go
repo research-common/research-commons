@@ -68,6 +68,7 @@ func anyPerms(amend bool) canon.Array {
 // closed vocabulary on I's lineage, reads `unknown` and counts toward nothing, through show on a direct store and a
 // pulled one; the full set is the control (eligible, counted).
 func TestIdentityCasesMissingEvidence(t *testing.T) {
+	conformance.Partial(t, "C-id-07", "through show on a direct and a pulled store: a missing inception, grant, delegate inception or ancestor, and an in-lineage root event outside the closed vocabulary, read unknown, not counted, never eligible; the printed reasons name the kind of what is missing (identity inception, grant, delegate inception, statement ancestry; unsupported_root_event), not its statement id, so `naming each missing or unsupported id` is not met")
 	w := newWorld(t)
 	w.worker("K1")
 	_, a := w.identityOf("I", "IR", canon.Bool(true), "K1")
@@ -111,8 +112,10 @@ func (w *world) rootAlt(name, root string) {
 // key, is a different lineage. A grant on the rival inception never authorizes a claim of I; a grant pinning the
 // wrong delegate line (a head, or the key's rival seq 0) never authorizes the delegate; each reads `denied` naming
 // the lineage, through a direct store and a pulled one. The rival identity's own grant stays eligible for the rival
-// (it is another identity), and I's own acts are untouched.
+// (it is another identity), and I's own acts are untouched. An act signed on a rival seq-0 line of the delegate's
+// key, under a grant that pins the real inception, is on another lineage too.
 func TestIdentityCasesRivalLineage(t *testing.T) {
+	conformance.Covers(t, "C-id-03")
 	w := newWorld(t)
 	w.worker("K1")
 	w.worker("K2")
@@ -139,10 +142,15 @@ func TestIdentityCasesRivalLineage(t *testing.T) {
 	gp := w.signRC2("Gpin", "IR", "identity_grant", obj("identity", i, "delegate", del("K3", r0), "permissions", anyPerms(true)), [2]string{})
 	cPin := w.signRC2("C1", "K3", "authored", licBody("W", "MIT"), [2]string{i, gp})
 
-	all := []string{"first:K1", "first:K2", "first:K3", "I", "G1", "J", "Grival", "Gj", "A0", "Ghead", "Gpin", "K3rival", "B0", "B1", "C0", "C1"}
+	// an act under K1's own, correct grant, but signed on a rival seq-0 line of K1's key (not the pinned inception)
+	w.forkAt("K1x", "K1", "", 0)
+	kRival := w.rawLine("K1rival", "K1x", "K1", "rc/2", "authored", "", nil, licBody("V", "MIT"), a["K1"])
+
+	all := []string{"first:K1", "first:K2", "first:K3", "I", "G1", "J", "Grival", "Gj", "A0", "Ghead", "Gpin", "K3rival", "B0", "B1", "C0", "C1", "K1rival"}
 	for how, d := range readers(holding(t, w, all...)) {
 		t.Run(how, func(t *testing.T) {
 			for _, c := range []struct{ name, act, code string }{
+				{"act on the delegate key's rival seq-0 line", kRival, "wrong_lineage"},
 				{"grant on a rival inception naming I", bRival, "wrong_lineage: grant root ancestry"},
 				{"grant pinning a head", cHead, "delegate_pin_not_inception"},
 				{"grant pinning the key's rival seq 0", cPin, "wrong_lineage: statement ancestry"},
@@ -163,11 +171,12 @@ func TestIdentityCasesRivalLineage(t *testing.T) {
 }
 
 // TestIdentityCasesWrongSignerIdentityGrant: an actor statement signed by a key other than the grant's delegate, a
-// grant not signed by I's root, a grant whose delegate is the root (in a store of its own: the root's act is itself
+// grant not signed by I's root, a grant whose delegate is the root (in a world of its own: the root's act is itself
 // a line on the root's log), an actor naming a grant as its identity and an actor naming one identity with another's
 // grant are each `denied` with the named reason through show, on a direct store and a pulled one, and count toward
 // nothing. The same statement signed correctly is the control.
 func TestIdentityCasesWrongSignerIdentityGrant(t *testing.T) {
+	conformance.Covers(t, "C-id-05")
 	w := newWorld(t)
 	for _, n := range []string{"K1", "K2", "S"} {
 		w.worker(n)
@@ -205,20 +214,17 @@ func TestIdentityCasesWrongSignerIdentityGrant(t *testing.T) {
 			}
 		})
 	}
-}
 
-// TestIdentityCasesRootAsDelegate: a grant whose delegate is the root key itself never authorizes an act, whatever
-// the act: `denied` root_is_delegate through show, direct and pulled.
-func TestIdentityCasesRootAsDelegate(t *testing.T) {
-	w := newWorld(t)
-	i := w.signRC2("I", "IR", "identity_inception", obj("profile", wire.FixedRootProfile), [2]string{})
-	w.ids["first:IR"] = i
-	selfG := w.grantTo("Gself", "IR", i, "IR", obj("any_content", true), canon.Bool(true))
-	w.ids["Gself"] = selfG[1]
-	act := w.signRC2("R1", "IR", "authored", licBody("Z", "MIT"), selfG)
-	for how, d := range readers(holding(t, w, "I", "Gself", "R1")) {
-		t.Run(how, func(t *testing.T) {
-			if v := actorOf(t, d, act); v.state != "denied" || v.counted != "not counted" || !strings.Contains(v.reasons, "root_is_delegate") {
+	// a grant whose delegate is the root key itself never authorizes an act, whatever the act
+	rw := newWorld(t)
+	ri := rw.signRC2("I", "IR", "identity_inception", obj("profile", wire.FixedRootProfile), [2]string{})
+	rw.ids["first:IR"] = ri
+	selfG := rw.grantTo("Gself", "IR", ri, "IR", obj("any_content", true), canon.Bool(true))
+	rw.ids["Gself"] = selfG[1]
+	bySelf := rw.signRC2("R1", "IR", "authored", licBody("Z", "MIT"), selfG)
+	for how, d := range readers(holding(t, rw, "I", "Gself", "R1")) {
+		t.Run("root is delegate/"+how, func(t *testing.T) {
+			if v := actorOf(t, d, bySelf); v.state != "denied" || v.counted != "not counted" || !strings.Contains(v.reasons, "root_is_delegate") {
 				t.Fatalf("%+v", v)
 			}
 		})
@@ -299,6 +305,7 @@ func cutAt(i, grant, lastGood string) *canon.Object {
 // or cut, an actor naming one identity with the other's grant is denied, and an act of I that names a claim of J as
 // its amendment target applies to nothing (explain) and does not move J's claim. Through a direct and a pulled store.
 func TestIdentityCasesOneKeyTwoIdentities(t *testing.T) {
+	conformance.Covers(t, "C-id-06")
 	w := newWorld(t)
 	w.worker("K")
 	i, a := w.identityOf("I", "IR", canon.Bool(true), "K")
@@ -385,6 +392,7 @@ func slicesClone(s []string) []string { return append([]string(nil), s...) }
 //     bytes: the act signed under the old grant stays denied under it, the act under the new grant is eligible,
 //     and re-signing the same body under the new grant is a different statement id.
 func TestIdentityCasesCutsThroughCommands(t *testing.T) {
+	conformance.Covers(t, "C-id-11", "C-id-12", "C-id-14", "C-id-16")
 	// --- C-id-11 ---
 	w := newWorld(t)
 	w.worker("K1")
@@ -403,6 +411,7 @@ func TestIdentityCasesCutsThroughCommands(t *testing.T) {
 	gj := w.grantTo("J", "JR2", j, "K1", obj("any_content", true), canon.Bool(true))
 	w.ids["GJ"] = gj[1]
 	aj := w.signRC2("AJ", "K1", "authored", licBody("J1", "MIT"), gj) // J's act by K1, after L2 on K1's log
+	rootHead, rootSeq := w.head["IR"], w.seq["IR"]
 	w.signRC2("C", "IR", "identity_cut", cutAt(i, g1, l), [2]string{})
 	all := []string{"first:K1", "first:K2", "I", "G1", "G2", "L", "L1", "L2", "SIB", "B1", "J", "GJ", "AJ", "C"}
 	for how, d := range readers(holding(t, w, all...)) {
@@ -420,6 +429,29 @@ func TestIdentityCasesCutsThroughCommands(t *testing.T) {
 			}
 			if v := actorOf(t, d, aj); v.state != "eligible" || v.identity != j {
 				t.Fatalf("another identity's grant to the same key: %+v", v)
+			}
+		})
+	}
+
+	// the closure includes merges: a delegate line that merges the sibling fork is kept by a cut at it, with the
+	// sibling, while a descendant of it is not
+	w.forkAt("K1m", "K1", l2, 4)
+	mg := w.rawLine("MG", "K1m", "K1", "rc/2", "authored", "", []string{sib}, licBody("M", "MIT"), a["K1"])
+	after := w.rawLine("AFTER", "K1m", "K1", "rc/2", "authored", "", nil, licBody("M2", "MIT"), a["K1"])
+	// the cut at the merge line sits on its own fork of the root's log; the cut at L is not held here, so the only
+	// cut of G1 is the one at the merge line
+	w.forkAt("IRm", "IR", rootHead, rootSeq)
+	w.rawLine("C2", "IRm", "IR", "rc/2", "identity_cut", "", nil, cutAt(i, g1, mg), [2]string{})
+	mergeHeld := []string{"first:K1", "first:K2", "I", "G1", "G2", "L", "L1", "L2", "SIB", "MG", "AFTER", "C2"}
+	for how, d := range readers(holding(t, w, mergeHeld...)) {
+		t.Run("11 merges/"+how, func(t *testing.T) {
+			for n, id := range map[string]string{"L": l, "L1": l1, "L2": l2, "sibling": sib, "merge line": mg} {
+				if v := actorOf(t, d, id); v.state != "eligible" || v.counted != "counted" {
+					t.Fatalf("%s kept by the cut at the merge line: %+v", n, v)
+				}
+			}
+			if v := actorOf(t, d, after); v.state != "denied" || !strings.Contains(v.reasons, "cut_excluded") {
+				t.Fatalf("a descendant of the merge line: %+v", v)
 			}
 		})
 	}
@@ -578,6 +610,8 @@ func cutWorld(t *testing.T) (w *world, i string, ids map[string]string) {
 //   - C-id-13: an authenticated root cut that is malformed, or names G1 under the wrong identity, denies G1 (never
 //     ignored, so the grant is not falsely passed); a cut whose grant cannot be read makes every grant of I unknown.
 func TestIdentityCasesCutEvidenceThroughCommands(t *testing.T) {
+	conformance.Covers(t, "C-id-13")
+	conformance.Partial(t, "C-id-08", "through show on a direct and a pulled store: a held cut whose last_good, or the ancestry placing it, is missing makes the grant's act unknown (missing_evidence), not counted, another grant unaffected; `names L` and `the cut is listed as relevant` are not printed by any surface (the reasons name only the kind of what is missing, and show prints no relevant-cut list)")
 	grant := func(w *world) string { return w.ids["G1"] }
 	base := []string{"first:K1", "first:K2", "I", "G1", "G2", "A1", "A2", "B1"}
 
@@ -713,14 +747,14 @@ func TestIdentityCasesKeysLost(t *testing.T) {
 	}
 }
 
-// TestIdentityCasesReceivedPolicyInjection: C-id-33's received-policy half through the commands. Statements that
+// receivedPolicyInjection: C-id-33's received-policy half through the commands. Statements that
 // carry a policy document (the delegate's act under its grant, a stranger's line, the root key's line on a rival
 // lineage that is not I's, a policy file placed in the package beside them) change no answer: the pull trust floor
 // admits and refuses exactly what it did without them, and `explain` prints the same "none configured"
 // reader-policy block. A root-key line on I's own lineage is a different matter, decided by the root-event
 // vocabulary (an unsupported root event makes I unknown, C-id-07): it too installs no policy, which the bare
 // line's refusal shows.
-func TestIdentityCasesReceivedPolicyInjection(t *testing.T) {
+func receivedPolicyInjection(t *testing.T) {
 	type outcome struct {
 		verdicts [2]string // I's act, the bare line
 		explain  string
@@ -784,6 +818,7 @@ func TestIdentityCasesReceivedPolicyInjection(t *testing.T) {
 // are refused as a reader-policy problem with exit 2 before any work, by --policy and by the environment, and the
 // store is byte-identical afterwards. The same policy with one selection is accepted (the control).
 func TestIdentityCasesConflictingSelectionsExit2(t *testing.T) {
+	conformance.Partial(t, "C-id-32", "production preflight: conflicting selections for one content and role are exit 2 before any work on every command that takes a policy, store untouched; not covered: a missing or ineligible pinned statement reading non-passing through a command, which currently ends in an internal error (state token not in the closed vocabulary) instead of a not-met answer")
 	w := fixture(t)
 	i := strings.Repeat("ab", 32)
 	sub := `"subject":{"content":"` + dig("sole") + `","role":"authorship-declaration"}`
@@ -845,6 +880,7 @@ func TestIdentityCasesConflictingSelectionsExit2(t *testing.T) {
 // claim (the amendment), following J reads J's; each by a direct and a pulled store. A bare statement of the same
 // key, once held, is read only by pinning it: following I or J never reads it (GPL-3.0 appears under neither).
 func TestIdentityCasesPinVersusFollow(t *testing.T) {
+	conformance.Partial(t, "C-id-31", "through verify with the real evaluator: an exact pin selects that statement only (no successor, no alias between identities) and a principal selection of an identity follows its eligible current claim, direct and pulled; not covered: a pin on the amendment DAG of conflicting heads, and an unmet selection (ineligible pin, an identity with no eligible claim), which currently ends in an internal error instead of a not-met answer")
 	w := newWorld(t)
 	w.worker("K")
 	i, a := w.identityOf("I", "IR", canon.Bool(true), "K")
@@ -901,12 +937,12 @@ func TestIdentityCasesPinVersusFollow(t *testing.T) {
 	}
 }
 
-// TestIdentityCasesTrustPurposeAndTargets: the purpose and target boundary of C-id-33 through pull with the real
+// trustPurposeAndTargets: the purpose and target boundary of C-id-33 through pull with the real
 // evaluator. An `{identity: I}` entry for admission over any content admits I's grant-covered acts on every blob
 // and refuses a stranger's line; narrowed to the contents of X it admits I's act on X and refuses I's act on Y (the
 // same signer, the same grant: the target is judged, not the key); an entry for another purpose (attestation)
 // creates no admission floor at all, so it never admits or refuses on the admission question.
-func TestIdentityCasesTrustPurposeAndTargets(t *testing.T) {
+func trustPurposeAndTargets(t *testing.T) {
 	w := newWorld(t)
 	w.worker("K1")
 	w.worker("S")
@@ -934,4 +970,13 @@ func TestIdentityCasesTrustPurposeAndTargets(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestIdentityCasesTrustBoundaries: C-id-33 through the commands, both halves: trust applies only to the named
+// purpose and targets, and no received statement (a delegate's, a stranger's, the root key's on a rival lineage or on
+// I's own, or a policy file in the package) installs or changes local policy.
+func TestIdentityCasesTrustBoundaries(t *testing.T) {
+	conformance.Covers(t, "C-id-33")
+	t.Run("purposes and targets", trustPurposeAndTargets)
+	t.Run("received policy", receivedPolicyInjection)
 }

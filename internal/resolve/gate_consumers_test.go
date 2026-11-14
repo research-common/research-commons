@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/research-common/research-commons/internal/canon"
+	"github.com/research-common/research-commons/internal/conformance"
 	"github.com/research-common/research-commons/internal/conformance/fixture"
 	"github.com/research-common/research-commons/internal/identity"
 	"github.com/research-common/research-commons/internal/keylog"
@@ -130,6 +131,7 @@ func TestGateConsumersWithEvaluator(t *testing.T) {
 // anchor of K's own log bounds K's statements while its actor counts and loses the bound when the evaluator
 // excludes it, without touching whether the bounded claim counts (C-id-23's shape).
 func TestGateAnchorsKeyScoped(t *testing.T) {
+	conformance.Partial(t, "C-id-23", "the resolver's bound of a statement loses an anchor the evaluator excludes while the claim keeps its authority (the bound and the claim are asked separately); no command surface prints authority and time quality as two named outcomes for a cut anchor, so the case is not run end to end")
 	w, ids := gateWorld(t)
 	act := [2]string{ids["I"], ids["G"]}
 	// the root anchors its own log (verified height 100): it bounds nothing of K's
