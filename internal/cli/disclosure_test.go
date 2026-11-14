@@ -94,14 +94,14 @@ func TestShelfLifeSurfaces(t *testing.T) {
 }
 
 // TestWithheldReveal: C-core-75 and C-core-76 end to end. The author publishes with availability withheld and
-// --no-holds; a second store pulls the statements (no bytes). Before the reveal both read `withheld until …`, not
+// --no-holds, and anchors it with anchor stamp (a pending proof from a loopback calendar); a second store pulls the statements (no bytes). Before the reveal both read `withheld until …`, not
 // obtainable, verify 0, not revealed. The author then publishes the holds with a location; the reader pulls it:
 // a holds is the holder's word until the bytes are fetched. A fetch that serves other bytes is refused (intrinsic,
 // hash mismatch, scoped to that fetch), installs nothing, and the statement still reads withheld, not revealed.
 // A fetch of the right bytes installs them and the reader shows revealed. The held-but-no-holds control: the
 // author's own store holds the bytes from the start and does not read as revealed.
 func TestWithheldReveal(t *testing.T) {
-	conformance.Partial(t, "C-core-75", "publish withheld (--no-holds), pull to a second store, reveal by a later holds, `fetch` by full hash, revealed: covered through the commands; the `anchored` half needs an anchor writer (no command writes one yet)")
+	conformance.Covers(t, "C-core-75")
 	conformance.Covers(t, "C-core-76")
 	author := newPubWorld(t)
 	data := "season seed 0x5eed with a 128-bit nonce 4f1c9a2e7b3d5a60c8e1f2a3b4c5d6e7"
@@ -112,6 +112,22 @@ func TestWithheldReveal(t *testing.T) {
 	if r.code != 0 {
 		t.Fatalf("publish: %d %s", r.code, r.stdout)
 	}
+	// anchored: the author stamps the withheld authored (its standing: anchor required) through a loopback calendar
+	authoredID := idsOf(outObj(t, r))[0]
+	cal := okCal(t)
+	st := author.stamp(builder(cal), "--calendar", cal.srv.URL, "--allow-private")
+	if st.code != 0 || outObj(t, st).Members["covered"] != canon.String(authoredID) || !strings.Contains(st.stdout, "withheld") {
+		t.Fatalf("anchor stamp: %d %s", st.code, st.stdout)
+	}
+	anchorID := idsOf(outObj(t, st))[0]
+	anchored := func(w *world) {
+		t.Helper()
+		c := string(canon.Encode(jsonOf(t, w.run("show", d, "--json")).Members["claimants"]))
+		if !strings.Contains(c, `"anchor":"`+anchorID+`"`) {
+			t.Fatalf("the authored is not read as anchored: %s", c)
+		}
+	}
+	anchored(author.world)
 	reveal := func(w *world) string {
 		t.Helper()
 		av := disclosureOf(t, jsonOf(t, w.run("show", d, "--json")), "availability")
@@ -142,6 +158,7 @@ func TestWithheldReveal(t *testing.T) {
 	if v := reader.run("verify", d, "--json"); v.code != 0 {
 		t.Fatalf("withheld statement does not verify: %d %s", v.code, v.stdout)
 	}
+	anchored(reader)
 	if reader.s.HasBlob(store.Digest(d)) {
 		t.Fatal("bytes reached the reader before the reveal")
 	}
