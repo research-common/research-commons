@@ -9,6 +9,15 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ## [Unreleased]
 
+### Added
+- **Response layouts read batch captures.** When a batch observation's finality rule resolves through a pinned
+  source profile that cites a response layout, `show`, `explain` and `verify` read the state out of every response
+  its request log lists and read the batch at the least of them (the batch meets `run >= L` only when every
+  response does), disclosing the spread (`records at R2..DF across 3 responses, read as R2`). If the request-log
+  check is not `ok`, or any logged response is not held or not readable under the layout, the read is `unchecked`,
+  naming the first such entry by index and endpoint, and the observer's asserted state is used exactly as without
+  a layout. Single-response observations print exactly what they printed before.
+
 ## [0.5.0-alpha.4] - 2026-11-13
 
 ### Added

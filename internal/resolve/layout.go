@@ -12,6 +12,7 @@ import (
 
 	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/keylog"
+	"github.com/research-common/research-commons/internal/wire"
 )
 
 // Response layouts (claims-model note §5.3.1a, "Response layouts"; wire-format note §5).
@@ -350,6 +351,17 @@ type LayoutRead struct {
 	Spread string
 	// Asserted is the observer's asserted run label at capture ("" when none).
 	Asserted string
+	// Responses is the number of logged responses read for a batch capture (claims-model note §5.3.1a, "a batch
+	// reads at its least response"); 0 for a capture that pins one response.
+	Responses int
+}
+
+// from names what the state was read from: "the held response", or "the 3 held responses" of a batch.
+func (l *LayoutRead) from() string {
+	if l.Responses > 0 {
+		return fmt.Sprintf("the %d held responses", l.Responses)
+	}
+	return "the held response"
 }
 
 // Disagrees reports a state read from the bytes that differs from the observer's asserted one.
@@ -365,7 +377,7 @@ func (l *LayoutRead) String() string {
 	if l.State == "" {
 		return name + ": unchecked (" + l.Why + ")"
 	}
-	s := fmt.Sprintf("%s: state %s read from the held response", name, l.State)
+	s := fmt.Sprintf("%s: state %s read from %s", name, l.State, l.from())
 	if l.Spread != "" {
 		s += " (" + l.Spread + ")"
 	}
@@ -461,6 +473,10 @@ func (b BoundRules) readLayout(rule string, body *canon.Object, asserted State) 
 	case str(body, "class") != "source":
 		lr.Why = "a response layout reads a source-class capture, this is " + inertText(str(body, "class"))
 		return lr
+	case rd == "" && object(ref, "requests") != nil:
+		// a series segment: its record carries no content reader, so the batch's request log is not checked here
+		lr.Why = "a batch capture: its responses are read through its request log, which this read does not check"
+		return lr
 	case rd == "":
 		lr.Why = "the referent pins no single response_digest (a batch capture is not read)"
 		return lr
@@ -530,6 +546,168 @@ func heldState(rules FinalityRules, rule string, q *canon.Object, asserted State
 	}
 	lr := b.readLayout(rule, q, asserted)
 	if lr == nil || lr.State == "" {
+		return asserted, lr
+	}
+	return State{Run: lr.State}, lr
+}
+
+// A batch reads at its least response (claims-model note §5.3.1a, "Response layouts"). A batch source capture pins a
+// request log, not one response_digest: its responses are the logged ones, held in the captured content (or, when
+// the log is the whole content, among the blobs the reader holds). The rule is monotone, so the batch meets
+// `run >= L` exactly when every logged response does, and each response meets it exactly when its least record
+// does: the batch reads at the least state over every response's least record, with the spread across the
+// responses disclosed. There is no partial read: a request-log check that is not `ok`, or any logged response that
+// is not held or that the layout cannot read, makes the whole read unchecked, naming the first such entry (by its
+// 1-based index in the log and its endpoint) and counting the rest.
+
+// batchLayoutApplies reports whether a layout read of body under b is a batch read: the bound profile has a usable
+// layout for this ordered-label rule, and the source-class referent pins a request log, not one response_digest.
+func (b BoundRules) batchLayoutApplies(rule string, body *canon.Object) bool {
+	p := b.Profile
+	if p == nil || p.Layout == nil || p.Dialect != DialectOrderedLabel || !reLabelRule.MatchString(rule) {
+		return false
+	}
+	ref := object(body, "referent")
+	return str(body, "class") == "source" && str(ref, "response_digest") == "" && object(ref, "requests") != nil
+}
+
+// readBatchLayout is readLayout for a batch capture whose request-log check is l (nil when the log was not checked:
+// the referent's request-log pins are unpinned). The capture's declared media type is the content's (an archive,
+// or the log itself), not the responses', so it is not consulted: each response is read as I-JSON or is unchecked.
+func (b BoundRules) readBatchLayout(body *canon.Object, asserted State, l *RequestLog) *LayoutRead {
+	p := b.Profile
+	lr := &LayoutRead{Asserted: asserted.Run, Layout: p.Layout.Digest}
+	switch {
+	case l == nil:
+		lr.Why = "the request log the referent pins is not checked: no response is read"
+		return lr
+	case l.Outcome != RequestLogOK:
+		// the log's own why, then its first problem (an entry by index and endpoint), the rest counted
+		var parts []string
+		if l.Why != "" && (len(l.Problems) == 0 || l.Why != l.Problems[0]) {
+			parts = append(parts, l.Why)
+		}
+		if len(l.Problems) > 0 {
+			first := l.Problems[0]
+			if n := l.nProblems - 1; n > 0 {
+				first += fmt.Sprintf("; %d more in the request log", n)
+			}
+			parts = append(parts, first)
+		}
+		detail := strings.Join(parts, "; ")
+		lr.Why = "request log " + l.Outcome
+		if detail != "" {
+			lr.Why += " (" + detail + ")"
+		}
+		lr.Why += ": no response is read"
+		return lr
+	}
+	lr.Responses = len(l.responses)
+	key := batchKey(l.responses)
+	if sr, ok := b.reads.get(p.Digest, p.Layout.Digest, key); ok {
+		lr.State, lr.Spread = sr.State, batchSpread(sr, lr.Responses)
+		return lr
+	}
+	var out StateRead
+	first, bad := "", 0
+	lo, hi := 0, 0
+	for i, resp := range l.responses {
+		sr := b.readLoggedResponse(resp)
+		if sr.State == "" {
+			if bad++; bad == 1 {
+				first = fmt.Sprintf("entry %d, endpoint %s: response %s %s", i+1, inertText(resp.Endpoint), keylog.Short(resp.Digest), sr.Why)
+			}
+			continue
+		}
+		if bad > 0 {
+			continue
+		}
+		rl, _ := p.Rank(sr.State) // ReadState placed both
+		rg, _ := p.Rank(sr.Greatest)
+		if i == 0 || rl < lo {
+			out.State, lo = sr.State, rl
+		}
+		if i == 0 || rg > hi {
+			out.Greatest, hi = sr.Greatest, rg
+		}
+		out.Records += sr.Records
+	}
+	if bad > 0 {
+		lr.Why = first
+		if bad > 1 {
+			lr.Why += fmt.Sprintf("; %d more of the %d responses not read", bad-1, len(l.responses))
+		}
+		// not cached: whether a response is held is the reader's, not a function of the digests
+		return lr
+	}
+	// every response held and read: a pure function of the responses' bytes (fixed by their digests), the layout
+	// and the profile's order
+	b.reads.put(p.Digest, p.Layout.Digest, key, out)
+	lr.State, lr.Spread = out.State, batchSpread(out, lr.Responses)
+	return lr
+}
+
+// readLoggedResponse reads one logged response under the bound profile's layout: from the content's bytes when the
+// content holds it, else (the log is the whole content) through the reader's held blobs. Why reads after the
+// response's name ("not held", "is unchecked: …").
+func (b BoundRules) readLoggedResponse(resp loggedResponse) StateRead {
+	p := b.Profile
+	data := resp.data
+	if data == nil {
+		if !resp.held || b.bytes == nil {
+			return StateRead{Why: "not held"}
+		}
+		var why string
+		if data, why = b.bytes(resp.Digest, MaxResponseBytes); data == nil {
+			if why == "" {
+				why = "not held"
+			}
+			return StateRead{Why: why}
+		}
+	}
+	key := "response:" + resp.Digest
+	sr, ok := b.reads.get(p.Digest, p.Layout.Digest, key)
+	if !ok {
+		sr = ReadState(data, p.Layout, p.Rank, b.steps) // pure in the bytes: cached whatever it found
+		b.reads.put(p.Digest, p.Layout.Digest, key, sr)
+	}
+	if sr.State == "" {
+		return StateRead{Why: "unreadable: " + sr.Why}
+	}
+	return sr
+}
+
+// batchKey keys a batch read in the layout cache: the ordered list of its logged response digests (the read is a
+// pure function of those responses' bytes, the layout and the profile's order). The prefix keeps it apart from a
+// single response's digest.
+func batchKey(rs []loggedResponse) string {
+	h := sha256.New()
+	for _, r := range rs {
+		h.Write([]byte(r.Digest))
+		h.Write([]byte{'\n'})
+	}
+	return "batch:" + hex.EncodeToString(h.Sum(nil))
+}
+
+// batchSpread is the disclosure of a batch of n responses whose records differ, "records at R1..RF across 3
+// responses, read as R1"; "" when every record of every response carries one label (or the read is unchecked).
+func batchSpread(s StateRead, n int) string {
+	if s.State == "" || s.Greatest == s.State {
+		return ""
+	}
+	return fmt.Sprintf("records at %s..%s across %d responses, read as %s", inertText(s.State), inertText(s.Greatest), n, inertText(s.State))
+}
+
+// heldStateOf is heldState for statement st as this resolver reads it: a batch capture's responses are read through
+// its request-log check (requestLogOf, computed once per statement), so the read needs the resolver's content
+// reader; any other capture reads as heldState reads it.
+func (r *Resolver) heldStateOf(rules FinalityRules, rule string, st *wire.Statement, asserted State) (State, *LayoutRead) {
+	b, ok := rules.(BoundRules)
+	if !ok || !b.batchLayoutApplies(rule, st.Body) {
+		return heldState(rules, rule, st.Body, asserted)
+	}
+	lr := b.readBatchLayout(st.Body, asserted, r.requestLogOf(st, st.Unpinned))
+	if lr.State == "" {
 		return asserted, lr
 	}
 	return State{Run: lr.State}, lr
