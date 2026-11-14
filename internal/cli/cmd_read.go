@@ -52,7 +52,13 @@ func viewOf(c *Ctx) (*view, error) {
 	if profiles != nil {
 		opts = append(opts, resolve.WithFinalityRules(*profiles))
 	}
-	v, err := buildView(c.Store, c.Policy.Reader, timeVerifierFor(c), opts...)
+	tv := timeVerifierFor(c)
+	if tv.View != nil {
+		// the reader's synced header chain re-checks where an exact-bytes referent's block is (its depth, or that
+		// a reorg orphaned it), never its bytes (claims-model note §5.3.1); with no chain nothing is re-checked
+		opts = append(opts, resolve.WithReferentChecker(btctime.ReferentChecker{View: tv.View, Policy: tv.Policy, Now: tv.Now}))
+	}
+	v, err := buildView(c.Store, c.Policy.Reader, tv, opts...)
 	if err != nil {
 		return nil, failed(err, "store", false, "run status, then fsck")
 	}
@@ -228,6 +234,15 @@ func referentObj(ob *resolve.Observation, full bool) *Obj {
 	}
 	if ob.Layout != nil { // the response-layout read beside the status: the read state, or why unchecked (§5.3.1a)
 		o.set("layout", textV(ob.Layout.String()))
+	}
+	if b := ob.Beside; b != nil { // the asserted finality state beside the re-checked one, disagreement flagged (§7)
+		bo := newObj().set("asserted_state", textV(b.AssertedState)).set("asserted", textV(b.Asserted)).
+			set("computed_state", textV(b.ComputedState)).set("computed", textV(b.Computed)).set("via", textV(b.Via)).
+			set("disagrees", boolV(b.Disagrees))
+		if b.Disagrees {
+			bo.setHuman("note", textV("the observer's asserted state and this reader's re-check disagree; neither replaces the other"))
+		}
+		o.set("beside", bo)
 	}
 	if full && len(ob.Referent) > 0 { // each pinned field, as the observer signed it (claims §5.3.1, I2)
 		pinned := make([]string, 0, len(ob.Referent))

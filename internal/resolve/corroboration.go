@@ -407,6 +407,11 @@ const NotComparableUnderRule = "not comparable under the rule"
 // readerCheck turns the reader's own re-check into evidence.
 func (r *Resolver) readerCheck(c *Corroboration, o *Observation) {
 	rc := o.ReCheck
+	if rc.PositionOnly {
+		// where the referent is says nothing about what the observer captured: only a re-read of the bytes is
+		// evidence (claims §5.3.1), so a position re-check adds no item, not even an inconclusive one
+		return
+	}
 	e := Evidence{Via: "reader re-check", Model: o.Class + " (reader re-check)"}
 	switch rc.Outcome {
 	case ReSame:

@@ -196,7 +196,8 @@ func TestPropertyUnverifiedEvidenceNeverPasses(t *testing.T) {
 	})
 
 	t.Run("referent checker and finality rules: final needs a rule the reader evaluates", func(t *testing.T) {
-		conformance.Partial(t, "C-core-72", "the asserted state beside the computed provisional state is checked in the resolver view (ReferentHistory); no command configures a referent checker yet, so the CLI surfaces cannot print a computed state, and the display words `shown beside it` carry no explicit disagreement flag (observation.go)")
+		// C-core-72's resolver half; the commands (show, verify, explain over a synced header chain) cover it in
+		// internal/cli (TestReferentPositionCommands)
 		w := newWorld(t)
 		depth := w.observed("D", "A", "X", "exact-bytes", chainRef(3), "finality", depthFinality("confirmations ≥ 6", 3))
 		run := w.observed("R", "C", "S1", "source", apiRef("https://api.example/settle"), "finality", runFinality("RF"))
@@ -222,6 +223,9 @@ func TestPropertyUnverifiedEvidenceNeverPasses(t *testing.T) {
 			"re-check names an unknown outcome":              fakeReferents{depth: {Outcome: "looks fine"}},
 			"re-check same bytes at depth 2, below the rule": fakeReferents{depth: {Outcome: ReSame, State: State{HasDepth: true, Depth: 2}}},
 			"re-check same bytes with no state":              fakeReferents{depth: {Outcome: ReSame}},
+			"position re-check at depth 2, below the rule":   fakeReferents{depth: {Outcome: RePosition, State: State{HasDepth: true, Depth: 2}}},
+			"position re-check with no state":                fakeReferents{depth: {Outcome: RePosition}},
+			"position re-check claiming identical bytes":     fakeReferents{depth: {Outcome: ReSame, PositionOnly: true, State: State{HasDepth: true, Depth: 12}}},
 		} {
 			o := status(depth, WithReferentChecker(c))
 			if o.ReferentStatus == RefFinal {
@@ -258,10 +262,24 @@ func TestPropertyUnverifiedEvidenceNeverPasses(t *testing.T) {
 		// C-core-72 (resolver half): the display carries the observer's asserted state (final as captured) AND the
 		// reader's computed provisional state with the rule's final state, in the one view
 		o := status(self, WithReferentChecker(fakeReferents{self: {Outcome: ReSame, State: State{HasDepth: true, Depth: 2}}}))
-		for _, want := range []string{"at capture: state 9 meets rule", RefFinalCaptured, "reader re-check: state 2, identical bytes: provisional (2; final at 6) (asserted state 9 shown beside it)"} {
+		for _, want := range []string{"at capture: state 9 meets rule", RefFinalCaptured, "reader re-check: state 2, identical bytes: provisional (2; final at 6) (asserted state 9 shown beside it: they disagree)"} {
 			if !strings.Contains(strings.Join(o.ReferentHistory, "\n"), want) {
 				t.Fatalf("asserted-beside-computed: history lacks %q:\n%s", want, strings.Join(o.ReferentHistory, "\n"))
 			}
+		}
+		if b := o.Beside; b == nil || !b.Disagrees || b.Asserted != RefFinal || b.Computed != "provisional (2; final at 6)" || b.AssertedState != "9" || b.ComputedState != "2" {
+			t.Fatalf("asserted-beside-computed: the structured pair: %+v", o.Beside)
+		}
+		if !strings.Contains(o.Render(), "finality asserted 9 (final) beside computed 2 (provisional (2; final at 6)): they disagree") {
+			t.Fatalf("asserted-beside-computed: the display lacks the flag:\n%s", o.Render())
+		}
+		// control: a re-check ahead of the asserted state that meets the rule agrees with it (time passed)
+		if o := status(self, WithReferentChecker(fakeReferents{self: {Outcome: ReSame, State: State{HasDepth: true, Depth: 12}}})); o.Beside == nil || o.Beside.Disagrees {
+			t.Fatalf("a re-check ahead of the asserted state flagged: %+v", o.Beside)
+		}
+		// a position re-check (a header chain) below the rule disagrees in the same words, and is not bytes
+		if o := status(self, WithReferentChecker(fakeReferents{self: {Outcome: RePosition, State: State{HasDepth: true, Depth: 2}}})); o.ReferentStatus != "provisional (2; final at 6)" || o.Beside == nil || !o.Beside.Disagrees || o.Beside.Via != RePosition {
+			t.Fatalf("a position re-check below the rule: %q %+v\n%s", o.ReferentStatus, o.Beside, o.Render())
 		}
 	})
 
