@@ -176,20 +176,29 @@ var limits = []limit{
 		gap: "No hardware or wallet connector is built: an identity root kept on a device signs through the external-signing package (`--prepare` / `--complete`), with the bytes moved to and from the device by hand",
 		sources: []limitSource{
 			{file: "docs/DESIGN-notes-fixed-root-identity.md", says: "No hardware or wallet connector is built (§8)."},
+			{file: "docs/DESIGN-notes-fixed-root-identity.md", says: "A key file signer is not a hardware or wallet connector."},
+			{help: []string{"key", "sign"}, says: "A key file is not a hardware or wallet connector."},
 		},
-		probe:  "`identity grant --help` offers `--prepare` and `--complete` and names no device, wallet or connector option",
+		probe:  "`identity grant --help` offers `--prepare` and `--complete`, `key sign` signs from a key file only, and neither names a device, wallet or connector option",
 		closes: "a connector that drives a device or wallet",
 		open: func(t *testing.T) (bool, string) {
 			h := runIn(t.TempDir(), nil, "identity", "grant", "--help")
 			if !strings.Contains(h.stdout, "--prepare") || !strings.Contains(h.stdout, "--complete") {
 				return false, "identity grant offers no external-signing package"
 			}
+			k := runIn(t.TempDir(), nil, "key", "sign", "--help")
+			if !strings.Contains(k.stdout, "--key") {
+				return false, "key sign takes no key file"
+			}
 			for _, w := range []string{"--device", "--wallet", "--connector", "--hardware"} {
 				if strings.Contains(h.stdout, w) {
 					return false, "identity grant offers " + w
 				}
+				if strings.Contains(k.stdout, w) {
+					return false, "key sign offers " + w
+				}
 			}
-			return true, "external-signing package only; no connector option"
+			return true, "external-signing package and key-file signing only; no connector option"
 		},
 	},
 	{

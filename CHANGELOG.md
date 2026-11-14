@@ -59,6 +59,13 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   check again and commits, or refuses with nothing written (a changed package, a wrong signature, or
   `stale-prepare` when your log moved). The package format, `rc-signing-package/0`, is provisional. No hardware
   or wallet connector is included.
+- **`commons package show` and `commons key sign`: the signing side of a package, with no store.** On the
+  machine that holds the key file, `package show <file>` runs the same checks `--complete` runs (every member
+  derived from the unsigned statement recomputed) and prints the summary, signer, algorithm, proposed id and
+  `pae_sha256` to compare with the one `--prepare` printed: exit 0, or 1 naming the member that differs.
+  `key sign --package <file> --key <file> [--out <file>|-]` runs those checks, refuses a key that is not the
+  package's signer, and writes the signature `--complete --signature` reads (never overwriting a file;
+  `--dry-run` writes nothing). Neither reads a store; the log position is still checked by `--complete`.
 
 ### Changed
 - **`identity new` and `identity cut` say what they check.** The fresh-root check sees this store only, so the help says to use a key generated for this purpose that has signed nothing anywhere; `--last-good` says it takes any held line of the delegate's key (a bare-key line included, not only an act under the grant) and that a thief's act inside the kept prefix keeps counting, so you name the last act you can attest was the delegate's own.

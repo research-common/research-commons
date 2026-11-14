@@ -700,6 +700,25 @@ summary. The `pae_sha256` that `--prepare` prints can travel to the signing mach
 separate channel: hashing the decoded `pae` there and comparing it is how the signer checks
 the bytes they sign are the ones prepared.
 
+**The signing side, with no store.** Where R is a key file on a machine that holds the
+binary and no store, two commands do that machine's part. `commons package show <file>`
+runs the same package check `--complete` runs: it
+recomputes the PAE, the id, the alg, the signer, the shape of `log_head` and the summary
+from the envelope, prints the summary, the signer, the alg, the proposed id, `pae_sha256`
+and `pae_bytes`, and exits 0 when every derived member matches, 1 naming the member when
+one differs, 2 when the file is not a package. It reads no store, so it cannot say whether
+`log_head` is still the signer's head; it says so, and `--complete` checks it.
+`commons key sign --package <file> --key <keyfile> [--out <file>|-]` runs those checks
+first, refuses unless the key file's signer is the package's signer, signs the recomputed
+PAE with the code the writer signs with, verifies the signature as a reader does, and
+writes it in the encoding above, newline-terminated, to a new file (never overwritten) or
+standard output. Every refusal writes nothing; `--dry-run` prints what would be signed.
+It signs only the PAE of an envelope the tool would prepare, never bytes it is handed. The
+custody flow: `--prepare` on the store's machine; carry the package, and its `pae_sha256`
+by a separate channel, to the signing machine; `package show` and compare the hash; `key
+sign`; carry the signature back; `--complete`. A key file signer is not a hardware or
+wallet connector.
+
 Ledger Nano X, Flex and Stax are **untested targets** for Ethereum-account EIP-191 via
 an explicitly tested connector. Test firmware/app/connector, exact payload fidelity,
 size limits, display readability and rejection/disconnect separately per model.
@@ -770,7 +789,11 @@ The external-signing package is exercised by `internal/cli:TestExternalSigningAb
 and `TestExternalSigningEndToEnd`: a root key whose file the store never sees signs
 the inception, a grant and a cut over the package's PAE bytes, a delegate signs an act
 the same way, and each committed line equals what direct signing writes at the same
-`--ts`; every abort appends nothing.
+`--ts`; every abort appends nothing. `TestPackageShowKeySignEndToEnd` and
+`TestPackageShowKeySignRefusals` run the signing side with no store: `package show` and
+`key sign` on a machine whose only inputs are the package and the key file, the
+signature completed on the store and equal to direct signing; a package with any derived
+member changed, the wrong key, or an existing output file is refused with nothing written.
 
 Not drilled: a compromised operational host, and hardware or connector signing.
 C-id-40 is therefore partial: its simple-path and package halves are the tests above;

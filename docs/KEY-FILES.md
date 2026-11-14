@@ -1,8 +1,9 @@
 # Key files (`rc-key/0`)
 
 A key file holds one signing key. `commons key new --out <file>` writes it; every command that signs
-(`publish`, `publish task`, `gc --release`) reads one. `commons key show <file>` prints the signer a file
-stands for, and nothing else.
+(`publish`, `publish task`, `gc --release`, the identity commands) reads one. `commons key show <file>` prints the
+signer a file stands for, and nothing else. `commons key sign --package <file> --key <file>` signs an external-signing
+package's bytes with a key file on a machine that holds no store (identity profile §8).
 
 **Status: provisional.** The format tag is this tool's own and is versioned (`rc-key/0`). The wire-format
 note specifies what a signature is and how a signer is derived, not a file encoding. Expect the format to be

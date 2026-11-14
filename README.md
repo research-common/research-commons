@@ -20,7 +20,9 @@ alpha: **the format may still change between alpha releases**, and so may `--jso
 policy files (all marked provisional). The fixed-root identity profile is a candidate under review: its **reader is
 active** (`rc/2` statements are verified and identity actors evaluated from the statements you hold), and so is
 its **writer**: `commons identity new|grant|cut` administer an identity and `publish --as <identity> --grant <id>`
-acts for one (signed from a key file; no external-signing package or hardware connector yet). There is no importer from the old format.
+acts for one, signed from a key file or through an external-signing package (`--prepare`, then `package show` and
+`key sign` on a machine that holds the key and no store, then `--complete`); no hardware or wallet connector yet.
+There is no importer from the old format.
 
 The previous alpha (Python CLI, hubs, ledgers) lives on the `main` branch and the `v0.4.0-alpha.1` tag. It gets
 security fixes only. This README and everything under `docs/` marked otherwise describe the new format.
@@ -87,6 +89,8 @@ takes `--json`, which prints one JSON object (an RFC 9457 problem-details object
 |---|---|
 | `init` | create a store in a directory |
 | `key new` / `key show` | generate a signing key file / print its signer (never the key) |
+| `package show` | check an external-signing package written by `--prepare` (every member derived from its envelope recomputed, as `--complete` does) and print what a signature would cover: summary, signer, alg, proposed id, `pae_sha256`; reads no store |
+| `key sign` | sign an external-signing package's PAE bytes with a key file, after `package show`'s checks and only when the key is the package's signer; writes the signature `--complete --signature` reads; reads no store |
 | `publish` | sign and commit a statement: authored (with bytes), holds, describes, retracts, or a draft |
 | `publish task` | create a task, or publish a new edition of one |
 | `publish grant` | as a task edition's coordinator, grant a key for that edition (refused when the grant would have no effect) |
