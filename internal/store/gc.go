@@ -26,7 +26,9 @@ package store
 import (
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -728,4 +730,60 @@ func (s *Store) restoreGCAsides() error {
 		s.Recovered = append(s.Recovered, RecoveryEvent{What: "restored blob", Detail: string(d) + ": a gc run stopped before deciding; the verified file is back in blobs/"})
 	}
 	return nil
+}
+
+// Staging is step 1 of one operation (§3: install every blob it needs) with an undo for a failure before the
+// commit point. Blobs installed with no record written are unreferenced, and gc would remove them after the grace
+// window; Undo removes the ones this operation itself installed now, so an aborted writer leaves the store as it
+// found it. A blob that was already held (reused) is never touched.
+type Staging struct {
+	s *Store
+	// mine maps each blob this operation installed (not reused) to its modification time right after install.
+	mine map[Digest]time.Time
+}
+
+// Stage starts step 1 of an operation.
+func (s *Store) Stage() *Staging { return &Staging{s: s, mine: map[Digest]time.Time{}} }
+
+// Install is InstallBlob, remembering a blob this operation put in place.
+func (g *Staging) Install(src io.Reader, expect Digest) error {
+	d, res, err := g.s.InstallBlob(src, expect)
+	if err != nil || res != Installed {
+		return err
+	}
+	if fi, err := os.Stat(g.s.blobPath(d)); err == nil {
+		g.mine[d] = fi.ModTime()
+	}
+	return nil
+}
+
+// Undo removes the blobs Install put in place, for an operation that failed before its commit point. A blob is
+// kept when its time has changed (another operation installed or reused it since, §6.1.1) or anything references
+// it (a statement, a serving holds, a journal record); the re-check is gc's own (moved aside, references read
+// again, removed or moved back). It returns each kept blob with why.
+func (g *Staging) Undo() (map[Digest]string, error) {
+	kept := map[Digest]string{}
+	ri := g.s.newRefIndex(nil)
+	for _, d := range slices.Sorted(maps.Keys(g.mine)) {
+		fi, err := os.Stat(g.s.blobPath(d))
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return kept, err
+		}
+		if !fi.ModTime().Equal(g.mine[d]) {
+			kept[d] = "installed or reused by another operation since"
+			continue
+		}
+		// grace 0: the window protects other operations' step 1, and the time check above is that protection here
+		why, err := g.s.removeIfStillUnreferenced(GCBlob{Digest: d, Size: fi.Size()}, ri, 0, fi.ModTime())
+		if err != nil {
+			return kept, err
+		}
+		if why != "" {
+			kept[d] = why
+		}
+	}
+	return kept, nil
 }

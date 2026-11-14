@@ -59,6 +59,37 @@ var publishDisclosures = []struct{ Field, Shape string }{
 
 func flagOf(field string) string { return strings.ReplaceAll(field, "_", "-") }
 
+// disclosureFlag is the option for one disclosure, built from publishDisclosures: `publish` uses it as is and
+// `run --publish` wraps it per output (cmd_run.go), so the two commands accept one set (C-exec-05).
+func disclosureFlag(field, shape string) Flag {
+	f := Flag{Name: flagOf(field), Value: shape, Help: "authored disclosure " + field}
+	switch shape {
+	case "object":
+		f.Value, f.Check = "json", checkJSONObject
+	case "digest":
+		f.Check = checkDigestFlag
+	case "integer":
+		f.Check = checkInt
+	case "pre-pin":
+		f.Value, f.Check = "resource/edition", checkIntendedFor
+		f.Help = "run the edition's rules on the bytes before they are pinned (your own policy, chosen by naming the edition); fail refuses, ok or unchecked is recorded"
+	}
+	return f
+}
+
+// disclosureValue is a checked disclosure option value as the body member it becomes (not for pre-pin).
+func disclosureValue(shape, v string) canon.Value {
+	switch shape {
+	case "integer":
+		n, _ := strconv.ParseInt(v, 10, 64)
+		return canon.Int(n)
+	case "object":
+		o, _ := canon.Parse([]byte(v))
+		return o
+	}
+	return canon.String(v)
+}
+
 func checkJSONObject(v string) error {
 	o, err := canon.Parse([]byte(v))
 	if err != nil {
@@ -139,19 +170,7 @@ func init() {
 		Flag{Name: "reason", Value: "text", Help: "retracts: the reason"},
 	)
 	for _, d := range publishDisclosures {
-		f := Flag{Name: flagOf(d.Field), Value: d.Shape, Help: "authored disclosure " + d.Field}
-		switch d.Shape {
-		case "object":
-			f.Value, f.Check = "json", checkJSONObject
-		case "digest":
-			f.Check = checkDigestFlag
-		case "integer":
-			f.Check = checkInt
-		case "pre-pin":
-			f.Value, f.Check = "resource/edition", checkIntendedFor
-			f.Help = "run the edition's rules on the bytes before they are pinned (your own policy, chosen by naming the edition); fail refuses, ok or unchecked is recorded"
-		}
-		flags = append(flags, f)
+		flags = append(flags, disclosureFlag(d.Field, d.Shape))
 	}
 	Register(&Command{Name: "publish", Summary: "sign and commit a statement (authored with its bytes, holds, describes, retracts, or a draft)",
 		Store: true, Writes: true, Flags: flags, Prepare: preparePublish, Run: publishCmd,
@@ -306,16 +325,7 @@ func preparePublish(c *Ctx) *Problem {
 				if !ok || d.Shape == "pre-pin" {
 					continue
 				}
-				switch d.Shape {
-				case "text", "digest":
-					setMember(p.body, d.Field, canon.String(v))
-				case "integer":
-					n, _ := strconv.ParseInt(v, 10, 64)
-					setMember(p.body, d.Field, canon.Int(n))
-				case "object":
-					o, _ := canon.Parse([]byte(v))
-					setMember(p.body, d.Field, o)
-				}
+				setMember(p.body, d.Field, disclosureValue(d.Shape, v))
 			}
 			if v, ok := c.Flag("provenance"); ok {
 				o, _ := canon.Parse([]byte(v))
@@ -768,6 +778,15 @@ func prepinRefused(err error, p *pubPrep) *Problem {
 
 // commitUnit prints a dry run, or installs the blob and commits the statements as one journal record.
 func commitUnit(c *Ctx, out *Obj, op string, sts []signed, blobs []store.Digest, content string, h head) (*Obj, int, error) {
+	open := func(store.Digest) (io.ReadCloser, error) { return os.Open(content) }
+	return commitUnitFrom(c, out, op, sts, blobs, open, "option --content", h)
+}
+
+// commitUnitFrom is commitUnit with the bytes of each blob not yet held read from open (scope names the source
+// in a failure). Every blob is installed before the one journal record that commits the statements (storage note
+// §3, step 1); a failure before the commit point leaves no statement and no record, and the blobs this attempt
+// installed are removed again (store.Staging), so the store is as it was.
+func commitUnitFrom(c *Ctx, out *Obj, op string, sts []signed, blobs []store.Digest, open func(store.Digest) (io.ReadCloser, error), scope string, h head) (*Obj, int, error) {
 	l := listV{}
 	var lines [][]byte
 	for _, s := range sts {
@@ -800,19 +819,33 @@ func commitUnit(c *Ctx, out *Obj, op string, sts []signed, blobs []store.Digest,
 			set("note", textV("dry run: the ids above are of signatures that were discarded; nothing was written"))
 		return out, ExitOK, nil
 	}
+	stage := c.Store.Stage()
+	// abort undoes step 1 for a failure before the commit point: the blobs this unit installed are removed, so
+	// nothing of the unit stays (all or nothing). A blob already held, or referenced meanwhile, is kept.
+	abort := func(prob *Problem) (*Obj, int, error) {
+		if kept, err := stage.Undo(); err != nil {
+			prob.Detail += "; removing the blobs this attempt installed failed (gc removes them after the grace window): " + err.Error()
+		} else if len(kept) > 0 {
+			prob.Detail += "; " + strconv.Itoa(len(kept)) + " blob(s) it installed were kept because another operation uses them"
+		}
+		return nil, 0, prob
+	}
 	for _, b := range blobs {
 		if c.Store.HasBlob(b) {
 			continue
 		}
-		f, err := os.Open(content)
+		f, err := open(b)
 		if err != nil {
-			return nil, 0, failed(err, "option --content", false, "check the file and run the command again")
+			return abort(failed(err, scope, false, "check the file and run the command again"))
 		}
-		_, _, err = c.Store.InstallBlob(f, b)
+		err = stage.Install(f, b)
 		f.Close()
 		if err != nil {
-			return nil, 0, failed(err, "option --content", false, "the file changed while publishing? run the command again")
+			return abort(failed(err, scope, false, "the file changed while publishing? run the command again"))
 		}
+	}
+	if err := beforeCommit(); err != nil {
+		return abort(failed(err, "store", false, "nothing was committed; run the command again"))
 	}
 	res, err := c.Store.Commit(op, lines, blobs)
 	if err != nil {
@@ -828,7 +861,7 @@ func commitUnit(c *Ctx, out *Obj, op string, sts []signed, blobs []store.Digest,
 				Next: "fix the cause in peer_text, then run commons status (any command that opens the store finishes the install); do not publish again",
 				Peer: err.Error(), Exit: ExitCouldNot}
 		}
-		return nil, 0, failed(err, "store", false, "nothing was committed; run the command again")
+		return abort(failed(err, "store", false, "nothing was committed; run the command again"))
 	}
 	out.set("committed", boolV(true)).set("operation", refV(res.Op)).set("did", texts(effects...))
 	if res.NeedsRepair != nil {
@@ -978,6 +1011,10 @@ func (v *view) readinessWith(c *Ctx, sts []signed, task, edition string) (*Obj, 
 	}
 	return o, b.State, ""
 }
+
+// beforeCommit is a test seam called once every blob of a unit is installed and before its record is written:
+// a test returns an error to abort the unit there. It returns nil in production.
+var beforeCommit = func() error { return nil }
 
 // afterHead is a test seam called once the head is resolved and before the line is signed: tests widen the
 // window the writer lock exists to close. It is nil in production.

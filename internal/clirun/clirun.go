@@ -1,6 +1,7 @@
 // Package clirun is the one bridge between the command line and the execution layer: it implements
-// cli.Rerunner over run.Rerun. Package cli imports nothing that executes; the binary (cmd/commons) wires this
-// bridge in, and it is the only execution import the binary has (checked by the CLI's static test).
+// cli.Rerunner over run.Rerun, and cli.Executor over run.Execute and run.PlanPublish (run.go). Package cli
+// imports nothing that executes; the binary (cmd/commons) wires this bridge in, and it is the only execution
+// import the binary has (checked by the CLI's static test).
 package clirun
 
 import (

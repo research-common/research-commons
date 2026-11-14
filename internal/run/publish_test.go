@@ -190,7 +190,7 @@ func TestPerOutputDisclosures(t *testing.T) {
 // `authored` the resolver reads, minus `type`, which the tool writes) is accepted by `run --publish` and present
 // in the emitted statement; the set difference is empty. The emitted statement passes the wire gate.
 func TestPublishAcceptsEveryDisclosure(t *testing.T) {
-	conformance.Partial(t, "C-exec-05", "the disclosure sets compared are the Go lists (resolve.SingleParty vs run.Disclosure); publish's flags equal run.Disclosure (internal/cli.TestPublishDisclosureFlags); run --publish is not a CLI command yet")
+	conformance.Partial(t, "C-exec-05", "the disclosure sets compared are the Go lists (resolve.SingleParty vs run.Disclosure); publish's flags equal run.Disclosure (internal/cli.TestPublishDisclosureFlags); each flag passed to run --publish is internal/clirun.TestRunPublishDisclosureFlags")
 	var publish []string
 	for _, f := range resolveSingleParty() {
 		if f != "type" {

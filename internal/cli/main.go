@@ -33,6 +33,9 @@ type Env struct {
 	// Rerun is the re-run bridge `verify --rerun` calls; nil in a build without execution (the command then
 	// answers "re-run not available in this build", exit 3). This package never executes anything itself.
 	Rerun Rerunner
+	// Exec is the bridge `run` executes through (the same execution layer); nil in a build without execution
+	// (the command then answers "run is not available in this build", exit 3).
+	Exec Executor
 	// Stdin and Interactive serve a command that may ask the user (revoke without --reason). Interactive is true
 	// only when stdin is a terminal; with it false (a pipe, a test, cron) such a command refuses instead of
 	// asking. A nil Stdin reads nothing.
@@ -49,13 +52,15 @@ type Ctx struct {
 	Cmd  *Command
 	Args map[string]string
 	// Many holds every value of a variadic argument, in order (Args holds the first).
-	Many   map[string][]string
-	Flags  map[string]string // present flags; a boolean flag maps to ""
-	JSON   bool
-	Root   string
-	Policy *Policy
-	Store  *store.Store
-	Env    *Env
+	Many  map[string][]string
+	Flags map[string]string // present flags; a boolean flag maps to ""
+	// Repeated holds every value of a repeatable flag (Flag.Repeat), in order.
+	Repeated map[string][]string
+	JSON     bool
+	Root     string
+	Policy   *Policy
+	Store    *store.Store
+	Env      *Env
 	// state carries what a command's Before checked and Run uses (a loaded key), so Run does not re-read it.
 	state any
 	// Prep is what the command's Prepare hook read, for Run.
@@ -126,14 +131,15 @@ func emitProblem(env *Env, p *Problem, jsonOut bool) int {
 type parsed struct {
 	words []string // everything that is not a flag, in order
 	flags map[string]string
-	order []string // flag names in order, for duplicate detection
+	many  map[string][]string // every value of a repeatable flag, in order
+	order []string            // flag names in order, for duplicate detection
 }
 
 // split separates flags from words. A flag is --name, --name=value or --name value; the value form is decided
 // by the flag's declaration, so split takes the known flags. "--" ends options. Anything starting with "-"
 // that is not a known flag is an unknown option: exit 2.
 func split(argv []string, known func(string) (Flag, bool)) (*parsed, *Problem) {
-	p := &parsed{flags: map[string]string{}}
+	p := &parsed{flags: map[string]string{}, many: map[string][]string{}}
 	for i := 0; i < len(argv); i++ {
 		a := argv[i]
 		if a == "--" {
@@ -165,7 +171,7 @@ func split(argv []string, known func(string) (Flag, bool)) (*parsed, *Problem) {
 			i++
 			val = argv[i]
 		}
-		if _, dup := p.flags[f.Name]; dup {
+		if _, dup := p.flags[f.Name]; dup && !f.Repeat {
 			return nil, usage("malformed-argument", "an option was given twice", "nothing was done",
 				"option --"+f.Name, "give it once", "")
 		}
@@ -175,7 +181,12 @@ func split(argv []string, known func(string) (Flag, bool)) (*parsed, *Problem) {
 					"option --"+f.Name, "see commons help", val)
 			}
 		}
-		p.flags[f.Name] = val
+		if _, dup := p.flags[f.Name]; !dup {
+			p.flags[f.Name] = val
+		}
+		if f.Repeat {
+			p.many[f.Name] = append(p.many[f.Name], val)
+		}
 		p.order = append(p.order, f.Name)
 	}
 	return p, nil
@@ -183,7 +194,8 @@ func split(argv []string, known func(string) (Flag, bool)) (*parsed, *Problem) {
 
 func dispatch(argv []string, env *Env) (*Obj, int, error) {
 	// first pass: find the command by its words, accepting every flag any command declares, so a flag before
-	// the command name is not mistaken for the name
+	// the command name is not mistaken for the name. Two commands may declare one name with different checks or
+	// repeatability, so this pass checks neither: the second pass, over the command's own flags, does.
 	anyFlag := func(n string) (Flag, bool) {
 		for _, g := range globalFlags {
 			if g.Name == n {
@@ -193,6 +205,8 @@ func dispatch(argv []string, env *Env) (*Obj, int, error) {
 		for _, c := range registry {
 			for _, f := range c.Flags {
 				if f.Name == n {
+					f.Check = nil
+					f.Repeat = f.Value != ""
 					return f, true
 				}
 			}
@@ -249,7 +263,7 @@ func dispatch(argv []string, env *Env) (*Obj, int, error) {
 	if _, ok := p.flags["version"]; ok {
 		return versionObj(env.Build), ExitOK, nil
 	}
-	ctx := &Ctx{Cmd: cmd, Args: map[string]string{}, Many: map[string][]string{}, Flags: p.flags, Env: env}
+	ctx := &Ctx{Cmd: cmd, Args: map[string]string{}, Many: map[string][]string{}, Flags: p.flags, Repeated: p.many, Env: env}
 	_, ctx.JSON = p.flags["json"]
 	pos := p.words[n:]
 	if prob := bindArgs(cmd, pos, ctx.Args, ctx.Many); prob != nil {
