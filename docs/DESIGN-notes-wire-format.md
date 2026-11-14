@@ -504,7 +504,8 @@ present, every entry's endpoint. A writer derives both from the log it pins.
 On the workflow's `authored`, `environment_match` list of string O is a disclosure (a set of environment-record
 field names; absent = the execution note §1 default for the mode). A run with an unpinned input emits
 `provenance_partial` object (`workflow` digest R · `inputs` list of digest R, the pinned ones · `unpinned`
-list of string R, the input names · `environment` O) **in place of** `provenance`, so the output joins no
+list of string R, the input names · `supplied` object O, unpinned input name → digest of the bytes the run
+staged for it · `environment` O) **in place of** `provenance`, so the output joins no
 derivation group. `provenance` gains `output` string O, the spec's output name the content is, so a re-run of
 a multi-output workflow names which output it re-ran. An acquisition's `capture` gains `endpoints` list of
 string O, `window` O (the shared object) and `environment` O (the record above).

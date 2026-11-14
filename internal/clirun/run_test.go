@@ -110,6 +110,15 @@ func (w *runWorld) run(f *run.Fake, args ...string) result {
 	return result{code, o.String() + e.String()}
 }
 
+// cmd runs any other command against the world's store.
+func (w *runWorld) cmd(args ...string) result {
+	var o, e bytes.Buffer
+	env := &cli.Env{Stdout: &o, Stderr: &e, Getenv: func(string) string { return "" }, Getwd: func() (string, error) { return w.root, nil },
+		Build: cli.Build{Version: "test", Commit: "0000000"}}
+	code := cli.Main(args, env)
+	return result{code, o.String() + e.String()}
+}
+
 func (w *runWorld) publish(f *run.Fake, args ...string) result {
 	return w.run(f, append([]string{"--publish", "--key", w.key}, args...)...)
 }
@@ -395,19 +404,83 @@ func (w *runWorld) collection(t *testing.T) (string, string) {
 	return g, resolve.EditionID(eb)
 }
 
-// TestRunPublishUnpinnedInput: C-exec-03 through the command. A spec whose input is a mutable tag cannot be
-// staged from a store (it holds content by hash only, and the command fetches nothing): the run is refused
-// before staging, naming the input, and nothing is appended.
+// TestRunPublishUnpinnedInput: C-exec-03 through the command. A spec whose input "feed" is a mutable tag. Without
+// --input the run is refused before staging, naming the input and the option (nothing fetches a tag). --input for
+// the pinned input, or for a name the spec does not declare, is exit 2 before anything runs. With --input
+// feed=<file>: the run stages those bytes, `run --publish` emits an authored with provenance_partial (no
+// provenance) listing the unpinned input and the supplied bytes by digest, never the file's path; the output
+// joins no derivation group (show lists none) and `verify` exits 4 naming the unpinned input, never T0.
 func TestRunPublishUnpinnedInput(t *testing.T) {
-	conformance.Partial(t, "C-exec-03", "a run of an unpinned input through the command needs a way to supply the tag's bytes (none exists: the store holds content by hash and run fetches nothing); the emitted provenance_partial, no group and verify's exit 4 are the planner's and resolver's tests in internal/run")
+	conformance.Covers(t, "C-exec-03")
 	data := []byte("pinned")
 	w := newRunWorld(t, "", [][]byte{data}, "inputs", object("feed", canon.String("registry.example/feed:latest"), "table", canon.String(run.Digest(data))),
 		"outputs", object("result", canon.String("result.txt")))
+	// the step concatenates both staged inputs, so the output proves which bytes were staged
+	cat := func(_ context.Context, in, out string, _ map[string]string) (int, run.Resources) {
+		a, err1 := os.ReadFile(filepath.Join(in, "feed"))
+		b, err2 := os.ReadFile(filepath.Join(in, "table"))
+		if err1 != nil || err2 != nil {
+			return 2, run.Resources{}
+		}
+		os.WriteFile(filepath.Join(out, "result.txt"), append(a, b...), 0o644)
+		return 0, run.Resources{run.CapMemory: 1000, run.CapWallTime: 5, run.CapPids: 1}
+	}
 	before := tree(t, w.root)
-	f := w.fake(writes("result.txt", "x"))
-	want(t, "unpinned", w.publish(f), 3, `"ran":false`, "registry.example/feed:latest", `"published":false`)
+	f := w.fake(cat)
+	want(t, "not supplied", w.publish(f), 3, `"ran":false`, run.ReasonNotSupplied, `\"feed\"`, "--input feed=<file>", `"published":false`)
 	if f.Spawned != 0 || tree(t, w.root) != before {
 		t.Fatalf("spawned %d, store changed %v", f.Spawned, tree(t, w.root) != before)
+	}
+	dir := t.TempDir()
+	feed := filepath.Join(dir, "feed-snapshot.bin")
+	today := []byte("what the tag pointed at today;")
+	os.WriteFile(feed, today, 0o644)
+	for _, c := range []struct {
+		name string
+		args []string
+		subs []string
+	}{
+		{"pinned input", []string{"--input", "table=" + feed}, []string{"problem:pinned-input", `"table"`}},
+		{"undeclared input", []string{"--input", "other=" + feed}, []string{"problem:unknown-input", "feed"}},
+		{"twice", []string{"--input", "feed=" + feed, "--input", "feed=" + feed}, []string{"one input twice"}},
+		{"unreadable", []string{"--input", "feed=" + filepath.Join(dir, "missing")}, []string{"problem:unreadable-file"}},
+		{"not name=file", []string{"--input", "feed"}, nil},
+	} {
+		want(t, c.name, w.publish(f, c.args...), 2, c.subs...)
+		if f.Spawned != 0 || tree(t, w.root) != before {
+			t.Fatalf("%s: spawned %d, store changed %v", c.name, f.Spawned, tree(t, w.root) != before)
+		}
+	}
+	// without --publish too: the pinned input is refused before anything runs
+	want(t, "pinned input, no publish", w.run(f, "--input", "table="+feed), 2, "problem:pinned-input")
+
+	r := w.publish(f, "--input", "feed="+feed)
+	want(t, "supplied", r, 0, `"committed":true`, `"kind":"authored"`, `"supplied"`, run.Digest(today))
+	if strings.Contains(r.stdout, feed) || strings.Contains(r.stdout, "feed-snapshot") {
+		t.Fatalf("the input's path is printed: %s", r.stdout)
+	}
+	au := w.statements("authored")
+	if len(au) != 1 {
+		t.Fatalf("%d authored", len(au))
+	}
+	b := au[0].Body
+	out := run.Digest(append(append([]byte{}, today...), data...))
+	enc := string(canon.Encode(b))
+	if member(b, "content", "digest") != canon.String(out) || member(b, "provenance") != nil ||
+		member(b, "provenance_partial", "supplied", "feed") != canon.String(run.Digest(today)) ||
+		!strings.Contains(string(canon.Encode(member(b, "provenance_partial", "unpinned"))), "feed") ||
+		strings.Contains(enc, "feed-snapshot") || strings.Contains(enc, dir) {
+		t.Fatalf("authored: %s", enc)
+	}
+	// the outcome C-exec-03 names, through the read commands
+	show := w.cmd("show", out, "--json")
+	if show.code != 0 || strings.Contains(show.stdout, `"groups"`) {
+		t.Fatalf("show: the output joined a derivation group: %d %s", show.code, show.stdout)
+	}
+	v := w.cmd("verify", out, "--json")
+	want(t, "verify", v, 4, `"unpinned"`, "feed")
+	if strings.Contains(v.stdout, `"T0"`) {
+		t.Fatalf("verify reported T0: %s", v.stdout)
 	}
 }
 

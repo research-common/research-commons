@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"io"
+	"maps"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -43,6 +45,9 @@ type WorkflowInfo struct {
 	Inputs []string
 	// Unpinned lists inputs named by anything but a content hash, as "name (ref)" (§1 rule 1).
 	Unpinned []string
+	// PinnedNames and UnpinnedNames are the input names, by whether the spec pins them (--input supplies only
+	// the unpinned ones).
+	PinnedNames, UnpinnedNames []string
 	// Outputs are the declared output names, sorted.
 	Outputs []string
 	// Acquisition is true for a spec that requires the network (§1 rule 3): its outputs are `observed`.
@@ -56,6 +61,8 @@ type RunRequest struct {
 	// Signer is the workflow's default author (admission by signer, §2.3); "" when it has none.
 	Signer string
 	Blob   func(digest string) ([]byte, bool)
+	// Supplied is the bytes given with --input for each unpinned input, by input name.
+	Supplied map[string][]byte
 }
 
 // RunOutput is one output read back.
@@ -77,6 +84,8 @@ type RunResult struct {
 	Environment *canon.Object
 	Outputs     []RunOutput
 	Explain     []string
+	// Supplied is, per unpinned input, the digest of the bytes the run staged for it.
+	Supplied map[string]string
 	// Handle is the execution layer's own result, passed back to Plan unread.
 	Handle any
 }
@@ -132,10 +141,20 @@ func perOutput(check func(string) error) func(string) error {
 	}
 }
 
+// checkInputFlag checks an --input value: <name>=<file>.
+func checkInputFlag(v string) error {
+	name, file, ok := strings.Cut(v, "=")
+	if !ok || name == "" || file == "" {
+		return errors.New("not <name>=<file>")
+	}
+	return nil
+}
+
 func init() {
 	flags := slices.Clone(writerFlags)
 	flags = append(flags,
 		Flag{Name: "exec-policy", Value: "file", Help: "the reader's execution policy file (format " + ExecPolicyFormat + ", provisional); required: nothing runs without one"},
+		Flag{Name: "input", Value: "name=file", Repeat: true, Help: "the bytes of an input the spec does not pin (a tag, a URL, a path): staged under that name, recorded by digest only; refused for a pinned input", Check: checkInputFlag},
 		Flag{Name: "publish", Help: "sign and commit what the run emits (authored, reproduced or observed per output) with the output blobs, as one unit"},
 		Flag{Name: "request-log", Value: "output", Help: "an acquisition's request log output (rc-request-log/1): its referent's format, count and endpoint are read from it"},
 	)
@@ -149,7 +168,7 @@ func init() {
 	}
 	Register(&Command{Name: "run", Summary: "run a held workflow under your execution policy; --publish signs what it emits",
 		Args: []Arg{{Name: "workflow", Shape: ShapeRef}}, Store: true, Writes: true, Flags: flags, Prepare: prepareRun, Run: runCmd,
-		Help: "Runs the workflow spec the store holds (its digest, or the id of an authored statement on it) under --exec-policy, and prints the result token, the environment record and each output; nothing is appended. With --publish (and --key or $" + KeyEnv + ") it signs, per output: authored on a first derivation, reproduced over your own current authored of the same workflow and inputs (match on the same bytes; diverged, or the comparator's word, on different bytes; never a second authored), observed for a workflow that requires the network. Disclosures are per output (--licence out=CC-BY-4.0) and nothing is inherited: not from the workflow, its inputs or a sibling output. The provenance, environment record and capture are written from the run and cannot be supplied. A run that did not complete, or a re-run whose comparison could not finish, publishes nothing and says why. The statements and the output blobs commit as one unit: all or nothing."})
+		Help: "Runs the workflow spec the store holds (its digest, or the id of an authored statement on it) under --exec-policy, and prints the result token, the environment record and each output; nothing is appended. An input the spec does not pin (a tag, a URL, a path) is never fetched: give its bytes with --input <name>=<file> (unpinned inputs only; a pinned input is always the held blob its hash names), recorded by digest only, never the path; the run has partial provenance (no derivation group, verify exits 4). With --publish (and --key or $" + KeyEnv + ") it signs, per output: authored on a first derivation, reproduced over your own current authored of the same workflow and inputs (match on the same bytes; diverged, or the comparator's word, on different bytes; never a second authored), observed for a workflow that requires the network. Disclosures are per output (--licence out=CC-BY-4.0) and nothing is inherited: not from the workflow, its inputs or a sibling output. The provenance, environment record and capture are written from the run and cannot be supplied. A run that did not complete, or a re-run whose comparison could not finish, publishes nothing and says why. The statements and the output blobs commit as one unit: all or nothing."})
 }
 
 // runPrep is what prepareRun checked.
@@ -163,6 +182,8 @@ type runPrep struct {
 	intended    map[string][2]string
 	requestLog  string
 	tsGiven     bool
+	// supplied is the bytes of each --input, by input name (read before anything runs; the path is never recorded)
+	supplied map[string][]byte
 }
 
 func prepareRun(c *Ctx) *Problem {
@@ -177,10 +198,13 @@ func prepareRun(c *Ctx) *Problem {
 		return prob
 	}
 	p.policy = pol
+	if prob := p.readInputs(c); prob != nil {
+		return prob
+	}
 	_, p.publish = c.Flag("publish")
 	if !p.publish {
 		for _, f := range c.Cmd.Flags {
-			if _, given := c.Flags[f.Name]; given && f.Name != "exec-policy" && f.Name != "json" && f.Name != "store" {
+			if _, given := c.Flags[f.Name]; given && !slices.Contains([]string{"exec-policy", "json", "store", "input"}, f.Name) {
 				return usage("malformed-argument", "an option applies only with --publish", "without --publish the run is printed and nothing is signed; nothing was done",
 					"option --"+f.Name, "add --publish, or drop --"+f.Name, "")
 			}
@@ -244,6 +268,52 @@ func prepareRun(c *Ctx) *Problem {
 	return nil
 }
 
+// readInputs reads every --input file before anything runs: a name given twice, or a file that cannot be read, is
+// exit 2. Whether each name is an unpinned input of the spec is checked once the spec is read (checkInputs).
+func (p *runPrep) readInputs(c *Ctx) *Problem {
+	for _, v := range c.Repeated["input"] {
+		name, path, _ := strings.Cut(v, "=")
+		if _, dup := p.supplied[name]; dup {
+			return usage("malformed-argument", "an option names one input twice", "give each input one file; nothing was done", "option --input", "drop one", name)
+		}
+		fi, err := os.Stat(path)
+		if err != nil || !fi.Mode().IsRegular() {
+			return usage("unreadable-file", "the input file cannot be read", "nothing was done", "option --input", "check the path", name)
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return usage("unreadable-file", "the input file cannot be read", "nothing was done", "option --input", "check its permissions", name)
+		}
+		if p.supplied == nil {
+			p.supplied = map[string][]byte{}
+		}
+		p.supplied[name] = b
+	}
+	return nil
+}
+
+// checkInputs refuses, before anything runs, an --input for an input the spec pins (its bytes are the held blob
+// the pin names, never a file) or for a name the spec does not declare.
+func (p *runPrep) checkInputs(info *WorkflowInfo) *Problem {
+	names := slices.Sorted(maps.Keys(p.supplied))
+	for _, n := range names {
+		if slices.Contains(info.PinnedNames, n) {
+			return usage("pinned-input", "--input names an input the spec pins",
+				"a pinned input's bytes are the blob its hash names, staged from this store and checked against the pin; --input supplies only an unpinned input; nothing ran",
+				"option --input", "drop --input "+n+"=…, and fetch the pinned blob if it is not held", n)
+		}
+		if !slices.Contains(info.UnpinnedNames, n) {
+			in := "none"
+			if len(info.UnpinnedNames) > 0 {
+				in = strings.Join(info.UnpinnedNames, ", ")
+			}
+			return usage("unknown-input", "--input names an input the spec does not declare", "the spec's unpinned inputs are "+in+"; nothing ran",
+				"option --input", "name an unpinned input of the spec", n)
+		}
+	}
+	return nil
+}
+
 // runWorkflow resolves the workflow argument: a spec digest, or an authored statement's id (its content).
 func (v *view) runWorkflow(arg string) (string, *Problem) {
 	if isDigest(arg) {
@@ -289,6 +359,9 @@ func runCmd(c *Ctx) (*Obj, int, error) {
 			Detail: "the spec does not parse as a workflow spec; nothing ran; the parser's text is in peer_text", Next: "check the digest names a workflow spec",
 			Peer: err.Error(), Exit: ExitCouldNot}
 	}
+	if prob := p.checkInputs(info); prob != nil {
+		return nil, 0, prob
+	}
 	if prob := p.checkOutputs(info); prob != nil {
 		return nil, 0, prob
 	}
@@ -300,7 +373,7 @@ func runCmd(c *Ctx) (*Obj, int, error) {
 		out.set("author_note", textV(why+"; admission is by workflow hash only, and the comparison mode is undeclared"))
 	}
 	start := runNow()
-	res, err := c.Env.Exec.Run(context.Background(), RunRequest{Policy: p.policy, Spec: spec, Signer: signer, Blob: v.readBlob})
+	res, err := c.Env.Exec.Run(context.Background(), RunRequest{Policy: p.policy, Spec: spec, Signer: signer, Blob: v.readBlob, Supplied: p.supplied})
 	if err != nil {
 		var pr *Problem
 		if errors.As(err, &pr) {
@@ -311,6 +384,15 @@ func runCmd(c *Ctx) (*Obj, int, error) {
 	end := runNow()
 	if res.Refused != "" {
 		out.set("ran", boolV(false)).set("why", textV("refused before staging (no record written): "+res.Refused))
+		var missing []string
+		for _, n := range info.UnpinnedNames {
+			if _, ok := p.supplied[n]; !ok {
+				missing = append(missing, n)
+			}
+		}
+		if len(missing) > 0 {
+			out.set("next", textV("supply the bytes of each unpinned input: --input "+strings.Join(missing, "=<file> --input ")+"=<file>"))
+		}
 		if p.publish {
 			out.set("published", boolV(false))
 		}
@@ -319,6 +401,13 @@ func runCmd(c *Ctx) (*Obj, int, error) {
 	out.set("ran", boolV(res.Environment != nil)).set("run", runResultObj(res))
 	if len(info.Unpinned) > 0 {
 		out.set("unpinned", texts(info.Unpinned...)).set("unpinned_note", textV("partial provenance: an authored from this run joins no derivation group and verify cannot report T0 (exit 4)"))
+	}
+	if len(res.Supplied) > 0 {
+		var sl listV
+		for _, n := range slices.Sorted(maps.Keys(res.Supplied)) {
+			sl = append(sl, newObj().set("input", textV(n)).set("digest", refV(res.Supplied[n])).set("size", intV(int64(len(p.supplied[n])))))
+		}
+		out.set("supplied", sl).set("supplied_note", textV("the bytes given with --input, recorded by digest only (never the path); they pin nothing: the spec still names the input by a mutable reference"))
 	}
 	code := ExitOK
 	if !res.Completed {

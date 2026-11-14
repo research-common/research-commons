@@ -52,7 +52,11 @@ Rules:
 1. **Provenance is the pair (workflow hash, input hashes).** A run whose spec has any `unpinned` input emits
    an `authored` statement with the unpinned input listed and `provenance: partial`. It joins no derivation
    group and `verify` exits 4 (nothing to re-run) naming the input (C-exec-03). The run itself is not refused:
-   partial provenance is disclosed, not forbidden.
+   partial provenance is disclosed, not forbidden. Nothing fetches a tag, a URL or a path: the runner supplies
+   an unpinned input's bytes (`run --input <name>=<file>`, for unpinned inputs only; a pinned input's bytes are
+   always the held blob its hash names). Without them the run is refused before staging, naming the input. The
+   statement records the supplied bytes by digest (`provenance_partial.supplied`), never where they came from;
+   the digest records what this run read and pins nothing, so the output still joins no group.
 2. **A spec never carries the replication mode or comparator.** They are single-party fields of the workflow's
    `authored` statement so that they are signed by the author and amendable only by the author (claims-model
    note §4, §5.2). An implementation that finds them in the spec body ignores them there and displays

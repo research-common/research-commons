@@ -42,6 +42,14 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   its inputs or a sibling output. The statements, the runner's `holds` and the output blobs commit as one unit: a
   failure before the commit point removes the blobs it installed, so the store is left as it was. A run that did
   not complete, or a re-run whose comparison could not finish, publishes nothing and says why.
+- **`run --input <name>=<file>` supplies an unpinned input.** A workflow spec that names an input by a tag, a URL
+  or a path (not a content hash) used to be refused by `run` before staging, because nothing fetches such a
+  reference. `--input` (repeatable) now supplies its bytes from a local file. It is accepted for unpinned inputs
+  only: an `--input` for a pinned input, or for a name the spec does not declare, is refused (exit 2) before
+  anything runs, and an unpinned input not given is still refused, now naming the option. The run has partial
+  provenance as before: `run --publish` emits `authored` with `provenance_partial`, which now also records the
+  supplied bytes by digest (`supplied`, never the file's path); the output joins no derivation group and `verify`
+  exits 4 naming the unpinned input.
 - **The fixed-root identity writer.** `commons identity new` signs an identity's inception with a fresh root key
   (a key that already has a log is refused), `commons identity grant` grants a delegate key (pinned at its first
   line) a permission set, and `commons identity cut` cuts a grant: `--last-good <id|none>` is required, it says it

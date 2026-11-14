@@ -16,6 +16,13 @@ func (b *Bridge) Describe(spec []byte) (*cli.WorkflowInfo, error) {
 		return nil, err
 	}
 	info := &cli.WorkflowInfo{Digest: s.Digest, Inputs: s.InputDigests(), Unpinned: s.Unpinned(), Acquisition: s.Acquisition()}
+	for _, in := range s.Inputs {
+		if in.Pinned() {
+			info.PinnedNames = append(info.PinnedNames, in.Name)
+		} else {
+			info.UnpinnedNames = append(info.UnpinnedNames, in.Name)
+		}
+	}
 	for _, o := range s.Outputs {
 		info.Outputs = append(info.Outputs, o.Name)
 	}
@@ -42,7 +49,7 @@ func (b *Bridge) Run(ctx context.Context, q cli.RunRequest) (*cli.RunResult, err
 		}
 		blobs[d] = data
 	}
-	inv := run.Invocation{Request: run.Request{Spec: s, Signer: q.Signer}, Blobs: blobs, StagingRoot: b.StagingRoot}
+	inv := run.Invocation{Request: run.Request{Spec: s, Signer: q.Signer}, Blobs: blobs, Supplied: q.Supplied, StagingRoot: b.StagingRoot}
 	res, err := run.Execute(ctx, Policy(q.Policy), b.Runner, inv)
 	if err != nil {
 		var r *refusal.Refusal
@@ -52,7 +59,7 @@ func (b *Bridge) Run(ctx context.Context, q cli.RunRequest) (*cli.RunResult, err
 		return nil, err
 	}
 	out := &cli.RunResult{Token: Word(res.Token), Detail: res.Token.String(), Exit: res.Token.Exit(), Completed: res.Completed(),
-		Explain: res.Explain, Handle: handle{spec: s, res: res}}
+		Explain: res.Explain, Supplied: res.Supplied, Handle: handle{spec: s, res: res}}
 	if res.Record != nil {
 		out.Environment = res.Record.Object()
 	}

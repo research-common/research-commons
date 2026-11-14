@@ -92,10 +92,19 @@ func TestUnpinnedInput(t *testing.T) {
 	s := mustSpec(t, specBytes)
 	f := newFake().step("s", catStep("table"))
 	blobs := blobsFor(s, "s", map[string][]byte{"t": data})
-	blobs["registry.example/feed:latest"] = []byte("whatever the tag pointed at today")
-	res, err := Execute(context.Background(), grantAll(), f, Invocation{Request: Request{Spec: s, Signer: ownerKey}, Blobs: blobs})
+	// nothing fetches a tag: without supplied bytes the run is refused before staging, naming the input
+	if _, err := Execute(context.Background(), grantAll(), f, Invocation{Request: Request{Spec: s, Signer: ownerKey}, Blobs: blobs}); err == nil ||
+		!strings.Contains(err.Error(), ReasonNotSupplied) || !strings.Contains(err.Error(), `"feed"`) || f.Spawned != 0 {
+		t.Fatalf("unsupplied: %v, spawned %d", err, f.Spawned)
+	}
+	today := []byte("whatever the tag pointed at today")
+	res, err := Execute(context.Background(), grantAll(), f, Invocation{Request: Request{Spec: s, Signer: ownerKey}, Blobs: blobs,
+		Supplied: map[string][]byte{"feed": today}})
 	if err != nil || !res.Completed() {
 		t.Fatalf("an unpinned input is disclosed, not refused: %v", err)
+	}
+	if len(res.Supplied) != 1 || res.Supplied["feed"] != Digest(today) {
+		t.Fatalf("supplied %v", res.Supplied)
 	}
 	plan, err := PlanPublish(PublishInput{Spec: s, Result: res, Mode: "bytes"})
 	if err != nil || len(plan) != 1 || plan[0].Kind != "authored" {
@@ -108,6 +117,10 @@ func TestUnpinnedInput(t *testing.T) {
 	a := w.resolver().Artifact(res.Outputs[0].Digest)
 	if a.Group != nil || len(a.Groups) != 0 || a.Step.Tier != "" {
 		t.Fatalf("partial provenance joined a group:\n%s", a.Render())
+	}
+	pp, _ := plan[0].Body.Get("provenance_partial")
+	if sup := pp.(*canon.Object).Members["supplied"]; string(canon.Encode(sup)) != `{"feed":"`+Digest(today)+`"}` {
+		t.Fatalf("provenance_partial.supplied %s", canon.Encode(sup))
 	}
 	un := UnpinnedOf(plan[0].Body)
 	if len(un) != 1 || !strings.Contains(un[0], "feed:latest") {

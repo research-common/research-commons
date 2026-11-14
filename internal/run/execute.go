@@ -23,9 +23,12 @@ type Attachment struct {
 // Invocation is one `run`.
 type Invocation struct {
 	Request
-	// Blobs supplies the bytes of the code and of every input, keyed by the reference the spec writes (a digest
-	// for a pinned input).
-	Blobs       map[string][]byte
+	// Blobs supplies the bytes of the code and of every pinned input, keyed by digest.
+	Blobs map[string][]byte
+	// Supplied supplies the bytes of each unpinned input, keyed by the input's name (§1 rule 1): the runner says
+	// which bytes stand for a tag, a URL or a path. Their digests are recorded (Result.Supplied), never where
+	// they came from.
+	Supplied    map[string][]byte
 	Attachments []Attachment
 	// Secrets holds the values of granted names; only names the policy grants this workflow cross (§6).
 	Secrets map[string]string
@@ -57,6 +60,9 @@ type Result struct {
 	Explain []string
 	// StagingRemoved records that the per-run staging directory is gone (§2.2: staging is removed after any run).
 	StagingRemoved bool
+	// Supplied is, per unpinned input name, the digest of the bytes staged for it (nil when the spec pins every
+	// input). A run of such a spec has partial provenance; this records what it read, not that it was pinned.
+	Supplied map[string]string
 }
 
 // Completed reports whether the step ran to its own exit 0 and every declared output was read back.
@@ -139,6 +145,14 @@ func Execute(ctx context.Context, p *Policy, rn Runner, inv Invocation) (*Result
 	}
 	if err := stage(in, s, inv, scope); err != nil {
 		return nil, err
+	}
+	for _, x := range s.Inputs {
+		if !x.Pinned() {
+			if res.Supplied == nil {
+				res.Supplied = map[string]string{}
+			}
+			res.Supplied[x.Name] = Digest(inv.Supplied[x.Name])
+		}
 	}
 	env := map[string]string{}
 	for k, v := range s.Env {
@@ -223,6 +237,10 @@ func Execute(ctx context.Context, p *Policy, rn Runner, inv Invocation) (*Result
 	return res, nil
 }
 
+// ReasonNotSupplied refuses a run before staging when an unpinned input has no supplied bytes: nothing fetches a
+// tag, a URL or a path, so the runner supplies them (§1 rule 1).
+const ReasonNotSupplied = "unpinned input not supplied"
+
 // codeName is the input-directory name the workflow's own code is staged under (§2.1).
 const codeName = "code"
 
@@ -256,9 +274,15 @@ func stage(in string, s *Spec, inv Invocation, scope string) error {
 		return stagingErr(err, codeName, scope)
 	}
 	for _, x := range s.Inputs {
-		b, ok := inv.Blobs[x.Ref]
-		if !ok {
-			return &refusal.Refusal{Class: refusal.Operational, Reason: "blob not held", Detail: "input " + strconv.Quote(x.Name) + " (" + x.Ref + "); " + scope}
+		var b []byte
+		var ok bool
+		if x.Pinned() {
+			if b, ok = inv.Blobs[x.Ref]; !ok {
+				return &refusal.Refusal{Class: refusal.Operational, Reason: "blob not held", Detail: "input " + strconv.Quote(x.Name) + " (" + x.Ref + "); " + scope}
+			}
+		} else if b, ok = inv.Supplied[x.Name]; !ok {
+			return &refusal.Refusal{Class: refusal.Operational, Reason: ReasonNotSupplied,
+				Detail: "input " + strconv.Quote(x.Name) + " is unpinned (" + strconv.Quote(x.Ref) + ") and no bytes were supplied for it; " + scope}
 		}
 		if err := WriteNew(in, x.Name, scope, b, 0o444); err != nil {
 			return stagingErr(err, x.Name, scope)

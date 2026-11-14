@@ -17,7 +17,8 @@ import (
 // retains them as unknown fields, and no resolver reads them):
 //   - partial provenance (§1 rule 1): the wire `provenance` requires every input as a digest, so a run with an
 //     unpinned input writes no `provenance` (it joins no derivation group) and writes `provenance_partial`
-//     {workflow, inputs (the pinned ones), unpinned (the names as written), environment};
+//     {workflow, inputs (the pinned ones), unpinned (the names as written), supplied (name → digest of the bytes
+//     the runner supplied for each unpinned input, never where they came from), environment};
 //   - an acquisition's capture record (§1 rule 3): the endpoints, the run's window and the environment record
 //     go in `capture` as `endpoints`, `window` and `environment`, beside the wire's `at` and `evidence`.
 
@@ -125,11 +126,17 @@ func PlanPublish(in PublishInput) ([]Planned, error) {
 			b := disclosed(in.Disclosures[o.Name])
 			b.set("content", content)
 			b.set("type", canon.String("dataset"))
-			b.set("provenance_partial", object(
+			pp := object(
 				"workflow", canon.String(in.Spec.Digest),
 				"inputs", strings2array(in.Spec.InputDigests()),
 				"unpinned", strings2array(un),
-				"environment", env))
+				"environment", env)
+			if sup := suppliedObject(r.Supplied); sup != nil {
+				pp.Keys = append(pp.Keys, "supplied")
+				pp.Members["supplied"] = sup
+				slices.SortFunc(pp.Keys, canon.CompareKeys)
+			}
+			b.set("provenance_partial", pp)
 			plan = append(plan, Planned{Output: o.Name, Kind: "authored", Body: b.done()})
 			continue
 		}
@@ -224,6 +231,22 @@ func observedBody(in PublishInput, o OutputBlob, content, env *canon.Object) *ca
 	}
 	b.set("capture", capture)
 	return b.done()
+}
+
+// suppliedObject is `provenance_partial.supplied`: per unpinned input name, the digest of the bytes the run
+// staged for it. It records what this run read, so a reader can compare two runs of a mutable tag; it pins
+// nothing (the spec still names the tag), so the output still joins no derivation group.
+func suppliedObject(m map[string]string) *canon.Object {
+	if len(m) == 0 {
+		return nil
+	}
+	o := &canon.Object{Members: map[string]canon.Value{}}
+	for k, v := range m {
+		o.Keys = append(o.Keys, k)
+		o.Members[k] = canon.String(v)
+	}
+	slices.SortFunc(o.Keys, canon.CompareKeys)
+	return o
 }
 
 func contentObject(o OutputBlob, media string) *canon.Object {
