@@ -66,6 +66,8 @@ A plan, not a schedule; the maintainers make the final call and may revise this 
 2. **Version.** Set `VERSION` to the new version string (and the Python package's two version declarations, step 8). The binary embeds it (root
    `version.go`), so an unstamped `go build ./cmd/commons` reports it; release builds may still
    override it with `-ldflags "-X main.version=…"`.
+   In the same PR, update the version named in prose: the README status line and its `go install …@<tag>`,
+   `GETTING-STARTED.md`'s `go install` line and `docs/WHY.md`'s status sentence (`grep -rn '0\.5\.0-alpha' *.md docs/`).
 3. **PR.** Open a PR into `next` and get it merged. It is squash-merged; the PR title and
    description become the commit message.
 4. **Check the unstamped build.** Module-proxy tags are permanent: once a tag has been fetched
