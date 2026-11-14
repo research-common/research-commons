@@ -440,8 +440,8 @@ func TestInert(t *testing.T) {
 		t.Fatal("something executed peer text")
 	}
 	// static: the CLI imports nothing that executes or touches the network. The binary imports exactly one
-	// execution path, the re-run bridge (internal/clirun), which only verify --rerun with an execution policy
-	// reaches (TestRerunNeverByDefault checks that dynamically).
+	// execution path, the bridge (internal/clirun), which only verify --rerun and run, each with an execution
+	// policy, reach (TestRerunNeverByDefault and TestRunNeedsPolicy check that dynamically).
 	root, _ := conformance.RepoRoot()
 	sawBridge := false
 	for _, dir := range []string{"internal/cli", "cmd/commons"} {
@@ -467,7 +467,7 @@ func TestInert(t *testing.T) {
 		}
 	}
 	if !sawBridge {
-		t.Error("cmd/commons does not wire the re-run bridge; verify --rerun would always be unavailable")
+		t.Error("cmd/commons does not wire the execution bridge; verify --rerun and run would always be unavailable")
 	}
 	// the CLI's reader of partial provenance agrees with the execution layer's
 	b := obj("provenance_partial", canon.Value(obj("unpinned", []string{"a", "b"})))

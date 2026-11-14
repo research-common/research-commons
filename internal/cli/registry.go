@@ -50,6 +50,9 @@ type Flag struct {
 	Help  string
 	// Check validates the value before any work; an error exits 2 with the value as peer text.
 	Check func(string) error
+	// Repeat (an option with a value only): the option may be given more than once; Ctx.Repeated holds every
+	// value in order and Ctx.Flags the first. Any other option given twice exits 2.
+	Repeat bool
 }
 
 // Command is one registered command.
@@ -100,6 +103,9 @@ func Register(c *Command) {
 		if slices.ContainsFunc(globalFlags, func(g Flag) bool { return g.Name == f.Name }) {
 			panic("cli: command " + c.Name + " flag --" + f.Name + " shadows a global flag")
 		}
+		if f.Repeat && f.Value == "" {
+			panic("cli: command " + c.Name + " flag --" + f.Name + " repeats and takes no value")
+		}
 	}
 	if c.ReaderPolicy {
 		c.Flags = append(c.Flags, readerPolicyFlag)
@@ -138,7 +144,9 @@ var globalFlags = []Flag{
 func synopsis(c *Command) string {
 	s := "commons " + c.Name
 	for _, f := range c.Flags {
-		if f.Value != "" {
+		if f.Value != "" && f.Repeat {
+			s += " [--" + f.Name + " <" + f.Value + ">]…"
+		} else if f.Value != "" {
 			s += " [--" + f.Name + " <" + f.Value + ">]"
 		} else {
 			s += " [--" + f.Name + "]"

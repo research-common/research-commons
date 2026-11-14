@@ -1,5 +1,5 @@
 // Command commons is the Research Commons tool. All logic lives in internal/cli; this is the process
-// boundary only: it wires the one execution bridge (internal/clirun) that `verify --rerun` calls and the one
+// boundary only: it wires the one execution bridge (internal/clirun) that `verify --rerun` and `run` call and the one
 // network transport that `fetch` dials through.
 package main
 
@@ -20,7 +20,10 @@ func main() {
 	env := cli.OSEnv(cli.Build{Version: research.Version(version), Commit: commit})
 	// The OCI sandbox runs a re-run only when the reader passes --rerun and an execution policy; nothing else
 	// in the binary reaches it.
-	env.Rerun = clirun.Sandbox()
+	bridge := clirun.Sandbox()
+	env.Rerun = bridge
+	// `run` executes through the same bridge, under the same explicit execution policy.
+	env.Exec = bridge
 	// The HTTPS transport is dialled only by `fetch`, the reader's explicit request; no other command reaches it.
 	env.Fetch = transport
 	os.Exit(cli.Main(os.Args[1:], env))
