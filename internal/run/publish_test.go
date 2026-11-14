@@ -123,7 +123,7 @@ func TestUnpinnedInput(t *testing.T) {
 		t.Fatalf("provenance_partial.supplied %s", canon.Encode(sup))
 	}
 	un := UnpinnedOf(plan[0].Body)
-	if len(un) != 1 || !strings.Contains(un[0], "feed:latest") {
+	if len(un) != 1 || un[0] != "feed" { // the input's name, as the wire note says; the tag stays in the spec blob
 		t.Fatalf("unpinned %v", un)
 	}
 	code, why := VerifyPartial(un)

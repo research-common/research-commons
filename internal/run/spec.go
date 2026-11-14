@@ -273,6 +273,18 @@ func (s *Spec) Unpinned() []string {
 	return out
 }
 
+// UnpinnedNames lists the names of the unpinned inputs: what a `provenance_partial` records in `unpinned` (the
+// spec blob it names by digest still carries each input's reference).
+func (s *Spec) UnpinnedNames() []string {
+	var out []string
+	for _, in := range s.Inputs {
+		if !in.Pinned() {
+			out = append(out, in.Name)
+		}
+	}
+	return out
+}
+
 // InputDigests are the pinned inputs' digests in spec order: the `inputs` of a provenance block.
 func (s *Spec) InputDigests() []string {
 	var out []string

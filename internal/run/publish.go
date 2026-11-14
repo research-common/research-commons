@@ -17,7 +17,7 @@ import (
 // retains them as unknown fields, and no resolver reads them):
 //   - partial provenance (§1 rule 1): the wire `provenance` requires every input as a digest, so a run with an
 //     unpinned input writes no `provenance` (it joins no derivation group) and writes `provenance_partial`
-//     {workflow, inputs (the pinned ones), unpinned (the names as written), supplied (name → digest of the bytes
+//     {workflow, inputs (the pinned ones), unpinned (the input names), supplied (name → digest of the bytes
 //     the runner supplied for each unpinned input, never where they came from), environment};
 //   - an acquisition's capture record (§1 rule 3): the endpoints, the run's window and the environment record
 //     go in `capture` as `endpoints`, `window` and `environment`, beside the wire's `at` and `evidence`.
@@ -122,7 +122,7 @@ func PlanPublish(in PublishInput) ([]Planned, error) {
 			plan = append(plan, Planned{Output: o.Name, Kind: "observed", Body: observedBody(in, o, content, env)})
 			continue
 		}
-		if un := in.Spec.Unpinned(); len(un) > 0 {
+		if un := in.Spec.UnpinnedNames(); len(un) > 0 {
 			b := disclosed(in.Disclosures[o.Name])
 			b.set("content", content)
 			b.set("type", canon.String("dataset"))
