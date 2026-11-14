@@ -173,23 +173,23 @@ var limits = []limit{
 	},
 	{
 		id:  "L-07",
-		gap: "Identity statements are signed only from a key file by this tool: no external-signing package (prepare / complete) and no hardware or wallet connector is built, so an identity root kept on a device cannot administer through the CLI",
+		gap: "No hardware or wallet connector is built: an identity root kept on a device signs through the external-signing package (`--prepare` / `--complete`), with the bytes moved to and from the device by hand",
 		sources: []limitSource{
-			{file: "docs/DESIGN-notes-fixed-root-identity.md", says: "No external-signing package or hardware connector is built (§8)."},
+			{file: "docs/DESIGN-notes-fixed-root-identity.md", says: "No hardware or wallet connector is built (§8)."},
 		},
-		probe:  "`identity grant --help` names no prepare/complete option, while `identity new` signs a valid `rc/2` inception from a key file",
-		closes: "an external-signing package (`--prepare` / `--complete`) or a connector",
+		probe:  "`identity grant --help` offers `--prepare` and `--complete` and names no device, wallet or connector option",
+		closes: "a connector that drives a device or wallet",
 		open: func(t *testing.T) (bool, string) {
 			h := runIn(t.TempDir(), nil, "identity", "grant", "--help")
-			if strings.Contains(h.stdout, "--prepare") || strings.Contains(h.stdout, "--complete") {
-				return false, "identity grant offers an external-signing option"
+			if !strings.Contains(h.stdout, "--prepare") || !strings.Contains(h.stdout, "--complete") {
+				return false, "identity grant offers no external-signing package"
 			}
-			root := newIDHome(t, wire.AlgEd25519)
-			r := root.run("identity", "new")
-			if r.code != ExitOK {
-				return false, "identity new: " + r.stdout
+			for _, w := range []string{"--device", "--wallet", "--connector", "--hardware"} {
+				if strings.Contains(h.stdout, w) {
+					return false, "identity grant offers " + w
+				}
 			}
-			return strings.Contains(r.stdout, `"profile":"fixed-root-v1"`), "identity new signs from a key file; no external-signing option"
+			return true, "external-signing package only; no connector option"
 		},
 	},
 	{
@@ -212,15 +212,17 @@ var limits = []limit{
 	},
 	{
 		id:  "L-09",
-		gap: "Key and execution-policy file formats are provisional (version 0) and expected to change before a stable release",
+		gap: "Key, execution-policy and external-signing package file formats are provisional (version 0) and expected to change before a stable release",
 		sources: []limitSource{
 			{file: "docs/KEY-FILES.md", says: "**Status: provisional.** The format tag is this tool's own and is versioned (`rc-key/0`)."},
 			{file: "docs/EXEC-POLICY.md", says: "**Status: provisional.**"},
+			{file: "docs/DESIGN-notes-fixed-root-identity.md", says: "Its format tag, `rc-signing-package/0`, is this tool's own and **provisional**"},
 		},
-		probe:  "the key file tag is `rc-key/0` and the execution policy tag is `rc-exec-policy/0`",
-		closes: "a stable (`/1`) tag for either format",
+		probe:  "the key file tag is `rc-key/0`, the execution policy tag is `rc-exec-policy/0` and the signing package tag is `rc-signing-package/0`",
+		closes: "a stable (`/1`) tag for any of them",
 		open: func(t *testing.T) (bool, string) {
-			return KeyFormat == "rc-key/0" && ExecPolicyFormat == "rc-exec-policy/0", KeyFormat + " " + ExecPolicyFormat
+			return KeyFormat == "rc-key/0" && ExecPolicyFormat == "rc-exec-policy/0" && SigningPackageFormat == "rc-signing-package/0",
+				KeyFormat + " " + ExecPolicyFormat + " " + SigningPackageFormat
 		},
 	},
 	{

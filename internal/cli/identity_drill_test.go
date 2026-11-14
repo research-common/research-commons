@@ -26,7 +26,8 @@ import (
 //     missing the identity, a refused act) leaves every store byte-identical, and restoring R's key file from a
 //     backup copy signs as the same root (a later grant by the restored copy is valid and eligible).
 //
-// What it does not exercise: hardware signers, an external-signing package, a compromised operational host.
+// What it does not exercise: hardware signers, a compromised operational host. The external-signing package is
+// TestExternalSigningEndToEnd and TestExternalSigningAborts.
 func TestIdentitySimplePathDrill(t *testing.T) {
 	conformance.Partial(t, "C-id-40", "the simple path (§8, rc-key/0 files, the CLI signs) is drilled through the commands on three stores: inception, grant, acts counted, a stolen worker key cut at last_good, aborts leave nothing appended, a root key file restored from backup signs as the same root; a compromised operational host and hardware or connector signing are not drilled")
 	conformance.Partial(t, "C-id-18", "through the commands: a root key file restored from backup on a new machine signs a valid grant for the same identity and the act under it is eligible; the evaluator half (lost key, evidence unchanged) is TestCaseRootKeyLossChangesNothing")
