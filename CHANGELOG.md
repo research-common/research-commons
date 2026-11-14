@@ -9,6 +9,8 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ## [Unreleased]
 
+## [0.5.0-alpha.4] - 2026-11-13
+
 ### Added
 - **Batch captures are checked against their request log.** The format now defines one request-log layout,
   `rc-request-log/1` (JSON Lines: `endpoint`, `parameters`, `status`, `time`, `response_digest` per request).
@@ -90,6 +92,17 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   member were missing: under a method edition that declares `system_keys` the referent is `unpinned` naming
   `referent.system.<key>` and `verify` exits 3, and without a declaration the member is not a key two observations
   "pin" for comparability. The statement is still admitted and shown as written; nothing is refused.
+
+### Known issues (open at this tag)
+- Every gap in `docs/KNOWN-LIMITS.md` (L-01…L-14). The ones a first user meets:
+  - Block headers come only from a file the operator obtains (`anchor headers sync --from`, L-02); with no header
+    database every rival construction is `contested` and a task contract with a `deadline` never reaches `ready`. (#59)
+  - A response layout reads JSON only, through one pointer to the record array and one to the state (L-14); a batch
+    capture's responses are checked against its request log but not yet read under a layout.
+  - There is no Windows build (L-11), and `--json` output may change between alphas (L-12).
+- The identity profile's **reader** is active; no command writes an `rc/2` statement yet (L-07). The writer
+  (inception, grant, cut, publishing as an identity) is planned for the next alpha, one release after the reader.
+- The `next-format` issues are requirements for later stages, not defects in this release.
 
 ## [0.5.0-alpha.3] - 2026-11-12
 
@@ -827,7 +840,8 @@ contributions, landed on top of that baseline.
 - **#12** — COMMONS.md review request from an external hub: the first outside use of the
   template and rubric.
 
-[Unreleased]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.3...next
+[Unreleased]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.4...next
+[0.5.0-alpha.4]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.3...v0.5.0-alpha.4
 [0.5.0-alpha.3]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.2...v0.5.0-alpha.3
 [0.5.0-alpha.2]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.1...v0.5.0-alpha.2
 [0.5.0-alpha.1]: https://github.com/research-common/research-commons/releases/tag/v0.5.0-alpha.1
