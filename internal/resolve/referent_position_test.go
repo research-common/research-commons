@@ -1,10 +1,6 @@
 package resolve
 
-import (
-	"testing"
-
-	"github.com/research-common/research-commons/internal/conformance"
-)
+import "testing"
 
 // TestPositionReCheckIsNotBytes: a re-check that reads where the pinned block is (a reader's header chain) and never
 // its bytes drives the referent status only (claims §5.3.1, "for an exact-bytes referent the rule drives the
@@ -12,7 +8,6 @@ import (
 // an observation nobody re-read stays `unchecked` (C-core-29 and C-core-43 need a byte re-read). Control: a byte
 // re-check (identical bytes) at the same depth is counted.
 func TestPositionReCheckIsNotBytes(t *testing.T) {
-	conformance.Partial(t, "C-core-29", "a position re-check (header chain) is shown not to count as a byte re-read; the byte re-read itself is TestExactBytesClass")
 	w := newWorld(t)
 	o1 := w.observed("O1", "O1", "X", "exact-bytes", chainRef(3), "finality", depthFinality("confirmations ≥ 6", 3))
 	pos := func(rc ReCheck) *Observation {
