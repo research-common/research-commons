@@ -144,6 +144,24 @@ func anyObject() rule {
 	}
 }
 
+// digestMap: an object with free keys whose values are content digests (provenance_partial.supplied: input name
+// → digest). Each value is a typed reference, like any digest().
+func digestMap() rule {
+	d := digest()
+	return func(v canon.Value, p string, ctx *schemaCtx) error {
+		o, ok := v.(*canon.Object)
+		if !ok {
+			return bad(p, "is not an object")
+		}
+		for _, k := range o.Keys {
+			if err := d(o.Members[k], p+"."+k, ctx); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+}
+
 // stringMap: an object with free keys whose values are strings (referent.system, licence_texts).
 func stringMap() rule {
 	return func(v canon.Value, p string, _ *schemaCtx) error {
@@ -312,6 +330,11 @@ var (
 	taskRef = []field{req("task", id()), req("edition", id())}
 )
 
+// partialObj is `provenance_partial` (§5, execution objects): what a run with an unpinned input writes on an
+// `authored` in place of `provenance`. `supplied` is optional: input name → digest of the bytes the run staged.
+var partialObj = object(req("workflow", digest()), req("inputs", list(digest())), req("unpinned", list(text())),
+	opt("supplied", digestMap()), opt("environment", envObj))
+
 func with(base []field, more ...field) []field {
 	return append(append([]field{}, base...), more...)
 }
@@ -341,7 +364,7 @@ var editionContents = []field{
 var kinds = map[string][]field{
 	"authored": with(disclosures, req("content", contentObj),
 		req("type", enum("dataset", "workflow", "skill", "synthesis", "report", "other")),
-		opt("provenance", provObj), opt("supersedes", digest()), opt("extends", digest())),
+		opt("provenance", provObj), opt("provenance_partial", partialObj), opt("supersedes", digest()), opt("extends", digest())),
 	"holds": {req("content", contentObj), opt("locations", list(text())), opt("withdrawn", isTrue())},
 	"describes": {
 		req("about", exactlyOne([]field{opt("content", digest()), opt("statement", id()), opt("resource", id())})),

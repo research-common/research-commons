@@ -233,6 +233,109 @@ func TestSchemaRules(t *testing.T) {
 	}
 }
 
+// partialBody is a well-formed `provenance_partial` with the given members replaced or added.
+func partialBody(kv ...any) *canon.Object {
+	o := body("workflow", tDig, "inputs", arr(s(dg("in"))), "unpinned", arr(s("tag:latest")))
+	for i := 0; i < len(kv); i += 2 {
+		var v canon.Value
+		switch x := kv[i+1].(type) {
+		case string:
+			v = canon.String(x)
+		case canon.Value:
+			v = x
+		}
+		o = setField(o, kv[i].(string), v)
+	}
+	return o
+}
+
+// TestSchemaProvenancePartial: `provenance_partial` is typed like `provenance`: `workflow` digest R, `inputs`
+// list of digest R, `unpinned` list of string R, `supplied` object O (name → digest), `environment` O (the
+// standard forms). Every wrong shape is intrinsic, malformed statement, naming the member; the accepted
+// shapes include the optional members absent and present.
+func TestSchemaProvenancePartial(t *testing.T) {
+	drop := func(k string) *canon.Object { return dropField(partialBody(), k) }
+	for _, c := range []struct {
+		name   string
+		v      canon.Value
+		detail string // "" = accepted
+	}{
+		{"a number", canon.Int(5), "body.provenance_partial is not an object"},
+		{"a string", s("partial"), "body.provenance_partial is not an object"},
+		{"a list", arr(), "body.provenance_partial is not an object"},
+		{"null", canon.Null{}, "body.provenance_partial is not an object"},
+		{"true", canon.Bool(true), "body.provenance_partial is not an object"},
+		{"empty object", body(), "body.provenance_partial.workflow is missing"},
+		{"workflow missing", drop("workflow"), "body.provenance_partial.workflow is missing"},
+		{"inputs missing", drop("inputs"), "body.provenance_partial.inputs is missing"},
+		{"unpinned missing", drop("unpinned"), "body.provenance_partial.unpinned is missing"},
+		{"workflow not a digest", partialBody("workflow", "abc"), "body.provenance_partial.workflow is not a content digest"},
+		{"workflow upper-case", partialBody("workflow", "sha256:"+strings.Repeat("EF", 32)), "provenance_partial.workflow is not a content digest"},
+		{"inputs not a list", partialBody("inputs", "x"), "body.provenance_partial.inputs is not a list"},
+		{"bad digest in inputs", partialBody("inputs", arr(s(dg("a")), s("sha256:12"))), "body.provenance_partial.inputs[1] is not a content digest"},
+		{"unpinned not a list", partialBody("unpinned", "tag:latest"), "body.provenance_partial.unpinned is not a list"},
+		{"non-string in unpinned", partialBody("unpinned", arr(s("a"), canon.Int(3))), "body.provenance_partial.unpinned[1] is not a string"},
+		{"supplied not an object", partialBody("supplied", arr()), "body.provenance_partial.supplied is not an object"},
+		{"supplied value not a digest", partialBody("supplied", body("tag:latest", "bytes")), "body.provenance_partial.supplied.tag:latest is not a content digest"},
+		{"supplied value not a string", partialBody("supplied", body("tag:latest", 7)), "body.provenance_partial.supplied.tag:latest is not a content digest"},
+		{"environment not an object", partialBody("environment", "x"), "body.provenance_partial.environment is not an object"},
+		{"environment harness_commit abbreviated", partialBody("environment", body("harness_commit", "abc1234")), "commit hash"},
+		// accepted
+		{"required members only", partialBody(), ""},
+		{"no inputs, one unpinned", partialBody("inputs", arr()), ""},
+		{"nothing unpinned listed", partialBody("unpinned", arr()), ""},
+		{"supplied", partialBody("supplied", body("tag:latest", dg("supplied"))), ""},
+		{"empty supplied", partialBody("supplied", body()), ""},
+		{"environment record", partialBody("environment", body("image_digest", dg("img"), "platform", "linux/amd64", "profile", "sandbox")), ""},
+		{"unknown member retained", partialBody("x_note", "n"), ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			b := setField(minimal("authored"), "provenance_partial", c.v)
+			st, err := readBody(t, "authored", b)
+			if c.detail != "" {
+				refused(t, err, refusal.Intrinsic, refusal.MalformedStatement, c.detail)
+				return
+			}
+			if err != nil || st.Status != Valid {
+				t.Fatalf("a well-formed provenance_partial is refused: %v %v", err, st)
+			}
+		})
+	}
+	// every digest it names is a typed reference (the workflow, the pinned inputs, the supplied bytes, the image)
+	st, err := readBody(t, "authored", setField(minimal("authored"), "provenance_partial",
+		body("workflow", dg("wf"), "inputs", arr(s(dg("in1"))), "unpinned", arr(s("u")), "supplied", body("u", dg("sup")),
+			"environment", body("image_digest", dg("img")))))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want []string
+	for _, n := range []string{"wf", "in1", "sup", "img", "content"} {
+		want = append(want, dg(n))
+	}
+	want[4] = "sha256:" + strings.Repeat("ab", 32) // minimal's content digest
+	slices.Sort(want)
+	if got := st.References(); !slices.Equal(got, want) {
+		t.Fatalf("references %v, want %v", got, want)
+	}
+	// Both `provenance` and `provenance_partial` on one authored: §5 says a run writes the second "in place of" the
+	// first, which describes what the run emits and is not stated as a rule about a statement, and the kinds
+	// table lists `provenance` alone. The schema does not refuse the pair (open point for the note); each member
+	// is still checked on its own, so a malformed one beside a good one is refused.
+	both := setField(setField(minimal("authored"), "provenance", body("workflow", tDig, "inputs", arr())), "provenance_partial", partialBody())
+	if st, err := readBody(t, "authored", both); err != nil || st.Status != Valid {
+		t.Fatalf("both members, each well-formed: %v %v", err, st)
+	}
+	_, err = readBody(t, "authored", setField(both, "provenance_partial", canon.Int(5)))
+	refused(t, err, refusal.Intrinsic, refusal.MalformedStatement, "body.provenance_partial is not an object")
+	// the field is typed on `authored` only: the note defines no other kind carrying it, so elsewhere it stays an
+	// unknown field, retained and ignored (§6)
+	for _, k := range []string{"observed", "reproduced"} {
+		if _, err := readBody(t, k, setField(minimal(k), "provenance_partial", canon.Int(5))); err != nil {
+			t.Fatalf("%s: provenance_partial is not a field of this kind, yet it was refused: %v", k, err)
+		}
+	}
+}
+
 // TestTaskKindsBindings: the task-contracts note's wire additions. `grant` is a known kind with its fields;
 // `refutes` takes `task` and `edition` together or not at all (§4.2), and a bound one is valid; `submit.salt`
 // is still parsed (a signed line keeps its meaning) and is a string field only: no rule reads its value.
