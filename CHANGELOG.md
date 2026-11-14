@@ -42,8 +42,8 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   cannot be undone, and it lists which of the delegate's acts keep counting. `publish --as <identity> --grant <id>`
   (with `--amends` for authored and observed) signs a statement acting for the identity, and refuses it, with
   nothing written, unless the statements you hold read the act eligible. These statements are written `rc/2`;
-  every other statement is still `rc/1`, so **a reader older than this release cannot read identity statements**
-  (it keeps them as unverified lines of another major). `key new` and `init` now say that a bare key cannot be
+  every other statement is still `rc/1`. Readers from 0.5.0-alpha.4 on verify identity statements; **an
+  older reader cannot** (it keeps them as unverified lines of another major). `key new` and `init` now say that a bare key cannot be
   recovered and point at identities.
 
 ## [0.5.0-alpha.4] - 2026-11-13
