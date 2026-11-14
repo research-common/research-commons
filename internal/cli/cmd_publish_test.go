@@ -535,7 +535,7 @@ func mustLogs(t *testing.T, p *pubWorld) *keylog.Store {
 // TestPublishDisclosureFlags: C-exec-05 (CLI half). publish accepts a flag for every disclosure run --publish
 // accepts, and each lands in the signed statement.
 func TestPublishDisclosureFlags(t *testing.T) {
-	conformance.Partial(t, "C-exec-05", "publish's disclosure flags equal run.Disclosure and each lands in the statement; run --publish is not a CLI command yet, so the second half (each flag passed to run --publish) is the planner's test in internal/run")
+	conformance.Partial(t, "C-exec-05", "publish's half: its disclosure flags equal run.Disclosure and each lands in the statement; each flag passed to run --publish is internal/clirun.TestRunPublishDisclosureFlags")
 	var fields []string
 	for _, d := range publishDisclosures {
 		fields = append(fields, d.Field)

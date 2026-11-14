@@ -712,7 +712,7 @@ func TestHoldersAreNotDerivers(t *testing.T) {
 // TestReproducedJoinsGroup: C-exec-01 (resolver half). A's own re-run is a reproduced, not a second authored:
 // the group shows derived by 1 plus the reproduction, and a byte-identical reproduction under bytes is T0.
 func TestReproducedJoinsGroup(t *testing.T) {
-	conformance.Partial(t, "C-exec-01", "the group display; emitting reproduced instead of authored is run --publish")
+	conformance.Partial(t, "C-exec-01", "the group display; emitting reproduced instead of authored through run --publish is internal/clirun.TestRunPublishFirstThenReproduced")
 	w := newWorld(t)
 	w.workflow("WA", "W", "bytes", "")
 	a1 := w.authored("A1", "A", "X", "prov", []string{"W", "I"})
