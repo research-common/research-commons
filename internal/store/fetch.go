@@ -475,12 +475,13 @@ func (b *idleBody) Close() error {
 	return err
 }
 
-func (h HTTPTransport) client() *http.Client {
-	if h.Client != nil {
-		return h.Client
-	}
+// GuardedDialer is the dialer every outbound connection of the tool goes through (fetch, and a timestamp calendar
+// client): a 15 s connect bound and, unless allowPrivate, a refusal to connect to any address PublicAddress rejects,
+// checked at connect time on the address actually dialled (after name resolution, so a name that resolves to a
+// private address is refused too).
+func GuardedDialer(allowPrivate bool) *net.Dialer {
 	d := &net.Dialer{Timeout: 15 * time.Second}
-	if !h.AllowPrivate {
+	if !allowPrivate {
 		d.Control = func(network, address string, _ syscall.RawConn) error {
 			host, _, err := net.SplitHostPort(address)
 			if err != nil {
@@ -492,6 +493,14 @@ func (h HTTPTransport) client() *http.Client {
 			return nil
 		}
 	}
+	return d
+}
+
+func (h HTTPTransport) client() *http.Client {
+	if h.Client != nil {
+		return h.Client
+	}
+	d := GuardedDialer(h.AllowPrivate)
 	return &http.Client{
 		Timeout:   h.Timeout,
 		Transport: &http.Transport{DialContext: d.DialContext, DisableCompression: true, Proxy: nil, TLSHandshakeTimeout: 15 * time.Second},
