@@ -25,6 +25,17 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   Where the observer's asserted state at capture and the re-checked state disagree (asserted `final` at depth 7,
   re-checked depth 2), the referent carries both under `beside` with `disagrees: true` and the text says they
   disagree. Other chains and source referents are not re-checked. With no header chain nothing changes.
+- **`commons run`** runs a workflow spec the store holds (its digest, or the id of an `authored` statement on it)
+  under your execution policy (`--exec-policy`, required) and prints the result token, the environment record and
+  each output; nothing is written. With `--publish` (and `--key`) it signs what the run emits, per output:
+  `authored` on a first derivation, `reproduced` (`match`, or `diverged` / the comparator's word) over your own
+  current `authored` of the same workflow and inputs instead of a second `authored`, and `observed` for a workflow
+  that requires the network (`--request-log <output>` pins an `rc-request-log/1` capture's format, count and
+  endpoint from the log). Disclosures are given per output with the same options `publish` takes
+  (`--licence out=CC-BY-4.0`, `--availability out=…`, any number of times); nothing is inherited from the workflow,
+  its inputs or a sibling output. The statements, the runner's `holds` and the output blobs commit as one unit: a
+  failure before the commit point removes the blobs it installed, so the store is left as it was. A run that did
+  not complete, or a re-run whose comparison could not finish, publishes nothing and says why.
 
 ## [0.5.0-alpha.4] - 2026-11-13
 
@@ -36,7 +47,7 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   responses the content holds; a wrong count, an endpoint other than the pinned one, or a response whose bytes
   were changed is named by entry and `verify` exits 1, and a log digest that matches nothing in the content
   reads `unpinned`. Another layout is `unchecked`, naming it. The run library's publish plan pins a request log only in
-  this layout, with its count and shared endpoint read from the log (no command wires it yet).
+  this layout, with its count and shared endpoint read from the log.
 - The fixed-root identity profile's **reader is active**: every command reads `rc/2` statements (verified under
   the profile; a bad `rc/2` signature is refused like an `rc/1` one) and evaluates identity actors from the
   statements you hold. `show` and `explain` print an identity statement's actor (identity, grant, `eligible` /

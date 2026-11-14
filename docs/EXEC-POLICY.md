@@ -5,6 +5,11 @@ compares the result with what was pinned. A re-run executes code, so it happens 
 (`--rerun`) and only under the reader's own policy, read from this file. Without `--exec-policy` nothing runs and
 the re-run is reported `unchecked` (exit 3), never a pass. `--exec-policy` without `--rerun` exits 2.
 
+`commons run <workflow> --exec-policy <file>` runs a held workflow spec (its digest, or the id of an `authored`
+statement on it) under the same policy; without `--exec-policy` it exits 2 and nothing runs. The workflow is admitted
+by its default author (`exec_signers`) or its hash (`exec_workflows`); a workflow that requires the network also
+needs its hash in `network`. Without `--publish` the run is printed and nothing is written.
+
 **Status: provisional.** The execution design note says what an execution policy decides, not how it is
 written down; this file format is the tool's own and versioned (`rc-exec-policy/0`). It will change, with a new
 tag. A file with a different `format` is refused.

@@ -95,6 +95,7 @@ takes `--json`, which prints one JSON object (an RFC 9457 problem-details object
 | `fetch` | obtain blobs from the locations a `holds` statement names, verified by full hash |
 | `list` / `show` | the blobs, resources and statements the store holds (`list`: one line each), with authorship, grade and disclosures; an observation's referent status (finality, read through the source profiles the store's policy pins) and corroboration status; for a resource (its genesis id), an edition id or an approval id, the resource view: controllers and rule, current edition and the chain behind it, every edition with its approvals, any `FORK`, members, and the check of a completeness claim; a statement on a fork of its signer's log, the fork (`FORK` with its tips, or `merged`); for a task, its terms, readiness, every submission (`counted`, `undecided`, `not counted`, with every reason), grants, bound refutations and decisions |
 | `verify` | check a blob or statement from the statements held; `--rerun` re-runs a derivation under your policy; for a task, exit 0 when readiness is `ready`, `not ready` or settled by review and no decisions conflict, else 3 |
+| `run` | run a held workflow under your execution policy (`--exec-policy`) and print the result token, the environment record and the outputs; `--publish` signs what it emits (`authored` on a first derivation, `reproduced` over your own `authored` of the same workflow and inputs, `observed` for a workflow that requires the network) with per-output disclosures (`--licence out=CC-BY-4.0`) and the output blobs, as one unit |
 | `explain` | the statements, policy, evaluator and time context behind every token shown; `--since <file>` names what changed since an earlier `explain --json`, and why |
 | `fsck` | re-hash blobs, re-read statements, resolve references, check the journal; list every fork of a held key log (`FORK` or `merged`, informational) |
 | `status` | recovery state, unfinished operations, the durability declaration (`--limits` for scan limits); a row per open `FORK` of a held key log |
@@ -124,7 +125,7 @@ least one commit.
 | [`docs/CLI-OUTPUTS.md`](docs/CLI-OUTPUTS.md) | exit codes, state tokens, error shape |
 | [`docs/KNOWN-LIMITS.md`](docs/KNOWN-LIMITS.md) | open gaps, each with a test |
 | [`docs/READER-POLICY.md`](docs/READER-POLICY.md) | the reader policy file (`pull --policy`, `verify --policy`) |
-| [`docs/EXEC-POLICY.md`](docs/EXEC-POLICY.md) | the execution policy file (`verify --rerun`) |
+| [`docs/EXEC-POLICY.md`](docs/EXEC-POLICY.md) | the execution policy file (`verify --rerun`, `run`) |
 | [`docs/KEY-FILES.md`](docs/KEY-FILES.md) | the key file format and how to keep keys |
 | [`docs/READER-EXTENSIONS.md`](docs/READER-EXTENSIONS.md) | critical extensions (none enabled) |
 | [`internal/README.md`](internal/README.md) | package map, build and test commands |
