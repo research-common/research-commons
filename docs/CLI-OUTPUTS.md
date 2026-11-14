@@ -102,13 +102,13 @@ JSON members carrying tokens: `authorship`, `role`, `state`, `grade`, `step`, `q
 | `would fetch (dry run)` | fetch | a dry run: the location would be dialled; nothing was |
 | `stored copy corrupt` | fetch | the blob file held here does not hash to its name; never used, replaced (and quarantined) only by verified bytes |
 | `unpinned` | verify | a pin the statement needs is missing: a derivation input it did not pin (nothing to re-run), or a referent field an observation's class requires (no class agreement model applied) |
-| `final` | referent | the reader's own re-check found the referent at a state that meets the declared finality rule |
+| `final` | referent | the reader's own re-check found the referent at a state that meets the declared finality rule (for an exact-bytes referent, the pinned block at that depth in this reader's synced header chain: its position re-checked, its bytes not re-read). The asserted state at capture is shown beside it, with `disagrees` set when the re-check is behind it |
 | `final (as captured, not re-checked)` | referent | the observer's asserted state at capture meets the rule and no re-check of this reader confirmed it; never shown as final (I4) |
 | `final (as held)` | referent | the state read out of the held response under the cited source profile's response layout meets the rule (the least record's state under the profile's order, so every record meets it; records that differ are disclosed beside it as "records at R1..RF, read as R1"; for a batch capture, the least over every logged response, "records at R1..RF across N responses, read as R1"); checked against the bytes, not re-checked at the source, so never shown as final (I4) |
-| `provisional` | referent | the finality rule is not met at the state shown (the state at capture, or this reader's re-check), with the state at which it would be |
+| `provisional` | referent | the finality rule is not met at the state shown (the state at capture, or this reader's re-check), with the state at which it would be. When a re-check computed it and the asserted state meets the rule, the two are shown beside each other with `disagrees: true` |
 | `revised` | referent | a later capture of the same referent holds different bytes before finality; the observation stays true of what it pinned |
-| `not canonical` | referent | this reader's re-check found the referent replaced (a deep reorg, a dispute run); nothing counts against the observer |
-| `still canonical` | referent | this reader's re-check found the pinned referent unchanged (no finality rule declared) |
+| `not canonical` | referent | this reader's re-check found the referent replaced (a deep reorg, a dispute run; for an exact-bytes referent, the pinned block held off the accepted chain of this reader's header chain); nothing counts against the observer |
+| `still canonical` | referent | this reader's re-check found the pinned referent unchanged, or (exact-bytes) its block on the accepted chain of this reader's header chain (no finality rule declared) |
 | `source still available` | referent | this reader's re-check of a source referent returned it (no finality rule declared) |
 | `source unavailable` | referent | this reader's re-check could not reach the source; existing corroborations stand |
 | `unknown (not re-checked by this reader)` | referent | no finality rule declared and no re-check of this reader decided anything |

@@ -411,7 +411,10 @@ Rules:
     holds. So agreement is byte equality at the pinned hash at every depth: another key's re-read with
     identical bytes is a corroboration whether or not the rule holds yet, different bytes contradict, and the
     rule decides only `provisional (d; final at N)` · `final` · `not canonical`. An exact-bytes referent is
-    never `revised`.
+    never `revised`. A reader's header chain re-checks position and depth, never bytes: the pinned block on its
+    accepted chain gives the depth the rule reads (and, since the bytes at a hash never change, a depth that
+    meets the rule is `final`), a held block off the accepted chain is `not canonical`, and a block it does not
+    hold leaves the re-check `unchecked`. It is not a re-read, so it adds no corroboration evidence.
   - *Class migration by rule* applies to source-class referents, whose bytes can be revised before the rule is
     met. While the rule is unmet, agreement is source-class (near-equality around the same time). Near-equality
     needs a declared tolerance, from the agreement model or the source profile; without one no default
