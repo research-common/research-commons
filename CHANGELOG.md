@@ -9,6 +9,13 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ## [Unreleased]
 
+## [0.5.0-alpha.5] - 2026-11-14
+
+**This release writes `rc/2`.** `identity new`, `identity grant`, `identity cut` and `publish --as` (directly or
+through an external-signing package) write their statements in wire major `rc/2`; a reader from a release before
+0.5.0-alpha.4 cannot read them (it keeps them as unverified lines of another major). 0.5.0-alpha.4, tagged and
+published 2026-11-13, is the earliest reader of `rc/2`. Every other statement is written `rc/1`, unchanged.
+
 ### Added
 - **Response layouts read batch captures.** When a batch observation's finality rule resolves through a pinned
   source profile that cites a response layout, `show`, `explain` and `verify` read the state out of every response
@@ -93,6 +100,16 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   `malformed statement` naming the member. An `authored` carrying both `provenance` and `provenance_partial` is
   refused the same way (the partial form stands in place of `provenance`, so the output joins no derivation group).
   `run --publish` writes a well-formed one, so its output is unchanged.
+
+### Known issues (open at this tag)
+- Every gap in `docs/KNOWN-LIMITS.md` (L-01…L-15). The ones a first user meets:
+  - Block headers come only from a file the operator obtains (`anchor headers sync --from`, L-02); with no header
+    database every rival construction is `contested` and a task contract with a `deadline` never reaches `ready`. (#59)
+  - A response layout reads JSON only, through one pointer to the record array and one to the state (L-14).
+  - No hardware or wallet connector is built (L-07): an identity root on a device signs through the external-signing
+    package, whose format `rc-signing-package/0` is provisional (L-09).
+  - There is no Windows build (L-11), and `--json` output may change between alphas (L-12).
+- The `next-format` issues are requirements for later stages, not defects in this release.
 
 ## [0.5.0-alpha.4] - 2026-11-13
 
@@ -925,7 +942,8 @@ contributions, landed on top of that baseline.
 - **#12** — COMMONS.md review request from an external hub: the first outside use of the
   template and rubric.
 
-[Unreleased]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.4...next
+[Unreleased]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.5...next
+[0.5.0-alpha.5]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.4...v0.5.0-alpha.5
 [0.5.0-alpha.4]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.3...v0.5.0-alpha.4
 [0.5.0-alpha.3]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.2...v0.5.0-alpha.3
 [0.5.0-alpha.2]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.1...v0.5.0-alpha.2
