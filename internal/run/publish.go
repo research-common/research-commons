@@ -6,6 +6,7 @@ import (
 
 	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/refusal"
+	"github.com/research-common/research-commons/internal/reqlog"
 )
 
 // What `run --publish` emits (execution note §5.1, §7, §1 rules 1 and 3). PlanPublish is pure: it returns the
@@ -53,10 +54,11 @@ type PublishInput struct {
 	RequestLog *RequestLog
 }
 
-// RequestLog names an acquisition's request log output.
+// RequestLog names an acquisition's request log output. The log must be `rc-request-log/1` (the one dialect the
+// format defines, package reqlog): the referent's format, count and shared endpoint are read from it, never
+// supplied, so the pins a run signs are the pins a reader checks.
 type RequestLog struct {
-	Output, Format string
-	Count          int64
+	Output string
 }
 
 // Planned is one statement to sign.
@@ -102,6 +104,16 @@ func PlanPublish(in PublishInput) ([]Planned, error) {
 		}
 	}
 	env := r.Record.Object()
+	if in.RequestLog != nil {
+		lg, ok := r.Output(in.RequestLog.Output)
+		if !ok {
+			return nil, &refusal.Refusal{Class: refusal.Policy, Reason: "unknown output", Detail: "the request log names output " + strconv.Quote(in.RequestLog.Output) + ", which the spec does not declare"}
+		}
+		if _, err := reqlog.Parse(lg.Bytes); err != nil {
+			return nil, &refusal.Refusal{Class: refusal.Operational, Reason: "nothing to publish",
+				Detail: "output " + strconv.Quote(in.RequestLog.Output) + " is not a " + reqlog.Format + " request log: " + err.Error()}
+		}
+	}
 	var plan []Planned
 	for _, o := range r.Outputs {
 		content := contentObject(o, in.MediaTypes[o.Name])
@@ -187,7 +199,12 @@ func observedBody(in PublishInput, o OutputBlob, content, env *canon.Object) *ca
 	switch {
 	case in.RequestLog != nil:
 		lg, _ := in.Result.Output(in.RequestLog.Output)
-		ref = object("requests", object("digest", canon.String(lg.Digest), "format", canon.String(in.RequestLog.Format), "count", canon.Int(in.RequestLog.Count)))
+		es, _ := reqlog.Parse(lg.Bytes) // checked by PlanPublish
+		req := object("count", canon.Int(int64(len(es))), "digest", canon.String(lg.Digest), "format", canon.String(reqlog.Format))
+		if ep := reqlog.SharedEndpoint(es); ep != "" {
+			req = object("count", canon.Int(int64(len(es))), "digest", canon.String(lg.Digest), "endpoint", canon.String(ep), "format", canon.String(reqlog.Format))
+		}
+		ref = object("requests", req)
 	case len(in.Spec.Network) == 1:
 		params := in.Spec.Parameters
 		if params == nil {

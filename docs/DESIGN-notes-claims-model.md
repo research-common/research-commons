@@ -356,7 +356,14 @@ Rules:
 - **The observation pins its referent.** For chain data that means chain id, block hash (not height) and
   confirmation depth at capture. For APIs: endpoint, parameters and response hash; for a batch capture, the hash, format and count of a
   request log carried inside the captured content, listing each request's endpoint, parameters, status, time
-  and response hash. For instruments: instrument
+  and response hash. The format defines one request-log layout, `rc-request-log/1` (wire-format note §5); a
+  log in any other layout is shown and its check is `unchecked`, naming the layout. A reader locates the log
+  by its hash among the content's units (the content blob itself, or a member of a content archive), checks
+  the pinned count against its entries and a pinned shared endpoint against each entry's, and checks that each
+  logged response is held in the same content (when the log is the whole content, among the blobs the reader
+  holds). A response that is not held is named by entry and endpoint: inside a fully read archive it is
+  `fail` (mutated or missing; `verify` exits 1), otherwise `unchecked`. A log hash matching nothing in fully
+  read content leaves the referent `unpinned`: it pins no request the capture carries. For instruments: instrument
   identity, location and time. For methods: the method edition followed, the execution environment record
   (image digest, platform, harness commit), the measured system's identity and state (model and provider pin,
   and whatever changes the apparatus under the observer, such as a routing era), the protocol's pinned inputs
@@ -936,8 +943,11 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
   divergent submission is reported, and the task check is not itself a comparison (task-contracts note §5.7).
 - **`verify` of an observation** checks its signature and its pins: exit 0 when they hold, exit 3
   when the referent is `unpinned` or its finality rule cannot be evaluated, or, for a method-class observation,
-  the method edition it pins is not held as authorized (whether it declares `system_keys` cannot be read).
-  Corroboration status and capture evidence are disclosures (I6) shown beside it and never change the exit,
+  the method edition it pins is not held as authorized (whether it declares `system_keys` cannot be read);
+  exit 1 when a batch referent's request log was read in full and is false of the content (a wrong count, an
+  endpoint other than the pinned one, a logged response the read archive does not hold), since that is a pin
+  checked against held bytes and found wrong (§5.3.1); exit 3 when the log is in another layout or a response
+  could not be looked for. Corroboration status and capture evidence are disclosures (I6) shown beside it and never change the exit,
   so no exit rests on a capture level the reader did not verify (C-core-52).
 - **`verify` of a resource or an edition.** A resource (named by its genesis id): exit 0 with one current
   edition, exit 3 under an uncleared `FORK` or with a `contested` edition. A pinned edition: exit 0 when it is an

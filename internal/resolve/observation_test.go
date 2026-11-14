@@ -218,10 +218,9 @@ func TestReferentPinsAndUnpinned(t *testing.T) {
 }
 
 // TestSourceAndPhenomenonReferents: C-core-31. Each pinned field shown as the observer's statement; a re-capture
-// pinning a different endpoint is never agreement. The batch variant (locating the request log inside the
-// content and naming the mutated request) needs the blob bytes, which the resolver does not read.
+// pinning a different endpoint is never agreement. The batch variant is requestlog_test.go.
 func TestSourceAndPhenomenonReferents(t *testing.T) {
-	conformance.Partial(t, "C-core-31", "single-request and instrument referents shown, different endpoint never agreement; the batch variant (log located by hash inside the content, count checked, mutated request named, unmatched log hash unpinned) needs a reader of the content blob")
+	conformance.Partial(t, "C-core-31", "the resolver half; through the commands in internal/cli TestSingleRequestReferentCommands")
 	w := newWorld(t)
 	src := w.observed("S1", "O1", "X", "source", apiRef("https://api.example/settlements"), "finality", runFinality("SF"))
 	// a final re-capture with identical bytes would corroborate (class migration), but it pins another endpoint

@@ -10,6 +10,14 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 ## [Unreleased]
 
 ### Added
+- **Batch captures are checked against their request log.** The format now defines one request-log layout,
+  `rc-request-log/1` (JSON Lines: `endpoint`, `parameters`, `status`, `time`, `response_digest` per request).
+  `show`, `explain` and `verify` of a batch observation find the log by its digest inside the captured
+  content (the blob or an archive member) and print where it was found, its entries and endpoints, and how many
+  responses the content holds; a wrong count, an endpoint other than the pinned one, or a response whose bytes
+  were changed is named by entry and `verify` exits 1, and a log digest that matches nothing in the content
+  reads `unpinned`. Another layout is `unchecked`, naming it. The run library's publish plan pins a request log only in
+  this layout, with its count and shared endpoint read from the log (no command wires it yet).
 - The fixed-root identity profile's **reader is active**: every command reads `rc/2` statements (verified under
   the profile; a bad `rc/2` signature is refused like an `rc/1` one) and evaluates identity actors from the
   statements you hold. `show` and `explain` print an identity statement's actor (identity, grant, `eligible` /
