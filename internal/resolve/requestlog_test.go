@@ -174,3 +174,37 @@ func TestBatchRequestLogMalformed(t *testing.T) {
 		t.Fatalf("%+v", o.RequestLog)
 	}
 }
+
+// TestObservationVerifyExitRequestLog: claims-model note §13, `verify` of an observation after the request-log
+// reader. A log that does not conform to its named layout is checked and wrong (exit 1, named by line); content not
+// held is unchecked (exit 3); and a log `fail` exits 1 even when the observation also has a cause to exit 3 (here a
+// finality rule no profile evaluates), both causes listed.
+func TestObservationVerifyExitRequestLog(t *testing.T) {
+	m := newBatch(2)
+	m.log = append(m.log, []byte("{\"endpoint\":\"e\"}\n")...)
+	w := newWorld(t)
+	id := w.batchObserved("B", "O", m, batchReq(m, 3))
+	if code, why := obsView(t, w, id, WithObservedContent(m.reader())).VerifyExit(); code != 1 || !strings.Contains(strings.Join(why, ";"), "line 3") {
+		t.Fatalf("malformed log: exit %d %v", code, why)
+	}
+	if code, why := obsView(t, w, id).VerifyExit(); code != 3 || !strings.Contains(strings.Join(why, ";"), "content not held") {
+		t.Fatalf("content not held: exit %d %v", code, why)
+	}
+	// fail beside an unevaluable rule: 1, and the exit-3 cause is still listed
+	f := newBatch(2)
+	f.responses[1] = []byte(`{"tampered":true}`)
+	w2 := newWorld(t)
+	id2 := w2.sign("B", "O", "observed", obj("content", obj("digest", f.content, "size", 1), "class", "source",
+		"referent", obj("requests", batchReq(f, 2)), "capture", obj("at", "2026-10-16T05:01:00Z", "evidence", "self-asserted"),
+		"finality", profileRun(dig("no profile this reader chose"), "RF")))
+	o := obsView(t, w2, id2, WithObservedContent(f.reader()), WithFinalityRules(NewProfileRules()))
+	code, why := o.VerifyExit()
+	if code != 1 || !strings.Contains(strings.Join(why, ";"), "request log: fail") || !strings.Contains(strings.Join(why, ";"), RefRuleUnchecked) {
+		t.Fatalf("fail beside unevaluable rule: exit %d %v", code, why)
+	}
+	// the mutation reached the boundary: the same statement over intact content exits 3 on the rule alone
+	g := newBatch(2)
+	if code, why := obsView(t, w2, id2, WithObservedContent(tableContent{f.content: g.units()}), WithFinalityRules(NewProfileRules())).VerifyExit(); code != 3 {
+		t.Fatalf("intact beside unevaluable rule: exit %d %v", code, why)
+	}
+}
