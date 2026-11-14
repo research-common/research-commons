@@ -45,6 +45,14 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   every other statement is still `rc/1`. Readers from 0.5.0-alpha.4 on verify identity statements; **an
   older reader cannot** (it keeps them as unverified lines of another major). `key new` and `init` now say that a bare key cannot be
   recovered and point at identities.
+- **External signing for identity statements.** `identity new`, `identity grant`, `identity cut` and
+  `publish --as` take `--prepare <file> --signer <key>`: with no key file, they write a signing package (the
+  unsigned statement, the exact bytes to sign, the proposed id, your log's position and a readable summary) and
+  append nothing. Sign the bytes on another machine or device, then run the same command with
+  `--complete <file> --signature <file|->`: the tool recomputes the bytes, verifies the signature, runs every
+  check again and commits, or refuses with nothing written (a changed package, a wrong signature, or
+  `stale-prepare` when your log moved). The package format, `rc-signing-package/0`, is provisional. No hardware
+  or wallet connector is included.
 
 ## [0.5.0-alpha.4] - 2026-11-13
 
