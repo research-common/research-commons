@@ -226,6 +226,8 @@ func TestClosedVocabulary(t *testing.T) {
 		resolve.RefUnpinned, resolve.RefNotCanonical, resolve.RefUnavailable, resolve.RefRevised, resolve.RefFinal,
 		resolve.RefFinalCaptured, resolve.RefFinalHeld, resolve.RefProvisional, resolve.RefCanonical, resolve.RefAvailable, resolve.RefUnknown,
 		resolve.RefPinned, resolve.RefNoneYet, resolve.RefRuleUnchecked)
+	below = append(below, string(resolve.FieldSelectionUnmet), resolve.SelMet, resolve.SelMissing, resolve.SelIneligible, resolve.SelNone,
+		resolve.SelConflict, resolve.SelIdentity, resolve.SelIdentityUnknown)
 	for _, s := range []btctime.State{btctime.StateVerified, btctime.StateVerifiedHistorical, btctime.StatePending, btctime.StateInsufficient,
 		btctime.StateMissingProof, btctime.StateInvalidProof, btctime.StateInvalidAnchor, btctime.StateUnknownHeight, btctime.StateOrphaned,
 		btctime.StateStaleChain, btctime.StateUnconfigured, btctime.StateUnavailable, btctime.StateUnsupported, btctime.StateRefused} {

@@ -31,6 +31,13 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   Ten identity conformance cases (03, 05, 06, 11, 12, 13, 14, 16, 18, 33) now pass through the commands, and the
   coverage file states what the remaining ones still lack.
 
+### Fixed
+- **An unmet reader-policy selection is an answer, not an internal error.** With `--policy` holding an
+  `authorship-declaration` selection that is not met (a pinned statement not held or ineligible, or a followed key
+  or identity with no eligible claim), `verify` and `explain` ended in `internal error`. They now answer: `verify`
+  exits 3 naming the selection's state, and the field reads `no default (reader's selection not met)`. The
+  selection states are now in the closed vocabulary (`docs/CLI-OUTPUTS.md`).
+
 ## [0.5.0-alpha.5] - 2026-11-14
 
 **This release writes `rc/2`.** `identity new`, `identity grant`, `identity cut` and `publish --as` (directly or

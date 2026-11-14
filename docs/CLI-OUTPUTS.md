@@ -46,6 +46,14 @@ JSON members carrying tokens: `authorship`, `role`, `state`, `grade`, `step`, `q
 | `undeclared` | field | no claimant declared the field; for pre-registration, not the same as exploratory |
 | `unknown` | field | for a licence: none declared, or a declared value that is not an SPDX license expression (the reason is printed beside it); never read as open (C-core-67); elsewhere: nothing held establishes it. A parsed licence is shown as written with `syntax valid; identifiers not checked against the SPDX License List` and, per `LicenseRef-`, `cited (text held)`, `cited (text not held)`, `cited (location only, unverified)` or `cited (no source)`; the tool ships no licence list |
 | `no default (authorship contested)` | field | authorship is contested, so no claimant's value is the default |
+| `no default (reader's selection not met)` | field | the reader's authorship-declaration selection for the blob is not met, so no claimant's value is the default and no other declaration is substituted |
+| `met` | selection | the reader's selection names held, eligible statements, and only those are read |
+| `not met: statement not held` | selection | the pinned statement is not held; no other statement is substituted |
+| `not met: statement ineligible` | selection | the pinned statement is held but cannot serve the selection (why is printed beside it); no other statement is substituted |
+| `not met: no eligible current claim of the principal` | selection | the followed key or identity has no eligible current claim on the content |
+| `not met: the principal's current claims disagree` | selection | the followed principal has several current claims that disagree; none is preferred |
+| `unknown (identity profile not active)` | selection | the policy names an identity and this reader evaluates no identity actors; no key is followed in its place |
+| `unknown (identity eligibility not established)` | selection | a claim may act for the named identity but the statements held cannot establish it; no other claim is substituted |
 | `T0` | grade | byte-identical re-derivation |
 | `T1` | grade | re-derivation matched under the named comparator, run by this reader |
 | `T2` | grade | task-level replication |
