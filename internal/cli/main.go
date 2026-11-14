@@ -44,6 +44,10 @@ type Env struct {
 	// Fetch builds the network transport `fetch` dials through; nil in a build without network access (fetch then
 	// answers from what is held, exit 3 for anything not held). This package never dials anything itself.
 	Fetch Fetcher
+	// Calendars builds the timestamp calendar clients `anchor stamp` submits through; nil in a build without network
+	// access (anchor stamp then answers "calendars are not available in this build", exit 3). This package dials
+	// nothing itself.
+	Calendars CalendarBuilder
 }
 
 // Ctx is one invocation as a command's Run sees it: arguments and flags already validated, the store (when

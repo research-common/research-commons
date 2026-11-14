@@ -1,14 +1,16 @@
 // Command commons is the Research Commons tool. All logic lives in internal/cli; this is the process
 // boundary only: it wires the one execution bridge (internal/clirun) that `verify --rerun` and `run` call and the one
-// network transport that `fetch` dials through.
+// network transport that `fetch` dials through, and the calendar client `anchor stamp` submits through.
 package main
 
 import (
 	"os"
 
 	research "github.com/research-common/research-commons"
+	"github.com/research-common/research-commons/internal/btctime"
 	"github.com/research-common/research-commons/internal/cli"
 	"github.com/research-common/research-commons/internal/clirun"
+	"github.com/research-common/research-commons/internal/otscal"
 	"github.com/research-common/research-commons/internal/store"
 )
 
@@ -26,9 +28,15 @@ func main() {
 	env.Exec = bridge
 	// The HTTPS transport is dialled only by `fetch`, the reader's explicit request; no other command reaches it.
 	env.Fetch = transport
+	// The OpenTimestamps calendar client is dialled only by `anchor stamp`, the author's explicit request.
+	env.Calendars = calendar
 	os.Exit(cli.Main(os.Args[1:], env))
 }
 
 func transport(c cli.FetchConfig) store.Transport {
 	return store.HTTPTransport{AllowHTTP: c.AllowHTTP, AllowPrivate: c.AllowPrivate, Timeout: c.Timeout, IdleTimeout: c.IdleTimeout}
+}
+
+func calendar(url string, c cli.CalendarConfig) (btctime.Calendar, error) {
+	return otscal.New(url, otscal.Config{AllowPrivate: c.AllowPrivate, Timeout: c.Timeout})
 }

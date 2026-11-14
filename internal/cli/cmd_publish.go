@@ -518,14 +518,23 @@ func (v *view) nextLine(c *Ctx, signer, kind string) (head, *Problem) {
 	if prob != nil || kind == "rotate_key" || kind == "revoke_key" {
 		return h, prob
 	}
+	if prob := v.keyRetired(signer); prob != nil {
+		return head{}, prob
+	}
+	return h, nil
+}
+
+// keyRetired refuses a new line (other than a key event) when signer's log holds a key event: such a line counts
+// toward nothing on any branch (nextLine).
+func (v *view) keyRetired(signer string) *Problem {
 	if evs := v.logs.Log(signer).View().KeyState().Events; len(evs) > 0 {
-		return head{}, &Problem{Slug: "key-already-retired", Title: "refused: your key already has a key event",
+		return &Problem{Slug: "key-already-retired", Title: "refused: your key already has a key event",
 			Class: refusal.Policy, Scope: "this key's log",
 			Detail: "this store holds " + eventList(evs) + " in your key's log; a line signed after a rotation or revocation counts toward nothing, on any branch; nothing was signed or appended",
 			Next:   "sign with the key that is current (the successor a rotation names, or a new key: commons key new --out <file>); if the event is not yours, revoke with --reason key_compromise and --last-good",
 			Peer:   evs[0].St.ID, Exit: exitWriterRefused}
 	}
-	return h, nil
+	return nil
 }
 
 // placeLine is nextLine's placement: the head named by --prev, the one tip, or a refusal for a fork or a detached log.
