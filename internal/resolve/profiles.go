@@ -366,7 +366,10 @@ func (b BoundRules) Compare(rule string, x, y State) (int, bool) {
 
 // ProfileSegments is a SegmentReader that reads each segment's finality from its own statement's asserted state at
 // capture, under the reader's chosen source profiles, or, when the profile cites a response layout and the segment's
-// held response reads under it, from the held bytes (Held). It re-checks no source: every state it reports final or
+// held response reads under it, from the held bytes (Held). A batch segment (its referent pins a request log) is read
+// as the observation view reads it: at its least logged response, through its request-log check, when the resolver
+// has a content reader to locate the log in (WithContent or WithObservedContent); without one the layout read is
+// unchecked, as the record alone carries no content. It re-checks no source: every state it reports final or
 // provisional is as captured or as held, and the series boundary it yields is marked so (claims-model note §8, "a
 // boundary as captured"). The position is read as RecordSegments reads it.
 type ProfileSegments struct {
@@ -386,7 +389,16 @@ func (ps ProfileSegments) Segment(m *Member) SegmentState {
 	fo := object(m.record, "finality")
 	rule := str(fo, "rule")
 	b := ps.Rules.For(str(fo, "rule_source"))
-	state, lr := heldState(b, rule, m.record, stateOf(object(fo, "state_at_capture")))
+	asserted := stateOf(object(fo, "state_at_capture"))
+	var state State
+	var lr *LayoutRead
+	if m.held != nil {
+		// the statement as the resolver reads it: a batch capture's responses through its request-log check
+		state, lr = m.held(b, rule, asserted)
+	} else {
+		state, lr = heldState(b, rule, m.record, asserted)
+	}
+	s.Layout = lr
 	met, _, why := b.Check(rule, state)
 	if why != "" {
 		s.Final, s.Why = "unchecked", why

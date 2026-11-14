@@ -117,6 +117,10 @@ type Member struct {
 	// Digest is the member's content digest, when it has content.
 	Digest string
 	record *canon.Object
+	// held reads the record's capture at its held state as the resolver reads the statement (heldStateOf): a batch
+	// capture's responses through its request-log check. nil when the member is not a held statement, or the
+	// resolver has no content reader to locate a log in; a reader then reads the record alone (heldState).
+	held func(rules FinalityRules, rule string, asserted State) (State, *LayoutRead)
 	// fieldWhy explains a field the record cannot give (contested default, observation fields of a content
 	// member); recordWhy explains a member with no record at all.
 	fieldWhy  map[string]string
@@ -407,6 +411,12 @@ func (r *Resolver) memberRecord(entry *canon.Object) *Member {
 			m.recordWhy = "statement counts toward nothing (" + r.gate(p).Why + ")"
 		default:
 			m.record, m.Statement, m.Signer, m.Digest = p.St.Body, p.St.ID, p.St.Signer, contentDigest(p.St.Body)
+			if r.obs.content != nil || r.rules.content != nil {
+				st := p.St
+				m.held = func(rules FinalityRules, rule string, asserted State) (State, *LayoutRead) {
+					return r.heldStateOf(rules, rule, st, asserted)
+				}
+			}
 		}
 	case str(entry, "content") != "":
 		m.By, m.Key, m.Digest = "content", str(entry, "content"), str(entry, "content")

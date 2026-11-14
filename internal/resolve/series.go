@@ -91,6 +91,9 @@ type SegmentState struct {
 	// Held marks an AsCaptured state read from the segment's held response under the profile's response layout
 	// rather than asserted: still not a re-check (AsCaptured stays true), shown `as held`.
 	Held bool
+	// Layout is the segment's response-layout read (nil when no layout applies), as the observation view reads the
+	// same statement: unchecked with its why when the state could not be read from held bytes.
+	Layout *LayoutRead
 }
 
 // SegmentReader is the reader's re-check of a segment's position and finality.

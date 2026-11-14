@@ -474,7 +474,8 @@ func (b BoundRules) readLayout(rule string, body *canon.Object, asserted State) 
 		lr.Why = "a response layout reads a source-class capture, this is " + inertText(str(body, "class"))
 		return lr
 	case rd == "" && object(ref, "requests") != nil:
-		// a series segment: its record carries no content reader, so the batch's request log is not checked here
+		// a batch capture read from its record alone (a series segment when the resolver has no content reader):
+		// the request log is not checked here; heldStateOf reads it through the log
 		lr.Why = "a batch capture: its responses are read through its request log, which this read does not check"
 		return lr
 	case rd == "":
