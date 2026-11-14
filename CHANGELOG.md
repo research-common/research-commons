@@ -84,6 +84,14 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 ### Changed
 - **`identity new` and `identity cut` say what they check.** The fresh-root check sees this store only, so the help says to use a key generated for this purpose that has signed nothing anywhere; `--last-good` says it takes any held line of the delegate's key (a bare-key line included, not only an act under the grant) and that a thief's act inside the kept prefix keeps counting, so you name the last act you can attest was the delegate's own.
 
+### Fixed
+- **`provenance_partial` is now checked like every other field of `authored`.** The wire format lists it (`workflow`
+  digest, `inputs` list of digests, `unpinned` list of strings, optional `supplied` object of name → digest, optional
+  `environment`) and says every required field of a listed kind is checked at every gate, but the schema never read
+  it: a draft with `"provenance_partial":5` was signed, committed and accepted by `pull` and `hub check`. `publish`
+  now refuses such a draft before signing, and `pull`, `hub check` and `push` refuse the line, as intrinsic
+  `malformed statement` naming the member. `run --publish` writes a well-formed one, so its output is unchanged.
+
 ## [0.5.0-alpha.4] - 2026-11-13
 
 ### Added
