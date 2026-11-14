@@ -17,10 +17,6 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 - **`package show --pae-out <file>`** writes the exact PAE bytes a signature covers (no newline) to a new file,
   for a signer that is not this tool. An existing file is never overwritten, and nothing is written unless every
   package check passes.
-- **A series shows each segment's response-layout read.** When a batch segment's state was read from its held
-  responses (or could not be, with the reason), `show` and `explain` of a series edition print that read on an
-  indented line under the segment, in the words the observation view uses. Segments with no layout read render
-  as before.
 
 ### Changed
 - **`provenance_partial` is stricter (pre-1.0 tightening).** `unpinned` must name at least one input and name each
