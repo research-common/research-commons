@@ -713,7 +713,12 @@ first, refuses unless the key file's signer is the package's signer, signs the r
 PAE with the code the writer signs with, verifies the signature as a reader does, and
 writes it in the encoding above, newline-terminated, to a new file (never overwritten) or
 standard output. Every refusal writes nothing; `--dry-run` prints what would be signed.
-It signs only the PAE of an envelope the tool would prepare, never bytes it is handed. The
+It signs only the PAE of an envelope the tool would prepare, never bytes it is handed.
+`package show --pae-out <file>` writes those PAE bytes (the decoded `pae`, no newline) to a new
+file, only once every check has passed, for a signer that is not this tool. When the
+envelope's `ts` is more than 300 s ahead of the signing machine's clock, both commands add an
+advisory (the store refuses such a `ts` at `--complete`); the exit is unchanged and `key sign`
+still signs, because that machine's clock is the weaker reference. The
 custody flow: `--prepare` on the store's machine; carry the package, and its `pae_sha256`
 by a separate channel, to the signing machine; `package show` and compare the hash; `key
 sign`; carry the signature back; `--complete`. A key file signer is not a hardware or

@@ -89,8 +89,8 @@ takes `--json`, which prints one JSON object (an RFC 9457 problem-details object
 |---|---|
 | `init` | create a store in a directory |
 | `key new` / `key show` | generate a signing key file / print its signer (never the key) |
-| `package show` | check an external-signing package written by `--prepare` (every member derived from its envelope recomputed, as `--complete` does) and print what a signature would cover: summary, signer, alg, proposed id, `pae_sha256`; reads no store |
-| `key sign` | sign an external-signing package's PAE bytes with a key file, after `package show`'s checks and only when the key is the package's signer; writes the signature `--complete --signature` reads; reads no store |
+| `package show` | check an external-signing package written by `--prepare` (every member derived from its envelope recomputed, as `--complete` does) and print what a signature would cover: summary, signer, alg, proposed id, `pae_sha256` (`--pae-out <file>` writes the PAE bytes for a non-CLI signer; an advisory when `ts` is >300 s ahead of the local clock); reads no store |
+| `key sign` | sign an external-signing package's PAE bytes with a key file, after `package show`'s checks and only when the key is the package's signer; writes the signature `--complete --signature` reads (same future-`ts` advisory; still signs); reads no store |
 | `publish` | sign and commit a statement: authored (with bytes), holds, describes, retracts, or a draft |
 | `publish task` | create a task, or publish a new edition of one |
 | `publish grant` | as a task edition's coordinator, grant a key for that edition (refused when the grant would have no effect) |
