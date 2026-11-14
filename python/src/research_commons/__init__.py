@@ -6,7 +6,7 @@ binary prints becomes an exception, chosen by exit code.
 
     >>> import research_commons as rc
     >>> rc.run("--version").json["version"]            # doctest: +SKIP
-    '0.5.0-alpha.3'
+    '0.5.0-alpha.4'
     >>> rc.verify("sha256:…", check=False).exit         # doctest: +SKIP
     3
 """
@@ -27,7 +27,7 @@ from .errors import (
     UnparseableOutput,
 )
 
-__version__ = "0.5.0a3"
+__version__ = "0.5.0a4"
 
 __all__ = [
     "run",

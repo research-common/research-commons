@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "research-commons"
-version = "0.5.0a3"
+version = "0.5.0a4"
 description = "A thin Python wrapper around the Research Commons command-line tool (commons): it runs the binary and returns its --json output."
 readme = "README.md"
 requires-python = ">=3.9"
