@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -709,5 +710,193 @@ func TestIdentityCasesKeysLost(t *testing.T) {
 				t.Fatal("a refused writer changed the store")
 			}
 		})
+	}
+}
+
+// TestIdentityCasesReceivedPolicyInjection: C-id-33's received-policy half through the commands. Statements that
+// carry a policy document (the delegate's act under its grant, a stranger's line, the root key's line on a rival
+// lineage that is not I's, a policy file placed in the package beside them) change no answer: the pull trust floor
+// admits and refuses exactly what it did without them, and `explain` prints the same "none configured"
+// reader-policy block. A root-key line on I's own lineage is a different matter, decided by the root-event
+// vocabulary (an unsupported root event makes I unknown, C-id-07): it too installs no policy, which the bare
+// line's refusal shows.
+func TestIdentityCasesReceivedPolicyInjection(t *testing.T) {
+	type outcome struct {
+		verdicts [2]string // I's act, the bare line
+		explain  string
+	}
+	run := func(inject string) outcome {
+		w := newWorld(t)
+		w.worker("K1")
+		w.worker("S")
+		i, a := w.identityOf("I", "IR", canon.Bool(true), "K1")
+		act := w.signRC2("A0", "K1", "authored", licBody("X", "MIT"), a["K1"])
+		bare := w.authored("S0", "S", "Y", "licence", "MIT")
+		doc := `{"version":"reader-policy-v1","selections":[],"trust":[{"principal":{"key":"` + w.signer("S") + `"},"purposes":["admission"],"targets":{"any_content":true}}]}`
+		carrying := func() *canon.Object { return withMember(licBody("P", "MIT"), "reader_policy", obj("doc", doc)) }
+		switch inject {
+		case "delegate":
+			w.signRC2("P", "K1", "authored", carrying(), a["K1"])
+		case "stranger":
+			w.sign("P", "S", "authored", carrying())
+		case "root rival lineage":
+			w.rootAlt("IRx", "IR")
+			w.rawLine("P", "IRx", "IR", "rc/1", "authored", "", nil, carrying(), [2]string{})
+		case "root lineage":
+			w.signRC2("P", "IR", "authored", carrying(), [2]string{})
+			w.sign("note", "IR", "describes", obj("about", obj("statement", i), "note", doc))
+		}
+		pf := filepath.Join(t.TempDir(), "policy.json")
+		os.WriteFile(pf, []byte(`{"version":"reader-policy-v1","selections":[],"trust":[{"principal":{"identity":"`+i+`"},"purposes":["admission"],"targets":{"any_content":true}}]}`), 0o644)
+		pkg := t.TempDir()
+		copyData(t, w.root, pkg)
+		os.WriteFile(filepath.Join(pkg, "reader-policy.json"), []byte(readerPolicyDoc(w.signer("S"))), 0o644)
+		dst := newWorld(t)
+		rep := jsonOf(t, dst.run("pull", pkg, "--policy", pf, "--below-floor", "refuse", "--json"))
+		var o outcome
+		for k, x := range []struct{ signer, id string }{{w.signer("K1"), act}, {w.signer("S"), bare}} {
+			o.verdicts[k] = "admitted"
+			if row := objectRow(t, rep, stmtPath(x.signer, x.id)); row != nil {
+				o.verdicts[k] = string(row.Members["verdict"].(canon.String))
+			}
+		}
+		out := dst.run("explain", dig("X")).stdout
+		i0 := strings.Index(out, "reader policy:")
+		o.explain = out[i0 : i0+strings.Index(out[i0:], "\nevaluator:")]
+		return o
+	}
+	ctrl := run("")
+	if ctrl.verdicts[1] != "refused" || ctrl.verdicts[0] == "refused" || !strings.Contains(ctrl.explain, "none configured") {
+		t.Fatalf("control: %+v", ctrl)
+	}
+	for _, inj := range []string{"delegate", "stranger", "root rival lineage"} {
+		if got := run(inj); got != ctrl {
+			t.Fatalf("%s: a received statement changed an answer:\n%+v\nvs\n%+v", inj, got, ctrl)
+		}
+	}
+	if got := run("root lineage"); got.verdicts[1] != "refused" || got.explain != ctrl.explain {
+		t.Fatalf("root lineage: a root-signed policy-shaped statement installed policy: %+v", got)
+	}
+}
+
+// TestIdentityCasesConflictingSelectionsExit2: the preflight half of C-id-32 through every command that takes a
+// reader policy: two selections for one (content, role), whether two pins, a pin and a follow, or two principals,
+// are refused as a reader-policy problem with exit 2 before any work, by --policy and by the environment, and the
+// store is byte-identical afterwards. The same policy with one selection is accepted (the control).
+func TestIdentityCasesConflictingSelectionsExit2(t *testing.T) {
+	w := fixture(t)
+	i := strings.Repeat("ab", 32)
+	sub := `"subject":{"content":"` + dig("sole") + `","role":"authorship-declaration"}`
+	pin := func(id string) string { return `{"statement":"` + id + `",` + sub + `}` }
+	follow := func(p string) string { return `{"principal":` + p + `,` + sub + `}` }
+	doc := func(sels ...string) string {
+		return `{"version":"reader-policy-v1","selections":[` + strings.Join(sels, ",") + `],"trust":[]}`
+	}
+	dir := t.TempDir()
+	write := func(name, d string) string {
+		p := filepath.Join(dir, name)
+		os.WriteFile(p, []byte(d), 0o644)
+		return p
+	}
+	// the control selects for a blob no statement is about, so it is accepted and nothing prints a selection
+	// outcome (an unmet selection on a held blob is a separate finding: see the report)
+	good := write("good.json", `{"version":"reader-policy-v1","selections":[{"statement":"`+i+`","subject":{"content":"`+dig("unheld")+`","role":"authorship-declaration"}}],"trust":[]}`)
+	for _, c := range []struct{ name, doc string }{
+		{"two pins", doc(pin(i), pin(strings.Repeat("cd", 32)))},
+		{"a pin and a follow of a key", doc(follow(`{"key":"`+w.signer("K1")+`"}`), pin(i))},
+		{"a pin and a follow of an identity", doc(follow(`{"identity":"`+i+`"}`), pin(i))},
+		{"two principals", doc(follow(`{"identity":"`+i+`"}`), follow(`{"key":"`+w.signer("K1")+`"}`))},
+	} {
+		bad := write("bad.json", c.doc)
+		before := snapshot(t, w.root)
+		n := 0
+		for _, cmd := range Commands() {
+			if !cmd.ReaderPolicy {
+				continue
+			}
+			args := strings.Fields(cmd.Name)
+			if len(cmd.Args) > 0 && !cmd.Args[0].Optional {
+				args = append(args, sweepArg(w, cmd))
+			}
+			n++
+			if r := w.run(append(args, "--policy", bad, "--json")...); r.code != 2 || !strings.Contains(r.stdout, `"class":"reader policy"`) {
+				t.Fatalf("%s: %v --policy: exit %d\n%s", c.name, args, r.code, r.stdout)
+			}
+			if r := runIn(w.root, map[string]string{PolicyEnv: bad}, append(args, "--json")...); r.code != 2 {
+				t.Fatalf("%s: %v %s: exit %d", c.name, args, PolicyEnv, r.code)
+			}
+		}
+		if n == 0 {
+			t.Fatal("no command takes a reader policy")
+		}
+		if snapshot(t, w.root) != before {
+			t.Fatalf("%s: a refused policy changed the store", c.name)
+		}
+	}
+	if r := w.run("list", "--policy", good, "--json"); r.code != ExitOK {
+		t.Fatalf("control: one selection refused: %d\n%s", r.code, r.stdout)
+	}
+}
+
+// TestIdentityCasesPinVersusFollow: C-id-31 through verify with the real evaluator. I and J each hold a claim on
+// one blob (licence MIT and Apache-2.0), made by one key under two grants, and I amends its own claim. An exact pin
+// selects that statement only: pinning I's first claim reads MIT though I's current claim is CC0-1.0 (no successor
+// is followed); pinning J's claim reads J's value (no alias between identities). Following I reads I's current
+// claim (the amendment), following J reads J's; each by a direct and a pulled store. A bare statement of the same
+// key, once held, is read only by pinning it: following I or J never reads it (GPL-3.0 appears under neither).
+func TestIdentityCasesPinVersusFollow(t *testing.T) {
+	w := newWorld(t)
+	w.worker("K")
+	i, a := w.identityOf("I", "IR", canon.Bool(true), "K")
+	j := w.signRC2("J", "JR", "identity_inception", obj("profile", wire.FixedRootProfile), [2]string{})
+	gJ := w.grantTo("J", "JR", j, "K", obj("any_content", true), canon.Bool(true))
+	w.ids["GJ"] = gJ[1]
+	w.ids["GI"] = a["K"][1]
+	i0 := w.signRC2("I0", "K", "authored", licBody("X", "MIT"), a["K"])
+	j0 := w.signRC2("J0", "K", "authored", licBody("X", "Apache-2.0"), gJ)
+	i1 := w.signRC2("I1", "K", "authored", amendingBody("X", "CC0-1.0", i0), a["K"])
+	bare := w.authored("B0", "K", "X", "licence", "GPL-3.0")
+	sub := `"subject":{"content":"` + dig("X") + `","role":"authorship-declaration"}`
+	selector := map[string]string{
+		"pin I's first claim":     `{"statement":"` + i0 + `",` + sub + `}`,
+		"pin I's amendment":       `{"statement":"` + i1 + `",` + sub + `}`,
+		"pin J's claim":           `{"statement":"` + j0 + `",` + sub + `}`,
+		"follow I":                `{"principal":{"identity":"` + i + `"},` + sub + `}`,
+		"follow J":                `{"principal":{"identity":"` + j + `"},` + sub + `}`,
+		"pin the key's bare line": `{"statement":"` + bare + `",` + sub + `}`,
+	}
+	want := map[string]string{
+		"pin I's first claim": "MIT", "pin I's amendment": "CC0-1.0", "pin J's claim": "Apache-2.0",
+		"follow I": "CC0-1.0", "follow J": "Apache-2.0", "pin the key's bare line": "GPL-3.0",
+	}
+	all := []string{"first:K", "I", "GI", "J", "GJ", "I0", "J0", "I1"}
+	for how, d := range readers(holding(t, w, all...)) {
+		d := d
+		t.Run(how, func(t *testing.T) {
+			for name, sel := range selector {
+				pf := filepath.Join(t.TempDir(), "p.json")
+				os.WriteFile(pf, []byte(`{"version":"reader-policy-v1","selections":[`+sel+`],"trust":[]}`), 0o644)
+				o := jsonOf(t, d.run("verify", dig("X"), "--policy", pf, "--json"))
+				lic, _ := member(o, "disclosures", "licence", "value").(canon.String)
+				state := member(o, "disclosures", "licence", "state")
+				if _, ok := want[name]; !ok || name == "pin the key's bare line" {
+					continue // the bare line is not held here; an unmet selection is the report's finding, not asserted
+				}
+				if string(lic) != want[name] || state != canon.String("default") {
+					t.Fatalf("%s: licence %v %v, want %s", name, state, lic, want[name])
+				}
+			}
+		})
+	}
+	// with the bare line held too: pinning it reads GPL-3.0; following I or J never reads it
+	h := holding(t, w, append(slicesClone(all), "B0")...)
+	for name, sel := range selector {
+		pf := filepath.Join(t.TempDir(), "p.json")
+		os.WriteFile(pf, []byte(`{"version":"reader-policy-v1","selections":[`+sel+`],"trust":[]}`), 0o644)
+		o := jsonOf(t, h.run("verify", dig("X"), "--policy", pf, "--json"))
+		lic, _ := member(o, "disclosures", "licence", "value").(canon.String)
+		if w, ok := want[name]; ok && (string(lic) != w || member(o, "disclosures", "licence", "state") != canon.String("default")) {
+			t.Fatalf("bare line held, %s: %q, want %s", name, lic, w)
+		}
 	}
 }
