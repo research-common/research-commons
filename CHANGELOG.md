@@ -17,6 +17,10 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   unpinned input's **name** in `unpinned` (it wrote `name ("reference")`), which is what the wire format says and
   what the new `supplied` check compares against; the reference stays in the workflow spec the line names. Lines
   already written with the old form fail the `supplied` check only if they carry `supplied`.
+- **Identity profile note and coverage file state the writer.** They no longer say no command signs `rc/2`:
+  the writer is `identity new|grant|cut` and `publish --as --grant`; hardware and connector signing is not built.
+  Ten identity conformance cases (03, 05, 06, 11, 12, 13, 14, 16, 18, 33) now pass through the commands, and the
+  coverage file states what the remaining ones still lack.
 
 ## [0.5.0-alpha.5] - 2026-11-14
 

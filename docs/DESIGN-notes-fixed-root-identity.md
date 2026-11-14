@@ -886,8 +886,9 @@ asked by every resolver and the pull trust floor; `show`/`explain` print an iden
 statement's actor, the evaluator's state and reasons, and the evaluator context (version,
 evidence digest, receipt); `counted` is the counting gate's answer; the admission cap
 reads `unknown` (exit 3). Signed end-to-end tests run the published vectors and the
-amendment scenarios through the commands. Still required: the writer (inception, grant,
-cut and actor-bearing publish: no command signs `rc/2`); the critical registry; a
+amendment scenarios through the commands. The writer is the simple-path commands: `identity new`, `identity grant`, `identity cut` and `publish --as --grant`
+sign `rc/2` with a key file or through a detached-signing package. Still required: hardware and connector signing
+(none is built); the critical registry; a
 concrete identity task-contract profile; the production evidence-snapshot serialization,
 caches and replay; independent review of the major transition; detached signing
 packages/connectors and custody/hardware usability drills. No release, deployment, live
@@ -897,10 +898,11 @@ keys or devices are implied by these artifacts.
 
 The 45 scenario handles of §9 are registered conformance cases, one to one: handle `ID-NN` is case `C-id-NN`.
 The conformance harness reads them from this table, like the bitcoin-time profile's supplementary cases. They are
-cases **of this candidate profile**: the reader is active and the writer is not (no command signs `rc/2`;
-`wire.Major` is the writer's major, 1), so a case is checked through the commands over `rc/2` lines signed by the
-test builders, or at the layers below (the rc/2 reader, the admission adapter and the reference model); a case whose
-remaining outcome needs the writer or a custody drill stays partial. A case is covered only when its whole required outcome is checked by a signed,
+cases **of this candidate profile**: the reader is active and the writer is the simple-path commands
+(`identity new|grant|cut`, `publish --as --grant`); hardware and connector signing is not built. A case is checked
+through the commands over `rc/2` lines written by those commands or signed by the test builders, or at the layers below
+(the rc/2 reader, the admission adapter and the reference model); a case whose remaining outcome needs a connector, a
+consumer that does not exist yet or a custody drill stays partial. A case is covered only when its whole required outcome is checked by a signed,
 end-to-end test that does not depend on a consumer that does not exist yet. A schema vector is a shape check, not
 a scenario.
 

@@ -1,5 +1,5 @@
 {
-  "status": "Scenario handles of the candidate fixed-root identity profile. Handle ID-NN is the registered conformance case C-id-NN (profile note §10); 'conformance' is that case's harness status (covers, partial or pending) and a test in internal/conformance keeps it equal to what the tests declare. The reader is active and the writer is not: tests check the commands over rc/2 lines signed by the test builders (internal/cli), the rc/2 reader, the admission adapter and the reference model, and a case is covered only when its whole required outcome is checked end to end with signed evidence (profile note §10). Schema vectors are shape checks only.",
+  "status": "Scenario handles of the candidate fixed-root identity profile. Handle ID-NN is the registered conformance case C-id-NN (profile note §10); 'conformance' is that case's harness status (covers, partial or pending) and a test in internal/conformance keeps it equal to what the tests declare. The reader is active and the writer is the simple-path commands (identity new|grant|cut, publish --as --grant); hardware and connector signing is not built. Tests check the commands over rc/2 lines written by those commands or signed by the test builders (internal/cli), the rc/2 reader, the admission adapter and the reference model, and a case is covered only when its whole required outcome is checked end to end with signed evidence (profile note §10). Schema vectors are shape checks only.",
   "scenarios": [
     {
       "handle": "ID-01",
@@ -64,10 +64,11 @@
       ],
       "isolated_tests": [
         "internal/identity:TestSliceNegatives",
-        "internal/identity:TestReviewTerminalRootEventIgnoresAncestryDefects"
+        "internal/identity:TestReviewTerminalRootEventIgnoresAncestryDefects",
+        "internal/cli:TestIdentityCasesRivalLineage"
       ],
-      "conformance": "partial",
-      "remaining": "Require exact root and delegate lineage pins; schema checks inception syntax only."
+      "conformance": "covers",
+      "remaining": "Covered through the commands (internal/cli:TestIdentityCasesRivalLineage), direct and pulled: a grant on a rival seq-0 inception by the root key never authorizes a claim of I (denied wrong_lineage), a grant pinning a head or the key's rival seq 0 is denied, an act on a rival seq-0 line of the delegate's key is denied, and the rival identity's own grant and I's own acts are untouched. The adapter and model checks stay below."
     },
     {
       "handle": "ID-04",
@@ -92,10 +93,11 @@
       ],
       "isolated_tests": [
         "internal/identity:TestSliceNegatives",
-        "internal/hubcheck:TestActorLabels"
+        "internal/hubcheck:TestActorLabels",
+        "internal/cli:TestIdentityCasesWrongSignerIdentityGrant"
       ],
-      "conformance": "partial",
-      "remaining": "Self-grant/actor shapes checked; root/delegate signature and referent bindings require authority evaluation."
+      "conformance": "covers",
+      "remaining": "Covered through the commands (internal/cli:TestIdentityCasesWrongSignerIdentityGrant), direct and pulled: a key other than the delegate (wrong_delegate), a grant not signed by I's root (wrong_signer), a grant whose delegate is the root (root_is_delegate), a grant named as the identity (invalid_identity_inception) and another identity's grant (wrong_grant_identity) are each denied and not counted; the correctly signed act is the control."
     },
     {
       "handle": "ID-06",
@@ -106,10 +108,11 @@
       ],
       "isolated_tests": [
         "internal/identity:TestCaseOneKeyTwoIdentities",
-        "internal/identitymodel:TestSameWorkerDifferentIdentitiesDoNotInterfere"
+        "internal/identitymodel:TestSameWorkerDifferentIdentitiesDoNotInterfere",
+        "internal/cli:TestIdentityCasesOneKeyTwoIdentities"
       ],
-      "conformance": "partial",
-      "remaining": "Single actor object checked; test explicit principal selection and no cross-principal amendment."
+      "conformance": "covers",
+      "remaining": "Covered through the commands (internal/cli:TestIdentityCasesOneKeyTwoIdentities), direct and pulled: one key under grants of I and J; each statement acts for exactly the actor it names, I's answer is byte-identical (evaluator digest aside) with and without J's evidence, a cut of either identity's grant leaves the other's acts untouched, and I's amendment naming J's claim applies to nothing. The model's non-interference property stays in internal/identitymodel."
     },
     {
       "handle": "ID-07",
@@ -119,10 +122,11 @@
       "isolated_tests": [
         "internal/identity:TestSliceNegatives",
         "internal/identity:TestSliceRootTerminalAndDelivery",
-        "internal/identity:TestReviewUnsupportedRootEventSurvivesBadMerge"
+        "internal/identity:TestReviewUnsupportedRootEventSurvivesBadMerge",
+        "internal/cli:TestIdentityCasesMissingEvidence"
       ],
       "conformance": "partial",
-      "remaining": "Pure model and integration must retain and propagate exact unknown dependencies."
+      "remaining": "Partial: through show on a direct and a pulled store a missing inception, grant, delegate inception or ancestor, and an in-lineage root event outside the closed vocabulary, read unknown, not counted, never eligible. The printed reasons name the kind of what is missing (identity inception, grant, delegate inception, statement ancestry, unsupported_root_event), not each statement id, so `naming each missing or unsupported id` is not met: no surface prints the dependency ids the model records."
     },
     {
       "handle": "ID-08",
@@ -130,10 +134,11 @@
       "scenario": "Known cut with missing ancestry or prefix",
       "schema_vectors": [],
       "isolated_tests": [
-        "internal/identity:TestSliceCutUncertainty"
+        "internal/identity:TestSliceCutUncertainty",
+        "internal/cli:TestIdentityCasesCutEvidenceThroughCommands"
       ],
       "conformance": "partial",
-      "remaining": "Authenticated root relevance and blocked positive grant required."
+      "remaining": "Partial: through show on a direct and a pulled store a held cut whose last_good, or the ancestry placing it, is missing makes the grant's acts unknown (missing_evidence), not counted, with another grant unaffected. `names L` and `the cut is listed as relevant` are not met: the reasons name the kind of what is missing and no surface lists the relevant cuts."
     },
     {
       "handle": "ID-09",
@@ -171,10 +176,11 @@
         "internal/identity:TestSliceCutAtExactLine",
         "internal/identity:TestSignedVectorsCutsAndRetirement",
         "internal/cli:TestIdentityReaderVectorsThroughPull",
-        "internal/cli:TestHubCheckLabelsActor"
+        "internal/cli:TestHubCheckLabelsActor",
+        "internal/cli:TestIdentityCasesCutsThroughCommands"
       ],
-      "conformance": "partial",
-      "remaining": "Set-based ancestry closure including merges at the adapter and model; the published cut at last_good and the null cut through pull and `show` (named act kept, descendant `cut_excluded`). Siblings and other grants are checked with synthetic keys at the adapter only."
+      "conformance": "covers",
+      "remaining": "Covered through the commands (internal/cli:TestIdentityCasesCutsThroughCommands), direct and pulled: a cut at L keeps L and its ancestors, denies its descendants and a sibling fork of the delegate's log (cut_excluded), keeps a delegate line that merges the sibling together with the sibling and denies that line's descendant, and leaves another grant and another identity's grant of the same key unaffected. The published-vector cut at last_good and the null cut stay in TestIdentityReaderVectorsThroughPull."
     },
     {
       "handle": "ID-12",
@@ -185,10 +191,11 @@
       ],
       "isolated_tests": [
         "internal/identitymodel:TestSeededCutsMatchIndependentSetOracleAndNeverWiden",
-        "internal/identitymodel:TestSeededEvidenceNeverRaisesStatus"
+        "internal/identitymodel:TestSeededEvidenceNeverRaisesStatus",
+        "internal/cli:TestIdentityCasesCutsThroughCommands"
       ],
-      "conformance": "partial",
-      "remaining": "Mandatory nullable prefix syntax checked; intersection and permutation semantics belong to model."
+      "conformance": "covers",
+      "remaining": "Covered through the commands (internal/cli:TestIdentityCasesCutsThroughCommands), direct and pulled, with the cuts on one root log and each on its own fork: every order of three cuts gives the intersection, the null cut excludes everything, a later or earlier wider cut never reopens the grant. The seeded model property stays in internal/identitymodel."
     },
     {
       "handle": "ID-13",
@@ -198,10 +205,11 @@
       "isolated_tests": [
         "internal/identity:TestSliceCutUncertainty",
         "internal/identity:TestReviewCutWithWrongIdentityDeniesItsGrant",
-        "internal/identity:TestReviewCutAddressIsTheGrant"
+        "internal/identity:TestReviewCutAddressIsTheGrant",
+        "internal/cli:TestIdentityCasesCutEvidenceThroughCommands"
       ],
-      "conformance": "partial",
-      "remaining": "Do not drop authenticated control on syntax/lineage failures and falsely pass the grant."
+      "conformance": "covers",
+      "remaining": "Covered through the commands (internal/cli:TestIdentityCasesCutEvidenceThroughCommands), direct and pulled: an authenticated root cut with a malformed reason or last_good, or naming G1 under the wrong identity, denies G1 and leaves another grant standing; a cut whose grant cannot be read makes every grant of I unknown (unsupported_root_event)."
     },
     {
       "handle": "ID-14",
@@ -211,10 +219,11 @@
       "isolated_tests": [
         "internal/wire:TestFixedRootCandidateCrypto",
         "internal/identity:TestCaseNewGrantCannotRelabel",
-        "internal/wire:TestSignedIdentityNegativeVectors"
+        "internal/wire:TestSignedIdentityNegativeVectors",
+        "internal/cli:TestIdentityCasesCutsThroughCommands"
       ],
-      "conformance": "partial",
-      "remaining": "Actor/grant signature binding checked generically; full cut/new-grant authority fixture required."
+      "conformance": "covers",
+      "remaining": "Covered through the commands (internal/cli:TestIdentityCasesCutsThroughCommands), direct and pulled: after the grant is cut to nothing, a new grant to the same key and inception cannot relabel the old bytes (the old act stays denied under its own grant), the act under the new grant is eligible, and re-signing the same body under it is a different statement id."
     },
     {
       "handle": "ID-15",
@@ -234,10 +243,11 @@
       "schema_vectors": [],
       "isolated_tests": [
         "internal/identity:TestCaseRootForkGrantsCoexist",
-        "internal/identitymodel:TestRootForkGrantsCoexistAndMergesNeverUncut"
+        "internal/identitymodel:TestRootForkGrantsCoexistAndMergesNeverUncut",
+        "internal/cli:TestIdentityCasesCutsThroughCommands"
       ],
-      "conformance": "partial",
-      "remaining": "Model accumulation and complete root-lineage fork/merge checks."
+      "conformance": "covers",
+      "remaining": "Covered through the commands (internal/cli:TestIdentityCasesCutsThroughCommands), direct and pulled: a grant issued on a second fork of the root's log stands beside the first; a null cut of the first grant and a root line merging the forks never reopen the cut grant and never cut the second."
     },
     {
       "handle": "ID-17",
@@ -268,10 +278,11 @@
       "schema_vectors": [],
       "isolated_tests": [
         "internal/identity:TestCaseRootKeyLossChangesNothing",
-        "internal/cli:TestIdentitySimplePathDrill"
+        "internal/cli:TestIdentitySimplePathDrill",
+        "internal/cli:TestIdentityCasesKeysLost"
       ],
-      "conformance": "partial",
-      "remaining": "Authority must not depend on private-key availability; custody recovery is separate. Through the commands, a root key file restored from backup signs a valid grant for the same identity (TestIdentitySimplePathDrill); the evaluator half stays partial (key-loss of a delegate, not only the root, is not tested)."
+      "conformance": "covers",
+      "remaining": "Covered through the commands (internal/cli:TestIdentityCasesKeysLost), both algorithms: with the root's and the delegate's key files deleted, show, verify and explain are byte-identical on the store that held the evidence and on a fresh store that pulls it, and the writers that need a key refuse and leave the store byte-identical. Restoring a root key file to resume administration is drilled in TestIdentitySimplePathDrill; the model half is in internal/identity."
     },
     {
       "handle": "ID-19",
@@ -349,9 +360,11 @@
       "case": "C-id-23",
       "scenario": "Cut preserves claim but loses anchor",
       "schema_vectors": [],
-      "isolated_tests": [],
-      "conformance": "pending",
-      "remaining": "Pending: no test. Needs the time consumer to report authority and time quality separately; not built while the profile is not active. Time consumer must preserve separate authority and time-quality outcomes."
+      "isolated_tests": [
+        "internal/resolve:TestGateAnchorsKeyScoped"
+      ],
+      "conformance": "partial",
+      "remaining": "Partial: the resolver's bound of a statement loses an anchor the evaluator excludes (a cut) while the claim keeps its authority (internal/resolve:TestGateAnchorsKeyScoped); an anchor bounds only its own signer's log. No command surface prints authority and time quality as two named outcomes for a cut anchor, so the case is not run end to end through show."
     },
     {
       "handle": "ID-24",
@@ -464,10 +477,11 @@
       "isolated_tests": [
         "internal/wire:TestFixedRootCandidateVectors",
         "internal/resolve:TestActorIdentitySelection",
-        "internal/resolve:TestDualNoKeyFallbackSelection"
+        "internal/resolve:TestDualNoKeyFallbackSelection",
+        "internal/cli:TestIdentityCasesPinVersusFollow"
       ],
       "conformance": "partial",
-      "remaining": "Policy syntax tested. Principal-following selection of an identity now runs through the actor-eligibility seam with a test-only evaluator (eligible claims only; a bare worker-key statement is never I's; undecided or amending claims read unknown). Exact pins to identity-context statements, the amendment DAG, and the real evaluator adapter remain."
+      "remaining": "Partial: through verify with the real evaluator an exact pin selects that statement only (no successor, no alias between identities) and a principal selection of an identity follows its eligible current claim, direct and pulled (internal/cli:TestIdentityCasesPinVersusFollow). Not covered: pins on the amendment DAG of conflicting heads, and an unmet selection (an ineligible pin, an identity with no eligible claim), which today ends in an internal error rather than a not-met answer."
     },
     {
       "handle": "ID-32",
@@ -482,10 +496,11 @@
       ],
       "isolated_tests": [
         "internal/wire:TestFixedRootCandidateVectors",
-        "internal/resolve:TestActorIdentitySelection"
+        "internal/resolve:TestActorIdentitySelection",
+        "internal/cli:TestIdentityCasesConflictingSelectionsExit2"
       ],
       "conformance": "partial",
-      "remaining": "Conflicting selector syntax checked; through the seam, an undecided or denied claim of I is never substituted (unknown / not met). Production preflight exit 2 and the real evaluator adapter remain."
+      "remaining": "Partial: conflicting selections for one content and role are refused with exit 2 before any work on every command that takes a reader policy, store untouched (internal/cli:TestIdentityCasesConflictingSelectionsExit2). Not covered: a missing or ineligible pinned statement read through a command, which today ends in an internal error (a selection-state word that is not in the closed vocabulary) rather than a not-met answer."
     },
     {
       "handle": "ID-33",
@@ -503,10 +518,11 @@
         "internal/wire:TestFixedRootCandidateVectors",
         "internal/policy:TestTrustsStatementThroughActors",
         "internal/resolve:TestActorTrustSeam",
-        "internal/policy:TestTargetReference"
+        "internal/policy:TestTargetReference",
+        "internal/cli:TestIdentityCasesTrustBoundaries"
       ],
-      "conformance": "partial",
-      "remaining": "Closed local policy syntax checked; through the seam (policy.TrustsStatement, the resolver's one trust question) an identity entry trusts only statements a test-only evaluator calls eligible for I, never a bare worker-key statement, with purposes and content targets separate. Targets apply to the content being judged: a reference (corroborates/refutes/retracts `of`, describes of a statement) is followed one hop, and an unresolved one reads unknown, never trusted or not trusted (policy.TrustsTarget; the pull trust floor). The real evaluator adapter and the received-policy-injection half remain."
+      "conformance": "covers",
+      "remaining": "Covered through the commands (internal/cli:TestIdentityCasesTrustBoundaries): an identity trust entry applies only to its purpose and its content targets (admission over any content, over X only, and an attestation-only entry creates no admission floor), judged by the real evaluator, never by the key; statements carrying a policy document (a delegate's, a stranger's, the root key's on a rival lineage or on I's own, a policy file in the package) change no pull verdict and no printed reader policy. Reference-following targets stay in internal/policy."
     },
     {
       "handle": "ID-34",

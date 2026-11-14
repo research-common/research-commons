@@ -530,7 +530,32 @@ func TestIdentityCasesCutsThroughCommands(t *testing.T) {
 		}
 		return holding(t, w, held...), ps
 	}
+	// every order of three cuts gives the intersection
+	var orders [][]string
+	var permute func(rest, done []string)
+	permute = func(rest, done []string) {
+		if len(rest) == 0 {
+			orders = append(orders, done)
+			return
+		}
+		for k := range rest {
+			permute(append(slicesClone(rest[:k]), rest[k+1:]...), append(slicesClone(done), rest[k]))
+		}
+	}
+	permute([]string{"p1", "p2", "p3"}, nil)
 	for _, forked := range []bool{false, true} {
+		for _, o := range orders {
+			h, ps := cutsOf(forked, o...)
+			for how, d := range readers(h) {
+				t.Run(fmt.Sprint("12/forked=", forked, "/", o, "/", how), func(t *testing.T) {
+					for k, want := range [3]string{"eligible", "denied", "denied"} {
+						if v := actorOf(t, d, ps[k]); v.state != want {
+							t.Fatalf("p%d: %+v, want %s", k+1, v, want)
+						}
+					}
+				})
+			}
+		}
 		for _, c := range []struct {
 			name  string
 			order []string
