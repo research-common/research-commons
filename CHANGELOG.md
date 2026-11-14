@@ -17,6 +17,14 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   check is not `ok`, or any logged response is not held or not readable under the layout, the read is `unchecked`,
   naming the first such entry by index and endpoint, and the observer's asserted state is used exactly as without
   a layout. Single-response observations print exactly what they printed before.
+- **A synced header chain re-checks where an observed block is.** After `anchor headers sync`, `show`, `verify`
+  and `explain` look up an exact-bytes observation's pinned block hash in this reader's header chain (only a
+  `bip122:` referent naming the chain's genesis): on the accepted chain its depth now is what the finality rule
+  reads (`provisional (2; final at 6)` or `final`), held off it is `not canonical`, and not held stays unchecked,
+  saying so. This re-checks position, never bytes, so it adds no corroboration and never moves `verify`'s exit.
+  Where the observer's asserted state at capture and the re-checked state disagree (asserted `final` at depth 7,
+  re-checked depth 2), the referent carries both under `beside` with `disagrees: true` and the text says they
+  disagree. Other chains and source referents are not re-checked. With no header chain nothing changes.
 
 ## [0.5.0-alpha.4] - 2026-11-13
 

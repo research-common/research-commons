@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/conformance"
@@ -349,6 +350,38 @@ var limits = []limit{
 			r := w.run("verify", id)
 			return r.code == ExitOK && strings.Contains(r.stdout, "status: final (as captured, not re-checked)") &&
 				strings.Contains(r.stdout, "unchecked (the response is not I-JSON"), r.stdout[:min(len(r.stdout), 600)]
+		},
+	},
+	{
+		id:  "L-15",
+		gap: "The only referent re-check is position against the reader's synced Bitcoin header chain: an exact-bytes referent on another chain (`eip155:`, another `bip122:` network) and every source referent are never re-checked, so their status rests on the asserted state, and no re-read of a referent's bytes is built (a reader's own byte re-read cannot corroborate)",
+		sources: []limitSource{
+			{file: "CHANGELOG.md", says: "Other chains and source referents are not re-checked"},
+			{help: []string{"anchor", "headers", "sync"}, says: "Other chains and source referents stay unchecked."},
+		},
+		probe:  "after `anchor headers sync`, `show` of an exact-bytes observation pinning `eip155:1` at an asserted depth meeting its rule reads `final (as captured, not re-checked)` naming the chain it has no checker for, and a source observation reads its re-check unchecked for its class",
+		closes: "a referent checker for another chain, or a byte re-read of a referent",
+		open: func(t *testing.T) (bool, string) {
+			raw, main, _, tip := forkedTestChain(8, 4, 1)
+			w := newWorld(t)
+			f := filepath.Join(t.TempDir(), "chain.headers")
+			os.WriteFile(f, raw, 0o644)
+			env := map[string]string{StateDirEnv: t.TempDir()}
+			now := tip.Add(10 * time.Minute)
+			useTestChain(t, &now, 0)
+			if r := runIn(w.root, env, "anchor", "headers", "sync", "--from", f); r.code != ExitOK {
+				return false, "sync: " + r.stdout + r.stderr
+			}
+			fin := obj("rule", "confirmations ≥ 6", "state_at_capture", obj("depth", 7))
+			eth := w.sign("E", "K1", "observed", obj("content", content("e"), "class", "exact-bytes",
+				"referent", obj("chain_id", "eip155:1", "block_hash", main[2], "depth", 7),
+				"capture", obj("at", "2026-10-16T00:00:00Z", "evidence", "self-asserted"), "finality", fin))
+			src := w.sign("S", "K2", "observed", obj("content", content("s"), "class", "source",
+				"referent", obj("endpoint", "https://api.example/x", "parameters", obj(), "response_digest", dig("s")),
+				"capture", obj("at", "2026-10-16T00:00:00Z", "evidence", "self-asserted")))
+			a, b := runIn(w.root, env, "show", eth), runIn(w.root, env, "show", src)
+			return strings.Contains(a.stdout, "status: final (as captured, not re-checked)") && strings.Contains(a.stdout, `referent chain "eip155:1" is not this reader's header chain`) &&
+				strings.Contains(b.stdout, "no referent checker for this class"), a.stdout + b.stdout
 		},
 	},
 }

@@ -137,10 +137,14 @@ const (
 	ReNotCanonical = "not canonical"
 	ReUnavailable  = "source unavailable"
 	ReUnchecked    = "unchecked"
+	// RePosition is a re-check of where the referent is, not of what it holds: the pinned block found on the
+	// reader's accepted chain at State's depth (a header chain). It drives the referent status (provisional, final)
+	// and adds no corroboration evidence: only a re-read of the bytes is evidence about the bytes (claims §5.3.1).
+	RePosition = "position re-checked"
 )
 
-// ReCheck is the reader's own re-read of an observation's referent: the block at the pinned hash from the
-// reader's node, the pinned endpoint queried again.
+// ReCheck is the reader's own re-check of an observation's referent: the block at the pinned hash from the
+// reader's node, the pinned endpoint queried again, or the pinned block's position in the reader's header chain.
 type ReCheck struct {
 	Outcome string
 	// State is the referent's state at the re-check (the block's depth now, the run label now), when known.
@@ -148,6 +152,35 @@ type ReCheck struct {
 	// Digest is the content digest of the bytes the re-check got, when it got any.
 	Digest string
 	Why    string
+	// PositionOnly marks a re-check that read the referent's position (a header chain) and never its bytes. It
+	// feeds the referent status only: whatever its outcome (RePosition, ReNotCanonical, ReUnchecked), it adds no
+	// corroboration evidence, not even an inconclusive item.
+	PositionOnly bool
+}
+
+// Beside is an asserted finality state shown beside the state this reader computed (claims §7, "declared beside
+// computed"): the observer's `state_at_capture` and what it reads as under the rule, the reader's re-checked state
+// and the referent status it gives, and whether the two disagree. Disagrees is set when the reader's state is
+// below the asserted one in the rule's order, or when the asserted state meets the rule and the reader's does not:
+// a referent's state only moves forward between a capture and a later re-check, so a re-check behind the
+// capture is a disagreement, and one ahead of it is time passing. Neither is ever substituted for the other.
+type Beside struct {
+	AssertedState, ComputedState string
+	// Asserted is what the asserted state reads as under the rule ("final", "provisional (3; final at 6)");
+	// Computed is the referent status the reader's state gives.
+	Asserted, Computed string
+	// Via names the reader's re-check ("identical bytes", or the position source).
+	Via       string
+	Disagrees bool
+}
+
+// String renders the pair for display; it is never read back.
+func (b *Beside) String() string {
+	s := fmt.Sprintf("asserted %s (%s) beside computed %s (%s)", b.AssertedState, b.Asserted, b.ComputedState, b.Computed)
+	if b.Disagrees {
+		return s + ": they disagree"
+	}
+	return s + ": they agree"
 }
 
 // ReferentChecker re-reads an observation's referent. It answers from the reader's own sources only (I9).
@@ -312,8 +345,11 @@ type Observation struct {
 	ReferentStatus  string
 	ReferentHistory []string
 	ReCheck         ReCheck
-	Capture         Capture
-	Corroboration   *Corroboration
+	// Beside is the asserted finality state beside the state the reader's re-check computed, nil when no re-check
+	// computed a state or no finality rule is declared (claims §7).
+	Beside        *Beside
+	Capture       Capture
+	Corroboration *Corroboration
 	// Others are the other observations of the same bytes, with how each relates to this one.
 	Others []string
 	// Comparability lists, for a method-class observation, each other method-class observation of the same
@@ -643,6 +679,13 @@ func (r *Resolver) referentStatus(o *Observation, st *wire.Statement) {
 		return
 	}
 	o.ReCheck = r.obs.referents.Check(st)
+	if o.ReCheck.Outcome == RePosition {
+		o.ReCheck.PositionOnly = true
+	}
+	if o.ReCheck.PositionOnly && (o.ReCheck.Outcome == ReSame || o.ReCheck.Outcome == ReDifferent) {
+		// a re-check that never read the bytes cannot say they are identical or different
+		o.ReCheck = ReCheck{Outcome: ReUnchecked, PositionOnly: true, Why: "a position re-check reported a byte outcome, which it cannot have read"}
+	}
 	rc := o.ReCheck
 	var status string
 	f := o.Finality
@@ -690,6 +733,8 @@ func (r *Resolver) referentStatus(o *Observation, st *wire.Statement) {
 		}
 	}
 	switch rc.Outcome {
+	case RePosition:
+		status = r.positionStatus(o, rules, status, rc)
 	case ReNotCanonical:
 		status = RefNotCanonical
 		o.ReferentHistory = append(o.ReferentHistory, "reader re-check: not canonical ("+rc.Why+"); the observation stays true of what it pinned and nothing counts against the observer")
@@ -701,14 +746,21 @@ func (r *Resolver) referentStatus(o *Observation, st *wire.Statement) {
 			met, final, known := rules.Evaluate(f.Rule, rc.State)
 			if known && met && status != RefRevised {
 				status = RefFinal
-				o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("reader re-check: state %s, identical bytes: final (asserted state %s shown beside it)", rc.State, f.State))
+				o.Beside = beside(rules, f, rc, ReSame, status)
+				o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("reader re-check: state %s, identical bytes: final (asserted state %s shown beside it%s)", rc.State, f.State, o.Beside.flag()))
 				break
 			}
 			if known && (status == RefFinalCaptured || status == RefFinalHeld) {
 				// the reader's own re-check puts the referent below the rule: its evidence, not the observer's
 				// asserted state, is the status (I4)
 				status = fmt.Sprintf("%s (%s; final at %s)", RefProvisional, rc.State, final)
-				o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("reader re-check: state %s, identical bytes: %s (asserted state %s shown beside it)", rc.State, status, f.State))
+				o.Beside = beside(rules, f, rc, ReSame, status)
+				o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("reader re-check: state %s, identical bytes: %s (asserted state %s shown beside it%s)", rc.State, status, f.State, o.Beside.flag()))
+				break
+			}
+			if known && (rc.State != State{}) {
+				o.Beside = beside(rules, f, rc, ReSame, status)
+				o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("reader re-check: state %s, identical bytes (asserted state %s shown beside it%s)", rc.State, f.State, o.Beside.flag()))
 				break
 			}
 			o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("reader re-check: state %s, identical bytes", rc.State))
@@ -737,6 +789,64 @@ func (r *Resolver) referentStatus(o *Observation, st *wire.Statement) {
 		}
 	}
 	o.ReferentStatus = status
+}
+
+// positionStatus is the referent status after a position re-check (RePosition): the pinned block found on the
+// reader's accepted chain at rc.State's depth. It re-checks where the referent is, never what it holds, so it
+// decides `provisional` · `final` under the rule (or `still canonical` with no rule) and nothing else; the
+// corroboration status never reads it (readerCheck). status is the status at capture.
+func (r *Resolver) positionStatus(o *Observation, rules FinalityRules, status string, rc ReCheck) string {
+	via := "position only, bytes not re-read"
+	if rc.Why != "" {
+		via = rc.Why + "; " + via
+	}
+	f := o.Finality
+	if f == nil {
+		o.ReferentHistory = append(o.ReferentHistory, "reader re-check: pinned block on this reader's accepted chain at depth "+rc.State.String()+" ("+via+")")
+		return RefCanonical
+	}
+	met, final, known := rules.Evaluate(f.Rule, rc.State)
+	if !known {
+		o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("reader re-check: depth %s (%s), which rule %q cannot order", rc.State, via, f.Rule))
+		return status
+	}
+	if met {
+		status = RefFinal
+	} else {
+		status = fmt.Sprintf("%s (%s; final at %s)", RefProvisional, rc.State, final)
+	}
+	o.Beside = beside(rules, f, rc, RePosition, status)
+	o.ReferentHistory = append(o.ReferentHistory, fmt.Sprintf("reader re-check: depth %s (%s): %s (asserted state %s shown beside it%s)", rc.State, via, status, f.State, o.Beside.flag()))
+	return status
+}
+
+// beside pairs the observer's asserted state with the reader's re-checked one (claims §7): each read under the
+// rule, and whether they disagree. computed is the referent status the re-check gave.
+func beside(rules FinalityRules, f *Finality, rc ReCheck, via, computed string) *Beside {
+	b := &Beside{AssertedState: f.State.String(), ComputedState: rc.State.String(), Computed: computed, Via: via}
+	amet, afinal, aknown := rules.Evaluate(f.Rule, f.State)
+	cmet, _, _ := rules.Evaluate(f.Rule, rc.State)
+	switch {
+	case !aknown:
+		b.Asserted = RefRuleUnchecked
+	case amet:
+		b.Asserted = RefFinal
+	default:
+		b.Asserted = fmt.Sprintf("%s (%s; final at %s)", RefProvisional, f.State, afinal)
+	}
+	// a referent's state only moves forward between a capture and a later re-check: a re-check behind the asserted
+	// state, or one below the rule when the asserted state meets it, disagrees with the assertion
+	c, ok := rules.Compare(f.Rule, rc.State, f.State)
+	b.Disagrees = (ok && c < 0) || (aknown && amet && !cmet)
+	return b
+}
+
+// flag is the disagreement words in a history line.
+func (b *Beside) flag() string {
+	if b == nil || !b.Disagrees {
+		return ""
+	}
+	return ": they disagree"
 }
 
 // revision finds a later capture of the same referent, by any key, at a different state with different bytes
@@ -968,6 +1078,9 @@ func (o *Observation) Render() string {
 	fmt.Fprintf(&b, "  referent status: %s\n", o.ReferentStatus)
 	for _, h := range o.ReferentHistory {
 		fmt.Fprintf(&b, "    %s\n", h)
+	}
+	if o.Beside != nil {
+		fmt.Fprintf(&b, "  finality %s\n", o.Beside)
 	}
 	if f := o.Finality; f != nil {
 		fmt.Fprintf(&b, "  finality: rule %q, %s", f.Rule, f.Provenance)
