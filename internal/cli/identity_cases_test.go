@@ -900,3 +900,38 @@ func TestIdentityCasesPinVersusFollow(t *testing.T) {
 		}
 	}
 }
+
+// TestIdentityCasesTrustPurposeAndTargets: the purpose and target boundary of C-id-33 through pull with the real
+// evaluator. An `{identity: I}` entry for admission over any content admits I's grant-covered acts on every blob
+// and refuses a stranger's line; narrowed to the contents of X it admits I's act on X and refuses I's act on Y (the
+// same signer, the same grant: the target is judged, not the key); an entry for another purpose (attestation)
+// creates no admission floor at all, so it never admits or refuses on the admission question.
+func TestIdentityCasesTrustPurposeAndTargets(t *testing.T) {
+	w := newWorld(t)
+	w.worker("K1")
+	w.worker("S")
+	i, a := w.identityOf("I", "IR", canon.Bool(true), "K1")
+	ax := w.signRC2("AX", "K1", "authored", licBody("X", "MIT"), a["K1"])
+	ay := w.signRC2("AY", "K1", "authored", licBody("Y", "MIT"), a["K1"])
+	sy := w.authored("SY", "S", "Y", "licence", "MIT")
+	for _, c := range []struct {
+		name, purposes, targets string
+		want                    [3]string // AX, AY, SY
+	}{
+		{"admission, any content", `["admission"]`, `{"any_content":true}`, [3]string{"admitted and labelled", "admitted and labelled", "refused"}},
+		{"admission, contents of X", `["admission"]`, `{"contents":["` + dig("X") + `"]}`, [3]string{"admitted and labelled", "refused", "refused"}},
+		{"attestation only", `["attestation"]`, `{"any_content":true}`, [3]string{"admitted and labelled", "admitted and labelled", "admitted and labelled"}},
+	} {
+		tp := filepath.Join(t.TempDir(), "t.json")
+		os.WriteFile(tp, []byte(`{"version":"reader-policy-v1","selections":[],"trust":[{"principal":{"identity":"`+i+`"},"purposes":`+c.purposes+`,"targets":`+c.targets+`}]}`), 0o644)
+		pkg := t.TempDir()
+		copyData(t, w.root, pkg)
+		rep := jsonOf(t, newWorld(t).run("pull", pkg, "--policy", tp, "--below-floor", "refuse", "--json"))
+		for k, x := range []struct{ s, id string }{{w.signer("K1"), ax}, {w.signer("K1"), ay}, {w.signer("S"), sy}} {
+			row := objectRow(t, rep, stmtPath(x.s, x.id))
+			if row == nil || row.Members["verdict"] != canon.String(c.want[k]) {
+				t.Fatalf("%s, statement %d: %s, want %s", c.name, k, canon.Encode(row), c.want[k])
+			}
+		}
+	}
+}
