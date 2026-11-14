@@ -86,6 +86,26 @@ func (r *IdentityReader) Read(line []byte) (*Statement, error) {
 			env.Members[k] = full.Members[k]
 		}
 	}
+	return r.read(env, string(sigS), true)
+}
+
+// CheckUnsigned interprets an unsigned rc/2 envelope (no sig member) exactly as Read interprets the same envelope
+// once a valid signature is attached: the same linkage refusals, the same signed string and id, the same status
+// and reason. Nothing is verified: the result has Verified false and no Sig, and it is never evidence. It is the
+// writer's check of a statement prepared for an external signer (identity profile §8), so that the bytes handed
+// to the signer are bytes every reader would hold valid once signed. Any other major is refused.
+func CheckUnsigned(env *canon.Object) (*Statement, error) {
+	if _, ok := env.Get("sig"); ok {
+		return nil, refusal.Malformed("an unsigned envelope carries no sig")
+	}
+	if rc, _ := env.Get("rc"); rc != canon.String("rc/"+strconv.Itoa(CandidateMajor)) {
+		return nil, refusal.Malformed("only an rc/%d envelope is checked unsigned", CandidateMajor)
+	}
+	return NewIdentityReader().read(env, "", false)
+}
+
+// read is Read after the sig member is split off; verify false is CheckUnsigned.
+func (r *IdentityReader) read(env *canon.Object, sigS string, verify bool) (*Statement, error) {
 	s := &Statement{env: env, Status: Valid}
 	rc, err := str(env, "rc")
 	if err != nil {
@@ -101,7 +121,7 @@ func (r *IdentityReader) Read(line []byte) (*Statement, error) {
 	}
 	s.RC = rc
 	if major != Major && major != CandidateMajor {
-		return otherMajor(s, env, major, string(sigS))
+		return otherMajor(s, env, major, sigS)
 	}
 	if err := linkageEnvelope(s, env); err != nil {
 		return nil, err
@@ -115,13 +135,15 @@ func (r *IdentityReader) Read(line []byte) (*Statement, error) {
 	switch s.Alg {
 	case AlgEIP191, AlgEd25519:
 	default:
-		s.Status, s.Why, s.Sig = Unsupported, "alg "+s.Alg, string(sigS)
+		s.Status, s.Why, s.Sig = Unsupported, "alg "+s.Alg, sigS
 		return s, nil
 	}
-	if err := s.verify(string(sigS)); err != nil {
-		return nil, err
+	if verify {
+		if err := s.verify(sigS); err != nil {
+			return nil, err
+		}
+		s.Verified = true
 	}
-	s.Verified = true
 	// Everything below is attributable to the signer: a failure marks the statement, it does not drop it.
 	var st Status
 	var why string
