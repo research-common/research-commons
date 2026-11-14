@@ -4,7 +4,8 @@
 interprets `rc/2` under this profile and evaluates identity actors from the statements it holds. The writer
 signs `rc/2` for the administrative kinds (`identity new`, `identity grant`, `identity cut`) and for an act
 for an identity (`publish --as <I> --grant <G>`); every other statement, raw `rotate_key`/`revoke_key`
-included, is still written `rc/1` (§2.1). No external-signing package or hardware connector is built (§8).
+included, is still written `rc/1` (§2.1). Each of those commands can stop at an external-signing package and
+commit a signature made elsewhere (§8). No hardware or wallet connector is built (§8).
 The wire format is still a candidate: nothing here is frozen.
 This document selects one wire proposal, `fixed-root-v1` on **`rc/2`**, rather than
 changing `rc/1` fields through a critical-extension handler. It does not change
@@ -672,6 +673,23 @@ root-log concurrency checks. Rejection, disconnect, cancellation and stale prepa
 must leave no falsely appended operation. This specifies invariants, not a shipped
 connector or a finalized external-package interchange schema.
 
+**The tool's external-signing package.** `identity new`, `identity grant`, `identity cut`
+and `publish --as` take `--prepare <file> --signer <key>`: the references are resolved as
+for direct signing and one package file is written, nothing appended. It is canonical
+JSON with `format`, the unsigned `envelope`, `pae` (the exact signed string, standard
+padded base64), `alg`, `signer`, the proposed `statement` id, `log_head` (the signer's
+line the envelope extends, `{seq, statement}`, or `genesis`) and a human `summary`
+(identity, delegate key and inception, permissions, or the cut's grant, last-good and
+"cannot be undone"). `--complete <file> --signature <file|->` recomputes the PAE and id
+from the envelope and refuses, naming the member, when any derived member differs; it
+accepts the signature only in the statement encoding of the alg (wire note §4), verifies
+it over the recomputed bytes, runs every check of direct signing again, refuses
+`stale-prepare` (exit 1) unless the signer's log is still at `log_head`, and commits
+through the same journal unit. Every refusal appends nothing. Its format tag,
+`rc-signing-package/0`, is this tool's own and **provisional** (like `rc-key/0`); it is
+not the finalized interchange schema this section leaves open. A package carries one
+statement, so `publish --as --prepare` of `authored` needs `--no-holds`.
+
 Ledger Nano X, Flex and Stax are **untested targets** for Ethereum-account EIP-191 via
 an explicitly tested connector. Test firmware/app/connector, exact payload fidelity,
 size limits, display readability and rejection/disconnect separately per model.
@@ -720,9 +738,15 @@ an unknown or stale `--prev`, an act the evidence denies) leave every store byte
 R's key file restored from a backup copy on a new machine signs as the same root: a new
 grant from it is valid and the act under it `eligible`.
 
-Not drilled: a compromised operational host, hardware or connector signing, and the
-external-signing package. C-id-40 is therefore partial: its simple-path half is the
-test above; the host-compromise and hardware halves stay open.
+The external-signing package is exercised by `internal/cli:TestExternalSigningAborts`
+and `TestExternalSigningEndToEnd`: a root key whose file the store never sees signs
+the inception, a grant and a cut over the package's PAE bytes, a delegate signs an act
+the same way, and each committed line equals what direct signing writes at the same
+`--ts`; every abort appends nothing.
+
+Not drilled: a compromised operational host, and hardware or connector signing.
+C-id-40 is therefore partial: its simple-path and package halves are the tests above;
+the host-compromise and hardware halves stay open.
 
 ## 9. Schemas, vectors and reproducible checks
 

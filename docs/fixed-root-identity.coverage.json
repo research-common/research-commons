@@ -634,10 +634,11 @@
       "scenario": "Root backup / compromised operational host",
       "schema_vectors": [],
       "isolated_tests": [
-        "internal/cli:TestIdentitySimplePathDrill"
+        "internal/cli:TestIdentitySimplePathDrill",
+        "internal/cli:TestExternalSigningAborts"
       ],
       "conformance": "partial",
-      "remaining": "Partial: the simple path (profile §8, rc-key/0 files, the CLI signs) is drilled through the commands on separate stores, both algorithms: inception, grant, acts counted, a stolen worker key cut at last_good, aborts leave nothing appended, a root key file restored from backup signs as the same root. A compromised operational host and hardware or connector signing are not drilled; no signer adapter is claimed."
+      "remaining": "Partial: the simple path (profile §8, rc-key/0 files, the CLI signs) is drilled through the commands on separate stores, both algorithms: inception, grant, acts counted, a stolen worker key cut at last_good, aborts leave nothing appended, a root key file restored from backup signs as the same root. The external-signing package (prepare/complete) is exercised through the commands: a key held off the store signs over the exact PAE bytes, each line equal to direct signing; every abort (bad signature, wrong key, moved head, mutated envelope, mismatched derived member, lost eligibility) appends nothing. A compromised operational host and hardware or connector signing are not drilled; no signer adapter is claimed."
     },
     {
       "handle": "ID-41",
