@@ -370,6 +370,8 @@ func TestExternalSigningAborts(t *testing.T) {
 				{"identity", "new", "--signature", good},
 				{"identity", "new", "--prepare", gp, "--signer", root.signer}, // never overwritten
 				{"publish", "--kind", "describes", "--about", ident, "--prepare", root.path("x.pkg"), "--signer", root.signer},
+				{"publish", "--kind", "authored", "--content", gp, "--licence", "CC0-1.0", "--as", ident, "--grant", ident, "--prepare", root.path("x.pkg"), "--signer", root.signer},
+				{"publish", "--kind", "authored", "--content", gp, "--licence", "CC0-1.0", "--as", ident, "--grant", ident, "--no-holds", "--intended-for", ident + "/" + ident, "--prepare", root.path("x.pkg"), "--signer", root.signer},
 			} {
 				if r := root.run(bad...); r.code != ExitDidNotStart {
 					t.Fatalf("%v: %d %s", bad, r.code, r.stdout)
