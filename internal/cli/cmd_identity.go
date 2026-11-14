@@ -29,14 +29,15 @@ import (
 var reReasonToken = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 
 func init() {
-	nflags := slices.Clone(writerFlags)
+	nflags := append(slices.Clone(writerFlags), extFlags...)
 	Register(&Command{Name: "identity new", Summary: "create a fixed-root identity: sign its inception with a fresh root key",
 		Store: true, Writes: true, Flags: nflags, Prepare: prepareIdentityNew, Run: identityNewCmd,
 		Help: "Signs an identity_inception (rc/2, profile " + wire.FixedRootProfile + ") with --key (or $" + KeyEnv + ") as the first line of that key's log; the identity's id is the inception's statement id. " +
 			"The root key must be fresh: a key with any line in this store is refused (exit 1), since the identity's lineage is the root key's whole log. " +
 			"Use the root key for administration only (identity grant, identity cut) and keep it offline: it is the identity's only administrator, and fixed-root-v1 has no recovery if it is lost or stolen. " +
-			"--dry-run prints the exact statement and signs nothing; with --ts the dry run's id is the id the real run signs."})
-	gflags := append(slices.Clone(writerFlags),
+			"--dry-run prints the exact statement and signs nothing; with --ts the dry run's id is the id the real run signs." + extHelp})
+	gflags := append(slices.Clone(writerFlags), extFlags...)
+	gflags = append(gflags,
 		Flag{Name: "identity", Value: "id", Help: "the identity (its inception id); your key must be its root", Check: checkIDFlag},
 		Flag{Name: "delegate", Value: "key", Help: "the delegate key K (ed25519:<64 hex> or 0x<40 hex>); never the root key", Check: func(v string) error {
 			if !reGrantee.MatchString(v) {
@@ -52,8 +53,9 @@ func init() {
 		Help: "Signs an identity_grant (rc/2) with the identity's root key naming --delegate and its seq-0 line --delegate-inception, with the permission set --permissions (profile §3: a kind, its targets, and for authored and observed an amend mode true, false or own). " +
 			"Refused (exit 2) when the delegate is the root key, a permission is malformed, or this reader would not read the grant as valid; refused (exit 1) when your key is not the identity's root or the delegate-inception held here is not the delegate's seq-0 line; exit 3 when the identity is not held here. " +
 			"When the delegate-inception line is not held here the grant is signed with a warning: a reader needs that line to place the delegate's acts. " +
-			"The delegate acts with publish --as <identity> --grant <grant id>."})
-	cflags := append(slices.Clone(writerFlags),
+			"The delegate acts with publish --as <identity> --grant <grant id>." + extHelp})
+	cflags := append(slices.Clone(writerFlags), extFlags...)
+	cflags = append(cflags,
 		Flag{Name: "identity", Value: "id", Help: "the identity (its inception id); your key must be its root", Check: checkIDFlag},
 		Flag{Name: "grant", Value: "id", Help: "the grant to cut (its statement id)", Check: checkIDFlag},
 		Flag{Name: "last-good", Value: "id|none", Help: "required: the delegate's last act under the grant you vouch for (it and its ancestors keep counting), or none to keep nothing", Check: func(v string) error {
@@ -73,7 +75,7 @@ func init() {
 		Store: true, Writes: true, Flags: cflags, Prepare: prepareIdentityCut, Run: identityCutCmd,
 		Help: "Signs an identity_cut (rc/2) with the identity's root key. It cannot be undone: the delegate's acts under the grant after --last-good count toward nothing for the identity, now and for every reader that holds the cut; the acts at or before it keep counting. --last-good is required (an id, or none to keep nothing); the tool never picks it. " +
 			"Every held act under the grant is listed with what happens to it. --dry-run signs nothing and lists the same. " +
-			"Refused (exit 2) without --last-good or --reason; (exit 1) when your key is not the identity's root, the grant is not the identity's, or --last-good names a line of another key; exit 3 when the identity, the grant or the --last-good line is not held here."})
+			"Refused (exit 2) without --last-good or --reason; (exit 1) when your key is not the identity's root, the grant is not the identity's, or --last-good names a line of another key; exit 3 when the identity, the grant or the --last-good line is not held here." + extHelp})
 }
 
 func checkJSONArray(v string) error {
@@ -106,6 +108,9 @@ func needFlags(c *Ctx, synopsis string, names ...string) (map[string]string, *Pr
 }
 
 func prepareIdentityNew(c *Ctx) *Problem {
+	if prob := beginExternal(c, "identity_inception"); prob != nil {
+		return prob
+	}
 	p := &identityPrep{}
 	if prob := prepareCommon(c, &p.pubPrep); prob != nil {
 		return prob
@@ -115,6 +120,9 @@ func prepareIdentityNew(c *Ctx) *Problem {
 }
 
 func prepareIdentityGrant(c *Ctx) *Problem {
+	if prob := beginExternal(c, "identity_grant"); prob != nil {
+		return prob
+	}
 	f, prob := needFlags(c, "commons identity grant --identity <id> --delegate <key> --delegate-inception <id> --permissions <json>",
 		"identity", "delegate", "delegate-inception", "permissions")
 	if prob != nil {
@@ -168,6 +176,9 @@ func normalizePermissions(a canon.Array) (canon.Array, string) {
 }
 
 func prepareIdentityCut(c *Ctx) *Problem {
+	if prob := beginExternal(c, "identity_cut"); prob != nil {
+		return prob
+	}
 	f, prob := needFlags(c, "commons identity cut --identity <id> --grant <id> --last-good <id|none> --reason <token>",
 		"identity", "grant", "last-good", "reason")
 	if prob != nil {
@@ -240,6 +251,9 @@ func identityNewCmd(c *Ctx) (*Obj, int, error) {
 	if err != nil {
 		return nil, 0, err
 	}
+	if prob := v.checkPrepared(c, signer); prob != nil {
+		return nil, 0, prob
+	}
 	if lv := v.logs.Log(signer).View(); len(lv.Lines) > 0 || len(lv.Retained) > 0 || len(lv.Refused) > 0 {
 		return nil, 0, identityRefused("root-key-not-fresh", "refused: the root key already has a log",
 			"this store holds "+itoa(len(lv.Lines)+len(lv.Retained)+len(lv.Refused))+" line(s) of this key; an identity's inception is the first line of a dedicated root key, because the identity's lineage is that key's whole log",
@@ -265,6 +279,9 @@ func identityGrantCmd(c *Ctx) (*Obj, int, error) {
 	v, err := viewOf(c)
 	if err != nil {
 		return nil, 0, err
+	}
+	if prob := v.checkPrepared(c, signer); prob != nil {
+		return nil, 0, prob
 	}
 	if prob := v.rootOf(p.identity, signer); prob != nil {
 		return nil, 0, prob
@@ -308,6 +325,9 @@ func identityCutCmd(c *Ctx) (*Obj, int, error) {
 	v, err := viewOf(c)
 	if err != nil {
 		return nil, 0, err
+	}
+	if prob := v.checkPrepared(c, signer); prob != nil {
+		return nil, 0, prob
 	}
 	if prob := v.rootOf(p.identity, signer); prob != nil {
 		return nil, 0, prob
@@ -363,7 +383,11 @@ func identityCutCmd(c *Ctx) (*Obj, int, error) {
 		out.set("last_good", refV(p.lastGood))
 	}
 	out.set("irreversible", textV("a cut cannot be undone: every reader that holds it reads the delegate's acts under this grant after last_good as counting toward nothing for the identity; a later grant to a new key does not restore them"))
-	out.set("acts", v.cutEffects(c, delegate, p.grant, sts[0].line))
+	if preparing(c) {
+		out.set("acts", textV("listed at --complete: an unsigned cut is not evidence, so its effect is read once it is signed"))
+	} else {
+		out.set("acts", v.cutEffects(c, delegate, p.grant, sts[0].line))
+	}
 	noteLock(out, wl)
 	return v.scopedResult(commitUnit(c, out, "publish", sts, nil, "", h))
 }

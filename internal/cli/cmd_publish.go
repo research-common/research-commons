@@ -182,9 +182,10 @@ func init() {
 	for _, d := range publishDisclosures {
 		flags = append(flags, disclosureFlag(d.Field, d.Shape))
 	}
+	flags = append(flags, extFlags...)
 	Register(&Command{Name: "publish", Summary: "sign and commit a statement (authored with its bytes, holds, describes, retracts, or a draft)",
 		Store: true, Writes: true, Flags: flags, Prepare: preparePublish, Run: publishCmd,
-		Help: "Signs with --key (or $" + KeyEnv + ") and commits through the store's journal: the blob and its statements land together or not at all. A draft is never stored unsigned. Your log's next seq and prev come from the statements this store holds; a FORK in your log is refused until you name --prev. --intended-for runs the named edition's rules first and refuses on fail. With availability withheld and content under " + strconv.Itoa(WithheldWarnBelow) + " bytes it warns that short content may be enumerable against its hash (a heuristic; include a nonce) and proceeds; the warning is not recorded. A rotate_key draft is signed as written: none of `commons rotate`'s checks run (successor, key events already held, merged tips), so the way out after a compromise stays open; it warns and proceeds. With --as <identity> --grant <id> the statement acts for a fixed-root identity (rc/2, the actor in the signed envelope): it is refused, nothing signed, unless the identity evaluator over the statements this store holds plus this line reads the act eligible (exit 2 when it is denied, naming why; exit 3 when it cannot decide, e.g. the grant or the identity is not held). The holds written beside an authored stays your key's own (rc/1): your key holds the bytes."})
+		Help: "Signs with --key (or $" + KeyEnv + ") and commits through the store's journal: the blob and its statements land together or not at all. A draft is never stored unsigned. Your log's next seq and prev come from the statements this store holds; a FORK in your log is refused until you name --prev. --intended-for runs the named edition's rules first and refuses on fail. With availability withheld and content under " + strconv.Itoa(WithheldWarnBelow) + " bytes it warns that short content may be enumerable against its hash (a heuristic; include a nonce) and proceeds; the warning is not recorded. A rotate_key draft is signed as written: none of `commons rotate`'s checks run (successor, key events already held, merged tips), so the way out after a compromise stays open; it warns and proceeds. With --as <identity> --grant <id> the statement acts for a fixed-root identity (rc/2, the actor in the signed envelope): it is refused, nothing signed, unless the identity evaluator over the statements this store holds plus this line reads the act eligible (exit 2 when it is denied, naming why; exit 3 when it cannot decide, e.g. the grant or the identity is not held). The holds written beside an authored stays your key's own (rc/1): your key holds the bytes." + extHelp + " Only an act (--as) is prepared; an authored act needs --no-holds, and its eligibility is read at --complete."})
 	tflags := append(slices.Clone(writerFlags),
 		Flag{Name: "name", Value: "text", Help: "a new task's name"},
 		Flag{Name: "task", Value: "id", Help: "an existing task (its genesis id): publish a new edition after its current one", Check: checkIDFlag},
@@ -243,11 +244,15 @@ func setMember(o *canon.Object, k string, v canon.Value) {
 
 // prepareCommon loads the key and the ts: the inputs every writer has.
 func prepareCommon(c *Ctx, p *pubPrep) *Problem {
-	k, prob := signingKey(c)
-	if prob != nil {
-		return prob
+	if x := extOf(c); x != nil {
+		p.key = &loadedKey{Key: x.key} // external signing: the tool holds no key
+	} else {
+		k, prob := signingKey(c)
+		if prob != nil {
+			return prob
+		}
+		p.key = k
 	}
-	p.key = k
 	ts, given := c.Flag("ts")
 	if !given {
 		ts = Now().UTC().Truncate(time.Second).Format("2006-01-02T15:04:05Z")
@@ -266,12 +271,15 @@ func prepareCommon(c *Ctx, p *pubPrep) *Problem {
 
 func preparePublish(c *Ctx) *Problem {
 	p := &pubPrep{}
+	if prob := beginExternal(c, ""); prob != nil {
+		return prob
+	}
 	_, hasDraft := c.Flag("draft")
 	kind, hasKind := c.Flag("kind")
 	var bodyFlags []string
 	for _, f := range c.Cmd.Flags {
 		if _, ok := c.Flags[f.Name]; ok && !slices.ContainsFunc(writerFlags, func(w Flag) bool { return w.Name == f.Name }) &&
-			!slices.Contains([]string{"draft", "kind", "content", "intended-for", "no-holds", "as", "grant", "amends"}, f.Name) {
+			!slices.Contains([]string{"draft", "kind", "content", "intended-for", "no-holds", "as", "grant", "amends", "prepare", "signer", "complete", "signature"}, f.Name) {
 			bodyFlags = append(bodyFlags, f.Name)
 		}
 	}
@@ -285,9 +293,14 @@ func preparePublish(c *Ctx) *Problem {
 	}
 	if hasDraft {
 		path, _ := c.Flag("draft")
-		d, prob := readJSONFile(path, "option --draft")
-		if prob != nil {
-			return prob
+		var d *canon.Object
+		if x := extOf(c); x != nil && x.draft != nil {
+			d = x.draft // --complete: the act's kind and body from the package
+		} else {
+			var prob *Problem
+			if d, prob = readJSONFile(path, "option --draft"); prob != nil {
+				return prob
+			}
 		}
 		for _, k := range d.Keys {
 			if k != "kind" && k != "body" {
@@ -415,6 +428,16 @@ func preparePublish(c *Ctx) *Problem {
 	}
 	_, noHolds := c.Flag("no-holds")
 	p.holds = kind == "authored" && !noHolds
+	if _, ok := c.Flag("intended-for"); ok && preparing(c) {
+		return usage("conflicting-options", "--intended-for is not prepared for external signing",
+			"the pre-pin check's outcome would be recorded at prepare time and not run again at --complete; nothing was done", "option --intended-for",
+			"sign directly, or drop --intended-for", "")
+	}
+	if p.holds && preparing(c) {
+		return usage("conflicting-options", "an external-signing package carries one statement",
+			"authored writes a holds beside it, a second statement to sign; nothing was done", "option --prepare",
+			"add --no-holds (publish the holds separately, with your key), or sign directly", "")
+	}
 	if prob := prepareActor(c, p); prob != nil {
 		return prob
 	}
@@ -583,6 +606,9 @@ type signed struct {
 }
 
 func signAll(k wire.Key, h head, ts string, drafts []wire.Draft) ([]signed, error) {
+	if x, ok := k.(*externalKey); ok {
+		return signExternal(x, h, ts, drafts)
+	}
 	var out []signed
 	prev, seq := h.prev, h.seq
 	for _, d := range drafts {
@@ -602,6 +628,10 @@ func signAll(k wire.Key, h head, ts string, drafts []wire.Draft) ([]signed, erro
 
 // writeRefused is a refusal from signing (the body fails §5, a future ts): nothing appended.
 func writeRefused(err error) *Problem {
+	var pr *Problem
+	if errors.As(err, &pr) {
+		return pr
+	}
 	p := &Problem{Slug: "refused", Title: "the statement was not signed", Class: refusal.Intrinsic, Scope: "this statement",
 		Detail: "the body or envelope fails a rule every reader applies; its text is in peer_text; nothing was signed or appended",
 		Next:   "fix the named field and run the command again", Peer: err.Error(), Exit: ExitDidNotStart}
@@ -633,6 +663,9 @@ func publishCmd(c *Ctx) (*Obj, int, error) {
 	v, err := loadView(c.Store, nil, opts...)
 	if err != nil {
 		return nil, 0, failed(err, "store", false, "run status, then fsck")
+	}
+	if prob := v.checkPrepared(c, signer); prob != nil {
+		return nil, 0, prob
 	}
 	h, prob := v.nextLine(c, signer, p.kind)
 	if prob != nil {
@@ -715,7 +748,11 @@ func publishCmd(c *Ctx) (*Obj, int, error) {
 	if err != nil {
 		return nil, 0, writeRefused(err)
 	}
-	if p.actor != nil {
+	if p.actor != nil && preparing(c) {
+		// an unsigned line is no evidence: the evaluator reads the act at --complete, before anything is appended
+		out.set("actor", newObj().set("identity", refV(p.actor.Identity)).set("grant", refV(p.actor.Grant)).
+			set("state", textV("not evaluated: an unsigned statement is not evidence; --complete reads the signed act and refuses it unless it is eligible")))
+	} else if p.actor != nil {
 		a, prob := actingAnswer(c, sts[0])
 		if prob != nil {
 			return nil, 0, prob
@@ -808,6 +845,9 @@ func prepinRefused(err error, p *pubPrep) *Problem {
 
 // commitUnit prints a dry run, or installs the blob and commits the statements as one journal record.
 func commitUnit(c *Ctx, out *Obj, op string, sts []signed, blobs []store.Digest, content string, h head) (*Obj, int, error) {
+	if preparing(c) {
+		return preparedResult(c, out, sts[0], h)
+	}
 	open := func(store.Digest) (io.ReadCloser, error) { return os.Open(content) }
 	return commitUnitFrom(c, out, op, sts, blobs, open, "option --content", h)
 }
@@ -1060,7 +1100,7 @@ func noteLock(out *Obj, l *store.WriterLock) {
 
 // lockFor takes the writer lock for a command that may write. A dry run writes nothing, so it takes none (a nil lock is a held one for Unlock and noteLock).
 func lockFor(c *Ctx, signer string) *store.WriterLock {
-	if _, dry := c.Flag("dry-run"); dry {
+	if _, dry := c.Flag("dry-run"); dry || preparing(c) {
 		return nil
 	}
 	return c.Store.LockKey(signer)
