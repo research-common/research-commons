@@ -595,3 +595,26 @@ func TestRunPublishHoldsRule(t *testing.T) {
 		t.Fatalf("observed: holds %v, want %v", h, exp)
 	}
 }
+
+// TestRunPublishDryRun: run --publish --dry-run runs the workflow and prints the plan (what it would emit, each
+// statement with its body, the blobs it would install and the one journal record) and writes nothing: the store
+// is byte-identical and a later real publish still lands as a first derivation.
+func TestRunPublishDryRun(t *testing.T) {
+	w := oneOutput(t)
+	before := tree(t, w.root)
+	f := w.fake(writes("result.txt", "out-1"))
+	out1 := run.Digest([]byte("out-1"))
+	r := w.publish(f, "--dry-run", "--licence", "result=CC0-1.0")
+	want(t, "dry run", r, 0, `"dry_run":true`, `"committed":false`, `"kind":"authored"`, `"kind":"holds"`,
+		"install blob "+out1, "append 2 statement(s)", `"licence":"CC0-1.0"`)
+	if f.Spawned != 1 {
+		t.Fatalf("the dry run did not run the workflow: spawned %d", f.Spawned)
+	}
+	if tree(t, w.root) != before {
+		t.Fatal("run --publish --dry-run changed the store")
+	}
+	want(t, "real", w.publish(w.fake(writes("result.txt", "out-1"))), 0, `"committed":true`, `"kind":"authored"`)
+	if len(w.statements("authored")) != 1 || len(w.statements("holds")) != 1 {
+		t.Fatal("the real publish after a dry run did not land as a first derivation")
+	}
+}
