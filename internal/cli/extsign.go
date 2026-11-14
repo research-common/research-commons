@@ -182,16 +182,7 @@ func beginExternal(c *Ctx, kind string) *Problem {
 	}
 	// the signature, verified over the recomputed bytes under the envelope's own signer and algorithm
 	env := pkg.Members["envelope"].(*canon.Object)
-	full := &canon.Object{Keys: append(slices.Clone(env.Keys), "sig"), Members: map[string]canon.Value{"sig": canon.String(sig)}}
-	for k, v := range env.Members {
-		full.Members[k] = v
-	}
-	signedSt, err := wire.NewIdentityReader().Read(canon.Encode(full))
-	if err != nil || !signedSt.Verified || signedSt.ID != st.ID {
-		why := "it does not verify"
-		if err != nil {
-			why = err.Error()
-		}
+	if why := verifyOver(env, st, sig); why != "" {
 		return &Problem{Slug: "signature-does-not-verify", Title: "the signature does not verify over the prepared bytes", Class: refusal.Intrinsic,
 			Scope: "option --signature", Detail: "checked over the PAE recomputed from the package's envelope, under signer " + st.Signer + " (" + st.Alg + "): " + why + "; nothing was appended",
 			Next: "sign the package's pae bytes (base64-decoded) with the key " + st.Signer + ", unchanged, and give that signature", Peer: sig, Exit: ExitDidNotStart}
@@ -262,56 +253,117 @@ func beginExternal(c *Ctx, kind string) *Problem {
 }
 
 func badPackage(title, detail, path, next string) *Problem {
-	return usage("malformed-package", title, detail+"; nothing was done", "option --complete", next, path)
+	return badPackageAt("option --complete", title, detail, path, next)
+}
+
+func badPackageAt(scope, title, detail, path, next string) *Problem {
+	return usage("malformed-package", title, detail+"; nothing was done", scope, next, path)
 }
 
 var packageMembers = []string{"alg", "envelope", "format", "log_head", "pae", "signer", "statement", "summary"}
 
-// checkPackage checks a package's shape and recomputes everything derived from its envelope: the PAE, the id,
-// the alg and signer, the log head and the summary must all be what the envelope gives. It returns the envelope
-// read unsigned.
-func checkPackage(pkg *canon.Object, path string) (*wire.Statement, *Problem) {
+// packageMismatch is a package member that is not what the package's envelope gives.
+type packageMismatch struct{ member, detail string }
+
+// problem is the refusal naming the member (and every other member that differs), with the given exit:
+// --complete refuses before it starts (exit 2); package show and key sign checked the package and found it wrong
+// (exit 1).
+func (m packageMismatch) problem(all []packageMismatch, path string, exit int) *Problem {
+	detail := m.detail
+	if len(all) > 1 {
+		var names []string
+		for _, o := range all {
+			names = append(names, o.member)
+		}
+		detail += " (members that differ: " + strings.Join(names, ", ") + ")"
+	}
+	p := usage("package-mismatch", "the package's "+m.member+" is not what its envelope gives",
+		detail+"; the tool recomputes it from the envelope and never trusts the package's copy; nothing was done", "package member "+m.member,
+		"prepare the statement again; do not edit a package", path)
+	p.Exit = exit
+	return p
+}
+
+// inspectPackage is the one check of a package, for --complete, package show and key sign. It checks the package's
+// shape (a malformed package is a problem scoped to scope, exit 2) and recomputes everything derived from its
+// envelope: the PAE, the id, the alg and signer, the log head's shape and the summary. It returns the envelope read
+// unsigned and every derived member that differs from its recomputed value, in a fixed order (pae, statement, alg,
+// signer, log_head, summary). It reads no store: whether the log head is still the signer's head is --complete's.
+func inspectPackage(pkg *canon.Object, path, scope string) (*wire.Statement, []packageMismatch, *Problem) {
+	bad := func(title, detail, next string) *Problem { return badPackageAt(scope, title, detail, path, next) }
 	if pkg.Members["format"] != canon.String(SigningPackageFormat) {
-		return nil, badPackage("not an external-signing package", "the format member is not "+SigningPackageFormat, path, "name a file written by --prepare")
+		return nil, nil, bad("not an external-signing package", "the format member is not "+SigningPackageFormat, "name a file written by --prepare")
 	}
 	keys := slices.Clone(pkg.Keys)
 	slices.Sort(keys)
 	if !slices.Equal(keys, packageMembers) {
-		return nil, badPackage("the package's members are not the format's", "a package has exactly "+strings.Join(packageMembers, ", "), path, "name a file written by --prepare, unchanged")
+		return nil, nil, bad("the package's members are not the format's", "a package has exactly "+strings.Join(packageMembers, ", "), "name a file written by --prepare, unchanged")
 	}
 	env, ok := pkg.Members["envelope"].(*canon.Object)
 	if !ok {
-		return nil, badPackage("the package's envelope is not an object", "", path, "name a file written by --prepare, unchanged")
+		return nil, nil, bad("the package's envelope is not an object", "", "name a file written by --prepare, unchanged")
 	}
 	st, err := wire.CheckUnsigned(env)
 	if err != nil {
-		return nil, badPackage("the package's envelope is not a statement this tool prepares", err.Error(), path, "prepare the statement again")
+		return nil, nil, bad("the package's envelope is not a statement this tool prepares", err.Error(), "prepare the statement again")
 	}
 	if st.Status != wire.Valid {
-		return nil, badPackage("the package's envelope would not be valid once signed", "it reads "+string(st.Status)+": "+st.Why, path, "prepare the statement again")
+		return nil, nil, bad("the package's envelope would not be valid once signed", "it reads "+string(st.Status)+": "+st.Why, "prepare the statement again")
 	}
-	mismatch := func(member, detail string) *Problem {
-		return usage("package-mismatch", "the package's "+member+" is not what its envelope gives",
-			detail+"; the tool recomputes it from the envelope and never trusts the package's copy; nothing was done", "package member "+member,
-			"prepare the statement again; do not edit a package", path)
-	}
+	var mm []packageMismatch
+	add := func(member, detail string) { mm = append(mm, packageMismatch{member, detail}) }
 	paeS, _ := pkg.Members["pae"].(canon.String)
 	pae, err := base64.StdEncoding.Strict().DecodeString(string(paeS))
 	switch {
 	case err != nil:
-		return nil, mismatch("pae", "it is not standard padded base64")
+		add("pae", "it is not standard padded base64")
 	case !bytes.Equal(pae, st.SignedString):
-		return nil, mismatch("pae", "it differs from the PAE recomputed from the envelope")
-	case pkg.Members["statement"] != canon.String(st.ID):
-		return nil, mismatch("statement", "the recomputed id is "+st.ID)
-	case pkg.Members["alg"] != canon.String(st.Alg):
-		return nil, mismatch("alg", "the envelope's alg is "+st.Alg)
-	case pkg.Members["signer"] != canon.String(st.Signer):
-		return nil, mismatch("signer", "the envelope's signer is "+st.Signer)
-	case !bytes.Equal(canon.Encode(pkg.Members["log_head"]), canon.Encode(logHead(head{seq: st.Seq, prev: st.Prev}))):
-		return nil, mismatch("log_head", "the envelope extends "+string(canon.Encode(logHead(head{seq: st.Seq, prev: st.Prev}))))
-	case !bytes.Equal(canon.Encode(pkg.Members["summary"]), canon.Encode(summaryOf(st))):
-		return nil, mismatch("summary", "a summary is a display of the envelope, never the signed payload")
+		add("pae", "it differs from the PAE recomputed from the envelope")
+	}
+	if pkg.Members["statement"] != canon.String(st.ID) {
+		add("statement", "the recomputed id is "+st.ID)
+	}
+	if pkg.Members["alg"] != canon.String(st.Alg) {
+		add("alg", "the envelope's alg is "+st.Alg)
+	}
+	if pkg.Members["signer"] != canon.String(st.Signer) {
+		add("signer", "the envelope's signer is "+st.Signer)
+	}
+	if want := canon.Encode(logHead(head{seq: st.Seq, prev: st.Prev})); !bytes.Equal(canon.Encode(pkg.Members["log_head"]), want) {
+		add("log_head", "the envelope extends "+string(want))
+	}
+	if !bytes.Equal(canon.Encode(pkg.Members["summary"]), canon.Encode(summaryOf(st))) {
+		add("summary", "a summary is a display of the envelope, never the signed payload")
+	}
+	return st, mm, nil
+}
+
+// verifyOver checks sig over the envelope as every reader reads the signed line: verified under the envelope's own
+// signer and algorithm, with the prepared id. It returns "" when it verifies, else why not.
+func verifyOver(env *canon.Object, st *wire.Statement, sig string) string {
+	full := &canon.Object{Keys: append(slices.Clone(env.Keys), "sig"), Members: map[string]canon.Value{"sig": canon.String(sig)}}
+	for k, v := range env.Members {
+		full.Members[k] = v
+	}
+	signedSt, err := wire.NewIdentityReader().Read(canon.Encode(full))
+	switch {
+	case err != nil:
+		return err.Error()
+	case !signedSt.Verified || signedSt.ID != st.ID:
+		return "it does not verify"
+	}
+	return ""
+}
+
+// checkPackage is inspectPackage for --complete: the first derived member that differs refuses before any work
+// (exit 2). It returns the envelope read unsigned.
+func checkPackage(pkg *canon.Object, path string) (*wire.Statement, *Problem) {
+	st, mm, prob := inspectPackage(pkg, path, "option --complete")
+	if prob != nil {
+		return nil, prob
+	}
+	if len(mm) > 0 {
+		return nil, mm[0].problem(mm, path, ExitDidNotStart)
 	}
 	return st, nil
 }
