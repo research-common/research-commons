@@ -14,6 +14,9 @@
 //     record and state tokens of §8.1, §10;
 //   - adapter.go: the resolver's TimeVerifier, so priority among rival claims reads reader-verified bounds only;
 //   - publish.go: stamp-at-publish (§2): the anchors statement is appended before anything is transported;
+//   - otstree.go: the operation tree as data for the writer side: ParseTree (ParseProof's parser, same refusals),
+//     Serialize (the reference writer's sibling order, byte-identical on its files), PendingCommitments and Merge
+//     (splice a calendar's completed subtree in at a pending attestation's node, the core of `anchor upgrade`);
 //   - location.go, receipt.go: the receipt store of §9: receiver-local state under the git directory Git resolves
 //     (or an explicitly configured directory, else none), receipts binding every §9.2 field by content hash,
 //     the five eligibility checks of §9.3 on every read, the immutable binding kept apart from chain eligibility,

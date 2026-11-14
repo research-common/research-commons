@@ -208,6 +208,12 @@ not conform, whichever library it uses.
 library's `master` writes the major version as a single byte while v0.4.5 writes a varuint; for version 1 the
 two are the same byte `01`, and a conforming parser accepts exactly that byte.
 
+A writer of this format (`anchor upgrade`, which rewrites a proof) emits the reference writer's sibling order, so a
+file the library wrote round-trips byte for byte: at each node the attestations first, then the operations;
+attestations of different tags by their 8-byte tag, two Bitcoin attestations by height, two pending ones by URI,
+others by payload bytes; operations by tag byte, then by argument bytes (a prefix first). A reader does not
+check the order: a file in any other order parses to the same tree.
+
 ## 6. Chain-provider contract
 
 ### 6.1 Preferred: locally validated headers
