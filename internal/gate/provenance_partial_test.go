@@ -10,7 +10,8 @@ import (
 
 // TestProvenancePartialAtEveryGate: wire §5 says every R field of a listed kind is checked at every gate by the
 // one validation core, and `provenance_partial` (workflow R, inputs R, unpinned R, supplied O, environment O) is a
-// listed field of `authored`. Each wrong shape is signed validly (the signature and the canonical form pass,
+// listed field of `authored`, with its cross-member rule (`unpinned` non-empty and duplicate-free, `supplied` keys
+// among its names). Each wrong shape is signed validly (the signature and the canonical form pass,
 // which is what makes the schema the thing that refuses) and delivered to pull, hub check, push and the
 // pre-pin check: each refuses it intrinsic, malformed statement, naming the member and scoping the object, and
 // the well-formed control beside it is admitted at all four, so the refusal is the field's and not the fixture's.
@@ -51,6 +52,10 @@ func TestProvenancePartialAtEveryGate(t *testing.T) {
 		{"bad digest in inputs", partial("inputs", []string{d("in"), "sha256:zz"}), "body.provenance_partial.inputs[1] is not a content digest"},
 		{"non-string in unpinned", partial("unpinned", canon.Array{canon.String("a"), canon.Int(3)}), "body.provenance_partial.unpinned[1] is not a string"},
 		{"non-digest in supplied", partial("supplied", canon.Value(obj("tag:latest", "bytes"))), "body.provenance_partial.supplied.tag:latest is not a content digest"},
+		{"nothing unpinned", partial("unpinned", []string{}), "body.provenance_partial.unpinned is empty"},
+		{"unpinned name repeated", partial("unpinned", []string{"a", "b", "a"}), `body.provenance_partial.unpinned[2] repeats "a"`},
+		{"supplied key not unpinned", partial("supplied", canon.Value(obj("other", d("bytes")))), "body.provenance_partial.supplied.other is not among unpinned"},
+		{"control: unsorted unpinned, supplied for one", partial("unpinned", []string{"b", "a"}, "supplied", canon.Value(obj("a", d("bytes")))), ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

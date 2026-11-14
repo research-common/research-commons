@@ -11,7 +11,8 @@ import (
 )
 
 // TestProvenancePartialWriteAndRead: wire §5 lists `provenance_partial` (workflow R, inputs R, unpinned R,
-// supplied O, environment O) on `authored`, so the one validation core checks it. A draft with a wrong shape is
+// supplied O, environment O; `unpinned` non-empty and duplicate-free, `supplied` keys among its names) on
+// `authored`, so the one validation core checks it. A draft with a wrong shape is
 // refused by `publish --draft` before signing (intrinsic, malformed statement, naming the member; the store is
 // byte-identical afterwards), and the same body, signed by a key that skipped the writer, is refused by `pull` and
 // by `hub check` with the same class, reason and member. The well-formed control passes all three, so each refusal
@@ -51,6 +52,10 @@ func TestProvenancePartialWriteAndRead(t *testing.T) {
 		{"bad digest in inputs", with("inputs", `["`+dig("in")+`","sha256:zz"]`), "body.provenance_partial.inputs[1] is not a content digest"},
 		{"non-string in unpinned", with("unpinned", `["a",3]`), "body.provenance_partial.unpinned[1] is not a string"},
 		{"non-digest in supplied", with("supplied", `{"tag:latest":"bytes"}`), "body.provenance_partial.supplied.tag:latest is not a content digest"},
+		{"nothing unpinned", with("unpinned", `[]`), "body.provenance_partial.unpinned is empty"},
+		{"unpinned name repeated", with("unpinned", `["a","b","a"]`), "body.provenance_partial.unpinned[2] repeats"},
+		{"supplied key not unpinned", with("supplied", `{"other":"`+dig("bytes")+`"}`), "body.provenance_partial.supplied.other is not among unpinned"},
+		{"control: unsorted unpinned", with("unpinned", `["b","a"]`), ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

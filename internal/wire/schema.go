@@ -335,6 +335,33 @@ var (
 var partialObj = object(req("workflow", digest()), req("inputs", list(digest())), req("unpinned", list(text())),
 	opt("supplied", digestMap()), opt("environment", envObj))
 
+// partialConsistent is the rule across members of an object that already passed partialObj: `unpinned` names at
+// least one input and none twice, and every `supplied` key is one of them (bytes are supplied for an unpinned
+// input only). Order is not constrained: the names stand as the run wrote them.
+func partialConsistent(pp *canon.Object) error {
+	u, _ := pp.Get("unpinned")
+	names := map[string]bool{}
+	list, _ := u.(canon.Array)
+	if len(list) == 0 {
+		return bad("body.provenance_partial.unpinned", "is empty: a partial provenance names the unpinned inputs")
+	}
+	for i, x := range list {
+		n := string(x.(canon.String))
+		if names[n] {
+			return bad("body.provenance_partial.unpinned["+strconv.Itoa(i)+"]", "repeats "+strconv.Quote(n))
+		}
+		names[n] = true
+	}
+	if sv, ok := pp.Get("supplied"); ok {
+		for _, k := range sv.(*canon.Object).Keys {
+			if !names[k] {
+				return bad("body.provenance_partial.supplied."+k, "is not among unpinned: bytes are supplied for an unpinned input only")
+			}
+		}
+	}
+	return nil
+}
+
 func with(base []field, more ...field) []field {
 	return append(append([]field{}, base...), more...)
 }
@@ -453,6 +480,9 @@ func bodySchema(kind string, body *canon.Object) (bool, *schemaCtx, error) {
 		_, pv := body.Get("provenance")
 		if _, pp := body.Get("provenance_partial"); pv && pp {
 			return true, ctx, bad("body.provenance_partial", "is present with provenance: an authored carries at most one of them")
+		}
+		if pp, ok := body.Get("provenance_partial"); ok {
+			return true, ctx, partialConsistent(pp.(*canon.Object))
 		}
 	}
 	if kind == "holds" {

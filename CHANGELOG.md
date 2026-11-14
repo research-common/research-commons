@@ -9,6 +9,15 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ## [Unreleased]
 
+### Changed
+- **`provenance_partial` is stricter (pre-1.0 tightening).** `unpinned` must name at least one input and name each
+  once, and every key of `supplied` must be one of the `unpinned` names (order is not constrained). A line that
+  breaks either rule is refused at every gate, as intrinsic `malformed statement` naming the member; before, an
+  empty `unpinned` and a `supplied` key for an unlisted input were accepted. `run --publish` now records the
+  unpinned input's **name** in `unpinned` (it wrote `name ("reference")`), which is what the wire format says and
+  what the new `supplied` check compares against; the reference stays in the workflow spec the line names. Lines
+  already written with the old form fail the `supplied` check only if they carry `supplied`.
+
 ## [0.5.0-alpha.5] - 2026-11-14
 
 **This release writes `rc/2`.** `identity new`, `identity grant`, `identity cut` and `publish --as` (directly or

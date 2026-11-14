@@ -507,7 +507,8 @@ field names; absent = the execution note §1 default for the mode). A run with a
 list of string R, the input names · `supplied` object O, unpinned input name → digest of the bytes the run
 staged for it · `environment` O) **in place of** `provenance`, so the output joins no
 derivation group: an `authored` carries at most one of `provenance` and
-`provenance_partial`, and both together are malformed. `provenance` gains `output` string O, the spec's output name the content is, so a re-run of
+`provenance_partial`, and both together are malformed. Within the object, `unpinned` is non-empty and names
+each input once (in any order), and every `supplied` key is one of those names; anything else is malformed. `provenance` gains `output` string O, the spec's output name the content is, so a re-run of
 a multi-output workflow names which output it re-ran. An acquisition's `capture` gains `endpoints` list of
 string O, `window` O (the shared object) and `environment` O (the record above).
 

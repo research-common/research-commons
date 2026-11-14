@@ -251,8 +251,9 @@ func partialBody(kv ...any) *canon.Object {
 
 // TestSchemaProvenancePartial: `provenance_partial` is typed like `provenance`: `workflow` digest R, `inputs`
 // list of digest R, `unpinned` list of string R, `supplied` object O (name → digest), `environment` O (the
-// standard forms). Every wrong shape is intrinsic, malformed statement, naming the member; the accepted
-// shapes include the optional members absent and present.
+// standard forms). Across members: `unpinned` is non-empty and duplicate-free, and every `supplied` key is one of
+// its names (no ordering rule). Every wrong shape is intrinsic, malformed statement, naming the member; the
+// accepted shapes include the optional members absent and present.
 func TestSchemaProvenancePartial(t *testing.T) {
 	drop := func(k string) *canon.Object { return dropField(partialBody(), k) }
 	for _, c := range []struct {
@@ -280,10 +281,21 @@ func TestSchemaProvenancePartial(t *testing.T) {
 		{"supplied value not a string", partialBody("supplied", body("tag:latest", 7)), "body.provenance_partial.supplied.tag:latest is not a content digest"},
 		{"environment not an object", partialBody("environment", "x"), "body.provenance_partial.environment is not an object"},
 		{"environment harness_commit abbreviated", partialBody("environment", body("harness_commit", "abc1234")), "commit hash"},
+		// across members: `unpinned` names at least one input, once each, and `supplied` keys are among them
+		{"nothing unpinned listed", partialBody("unpinned", arr()), "body.provenance_partial.unpinned is empty"},
+		{"nothing unpinned, bytes supplied", partialBody("unpinned", arr(), "supplied", body("feed", dg("s"))), "body.provenance_partial.unpinned is empty"},
+		{"unpinned name repeated", partialBody("unpinned", arr(s("a"), s("b"), s("a"))), `body.provenance_partial.unpinned[2] repeats "a"`},
+		{"unpinned name repeated, adjacent", partialBody("unpinned", arr(s("a"), s("a"))), `body.provenance_partial.unpinned[1] repeats "a"`},
+		{"supplied key not unpinned", partialBody("unpinned", arr(s("a")), "supplied", body("b", dg("s"))), "body.provenance_partial.supplied.b is not among unpinned"},
+		{"one supplied key of two not unpinned", partialBody("unpinned", arr(s("a"), s("b")), "supplied", body("a", dg("s"), "c", dg("t"))), "body.provenance_partial.supplied.c is not among unpinned"},
+		{"supplied key differs by case", partialBody("unpinned", arr(s("Feed")), "supplied", body("feed", dg("s"))), "body.provenance_partial.supplied.feed is not among unpinned"},
 		// accepted
 		{"required members only", partialBody(), ""},
+		{"unpinned unsorted", partialBody("unpinned", arr(s("b"), s("a"))), ""},
+		{"supplied for some unpinned only", partialBody("unpinned", arr(s("a"), s("b")), "supplied", body("b", dg("s"))), ""},
+		{"supplied for every unpinned", partialBody("unpinned", arr(s("a"), s("b")), "supplied", body("a", dg("s"), "b", dg("t"))), ""},
+		{"unpinned names that differ by case", partialBody("unpinned", arr(s("a"), s("A"))), ""},
 		{"no inputs, one unpinned", partialBody("inputs", arr()), ""},
-		{"nothing unpinned listed", partialBody("unpinned", arr()), ""},
 		{"supplied", partialBody("supplied", body("tag:latest", dg("supplied"))), ""},
 		{"empty supplied", partialBody("supplied", body()), ""},
 		{"environment record", partialBody("environment", body("image_digest", dg("img"), "platform", "linux/amd64", "profile", "sandbox")), ""},
