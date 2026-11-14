@@ -428,10 +428,10 @@ func preparePublish(c *Ctx) *Problem {
 	}
 	_, noHolds := c.Flag("no-holds")
 	p.holds = kind == "authored" && !noHolds
-	if _, ok := c.Flag("intended-for"); ok && preparing(c) {
+	if p.resource != "" && preparing(c) {
 		return usage("conflicting-options", "--intended-for is not prepared for external signing",
 			"the pre-pin check's outcome would be recorded at prepare time and not run again at --complete; nothing was done", "option --intended-for",
-			"sign directly, or drop --intended-for", "")
+			"sign directly, or drop --intended-for (or intended_for from the draft)", "")
 	}
 	if p.holds && preparing(c) {
 		return usage("conflicting-options", "an external-signing package carries one statement",
