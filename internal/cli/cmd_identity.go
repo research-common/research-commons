@@ -34,6 +34,7 @@ func init() {
 		Store: true, Writes: true, Flags: nflags, Prepare: prepareIdentityNew, Run: identityNewCmd,
 		Help: "Signs an identity_inception (rc/2, profile " + wire.FixedRootProfile + ") with --key (or $" + KeyEnv + ") as the first line of that key's log; the identity's id is the inception's statement id. " +
 			"The root key must be fresh: a key with any line in this store is refused (exit 1), since the identity's lineage is the root key's whole log. " +
+			"That check sees this store only, not any other: use a key generated for this purpose, one that has signed nothing anywhere (the tool cannot see other stores, and an old key's earlier lines would become part of the identity's lineage). " +
 			"Use the root key for administration only (identity grant, identity cut) and keep it offline: it is the identity's only administrator, and fixed-root-v1 has no recovery if it is lost or stolen. " +
 			"--dry-run prints the exact statement and signs nothing; with --ts the dry run's id is the id the real run signs." + extHelp})
 	gflags := append(slices.Clone(writerFlags), extFlags...)
@@ -58,7 +59,7 @@ func init() {
 	cflags = append(cflags,
 		Flag{Name: "identity", Value: "id", Help: "the identity (its inception id); your key must be its root", Check: checkIDFlag},
 		Flag{Name: "grant", Value: "id", Help: "the grant to cut (its statement id)", Check: checkIDFlag},
-		Flag{Name: "last-good", Value: "id|none", Help: "required: the delegate's last act under the grant you vouch for (it and its ancestors keep counting), or none to keep nothing", Check: func(v string) error {
+		Flag{Name: "last-good", Value: "id|none", Help: "required: a line of the delegate's key you vouch for, held here (any line of that key, bare-key lines included, not only an act under the grant; it and its ancestors keep counting), or none to keep nothing", Check: func(v string) error {
 			if v != lastGoodNone && !isID(v) {
 				return errString("not a statement id or none")
 			}
@@ -73,7 +74,7 @@ func init() {
 	)
 	Register(&Command{Name: "identity cut", Summary: "cut a grant: the delegate's acts after --last-good stop counting for the identity",
 		Store: true, Writes: true, Flags: cflags, Prepare: prepareIdentityCut, Run: identityCutCmd,
-		Help: "Signs an identity_cut (rc/2) with the identity's root key. It cannot be undone: the delegate's acts under the grant after --last-good count toward nothing for the identity, now and for every reader that holds the cut; the acts at or before it keep counting. --last-good is required (an id, or none to keep nothing); the tool never picks it. " +
+		Help: "Signs an identity_cut (rc/2) with the identity's root key. It cannot be undone: the delegate's acts under the grant after --last-good count toward nothing for the identity, now and for every reader that holds the cut; the acts at or before it keep counting. --last-good is required (an id, or none to keep nothing); the tool never picks it. It must be a line of the grant's delegate key that this store holds: any line of that key is accepted, a bare-key line (one signed without --as) included, because it only marks a prefix of the key's log, and each act kept must still be signed under this grant to count. A line of any other key is refused. Choosing it is yours alone: name the last act you can attest was the delegate's own, not the last act you have seen, because a thief's act inside the kept prefix keeps counting. " +
 			"Every held act under the grant is listed with what happens to it. --dry-run signs nothing and lists the same. " +
 			"Refused (exit 2) without --last-good or --reason; (exit 1) when your key is not the identity's root, the grant is not the identity's, or --last-good names a line of another key; exit 3 when the identity, the grant or the --last-good line is not held here." + extHelp})
 }
@@ -240,7 +241,7 @@ func signIdentity(p *pubPrep, h head, d wire.Draft, actor *wire.Actor, marker *c
 	return sts, nil
 }
 
-const rootCustody = "keep the root key offline and use it only for identity grant and identity cut: it is this identity's only administrator, and fixed-root-v1 has no recovery if it is lost or stolen (a stolen root can grant and cut as you)"
+const rootCustody = "keep the root key offline and use it only for identity grant and identity cut: it is this identity's only administrator, and fixed-root-v1 has no recovery if it is lost or stolen (a stolen root can grant and cut as you). Use a key generated for this purpose, one that has signed nothing anywhere: this check sees only this store's log of the key"
 
 func identityNewCmd(c *Ctx) (*Obj, int, error) {
 	p := c.Prep.(*identityPrep)

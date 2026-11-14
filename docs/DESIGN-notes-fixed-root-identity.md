@@ -717,6 +717,13 @@ key file (`docs/KEY-FILES.md`) kept on a machine that does not run the hub's dai
 and the CLI signs with it. No package, connector or hardware is involved. The custody
 questions are a backup of that file and how quickly its holder can sign.
 
+**R must be a key made for this purpose.** `identity new` refuses a root key that already has
+a line in the store it runs against, because the identity's lineage is the root key's whole
+log. That is the only freshness the tool checks: it cannot see other stores, so a key that
+signed something elsewhere passes, and those earlier lines then belong to the identity's
+lineage for every reader that holds them. Use a key generated for this purpose, one that has
+signed nothing anywhere.
+
 **Reachability, not only safety.** Closing a stolen delegate key needs a root cut, and a
 prefix-preserving cut needs L known at cut time, so it cannot be pre-signed. The root
 must therefore be reachable within the exposure window the hub tolerates. That, rather
@@ -747,6 +754,17 @@ pulling everything: the acts up to L still count; the thief's act counts toward 
 an unknown or stale `--prev`, an act the evidence denies) leave every store byte-identical.
 R's key file restored from a backup copy on a new machine signs as the same root: a new
 grant from it is valid and the act under it `eligible`.
+
+What the drill shows is exclusion by ancestry: the thief's act forks off the vouched
+prefix (it extends a1, not a2), so it is outside L's ancestors and counts toward nothing.
+It does not show, and the cut cannot do, exclusion by origin: a thief act *inside* the
+vouched prefix (the delegate's log is linear and the theft happened before `last_good`)
+is an ancestor of L and keeps counting. `--last-good` therefore carries the root holder's
+attestation: pick the last act you can attest was the delegate's own, not the last act you
+have seen. `--last-good` takes any line of the delegate's key that the root's store holds
+(a bare-key line included, since it only marks a prefix of that key's log); each act within
+the prefix must still carry and qualify under the grant to count (§4). A line of another
+key is refused (`last-good-other-key`).
 
 The external-signing package is exercised by `internal/cli:TestExternalSigningAborts`
 and `TestExternalSigningEndToEnd`: a root key whose file the store never sees signs
