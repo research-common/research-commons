@@ -25,8 +25,8 @@ import (
 )
 
 // publish: the writer path (claims-model note §8, §11, §13; storage note §3.1, §3.2). One invocation signs one
-// atomic unit with the invocation's key and commits it through the store's journal: `authored` (+ `holds`
-// when this store keeps the bytes) with the blob, or a `holds`, `describes` or `retracts`, or a draft of any
+// atomic unit with the invocation's key and commits it through the store's journal: `authored` or `observed`
+// (+ `holds` when this store keeps the bytes; holdsFor) with the blob, or a `holds`, `describes` or `retracts`, or a draft of any
 // kind §5 lists. `publish task` is genesis + first edition, or a new edition of a task the key controls.
 //
 // Order: every input checked (exit 2, nothing done) → the key's log read from the store (seq, prev; a fork
@@ -158,7 +158,7 @@ func init() {
 		Flag{Name: "media-type", Value: "type", Help: "content.media_type"},
 		Flag{Name: "type", Value: "type", Help: "authored type (default dataset)"},
 		Flag{Name: "provenance", Value: "json", Help: "authored provenance object {workflow, inputs[, environment]}", Check: checkJSONObject},
-		Flag{Name: "no-holds", Help: "authored only: keep the bytes in the store but write no holds (a withheld artifact)"},
+		Flag{Name: "no-holds", Help: "authored or observed only: keep the bytes in the store but write no holds (a withheld artifact)"},
 		Flag{Name: "about", Value: "digest|id", Help: "describes: the blob or statement described", Check: func(v string) error {
 			if !isDigest(v) && !isID(v) {
 				return errors.New("not a digest or a statement id")
@@ -185,7 +185,7 @@ func init() {
 	flags = append(flags, extFlags...)
 	Register(&Command{Name: "publish", Summary: "sign and commit a statement (authored with its bytes, holds, describes, retracts, or a draft)",
 		Store: true, Writes: true, Flags: flags, Prepare: preparePublish, Run: publishCmd,
-		Help: "Signs with --key (or $" + KeyEnv + ") and commits through the store's journal: the blob and its statements land together or not at all. A draft is never stored unsigned. Your log's next seq and prev come from the statements this store holds; a FORK in your log is refused until you name --prev. --intended-for runs the named edition's rules first and refuses on fail. With availability withheld and content under " + strconv.Itoa(WithheldWarnBelow) + " bytes it warns that short content may be enumerable against its hash (a heuristic; include a nonce) and proceeds; the warning is not recorded. A rotate_key draft is signed as written: none of `commons rotate`'s checks run (successor, key events already held, merged tips), so the way out after a compromise stays open; it warns and proceeds. With --as <identity> --grant <id> the statement acts for a fixed-root identity (rc/2, the actor in the signed envelope): it is refused, nothing signed, unless the identity evaluator over the statements this store holds plus this line reads the act eligible (exit 2 when it is denied, naming why; exit 3 when it cannot decide, e.g. the grant or the identity is not held). The holds written beside an authored stays your key's own (rc/1): your key holds the bytes." + extHelp + " Only an act (--as) is prepared; an authored act needs --no-holds, and its eligibility is read at --complete."})
+		Help: "Signs with --key (or $" + KeyEnv + ") and commits through the store's journal: the blob and its statements land together or not at all. A draft is never stored unsigned. Your log's next seq and prev come from the statements this store holds; a FORK in your log is refused until you name --prev. --intended-for runs the named edition's rules first and refuses on fail. With availability withheld and content under " + strconv.Itoa(WithheldWarnBelow) + " bytes it warns that short content may be enumerable against its hash (a heuristic; include a nonce) and proceeds; the warning is not recorded. A rotate_key draft is signed as written: none of `commons rotate`'s checks run (successor, key events already held, merged tips), so the way out after a compromise stays open; it warns and proceeds. With --as <identity> --grant <id> the statement acts for a fixed-root identity (rc/2, the actor in the signed envelope): it is refused, nothing signed, unless the identity evaluator over the statements this store holds plus this line reads the act eligible (exit 2 when it is denied, naming why; exit 3 when it cannot decide, e.g. the grant or the identity is not held). A holds is written beside an authored or observed whose bytes this store keeps (--no-holds withholds it); it stays your key's own (rc/1): your key holds the bytes." + extHelp + " Only an act (--as) is prepared; an authored act needs --no-holds, and its eligibility is read at --complete."})
 	tflags := append(slices.Clone(writerFlags),
 		Flag{Name: "name", Value: "text", Help: "a new task's name"},
 		Flag{Name: "task", Value: "id", Help: "an existing task (its genesis id): publish a new edition after its current one", Check: checkIDFlag},
@@ -398,7 +398,7 @@ func preparePublish(c *Ctx) *Problem {
 					"drop it, or publish the kind it belongs to", kind)
 			}
 		}
-		if _, ok := c.Flag("no-holds"); ok && kind != "authored" {
+		if _, ok := c.Flag("no-holds"); ok && !holdsFor(kind) {
 			return usage("malformed-argument", "an option does not apply to this kind", "nothing was done", "option --no-holds", "drop it", kind)
 		}
 	}
@@ -426,17 +426,18 @@ func preparePublish(c *Ctx) *Problem {
 		f.Close()
 		p.content = path
 	}
+	if _, ok := c.Flag("no-holds"); ok && !holdsFor(kind) {
+		return usage("malformed-argument", "an option does not apply to this kind", "--no-holds applies to authored and observed; nothing was done", "option --no-holds", "drop it", kind)
+	}
 	_, noHolds := c.Flag("no-holds")
-	p.holds = kind == "authored" && !noHolds
+	p.holds = holdsFor(kind) && !noHolds
 	if p.resource != "" && preparing(c) {
 		return usage("conflicting-options", "--intended-for is not prepared for external signing",
 			"the pre-pin check's outcome would be recorded at prepare time and not run again at --complete; nothing was done", "option --intended-for",
 			"sign directly, or drop --intended-for (or intended_for from the draft)", "")
 	}
-	if p.holds && preparing(c) {
-		return usage("conflicting-options", "an external-signing package carries one statement",
-			"authored writes a holds beside it, a second statement to sign; nothing was done", "option --prepare",
-			"add --no-holds (publish the holds separately, with your key), or sign directly", "")
+	if p.holds && preparing(c) && (kind == "authored" || p.content != "") {
+		return holdsPrepared(kind)
 	}
 	if prob := prepareActor(c, p); prob != nil {
 		return prob
@@ -446,6 +447,25 @@ func preparePublish(c *Ctx) *Problem {
 	}
 	c.Prep = p
 	return nil
+}
+
+// holdsFor is the one rule for which kinds a writer adds its own `holds` beside, in `publish` and in
+// `run --publish` alike: `authored` and `observed`, whose bytes the signer installs and serves (for an `observed`
+// the `holds` is the only statement of the signer that pins the capture's bytes as served). A `reproduced` gets
+// none: its bytes are either the held `authored`'s (a match) or a divergence the statement itself names. --no-holds
+// (publish) withholds it.
+func holdsFor(kind string) bool { return kind == "authored" || kind == "observed" }
+
+// holdsDraft is the `holds` a writer signs beside a claim: the claim's content, nothing else.
+func holdsDraft(body *canon.Object) wire.Draft {
+	return wire.Draft{Kind: "holds", Body: &canon.Object{Keys: []string{"content"}, Members: map[string]canon.Value{"content": body.Members["content"]}}}
+}
+
+// holdsPrepared refuses an external-signing package for a claim that would write a holds beside it.
+func holdsPrepared(kind string) *Problem {
+	return usage("conflicting-options", "an external-signing package carries one statement",
+		kind+" writes a holds beside it, a second statement to sign; nothing was done", "option --prepare",
+		"add --no-holds (publish the holds separately, with your key), or sign directly", "")
 }
 
 // wireKind reports whether kind is a statement kind wire-format note §5 lists (the writer signs no other).
@@ -740,9 +760,13 @@ func publishCmd(c *Ctx) (*Obj, int, error) {
 		}
 		drafts[0] = d
 	}
-	if p.holds {
-		hb := &canon.Object{Keys: []string{"content"}, Members: map[string]canon.Value{"content": body.Members["content"]}}
-		drafts = append(drafts, wire.Draft{Kind: "holds", Body: hb})
+	// the holds beside the claim: only for bytes this unit installs or this store already keeps (an observed whose
+	// bytes this store does not keep has nothing to serve)
+	if haveBytes := digest != "" && (p.content != "" || c.Store.HasBlob(store.Digest(digest))); p.holds && haveBytes {
+		if preparing(c) {
+			return nil, 0, holdsPrepared(p.kind)
+		}
+		drafts = append(drafts, holdsDraft(body))
 	}
 	sts, err := signAll(p.key.Key, h, p.ts, drafts)
 	if err != nil {

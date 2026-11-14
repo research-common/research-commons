@@ -50,6 +50,12 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   provenance as before: `run --publish` emits `authored` with `provenance_partial`, which now also records the
   supplied bytes by digest (`supplied`, never the file's path); the output joins no derivation group and `verify`
   exits 4 naming the unpinned input.
+- **`observed` gets the signer's `holds`, in `publish` and `run --publish` alike.** One rule now decides which
+  statements a writer signs its own `holds` beside: `authored` and `observed`, for bytes the unit installs or the
+  store already keeps. Before, only `authored` got one, so a capture's bytes were installed but served by no
+  statement of the observer. `publish --no-holds` now applies to `observed` too, and an external-signing package
+  of an `observed` with its bytes needs it (one statement per package). A `reproduced` still gets none: its bytes
+  are the held `authored`'s, or a divergence the statement names.
 - **The fixed-root identity writer.** `commons identity new` signs an identity's inception with a fresh root key
   (a key that already has a log is refused), `commons identity grant` grants a delegate key (pinned at its first
   line) a permission set, and `commons identity cut` cuts a grant: `--last-good <id|none>` is required, it says it

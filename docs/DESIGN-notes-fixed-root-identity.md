@@ -688,7 +688,7 @@ it over the recomputed bytes, runs every check of direct signing again, refuses
 through the same journal unit. Every refusal appends nothing. Its format tag,
 `rc-signing-package/0`, is this tool's own and **provisional** (like `rc-key/0`); it is
 not the finalized interchange schema this section leaves open. A package carries one
-statement, so `publish --as --prepare` of `authored` needs `--no-holds`.
+statement, so `publish --as --prepare` of `authored` (or of an `observed` with its bytes) needs `--no-holds`.
 
 What the signing device signs is the decoded `pae` bytes, unchanged. For `ed25519` the
 signature is the 64-byte RFC 8032 signature over those bytes, written as 128 lowercase

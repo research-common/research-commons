@@ -137,12 +137,12 @@ unreferenced blob.
 
 | Operation | Unit (one journal record) | Preconditions checked before step 2 |
 |---|---|---|
-| `publish` (new bytes) | blob + `authored` + `holds` (+ `observed` for a capture) by one key | the pre-pin check named by the statement ran and its outcome is recorded (claims-model note §8); predecessor in the key's log resolved (§4.1) |
-| `publish` of a withheld artifact | `authored` only; the blob is installed but no `holds` is written | as above |
+| `publish` (new bytes) | blob + `authored` or `observed` + `holds` by one key | the pre-pin check named by the statement ran and its outcome is recorded (claims-model note §8); predecessor in the key's log resolved (§4.1) |
+| `publish` of a withheld artifact | `authored` or `observed` only; the blob is installed but no `holds` is written | as above |
 | reveal (`holds` for withheld bytes) | `holds` | blob present and hashes to the statement's hash |
 | resource genesis | genesis statement | none beyond signing |
 | resource edition | one edition statement | every member and the predecessor edition it names are held (else refuse, name the fetch; claims-model note §8) |
-| `run --publish` | output blobs + `authored` or `reproduced` + `holds` | execution record complete |
+| `run --publish` | output blobs + `authored`, `reproduced` or `observed` per output + a `holds` beside each `authored` and `observed` (none beside a `reproduced`) | execution record complete |
 | `pull` (package) | the package's **admitted set**: every blob and statement the validation core admitted | validation ran over the whole package first (claims-model note §11); refusals are reported with package scope; the admitted set is committed as one unit |
 | anchor, claim, submit, settle, retract, corroborate | one statement each | as the owning note specifies |
 | `gc --release <hash>` | `holds` with `withdrawn: true`; the blob is deleted after step 4 | the operator's current `holds` for the hash is a serving one (§6.2) |

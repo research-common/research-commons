@@ -168,7 +168,7 @@ func init() {
 	}
 	Register(&Command{Name: "run", Summary: "run a held workflow under your execution policy; --publish signs what it emits",
 		Args: []Arg{{Name: "workflow", Shape: ShapeRef}}, Store: true, Writes: true, Flags: flags, Prepare: prepareRun, Run: runCmd,
-		Help: "Runs the workflow spec the store holds (its digest, or the id of an authored statement on it) under --exec-policy, and prints the result token, the environment record and each output; nothing is appended. An input the spec does not pin (a tag, a URL, a path) is never fetched: give its bytes with --input <name>=<file> (unpinned inputs only; a pinned input is always the held blob its hash names), recorded by digest only, never the path; the run has partial provenance (no derivation group, verify exits 4). With --publish (and --key or $" + KeyEnv + ") it signs, per output: authored on a first derivation, reproduced over your own current authored of the same workflow and inputs (match on the same bytes; diverged, or the comparator's word, on different bytes; never a second authored), observed for a workflow that requires the network. Disclosures are per output (--licence out=CC-BY-4.0) and nothing is inherited: not from the workflow, its inputs or a sibling output. The provenance, environment record and capture are written from the run and cannot be supplied. A run that did not complete, or a re-run whose comparison could not finish, publishes nothing and says why. The statements and the output blobs commit as one unit: all or nothing."})
+		Help: "Runs the workflow spec the store holds (its digest, or the id of an authored statement on it) under --exec-policy, and prints the result token, the environment record and each output; nothing is appended. An input the spec does not pin (a tag, a URL, a path) is never fetched: give its bytes with --input <name>=<file> (unpinned inputs only; a pinned input is always the held blob its hash names), recorded by digest only, never the path; the run has partial provenance (no derivation group, verify exits 4). With --publish (and --key or $" + KeyEnv + ") it signs, per output: authored on a first derivation, reproduced over your own current authored of the same workflow and inputs (match on the same bytes; diverged, or the comparator's word, on different bytes; never a second authored), observed for a workflow that requires the network. Disclosures are per output (--licence out=CC-BY-4.0) and nothing is inherited: not from the workflow, its inputs or a sibling output. The provenance, environment record and capture are written from the run and cannot be supplied. A run that did not complete, or a re-run whose comparison could not finish, publishes nothing and says why. Beside each authored and observed it signs a holds (your key serves those bytes); a reproduced gets none. The statements and the output blobs commit as one unit: all or nothing."})
 }
 
 // runPrep is what prepareRun checked.
@@ -613,9 +613,8 @@ func (p *runPrep) publishRun(c *Ctx, out *Obj, wf string, info *WorkflowInfo, re
 		if d != "" && !slices.Contains(blobs, d) {
 			blobs = append(blobs, d)
 		}
-		if s.Kind == "authored" {
-			hb := &canon.Object{Keys: []string{"content"}, Members: map[string]canon.Value{"content": body.Members["content"]}}
-			drafts = append(drafts, wire.Draft{Kind: "holds", Body: hb})
+		if holdsFor(s.Kind) {
+			drafts = append(drafts, holdsDraft(body)) // the same rule as publish: authored and observed, never reproduced
 		}
 	}
 	out.set("emits", pl)

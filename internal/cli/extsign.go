@@ -235,7 +235,7 @@ func beginExternal(c *Ctx, kind string) *Problem {
 		setFlag("draft", comp)
 		setFlag("as", st.Actor.Identity)
 		setFlag("grant", st.Actor.Grant)
-		if st.Kind == "authored" {
+		if holdsFor(st.Kind) {
 			setFlag("no-holds", "") // prepared without its holds (one statement per package)
 		}
 		if m, ok := body.Members[wire.IdentityCrit].(*canon.Object); ok {
@@ -463,7 +463,7 @@ func summaryOf(st *wire.Statement) *canon.Object {
 func signExternal(k *externalKey, h head, ts string, drafts []wire.Draft) ([]signed, error) {
 	if len(drafts) != 1 {
 		return nil, usage("external-signing-one-statement", "an external-signing package carries one statement",
-			"this invocation signs "+itoa(len(drafts))+"; nothing was done", "invocation", "for authored, add --no-holds and publish the holds separately", "")
+			"this invocation signs "+itoa(len(drafts))+"; nothing was done", "invocation", "for authored or observed, add --no-holds and publish the holds separately", "")
 	}
 	d := drafts[0]
 	d.Seq, d.Prev, d.TS = h.seq, h.prev, ts

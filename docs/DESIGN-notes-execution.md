@@ -284,6 +284,12 @@ Rules:
 | its own `authored` for different bytes `Y` | `reproduced: diverged` (or `match` under the comparator, §5.3) pointing at it; `Y`'s `authored` stays |
 | another key's `authored` for the same provenance | `authored` for its own bytes; the group display handles the rest (claims-model note §5.2) |
 
+Beside each `authored` and each `observed` it emits, the runner signs its own `holds` for that output's
+bytes, in the same unit: it installed them and serves them, and for an `observed` the `holds` is the only
+statement of the runner that pins the capture's bytes as served. A `reproduced` gets none: its bytes are
+either the held `authored`'s (a match) or a divergence the statement itself names. `publish` follows the
+same rule (`--no-holds` withholds it there).
+
 A `reproduced` statement always carries: the statement it reproduces (by hash), the workflow and input
 hashes, the output hashes it produced, the result token, and the environment record. Its `result` is one of
 `match`, `diverged` and `not comparable`, so a re-run whose comparison is `unchecked` (different bytes under

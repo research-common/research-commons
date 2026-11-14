@@ -561,3 +561,37 @@ func TestRunPublishAbortLeavesStore(t *testing.T) {
 		t.Fatal("retry did not land")
 	}
 }
+
+// TestRunPublishHoldsRule: run --publish writes the runner's own holds by the same rule as publish
+// (internal/cli.TestPublishHoldsRule): beside each authored and each observed, for its output bytes; never beside a
+// reproduced (its bytes are the held authored's on a match, or a divergence the statement names).
+func TestRunPublishHoldsRule(t *testing.T) {
+	holdsOf := func(w *runWorld) []string {
+		var out []string
+		for _, h := range w.statements("holds") {
+			out = append(out, string(member(h.Body, "content", "digest").(canon.String)))
+		}
+		return out
+	}
+	w := oneOutput(t)
+	want(t, "first", w.publish(w.fake(writes("result.txt", "out-1"))), 0, `"kind":"authored"`)
+	want(t, "match", w.publish(w.fake(writes("result.txt", "out-1"))), 0, `"kind":"reproduced"`, `"state":"match"`)
+	want(t, "diverged", w.publish(w.fake(writes("result.txt", "out-2"))), 0, `"kind":"reproduced"`, `"state":"diverged"`)
+	if h := holdsOf(w); len(h) != 1 || h[0] != run.Digest([]byte("out-1")) {
+		t.Fatalf("authored then two reproduced: holds %v (want only the authored's)", h)
+	}
+	ep := "https://api.example/v1/x"
+	spec := []any{"network", object("required", canon.Array{canon.String(ep)}), "inputs", object(),
+		"outputs", object("a", canon.String("a.json"), "b", canon.String("b.json"))}
+	w = newRunWorld(t, `,"network":["SPEC"]`, nil, spec...)
+	pol, _ := os.ReadFile(w.policy)
+	os.WriteFile(w.policy, bytes.ReplaceAll(pol, []byte("SPEC"), []byte(w.spec)), 0o644)
+	want(t, "observed", w.publish(w.fake(writes("a.json", `{"a":1}`, "b.json", `{"b":2}`))), 0, `"kind":"observed"`)
+	h := holdsOf(w)
+	slices.Sort(h)
+	exp := []string{run.Digest([]byte(`{"a":1}`)), run.Digest([]byte(`{"b":2}`))}
+	slices.Sort(exp)
+	if len(w.statements("observed")) != 2 || !slices.Equal(h, exp) {
+		t.Fatalf("observed: holds %v, want %v", h, exp)
+	}
+}
