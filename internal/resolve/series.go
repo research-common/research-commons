@@ -494,6 +494,11 @@ func (s *Series) Render() string {
 			st += " (" + BoundaryAsCaptured + ")"
 		}
 		fmt.Fprintf(&b, "  segment %s from %s: %s\n", shortMember(g.Member), g.From, st)
+		if g.Layout != nil {
+			// the response-layout read that produced (or could not produce) the state above, in the words the
+			// observation view uses for the same statement; a segment with no layout read renders as it always did
+			fmt.Fprintf(&b, "    %s\n", g.Layout)
+		}
 	}
 	for _, id := range sortedKeys(s.Revised) {
 		fmt.Fprintf(&b, "  %s %s\n", RevisedFrozen, keylog.Short(id))
