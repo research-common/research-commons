@@ -317,16 +317,11 @@ func TestSchemaProvenancePartial(t *testing.T) {
 	if got := st.References(); !slices.Equal(got, want) {
 		t.Fatalf("references %v, want %v", got, want)
 	}
-	// Both `provenance` and `provenance_partial` on one authored: §5 says a run writes the second "in place of" the
-	// first, which describes what the run emits and is not stated as a rule about a statement, and the kinds
-	// table lists `provenance` alone. The schema does not refuse the pair (open point for the note); each member
-	// is still checked on its own, so a malformed one beside a good one is refused.
+	// Both `provenance` and `provenance_partial` on one authored is malformed (§5: the partial form stands in place
+	// of `provenance`, so such an output joins no derivation group; carrying both would let it join one).
 	both := setField(setField(minimal("authored"), "provenance", body("workflow", tDig, "inputs", arr())), "provenance_partial", partialBody())
-	if st, err := readBody(t, "authored", both); err != nil || st.Status != Valid {
-		t.Fatalf("both members, each well-formed: %v %v", err, st)
-	}
-	_, err = readBody(t, "authored", setField(both, "provenance_partial", canon.Int(5)))
-	refused(t, err, refusal.Intrinsic, refusal.MalformedStatement, "body.provenance_partial is not an object")
+	_, err = readBody(t, "authored", both)
+	refused(t, err, refusal.Intrinsic, refusal.MalformedStatement, "body.provenance_partial is present with provenance")
 	// the field is typed on `authored` only: the note defines no other kind carrying it, so elsewhere it stays an
 	// unknown field, retained and ignored (§6)
 	for _, k := range []string{"observed", "reproduced"} {

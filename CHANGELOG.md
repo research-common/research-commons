@@ -90,7 +90,9 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   `environment`) and says every required field of a listed kind is checked at every gate, but the schema never read
   it: a draft with `"provenance_partial":5` was signed, committed and accepted by `pull` and `hub check`. `publish`
   now refuses such a draft before signing, and `pull`, `hub check` and `push` refuse the line, as intrinsic
-  `malformed statement` naming the member. `run --publish` writes a well-formed one, so its output is unchanged.
+  `malformed statement` naming the member. An `authored` carrying both `provenance` and `provenance_partial` is
+  refused the same way (the partial form stands in place of `provenance`, so the output joins no derivation group).
+  `run --publish` writes a well-formed one, so its output is unchanged.
 
 ## [0.5.0-alpha.4] - 2026-11-13
 

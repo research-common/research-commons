@@ -449,6 +449,12 @@ func bodySchema(kind string, body *canon.Object) (bool, *schemaCtx, error) {
 	if kind == "refutes" {
 		return true, ctx, refutesBinding(body)
 	}
+	if kind == "authored" {
+		_, pv := body.Get("provenance")
+		if _, pp := body.Get("provenance_partial"); pv && pp {
+			return true, ctx, bad("body.provenance_partial", "is present with provenance: an authored carries at most one of them")
+		}
+	}
 	if kind == "holds" {
 		_, w := body.Get("withdrawn")
 		if _, l := body.Get("locations"); w && l {

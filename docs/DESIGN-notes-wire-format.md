@@ -506,7 +506,8 @@ field names; absent = the execution note §1 default for the mode). A run with a
 `provenance_partial` object (`workflow` digest R · `inputs` list of digest R, the pinned ones · `unpinned`
 list of string R, the input names · `supplied` object O, unpinned input name → digest of the bytes the run
 staged for it · `environment` O) **in place of** `provenance`, so the output joins no
-derivation group. `provenance` gains `output` string O, the spec's output name the content is, so a re-run of
+derivation group: an `authored` carries at most one of `provenance` and
+`provenance_partial`, and both together are malformed. `provenance` gains `output` string O, the spec's output name the content is, so a re-run of
 a multi-output workflow names which output it re-ran. An acquisition's `capture` gains `endpoints` list of
 string O, `window` O (the shared object) and `environment` O (the record above).
 
