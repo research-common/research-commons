@@ -18,8 +18,9 @@ New here? Read [`docs/WHY.md`](docs/WHY.md): the motivation and the epistemics, 
 signed, append-only statement log per key, a store directory (`rc-store/1`), and a Go command-line tool. It is
 alpha: **the format may still change between alpha releases**, and so may `--json` output, key files and execution
 policy files (all marked provisional). The fixed-root identity profile is a candidate under review: its **reader is
-active** (`rc/2` statements are verified and identity actors evaluated from the statements you hold), and **no
-command writes `rc/2` yet**. There is no importer from the old format.
+active** (`rc/2` statements are verified and identity actors evaluated from the statements you hold), and so is
+its **writer**: `commons identity new|grant|cut` administer an identity and `publish --as <identity> --grant <id>`
+acts for one (signed from a key file; no external-signing package or hardware connector yet). There is no importer from the old format.
 
 The previous alpha (Python CLI, hubs, ledgers) lives on the `main` branch and the `v0.4.0-alpha.1` tag. It gets
 security fixes only. This README and everything under `docs/` marked otherwise describe the new format.
@@ -120,7 +121,7 @@ least one commit.
 | [`docs/DESIGN-notes-storage.md`](docs/DESIGN-notes-storage.md) | the store layout, journal, recovery, locking |
 | [`docs/DESIGN-notes-execution.md`](docs/DESIGN-notes-execution.md) | sandboxed re-execution |
 | [`docs/DESIGN-notes-bitcoin-time.md`](docs/DESIGN-notes-bitcoin-time.md) | time evidence from Bitcoin |
-| [`docs/DESIGN-notes-fixed-root-identity.md`](docs/DESIGN-notes-fixed-root-identity.md) | the candidate identity profile (reader active, no writer) |
+| [`docs/DESIGN-notes-fixed-root-identity.md`](docs/DESIGN-notes-fixed-root-identity.md) | the candidate identity profile (reader and writer active) |
 | [`docs/CONFORMANCE.md`](docs/CONFORMANCE.md) | the test plan: every required outcome and what covers it |
 | [`docs/CLI-OUTPUTS.md`](docs/CLI-OUTPUTS.md) | exit codes, state tokens, error shape |
 | [`docs/KNOWN-LIMITS.md`](docs/KNOWN-LIMITS.md) | open gaps, each with a test |

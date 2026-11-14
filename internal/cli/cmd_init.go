@@ -92,5 +92,6 @@ func initCmd(c *Ctx) (*Obj, int, error) {
 		state, said = "existing", "already a store of this layout; nothing changed"
 	}
 	return newObj().set("store", peerV(dir)).set("layout", refV(store.Layout())).set("result", textV(state)).set("detail", textV(said)).
+		set("recovery", textV(bareKeyRecovery)).
 		set("next", textV("generate a signing key with commons key new --out <file>, then give --key <file> or "+KeyEnv+" to every signing command")), ExitOK, nil
 }

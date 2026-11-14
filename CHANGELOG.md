@@ -36,6 +36,15 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   its inputs or a sibling output. The statements, the runner's `holds` and the output blobs commit as one unit: a
   failure before the commit point removes the blobs it installed, so the store is left as it was. A run that did
   not complete, or a re-run whose comparison could not finish, publishes nothing and says why.
+- **The fixed-root identity writer.** `commons identity new` signs an identity's inception with a fresh root key
+  (a key that already has a log is refused), `commons identity grant` grants a delegate key (pinned at its first
+  line) a permission set, and `commons identity cut` cuts a grant: `--last-good <id|none>` is required, it says it
+  cannot be undone, and it lists which of the delegate's acts keep counting. `publish --as <identity> --grant <id>`
+  (with `--amends` for authored and observed) signs a statement acting for the identity, and refuses it, with
+  nothing written, unless the statements you hold read the act eligible. These statements are written `rc/2`;
+  every other statement is still `rc/1`. Readers from 0.5.0-alpha.4 on verify identity statements; **an
+  older reader cannot** (it keeps them as unverified lines of another major). `key new` and `init` now say that a bare key cannot be
+  recovered and point at identities.
 
 ## [0.5.0-alpha.4] - 2026-11-13
 
@@ -54,8 +63,8 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   `denied` / `unknown` with reasons), `counted` follows the actor's eligibility, and every answer that held
   `rc/2` evidence names the evaluator (version, evidence digest, receipt). A `pull` admission entry naming an
   identity now admits that identity's eligible acts. Past the evaluator's admission cap identity answers read
-  `unknown` (exit 3). A verified `rc/2` line that breaks the profile is kept and labelled `invalid`. No command
-  writes `rc/2` yet; with no `rc/2` statement held every output is unchanged.
+  `unknown` (exit 3). A verified `rc/2` line that breaks the profile is kept and labelled `invalid`. With no
+  `rc/2` statement held every output is unchanged.
 - **An official Python package, `research-commons`** (`python/`). It runs the `commons` binary with `--json` and
   returns what it printed; it reimplements nothing. A problem object the tool prints becomes an exception chosen by
   the exit code (`DidNotStart`, `CouldNotCheck`, `CheckedAndWrong`, `NothingToRerun`, `EnvironmentMismatch`), with

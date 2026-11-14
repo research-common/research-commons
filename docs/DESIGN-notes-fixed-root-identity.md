@@ -1,9 +1,11 @@
 # Fixed-root identity profile (candidate wire, reader active)
 
-**Status: reader active** (`rc/1` + `rc/2` read; no writer yet). The production reader verifies and
-interprets `rc/2` under this profile and evaluates identity actors from the statements it holds; no command
-signs an `rc/2` line, so identities can be read, not created, by this tool. The wire format is still a
-candidate: nothing here is frozen.
+**Status: reader and writer active** (`rc/1` + `rc/2` read and written). The production reader verifies and
+interprets `rc/2` under this profile and evaluates identity actors from the statements it holds. The writer
+signs `rc/2` for the administrative kinds (`identity new`, `identity grant`, `identity cut`) and for an act
+for an identity (`publish --as <I> --grant <G>`); every other statement, raw `rotate_key`/`revoke_key`
+included, is still written `rc/1` (§2.1). No external-signing package or hardware connector is built (§8).
+The wire format is still a candidate: nothing here is frozen.
 This document selects one wire proposal, `fixed-root-v1` on **`rc/2`**, rather than
 changing `rc/1` fields through a critical-extension handler. It does not change
 `wire.Major`, the current release version, old design notes, or any existing conformance
@@ -703,7 +705,24 @@ treats a restored copy as the same root), or one identity per maintainer with ev
 resource listing both under a `rule`. The second gives co-maintenance at the resource
 layer but not for grants: a delegate acts for exactly one I.
 
-No custody drill has been run or recorded; C-id-40 stays pending until one is.
+**Simple-path drill, recorded.** The simple path above is drilled by
+`internal/cli:TestIdentitySimplePathDrill`, through the command line only, for both
+algorithms, over separate stores standing for separate machines. Root machine: `key new`
+(R), `identity new` (I is R's seq-0 inception). Worker machine: `key new` (K); its first
+line, a bare-key `publish`, is D. Root: pull D, `identity grant` I to (K, D). Worker: two
+acts `publish --as I --grant G`; a third reader store pulls them: each `eligible`,
+`counted`, and `verify` names I sole author. Steal: a copy of K's file on another
+machine publishes as I under G, forking K's log. Root: `identity cut` G with
+`--last-good` the last legitimate act L (refused without `--last-good`). Reader, after
+pulling everything: the acts up to L still count; the thief's act counts toward nothing
+(`denied`, `cut_excluded`). Aborts (a cut without `--last-good`, an empty permission set,
+an unknown or stale `--prev`, an act the evidence denies) leave every store byte-identical.
+R's key file restored from a backup copy on a new machine signs as the same root: a new
+grant from it is valid and the act under it `eligible`.
+
+Not drilled: a compromised operational host, hardware or connector signing, and the
+external-signing package. C-id-40 is therefore partial: its simple-path half is the
+test above; the host-compromise and hardware halves stay open.
 
 ## 9. Schemas, vectors and reproducible checks
 
@@ -851,7 +870,7 @@ a scenario.
 | C-id-37 | §2.2, §2.3 (handle ID-37) | Tamper / marker / criticality / canonicalization | Any byte tamper, actor/marker without the other, unknown critical token, or non-canonical signed form: never `eligible`; never better than withholding the line. |
 | C-id-38 | §7 (handle ID-38) | Cache / replay / permutation invariance | Duplicate, reordered or re-serialised delivery of the same evidence gives identical results, evidence digest and receipt; a cache/replay gives the same answer as a cold read. |
 | C-id-39 | §7 (handle ID-39) | Deterministic resource caps | Every evaluation cap reached returns `unknown`/non-passing naming the cap (exit 3), never a partial grant or prefix. |
-| C-id-40 | §8 (handle ID-40) | Root backup / compromised operational host | Root backup restore and a compromised operational host: a recorded drill (custody, not protocol). None is recorded yet (§8). |
+| C-id-40 | §8 (handle ID-40) | Root backup / compromised operational host | Root backup restore and a compromised operational host: a recorded drill (custody, not protocol). The simple-path drill, root restore included, is recorded (§8); a compromised operational host and hardware signing are not. |
 | C-id-41 | §2.3 (handle ID-41) | Marker without actor / actor without marker | An actor without the body marker, or a marker without the critical declaration, is invalid even when correctly signed; never read as bare-key. |
 | C-id-42 | §5.3 (handle ID-42) | Decide grant is not beneficiary role | A `decide` grant does not make K the beneficiary: `decide` by an actor that is not the pinned edition's beneficiary is `denied`. |
 | C-id-43 | §5.3 (handle ID-43) | Cross-key exact-intent continuity | `progress`/`withdraw` by K2 for I continues K1-for-I's exact intent; a bare-key K1 intent is not continued; a withdrawn attempt cannot be reopened. |

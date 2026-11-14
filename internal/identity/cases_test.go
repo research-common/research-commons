@@ -103,7 +103,7 @@ func TestCaseRootForkGrantsCoexist(t *testing.T) {
 // Authority is a function of held public bytes only: with every private key discarded, admitting the same lines
 // gives the same receipt, digest and answers.
 func TestCaseRootKeyLossChangesNothing(t *testing.T) {
-	conformance.Partial(t, "C-id-18", "Admit takes bytes only, so evaluation cannot depend on key custody; restoring the same root key to resume administration is a writer concern, not built")
+	conformance.Partial(t, "C-id-18", "Admit takes bytes only, so evaluation cannot depend on key custody; restoring the same root key file to resume administration is drilled through the commands in internal/cli TestIdentitySimplePathDrill")
 	w := base(t)
 	w.sign(stmt{name: "C1", by: "R", parent: "G2", kind: "identity_cut", body: cutBody(w, "G1", "A1")})
 	before := w.admit()

@@ -49,10 +49,11 @@
         "internal/cli:TestIdentityReaderVectorsThroughPull",
         "internal/cli:TestIdentityReaderTrustFloor",
         "internal/hubcheck:TestActorLabels",
-        "internal/cli:TestHubCheckLabelsActor"
+        "internal/cli:TestHubCheckLabelsActor",
+        "internal/cli:TestPublishAs"
       ],
       "conformance": "covers",
-      "remaining": "Covered at the evaluator (the published signed rc/2 act, both algorithms, eligible through Admit and the actor evaluator, with I, G, D and the root lineage in its basis) and through the commands: pulled, `show` prints the actor eligible and counted, `verify` names the identity sole author, and the pull trust floor admits I's act for an {identity: I} entry. No command signs rc/2 yet."
+      "remaining": "Covered at the evaluator (the published signed rc/2 act, both algorithms, eligible through Admit and the actor evaluator, with I, G, D and the root lineage in its basis) and through the commands: pulled, `show` prints the actor eligible and counted, `verify` names the identity sole author, and the pull trust floor admits I's act for an {identity: I} entry. Written by the commands too: identity new, identity grant and publish --as sign the inception, grant and act, read back eligible and counted (TestPublishAs)."
     },
     {
       "handle": "ID-03",
@@ -266,10 +267,11 @@
       "scenario": "Root lost but public evidence held",
       "schema_vectors": [],
       "isolated_tests": [
-        "internal/identity:TestCaseRootKeyLossChangesNothing"
+        "internal/identity:TestCaseRootKeyLossChangesNothing",
+        "internal/cli:TestIdentitySimplePathDrill"
       ],
       "conformance": "partial",
-      "remaining": "Authority must not depend on private-key availability; custody recovery is separate."
+      "remaining": "Authority must not depend on private-key availability; custody recovery is separate. Through the commands, a root key file restored from backup signs a valid grant for the same identity (TestIdentitySimplePathDrill); the evaluator half stays partial (key-loss of a delegate, not only the root, is not tested)."
     },
     {
       "handle": "ID-19",
@@ -631,9 +633,11 @@
       "case": "C-id-40",
       "scenario": "Root backup / compromised operational host",
       "schema_vectors": [],
-      "isolated_tests": [],
-      "conformance": "pending",
-      "remaining": "Pending: no test. A recorded custody drill (profile §8): restore of the root key file from backup, and a compromised operational host; not a unit test. No drill is recorded and no signer adapter is claimed."
+      "isolated_tests": [
+        "internal/cli:TestIdentitySimplePathDrill"
+      ],
+      "conformance": "partial",
+      "remaining": "Partial: the simple path (profile §8, rc-key/0 files, the CLI signs) is drilled through the commands on separate stores, both algorithms: inception, grant, acts counted, a stolen worker key cut at last_good, aborts leave nothing appended, a root key file restored from backup signs as the same root. A compromised operational host and hardware or connector signing are not drilled; no signer adapter is claimed."
     },
     {
       "handle": "ID-41",

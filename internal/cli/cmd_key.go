@@ -24,6 +24,12 @@ func init() {
 		Run:  keyShowCmd})
 }
 
+// bareKeyRecovery is the onboarding label (Gate W3) printed by key new and init: a bare key has no recovery, and an
+// identity is how authority outlives one key.
+const bareKeyRecovery = "a bare key is unrecoverable: if this file is lost, nothing can sign as it again, and if it is stolen, the thief signs as you until you revoke it; " +
+	"what it signed stays attributed to this key alone. For authority that survives losing a working key, create an identity " +
+	"(commons identity new with a separate root key kept offline) and act for it with publish --as; a cut grant leaves the identity's earlier acts counting"
+
 func checkAlg(v string) error {
 	if _, ok := secretField[v]; !ok {
 		return errors.New("the algorithm must be " + wire.AlgEd25519 + " or " + wire.AlgEIP191)
@@ -63,6 +69,7 @@ func keyNewCmd(c *Ctx) (*Obj, int, error) {
 	clear(b)
 	return newObj().set("signer", refV(signer)).set("alg", textV(alg)).set("file", peerV(out)).
 		set("mode", textV("0600")).set("format", textV(KeyFormat)).
+		set("recovery", textV(bareKeyRecovery)).
 		set("next", textV("back the file up once, somewhere only you can read; sign with --key <file> or "+KeyEnv+"=<file>")), ExitOK, nil
 }
 

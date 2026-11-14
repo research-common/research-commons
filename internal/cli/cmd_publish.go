@@ -168,13 +168,23 @@ func init() {
 		Flag{Name: "note", Value: "text", Help: "describes: the note"},
 		Flag{Name: "of", Value: "id", Help: "retracts: the statement retracted", Check: checkIDFlag},
 		Flag{Name: "reason", Value: "text", Help: "retracts: the reason"},
+		Flag{Name: "as", Value: "identity", Help: "act for a fixed-root identity (its inception id): the statement is written rc/2 with x_actor_v1 {identity, grant}; needs --grant", Check: checkIDFlag},
+		Flag{Name: "grant", Value: "id", Help: "with --as: the grant (its statement id) your key acts under", Check: checkIDFlag},
+		Flag{Name: "amends", Value: "id[,id…]", Help: "with --as, authored or observed only: the identity's earlier claims this one amends (identity profile §5)", Check: func(v string) error {
+			for _, x := range strings.Split(v, ",") {
+				if !isID(x) {
+					return errors.New("not a comma-separated list of statement ids")
+				}
+			}
+			return nil
+		}},
 	)
 	for _, d := range publishDisclosures {
 		flags = append(flags, disclosureFlag(d.Field, d.Shape))
 	}
 	Register(&Command{Name: "publish", Summary: "sign and commit a statement (authored with its bytes, holds, describes, retracts, or a draft)",
 		Store: true, Writes: true, Flags: flags, Prepare: preparePublish, Run: publishCmd,
-		Help: "Signs with --key (or $" + KeyEnv + ") and commits through the store's journal: the blob and its statements land together or not at all. A draft is never stored unsigned. Your log's next seq and prev come from the statements this store holds; a FORK in your log is refused until you name --prev. --intended-for runs the named edition's rules first and refuses on fail. With availability withheld and content under " + strconv.Itoa(WithheldWarnBelow) + " bytes it warns that short content may be enumerable against its hash (a heuristic; include a nonce) and proceeds; the warning is not recorded. A rotate_key draft is signed as written: none of `commons rotate`'s checks run (successor, key events already held, merged tips), so the way out after a compromise stays open; it warns and proceeds."})
+		Help: "Signs with --key (or $" + KeyEnv + ") and commits through the store's journal: the blob and its statements land together or not at all. A draft is never stored unsigned. Your log's next seq and prev come from the statements this store holds; a FORK in your log is refused until you name --prev. --intended-for runs the named edition's rules first and refuses on fail. With availability withheld and content under " + strconv.Itoa(WithheldWarnBelow) + " bytes it warns that short content may be enumerable against its hash (a heuristic; include a nonce) and proceeds; the warning is not recorded. A rotate_key draft is signed as written: none of `commons rotate`'s checks run (successor, key events already held, merged tips), so the way out after a compromise stays open; it warns and proceeds. With --as <identity> --grant <id> the statement acts for a fixed-root identity (rc/2, the actor in the signed envelope): it is refused, nothing signed, unless the identity evaluator over the statements this store holds plus this line reads the act eligible (exit 2 when it is denied, naming why; exit 3 when it cannot decide, e.g. the grant or the identity is not held). The holds written beside an authored stays your key's own (rc/1): your key holds the bytes."})
 	tflags := append(slices.Clone(writerFlags),
 		Flag{Name: "name", Value: "text", Help: "a new task's name"},
 		Flag{Name: "task", Value: "id", Help: "an existing task (its genesis id): publish a new edition after its current one", Check: checkIDFlag},
@@ -195,6 +205,9 @@ type pubPrep struct {
 	// intended is the pre-pin request: resource and edition ids.
 	resource, edition string
 	holds             bool
+	// acting for an identity (--as, --grant), and the claims it amends; nil when the statement is bare-key
+	actor  *wire.Actor
+	amends []string
 	// task
 	taskName, taskID string
 	contract         *canon.Object
@@ -258,7 +271,7 @@ func preparePublish(c *Ctx) *Problem {
 	var bodyFlags []string
 	for _, f := range c.Cmd.Flags {
 		if _, ok := c.Flags[f.Name]; ok && !slices.ContainsFunc(writerFlags, func(w Flag) bool { return w.Name == f.Name }) &&
-			!slices.Contains([]string{"draft", "kind", "content", "intended-for", "no-holds"}, f.Name) {
+			!slices.Contains([]string{"draft", "kind", "content", "intended-for", "no-holds", "as", "grant", "amends"}, f.Name) {
 			bodyFlags = append(bodyFlags, f.Name)
 		}
 	}
@@ -402,6 +415,9 @@ func preparePublish(c *Ctx) *Problem {
 	}
 	_, noHolds := c.Flag("no-holds")
 	p.holds = kind == "authored" && !noHolds
+	if prob := prepareActor(c, p); prob != nil {
+		return prob
+	}
 	if prob := prepareCommon(c, p); prob != nil {
 		return prob
 	}
@@ -684,6 +700,13 @@ func publishCmd(c *Ctx) (*Obj, int, error) {
 		out.set("warnings", texts(warns...))
 	}
 	drafts := []wire.Draft{{Kind: p.kind, Body: body}}
+	if p.actor != nil {
+		d, err := wire.IdentityDraft(drafts[0], p.actor, amendsMarker(p.amends))
+		if err != nil {
+			return nil, 0, writeRefused(err)
+		}
+		drafts[0] = d
+	}
 	if p.holds {
 		hb := &canon.Object{Keys: []string{"content"}, Members: map[string]canon.Value{"content": body.Members["content"]}}
 		drafts = append(drafts, wire.Draft{Kind: "holds", Body: hb})
@@ -691,6 +714,13 @@ func publishCmd(c *Ctx) (*Obj, int, error) {
 	sts, err := signAll(p.key.Key, h, p.ts, drafts)
 	if err != nil {
 		return nil, 0, writeRefused(err)
+	}
+	if p.actor != nil {
+		a, prob := actingAnswer(c, sts[0])
+		if prob != nil {
+			return nil, 0, prob
+		}
+		out.set("actor", a)
 	}
 	var blobs []store.Digest
 	if digest != "" && (p.content != "" || c.Store.HasBlob(store.Digest(digest))) {

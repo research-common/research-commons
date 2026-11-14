@@ -81,7 +81,7 @@ evidence never becomes eligible just because its signature verifies or a valid c
 the same body. This separation adds no identity profile, actor inference, key fallback or reader
 registration; existing views and legacy snapshots keep their current behavior.
 
-### Identity admission (reader active, no writer)
+### Identity admission (reader and writer active)
 
 `wire.NewIdentityReader()` reads rc/1 exactly as `wire.Read` accepts it, plus the candidate rc/2 of
 `docs/DESIGN-notes-fixed-root-identity.md`. It verifies the signature before interpreting signer-chosen
@@ -89,8 +89,14 @@ fields, so an authentic but malformed line is kept as `Invalid` (attributable, n
 being refused. `wire.ReadStored` (the dual reader: rc/1 as `wire.Read`, rc/2 as the identity reader) is the
 production line reader: the store, the gates, `hub check` and every view read through it, and
 `keylog.NewStoredStore()` places lines with it. `wire.Read` and the zero `wire.Reader` stay the rc/1-only reader
-the differential tests compare against (for them rc/2 is an unverified other-major line); `Major` is the writer's
-major (1), `ReaderMajors` the majors read.
+the differential tests compare against (for them rc/2 is an unverified other-major line); `Major` is rc/1's
+major, `ReaderMajors` the majors read. The writer's major is per statement: `wire.WriterMajor(kind, acting)` is
+rc/2 for `identity_inception`/`identity_grant`/`identity_cut` and for an act carrying `x_actor_v1`, rc/1 for
+everything else (raw key events included), and `wire.IdentityDraft` adds rc/2's `crit`, body marker and actor.
+`Write` reads an rc/2 draft back through the identity reader, so the writer cannot sign what the reader would
+hold `invalid`. The commands are `identity new|grant|cut` (`cli/cmd_identity.go`) and `publish --as/--grant`
+(`cli/cmd_publish_as.go`), which signs an act only when the evaluator over the held lines plus the new one
+reads it eligible.
 
 `identity.Admit` is the only production constructor of `identitymodel` facts (a test enforces it). A fact is
 authenticated only when this reader verified its signature, or when a verified line of the same key commits to

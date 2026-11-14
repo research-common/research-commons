@@ -24,7 +24,10 @@ import (
 	"github.com/research-common/research-commons/internal/sig"
 )
 
-// Major is the one format major this reader implements.
+// Major is the rc/1 major: the one major Read (and the zero Reader) implements, and the major this tool's writer
+// signs every bare-key statement in. It is not the set of majors the production reader reads (ReaderMajors), and
+// not the major of every statement the writer signs: a statement acting for a fixed-root identity is written in
+// CandidateMajor (WriterMajor, write.go).
 const Major = 1
 
 // MaxSignedString is the statement size bound of §1: the signed string is at most 65 536 bytes.

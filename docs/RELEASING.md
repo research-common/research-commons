@@ -120,6 +120,13 @@ A plan, not a schedule; the maintainers make the final call and may revise this 
 9. **Hub template pin.** In `research-commons-hub-template`, on its `next` branch, set
    `TOOL_REF` to the tag's **full 40-character commit SHA** (immutable), with the tag as a
    trailing comment (`# v0.5.0-alpha.1`).
+10. **A release that changes the set of majors the writer signs** (for example the first release that writes
+    `rc/2`). Do all of the above, and also: (a) the release notes and the changelog entry say, in a sentence of
+    their own, which statements this release writes in the new major and that a reader from an earlier release
+    cannot read them (it keeps them unverified, as another major's lines); (b) name the earliest release whose
+    reader reads the new major, and check that it is already tagged and published (a writer major never ships in
+    the same release as the first reader of it); (c) bump the hub template pin (step 9) in the same sitting, so
+    hub checks read what the tool now writes; (d) state that statements in the old major are written unchanged.
 
 ## Ordering relative to open PRs
 
