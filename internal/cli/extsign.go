@@ -474,7 +474,7 @@ func stalePrepare(prepared, now head) *Problem {
 	}
 	return &Problem{Slug: "stale-prepare", Title: "refused: your log moved since the package was prepared", Class: refusal.Policy, Scope: "this key's log",
 		Detail: "the package was prepared at " + at(prepared) + "; the next line here now goes after " + at(now) + "; the signature covers the old position, so it is not appended; nothing was appended",
-		Next:   "prepare the statement again over the statements held now and sign the new package (or name the prepared line with --prev to fork deliberately)", Exit: exitWriterRefused}
+		Next:   "prepare the statement again over the statements held now and sign the new package (or name the prepared line with --prev to fork deliberately: a fork is not a quiet retry, every read command discloses it)", Exit: exitWriterRefused}
 }
 
 // checkPrepared refuses a completion whose signer's log is not at the prepared head, before the command's own

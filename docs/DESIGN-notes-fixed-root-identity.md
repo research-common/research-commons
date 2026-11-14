@@ -690,6 +690,16 @@ through the same journal unit. Every refusal appends nothing. Its format tag,
 not the finalized interchange schema this section leaves open. A package carries one
 statement, so `publish --as --prepare` of `authored` needs `--no-holds`.
 
+What the signing device signs is the decoded `pae` bytes, unchanged. For `ed25519` the
+signature is the 64-byte RFC 8032 signature over those bytes, written as 128 lowercase
+hex. For `eip191-secp256k1` it is EIP-191 `personal_sign` over those bytes: keccak256 of
+`"\x19Ethereum Signed Message:\n"`, the decimal byte length of the PAE, then the PAE
+itself, written as `0x` + 130 lowercase hex (`r ‖ s ‖ v`, `v` as 27 or 28, the form
+`personal_sign` implementations return). Never hash the PAE first, and never sign the
+summary. The `pae_sha256` that `--prepare` prints can travel to the signing machine by a
+separate channel: hashing the decoded `pae` there and comparing it is how the signer checks
+the bytes they sign are the ones prepared.
+
 Ledger Nano X, Flex and Stax are **untested targets** for Ethereum-account EIP-191 via
 an explicitly tested connector. Test firmware/app/connector, exact payload fidelity,
 size limits, display readability and rejection/disconnect separately per model.
