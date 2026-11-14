@@ -121,10 +121,27 @@ func (e *ProofError) Error() string {
 // file digest with anything; the verifier does (§4 check 7). A proof over lim.ProofBytes is the caller's
 // operational refusal and is never handed here (§4 check 5); ParseProof refuses it too, as a guard.
 func ParseProof(b []byte, lim Limits) (*Proof, error) {
+	p, _, err := parseFile(b, lim, false)
+	return p, err
+}
+
+// parseFile is the one parser behind ParseProof and ParseTree. With build set it also returns the operation tree;
+// every refusal is the same either way.
+func parseFile(b []byte, lim Limits, build bool) (*Proof, *Node, error) {
 	if lim == (Limits{}) {
 		lim = DefaultLimits()
 	}
 	p := &parser{b: b, lim: lim, out: &Proof{}}
+	var root *Node
+	if build {
+		root = &Node{}
+	}
+	pr, err := p.file(root)
+	return pr, root, err
+}
+
+func (p *parser) file(root *Node) (*Proof, error) {
+	b, lim := p.b, p.lim
 	if len(b) > lim.ProofBytes {
 		return nil, p.fail("proof is %d bytes, over the %d-byte limit", len(b), lim.ProofBytes)
 	}
@@ -157,7 +174,7 @@ func ParseProof(b []byte, lim Limits) (*Proof, error) {
 		return nil, err
 	}
 	copy(p.out.FileDigest[:], d)
-	if err := p.timestamp(d, 1); err != nil {
+	if err := p.timestamp(d, 1, root); err != nil {
 		return nil, err
 	}
 	if p.pos != len(b) {
@@ -237,12 +254,15 @@ func (p *parser) varbytes(min, max int) ([]byte, error) {
 
 // timestamp reads one node of the tree for message msg: (ff item)* item, where an item is an attestation or an
 // operation followed by the node for its result.
-func (p *parser) timestamp(msg []byte, depth int) error {
+func (p *parser) timestamp(msg []byte, depth int, n *Node) error {
 	if depth > p.lim.Depth {
 		return p.fail("tree deeper than %d", p.lim.Depth)
 	}
 	if depth > p.out.Depth {
 		p.out.Depth = depth
+	}
+	if n != nil {
+		n.Msg = append([]byte(nil), msg...)
 	}
 	// The library holds a node's operations in a dict keyed by (tag, argument) and its attestations in a set, so a
 	// repeated sibling silently replaces or merges with the first. Two parsers could then disagree about which
@@ -260,7 +280,7 @@ func (p *parser) timestamp(msg []byte, depth int) error {
 			}
 		}
 		at := p.pos - 1
-		key, err := p.item(tag, msg, depth)
+		key, err := p.item(tag, msg, depth, n)
 		if err != nil {
 			return err
 		}
@@ -278,19 +298,19 @@ func (p *parser) timestamp(msg []byte, depth int) error {
 }
 
 // item reads one attestation or operation and returns its sibling key: the tag and the serialized argument or
-// attestation bytes.
-func (p *parser) item(tag byte, msg []byte, depth int) (string, error) {
+// attestation bytes. When n is not nil (tree mode) the item is added to n.
+func (p *parser) item(tag byte, msg []byte, depth int, n *Node) (string, error) {
 	p.out.Nodes++
 	if p.out.Nodes > p.lim.Nodes {
 		return "", p.fail("more than %d nodes", p.lim.Nodes)
 	}
 	start := p.pos - 1
 	if tag == tagAttestation {
-		err := p.attestation(msg)
+		err := p.attestation(msg, n)
 		return string(p.b[start:p.pos]), err
 	}
 	at := p.pos - 1
-	res, err := p.op(tag, msg)
+	res, arg, err := p.op(tag, msg)
 	if err != nil {
 		return "", err
 	}
@@ -298,58 +318,81 @@ func (p *parser) item(tag byte, msg []byte, depth int) (string, error) {
 	if len(res) > maxMsg {
 		return "", p.failAt(at, "operation 0x%02x result is %d bytes, over %d", tag, len(res), maxMsg)
 	}
-	return key, p.timestamp(res, depth+1)
+	var child *Node
+	if n != nil {
+		child = &Node{}
+		n.Ops = append(n.Ops, TreeOp{Tag: tag, Arg: append([]byte(nil), arg...), Child: child})
+	}
+	return key, p.timestamp(res, depth+1, child)
 }
 
-func (p *parser) op(tag byte, msg []byte) ([]byte, error) {
+// op reads one operation's argument (if it has one) and applies the operation to msg. It returns the result and
+// the argument.
+func (p *parser) op(tag byte, msg []byte) (res, arg []byte, err error) {
 	at := p.pos - 1
 	if len(msg) > maxMsg {
-		return nil, p.failAt(at, "message over %d bytes", maxMsg)
+		return nil, nil, p.failAt(at, "message over %d bytes", maxMsg)
+	}
+	if tag == opAppend || tag == opPrepend {
+		if arg, err = p.varbytes(1, maxMsg); err != nil {
+			return nil, nil, err
+		}
+	}
+	res, why := applyOp(tag, arg, msg)
+	if why != "" {
+		return nil, nil, p.failAt(at, "%s", why)
+	}
+	return res, arg, nil
+}
+
+// applyOp computes one operation of §5.1 on msg. A non-empty why is the refusal (the parser places it).
+func applyOp(tag byte, arg, msg []byte) (res []byte, why string) {
+	if len(msg) > maxMsg {
+		return nil, fmt.Sprintf("message over %d bytes", maxMsg)
 	}
 	switch tag {
 	case opAppend, opPrepend:
-		arg, err := p.varbytes(1, maxMsg)
-		if err != nil {
-			return nil, err
+		if len(arg) < 1 || len(arg) > maxMsg {
+			return nil, fmt.Sprintf("length %d outside %d..%d", len(arg), 1, maxMsg)
 		}
 		out := make([]byte, 0, len(msg)+len(arg))
 		if tag == opAppend {
-			return append(append(out, msg...), arg...), nil
+			return append(append(out, msg...), arg...), ""
 		}
-		return append(append(out, arg...), msg...), nil
+		return append(append(out, arg...), msg...), ""
 	case opReverse:
 		if len(msg) == 0 {
-			return nil, p.failAt(at, "reverse of an empty message")
+			return nil, "reverse of an empty message"
 		}
 		out := make([]byte, len(msg))
 		for i, c := range msg {
 			out[len(msg)-1-i] = c
 		}
-		return out, nil
+		return out, ""
 	case opHexlify:
 		if len(msg) == 0 || len(msg) > maxMsg/2 {
-			return nil, p.failAt(at, "hexlify of a %d-byte message", len(msg))
+			return nil, fmt.Sprintf("hexlify of a %d-byte message", len(msg))
 		}
-		return []byte(hex.EncodeToString(msg)), nil
+		return []byte(hex.EncodeToString(msg)), ""
 	case opSHA1:
 		h := sha1.Sum(msg) //nolint:gosec
-		return h[:], nil
+		return h[:], ""
 	case opRIPEMD160:
 		h := ripemd160.New()
 		h.Write(msg)
-		return h.Sum(nil), nil
+		return h.Sum(nil), ""
 	case opSHA256:
 		h := sha256.Sum256(msg)
-		return h[:], nil
+		return h[:], ""
 	case opKeccak256:
 		h := sha3.NewLegacyKeccak256()
 		h.Write(msg)
-		return h.Sum(nil), nil
+		return h.Sum(nil), ""
 	}
-	return nil, p.failAt(at, "unknown operation tag 0x%02x", tag)
+	return nil, fmt.Sprintf("unknown operation tag 0x%02x", tag)
 }
 
-func (p *parser) attestation(msg []byte) error {
+func (p *parser) attestation(msg []byte, n *Node) error {
 	t, err := p.take(8)
 	if err != nil {
 		return err
@@ -397,6 +440,9 @@ func (p *parser) attestation(msg []byte) error {
 		}
 	default:
 		p.out.Unsupported++
+	}
+	if n != nil {
+		n.Attestations = append(n.Attestations, TreeAttestation{Tag: tag, Payload: append([]byte(nil), payload...)})
 	}
 	return nil
 }
