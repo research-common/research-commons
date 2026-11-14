@@ -395,7 +395,7 @@ func TestExternalSigningAborts(t *testing.T) {
 			}
 			before = storeBytes(t, root.store)
 			r := root.complete([]string{"identity", "grant"}, gp, good)
-			if r.code != ExitWrong || !strings.Contains(r.stdout, "stale-prepare") {
+			if r.code != ExitWrong || !strings.Contains(r.stdout, "stale-prepare") || !strings.Contains(r.stdout, "your log moved since the package was prepared") {
 				t.Fatalf("stale prepare: %d %s", r.code, r.stdout)
 			}
 			if storeBytes(t, root.store) != before {
@@ -498,4 +498,43 @@ func nonCanonicalEIP191(t *testing.T, canonical string) string {
 		t.Fatal("the re-encoding is not the same signature")
 	}
 	return "0x" + hex.EncodeToString(out)
+}
+
+// TestSignExternalRebuiltEnvelope: the innermost completion check on its own. At the prepared head, a statement
+// rebuilt from the package's inputs that differs in any envelope member (here ts, then body) is refused
+// stale-prepare naming the member, before any signature is attached; the prepared one is signed and reads valid.
+func TestSignExternalRebuiltEnvelope(t *testing.T) {
+	k := testKey("rebuilt")
+	d, _ := wire.IdentityDraft(wire.Draft{Kind: "identity_inception", Body: objOf("profile", canon.String(wire.FixedRootProfile))}, nil, nil)
+	prep := &externalKey{signer: k.Signer(), alg: k.Alg()}
+	sts, err := signExternal(prep, head{}, "2026-11-14T00:00:00Z", []wire.Draft{d})
+	if err != nil || sts[0].line != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	env := envelopeOf(sts[0].st).(*canon.Object)
+	done := &externalKey{signer: k.Signer(), alg: k.Alg(), sig: k.Sign(sts[0].st.SignedString), env: env}
+	if _, err := signExternal(done, head{}, "2026-11-14T00:00:01Z", []wire.Draft{d}); err == nil {
+		t.Fatal("a rebuilt ts was not refused")
+	} else if p, ok := err.(*Problem); !ok || p.Slug != "stale-prepare" || p.Scope != "envelope member ts" {
+		t.Fatalf("a rebuilt ts: %v", err)
+	}
+	d2, _ := wire.IdentityDraft(wire.Draft{Kind: "identity_inception", Body: objOf("profile", canon.String("fixed-root-v2"))}, nil, nil)
+	if _, err := signExternal(done, head{}, "2026-11-14T00:00:00Z", []wire.Draft{d2}); err == nil || !isProblem(err, "stale-prepare", "envelope member body") {
+		t.Fatalf("a rebuilt body was not refused: %v", err)
+	}
+	if _, err := signExternal(done, head{seq: 1, prev: sts[0].st.ID}, "2026-11-14T00:00:00Z", []wire.Draft{d}); err == nil || !isProblem(err, "stale-prepare", "this key's log") {
+		t.Fatalf("a moved head was not refused: %v", err)
+	}
+	got, err := signExternal(done, head{}, "2026-11-14T00:00:00Z", []wire.Draft{d})
+	if err != nil || got[0].st.ID != sts[0].st.ID || !got[0].st.Verified {
+		t.Fatalf("the prepared statement: %v", err)
+	}
+	if _, err := signExternal(done, head{}, "2026-11-14T00:00:00Z", []wire.Draft{d, d}); err == nil {
+		t.Fatal("two statements in one package")
+	}
+}
+
+func isProblem(err error, slug, scope string) bool {
+	p, ok := err.(*Problem)
+	return ok && p.Slug == slug && p.Scope == scope
 }
