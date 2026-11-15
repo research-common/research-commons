@@ -221,6 +221,7 @@ func TestPushAnchorGate(t *testing.T) {
 // declaring statement) while the statements themselves are carried; without the blob the push is clean; with
 // a holds (the reveal) also committed, the blob is carried.
 func TestPushWithheldBytes(t *testing.T) {
+	conformance.Partial(t, "C-core-148", "push --dry-run only: the refusal, the clean push without the blob and the carried blob after the reveal are asserted; nothing is transported yet, so the transport half waits for push")
 	p := newPushWorld(t)
 	data := "held-out pool with a 128-bit nonce 4f1c9a2e7b3d5a60c8e1f2a3b4c5d6e7"
 	c := p.file("seed", data)
