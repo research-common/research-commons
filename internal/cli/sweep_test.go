@@ -27,6 +27,8 @@ func (w *world) gitHub() {
 	gitIn(t, w.root, "init", "-q", "-b", "main")
 	gitIn(t, w.root, "add", "-A")
 	gitIn(t, w.root, "commit", "-q", "-m", "fixture")
+	// a remote named origin (configuration only, nothing is fetched): push --dry-run --base main sweeps it
+	gitIn(t, w.root, "remote", "add", "origin", w.root)
 }
 
 func gitIn(t testing.TB, dir string, args ...string) string {
@@ -85,6 +87,8 @@ func (w *world) sweepNonStore(c *Command) []string {
 	switch c.Name {
 	case "hub check":
 		return []string{"hub", "check"}
+	case "push":
+		return []string{"push", "--dry-run", "--base", "main"}
 	case "init":
 		return []string{"init", w.root} // an existing store: idempotent, exit 0, nothing changes
 	}
@@ -96,6 +100,12 @@ func (w *world) badInvocations(c *Command) [][]string {
 	switch c.Name {
 	case "hub check":
 		return [][]string{{"--base", "no-such-rev"}, {"--base", "--output=/tmp/x"}, {"--store", w.root}}
+	case "push":
+		// no --dry-run (no transport is built); a base that is not here; an unknown remote; a remote name that is a
+		// path; an anchor policy that is neither; --store (push reads the checkout it runs in); the remote's default
+		// branch not recorded
+		return [][]string{{"--base", "main"}, {"--dry-run", "--base", "no-such-rev"}, {"--dry-run", "--base", "main", "--remote", "nope"},
+			{"--dry-run", "--remote", "../x"}, {"--dry-run", "--anchor-policy", "maybe"}, {"--dry-run", "--store", w.root}, {"--dry-run"}}
 	case "pull":
 		d := w.pkgDir()
 		return [][]string{{filepath.Join(d, "absent")}, {filepath.Join(d, "rc-store")}, {w.root}, {d, "--override", "Bad Name=x"},

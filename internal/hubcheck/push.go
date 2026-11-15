@@ -100,7 +100,8 @@ func PlanPush(dir string, cfg PushConfig) (*PushPlan, error) {
 	if err != nil {
 		return nil, err
 	}
-	rep, err := gate.Push(p.Package, p.Held, p.Policy, gate.Options{})
+	// the options hub check passes for a change: push previews that answer, labels included
+	rep, err := gate.Push(p.Package, p.Held, p.Policy, gate.Options{ActorLabels: true})
 	if err != nil {
 		return nil, err
 	}
