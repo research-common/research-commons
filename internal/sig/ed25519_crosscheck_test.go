@@ -3,6 +3,7 @@ package sig_test
 import (
 	"crypto/ed25519"
 	"crypto/sha256"
+	"crypto/sha512"
 	"encoding/hex"
 	"math/big"
 	"strings"
@@ -103,6 +104,18 @@ func isID(p point) bool { return p.x.Sign() == 0 && p.y.Cmp(big.NewInt(1)) == 0 
 // 2 and 3 on the public key, then on R, which is what internal/sig does; the verdict is identical either way and
 // only the label of the refusing step can differ (when A fails step 3 and R fails step 2).
 func refVerify(pub, msg, signature []byte, perPoint bool) string {
+	if step := refPre(pub, signature, perPoint); step != "" {
+		return step
+	}
+	if !ed25519.Verify(ed25519.PublicKey(pub), msg, signature) {
+		return "4"
+	}
+	return ""
+}
+
+// refPre is the pinned rule's steps 1–3 (and the length check) on math/big alone: "" when the signature gets to
+// step 4, else the step that refused.
+func refPre(pub, signature []byte, perPoint bool) string {
 	if len(pub) != 32 || len(signature) != 64 {
 		return "length"
 	}
@@ -136,7 +149,47 @@ func refVerify(pub, msg, signature []byte, perPoint bool) string {
 			}
 		}
 	}
-	if !ed25519.Verify(ed25519.PublicKey(pub), msg, signature) {
+	return ""
+}
+
+// refBase is the RFC 8032 base point B: y = 4/5, x even.
+var refBase = func() point {
+	b, ok := decode(unhexBytes("5866666666666666666666666666666666666666666666666666666666666666"))
+	if !ok {
+		panic("base point does not decode")
+	}
+	return b
+}()
+
+func unhexBytes(s string) []byte {
+	b, err := hex.DecodeString(s)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
+func samePoint(p, q point) bool { return p.x.Cmp(q.x) == 0 && p.y.Cmp(q.y) == 0 }
+
+// refVerifyPure is refVerify with step 4 written out as well: the check [S]B = R + [k]A, k = SHA-512(R ‖ A ‖ M)
+// mod L (RFC 8032 §5.1.7), over the points steps 2 and 3 admitted. Nothing in it calls an Ed25519 library: it is
+// the whole of the pinned rule on math/big, crypto/sha512 and nothing else. For a prime-order A and R the
+// cofactored and cofactorless equations agree (wire-format note §4), so the one equation stands for both. It
+// returns what refVerify returns: "" for valid, else the step that refused.
+func refVerifyPure(pub, msg, signature []byte, perPoint bool) string {
+	if step := refPre(pub, signature, perPoint); step != "" {
+		return step
+	}
+	a, _ := decode(pub)
+	r, _ := decode(signature[:32])
+	h := sha512.New()
+	h.Write(signature[:32])
+	h.Write(pub)
+	h.Write(msg)
+	k := new(big.Int).Mod(le(h.Sum(nil)), refL)
+	lhs := scalarMult(le(signature[32:]), refBase)
+	rhs := add(r, scalarMult(k, a))
+	if !samePoint(lhs, rhs) {
 		return "4"
 	}
 	return ""
@@ -181,7 +234,7 @@ func unhex(t *testing.T, s string) []byte {
 // mutated signatures (bit flips in R, S, A and M; S + L; the identity and small-order encodings as R and A) runs
 // through both.
 func TestEd25519TwoImplementations(t *testing.T) {
-	conformance.Partial(t, "C-core-144", "(b) verdicts of internal/sig and an independent standard-library implementation agree on every vector: checked here; (a) and (c) are checked in keylog and wire, still on one implementation")
+	conformance.Partial(t, "C-core-144", "(b) raw verdicts of internal/sig and an independent standard-library implementation agree on every vector: checked here; the case itself is covered by sig.TestStatementsTwoImplementations")
 	v, err := conformance.LoadVectors()
 	if err != nil {
 		t.Fatal(err)

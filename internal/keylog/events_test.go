@@ -76,7 +76,7 @@ func eipKey(name string) wire.Key {
 // statement chains in its own log, and the succession is reported across algorithms. Every delivery order
 // (into either log first) gives the same answer.
 func TestCrossAlgorithmRotation(t *testing.T) {
-	conformance.Partial(t, "C-core-144", "(a) cross-algorithm rotation chain: checked here; (b), (c): see the wire tests; verdicts across two Ed25519 libraries not run")
+	conformance.Partial(t, "C-core-144", "(a) cross-algorithm rotation chain at the log layer: checked here; the case itself is covered by sig.TestStatementsTwoImplementations")
 	old, succ := edKey("old"), eipKey("successor")
 	a0 := authored(old, 0, "", 1)
 	r1 := rotate(old, 1, a0.id, succ)

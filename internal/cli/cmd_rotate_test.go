@@ -110,7 +110,7 @@ func vectorLine(t *testing.T, x conformance.Vector) []byte {
 // rotate_key by that key naming a secp256k1 successor read from its key file (never printed), then an authored by
 // the successor: all three verify, the rotation chains after the authored, and the successor's line is its seq 0.
 func TestRotateAcrossAlgorithms(t *testing.T) {
-	conformance.Partial(t, "C-core-144", "(a) through the commands, one implementation: checked here; (b), (c) and the second Ed25519 library: see the wire and sig tests")
+	conformance.Partial(t, "C-core-144", "(a) through the commands: checked here; the case itself is covered by sig.TestStatementsTwoImplementations")
 	p := newPubWorld(t) // Ed25519
 	succKey, succ := newKeyFile(t, p.dir, wire.AlgEIP191)
 	a := p.publish("--kind", "authored", "--content", p.file("a.bin", "old key's bytes"), "--licence", "CC0-1.0", "--description", "a")

@@ -23,7 +23,7 @@ import (
 // TestSignedIdentityNegativeVectors) and checks the same signatures with internal/sig. EIP-191 has one
 // implementation in this module (secp256k1 recovery), so those vectors are checked there only.
 func TestSignedIdentityVectorsTwoImplementations(t *testing.T) {
-	conformance.Partial(t, "C-core-144", "(b) and (c) as signed rc/2 identity lines under two Ed25519 libraries: checked here; the rc/1 cases are in the wire-format vectors' test, (a) in keylog; EIP-191 has one implementation")
+	conformance.Partial(t, "C-core-144", "(b) and (c) as signed rc/2 identity lines under two Ed25519 libraries: checked here; the case itself is covered by sig.TestStatementsTwoImplementations")
 	v, err := conformance.LoadSignedIdentityVectors()
 	if err != nil {
 		t.Fatal(err)
