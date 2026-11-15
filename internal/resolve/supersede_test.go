@@ -116,10 +116,10 @@ func TestSupersessionLaterPendingDisplayed(t *testing.T) {
 				t.Fatalf("newer id lower=%v order %v: bound %+v, want the later anchor %s (not %s)", newerLower, order, b, keylog.Short(a2), keylog.Short(a1))
 			}
 			shown, ls := displayed(t, r, h)
-			if shown.Anchor != a2 || shown.Why != "displayed: latest in log order" || len(ls) != 2 {
+			if shown.Anchor != a2 || shown.Why != "latest in log order" || len(ls) != 2 {
 				t.Fatalf("anchor lines %+v", ls)
 			}
-			if l := lineOf(t, ls, a1); l.Why != "not displayed: superseded by "+keylog.Short(a2) {
+			if l := lineOf(t, ls, a1); l.Why != "superseded by "+keylog.Short(a2) {
 				t.Fatalf("older line: %+v", l)
 			}
 			if ls[0].Anchor != a1 {
@@ -153,7 +153,7 @@ func TestSupersessionForkedLowerID(t *testing.T) {
 		if shown.Anchor != lo || !strings.Contains(shown.Why, "forked branches descend from neither, so the lower id is shown") {
 			t.Fatalf("forked: %+v", ls)
 		}
-		if l := lineOf(t, ls, hi); l.Why != "not displayed: on a forked branch; "+keylog.Short(lo)+" (lower id) is shown" {
+		if l := lineOf(t, ls, hi); l.Why != "on a forked branch; "+keylog.Short(lo)+" (lower id) is shown" {
 			t.Fatalf("forked, higher id: %+v", l)
 		}
 	}
@@ -174,10 +174,10 @@ func TestSupersessionVerifiedPreferred(t *testing.T) {
 			t.Fatalf("bound %+v, want the verified older anchor", b)
 		}
 		shown, ls := displayed(t, r, h)
-		if shown.Anchor != a1 || shown.Why != "displayed: verified preferred (the earliest verified bound for this head)" {
+		if shown.Anchor != a1 || shown.Why != "verified preferred (the earliest verified bound for this head)" {
 			t.Fatalf("lines %+v", ls)
 		}
-		if l := lineOf(t, ls, a2); l.Why != "not displayed: verified preferred ("+keylog.Short(a1)+")" {
+		if l := lineOf(t, ls, a2); l.Why != "verified preferred ("+keylog.Short(a1)+")" {
 			t.Fatalf("newer pending line: %+v", l)
 		}
 		everyOrderArtifact(t, w, "X", func(a *Artifact) {
@@ -204,7 +204,7 @@ func TestSupersessionRefusedNeverDisplaces(t *testing.T) {
 		if shown.Anchor != a1 {
 			t.Fatalf("lines %+v", ls)
 		}
-		if l := lineOf(t, ls, a2); l.Why != "not displayed: refused; a refused anchor never displaces a usable one ("+keylog.Short(a1)+")" {
+		if l := lineOf(t, ls, a2); l.Why != "refused; a refused anchor never displaces a usable one ("+keylog.Short(a1)+")" {
 			t.Fatalf("refused line: %+v", l)
 		}
 	}
@@ -235,7 +235,7 @@ func TestSupersessionSingleAnchorUnchanged(t *testing.T) {
 	if b := r.bound(mustStatement(t, r, h)); b.Anchor != a || b.Quality != Local {
 		t.Fatalf("bound %+v", b)
 	}
-	if shown, ls := displayed(t, r, h); shown.Why != "displayed: the only anchors line for this head" || len(ls) != 1 {
+	if shown, ls := displayed(t, r, h); shown.Why != "the only anchors line for this head" || len(ls) != 1 {
 		t.Fatalf("lines %+v", ls)
 	}
 }

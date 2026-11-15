@@ -31,7 +31,8 @@ type AnchorLine struct {
 	// Quality NoBound and Anchor set, and bounds nothing.
 	Bound  Bound
 	Usable bool
-	// Displayed marks the line shown for its covered head; Why says why it is shown or not.
+	// Displayed marks the line shown for its covered head; Why says why it is or is not (the reason only: Displayed
+	// carries which).
 	Displayed bool
 	Why       string
 }
@@ -157,35 +158,35 @@ func (r *Resolver) AnchorLines(id string) []AnchorLine {
 func (r *Resolver) shownWhy(signer string, shown anchorCand, cs []anchorCand) string {
 	switch {
 	case len(cs) == 1:
-		return "displayed: the only anchors line for this head"
+		return "the only anchors line for this head"
 	case shown.b.verified():
-		return "displayed: verified preferred (the earliest verified bound for this head)"
+		return "verified preferred (the earliest verified bound for this head)"
 	case shown.b.Quality == NoBound:
-		return "displayed: every anchors line for this head is refused; the latest in log order is shown, and it bounds nothing"
+		return "every anchors line for this head is refused; the latest in log order is shown, and it bounds nothing"
 	}
 	for _, c := range cs {
 		if c.p.St.ID != shown.p.St.ID && c.ok && c.b.Quality == Local && !r.precedes(signer, c.p.St.ID, shown.p.St.ID) {
-			return "displayed: latest in log order; the unverified lines on forked branches descend from neither, so the lower id is shown"
+			return "latest in log order; the unverified lines on forked branches descend from neither, so the lower id is shown"
 		}
 	}
-	return "displayed: latest in log order"
+	return "latest in log order"
 }
 
-// notShownWhy says why line c is not the displayed line shown of its covered head.
+// notShownWhy says why line c is not the line displayed for its covered head (shown).
 func (r *Resolver) notShownWhy(signer string, c, shown anchorCand, has bool) string {
 	switch {
 	case !c.ok:
-		return "not displayed: incoherent line; its proof places no bound, so no bound is derived from it"
+		return "incoherent line; its proof places no bound, so no bound is derived from it"
 	case !has:
-		return "not displayed"
+		return "no line of this head yields a bound" // unreachable: a line yielding none is caught above
 	case shown.b.verified() && c.b.verified():
-		return "not displayed: a later verified bound; " + keylog.Short(shown.p.St.ID) + " is earlier"
+		return "a later verified bound; " + keylog.Short(shown.p.St.ID) + " is earlier"
 	case shown.b.verified():
-		return "not displayed: verified preferred (" + keylog.Short(shown.p.St.ID) + ")"
+		return "verified preferred (" + keylog.Short(shown.p.St.ID) + ")"
 	case c.b.Quality == NoBound && shown.b.Quality != NoBound:
-		return "not displayed: refused; a refused anchor never displaces a usable one (" + keylog.Short(shown.p.St.ID) + ")"
+		return "refused; a refused anchor never displaces a usable one (" + keylog.Short(shown.p.St.ID) + ")"
 	case r.precedes(signer, c.p.St.ID, shown.p.St.ID):
-		return "not displayed: superseded by " + keylog.Short(shown.p.St.ID)
+		return "superseded by " + keylog.Short(shown.p.St.ID)
 	}
-	return "not displayed: on a forked branch; " + keylog.Short(shown.p.St.ID) + " (lower id) is shown"
+	return "on a forked branch; " + keylog.Short(shown.p.St.ID) + " (lower id) is shown"
 }
