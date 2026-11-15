@@ -440,7 +440,7 @@ func ivObj2(ss []string) canon.Value { return ivObj("x", ss).Members["x"] }
 // A freshly generated file must equal the committed one byte for byte: ids and signatures are deterministic
 // (RFC 8032, RFC 6979), so a different byte is a different vector.
 func TestSignedIdentityVectorsReproduce(t *testing.T) {
-	conformance.Partial(t, "C-id-37", "signed bytes of both algorithms pinned (actor tamper, v1 preimage, rc/1<->rc/2 relabel, stripped actor, rc/1 crit); production critical registry still disabled")
+	conformance.Partial(t, "C-id-37", "signed bytes of both algorithms pinned (actor tamper, v1 preimage, rc/1<->rc/2 relabel, stripped actor, rc/1 crit); the critical-marker rules are the production registry's (identity_registry_test.go)")
 	got, _, _ := ivBuild(t)
 	if os.Getenv("RC_REGENERATE_SIGNED_IDENTITY_VECTORS") == "1" {
 		if err := os.WriteFile(ivPath, []byte(got), 0o644); err != nil {
@@ -681,7 +681,7 @@ func TestSignedIdentityPositiveVectors(t *testing.T) {
 // have reached the boundary under test: where the signature is carried over, the same signature is a genuine one
 // over the unmutated bytes (or the v1 domain), so the refusal is the mutation's and not a broken fixture.
 func TestSignedIdentityNegativeVectors(t *testing.T) {
-	conformance.Partial(t, "C-id-37", "refusals before any fact exists for the signed negatives of both algorithms: tamper, v1 preimage, relabel both ways, an Ed25519 edge case as an rc/2 line; the production critical registry is still disabled")
+	conformance.Partial(t, "C-id-37", "refusals before any fact exists for the signed negatives of both algorithms: tamper, v1 preimage, relabel both ways, an Ed25519 edge case as an rc/2 line")
 	conformance.Partial(t, "C-id-14", "the actor is bound into the signature in both algorithms: a changed or stripped actor is a bad signature; no grant-relabel evaluation here")
 	conformance.Partial(t, "C-id-17", "representation only: the root's raw rc/1 revoke_key is a valid line after rc/2 lines and an rc/2 revoke_key reads invalid in both algorithms; placement on the identity's lineage and retirement are the evaluator's")
 	v := ivLoad(t)

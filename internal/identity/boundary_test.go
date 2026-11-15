@@ -67,7 +67,7 @@ func TestOnlyAdapterImportsModel(t *testing.T) {
 // cut, the documented evidence-relative limit; it must not be worse than that), and the mutated bytes never read
 // Valid under the victim's id.
 func TestByteMutationsNeverCreateAuthority(t *testing.T) {
-	conformance.Partial(t, "C-id-37", "adapter and model, sampled mutations; the production critical registry is not enabled, the production reader asks this evaluator, but this case is not yet run through a command")
+	conformance.Partial(t, "C-id-37", "adapter and model, sampled single-byte mutations through the production reader (its critical registry wired): never better than withholding")
 	w := base(t)
 	w.sign(stmt{name: "C1", by: "R", parent: "G2", kind: "identity_cut", body: cutBody(w, "G1", "A1")})
 	targets := []string{"I", "G1", "G2", "C1", "A1", "A2", "B2"}

@@ -79,7 +79,7 @@ func TestIdentityReaderRegistryIsTheOnlyHook(t *testing.T) {
 // refused: they chain, and no reader reads their body.
 func TestIdentityReaderCriticalRegistryDecides(t *testing.T) {
 	conformance.Covers(t, "C-id-37")
-	conformance.Partial(t, "C-id-41", "wire half through the registry: a marker that is not an object, an actor on a raw-key kind, a closed-marker violation and amends without an actor are verified Invalid; actor-without-marker and marker-without-declaration are the base reader's (vector cases); the evaluator half is internal/identity")
+	conformance.Partial(t, "C-id-41", "wire half through the registry: a marker that is not an object, an actor on a raw-key kind, a closed-marker violation and amends without an actor are verified Invalid; the other pairings are the vector cases and internal/identity; mixed controller semantics need the resource consumer")
 	act := &Actor{Identity: tID, Grant: tID2}
 	empty := canon.Value(body())
 	id := []string{IdentityCrit}

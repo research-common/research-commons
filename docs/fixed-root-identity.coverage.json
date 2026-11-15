@@ -574,10 +574,12 @@
         "internal/resolve:TestDualNoKeyFallback",
         "internal/resolve:TestDualViewsSurviveCandidateBytes",
         "internal/cli:TestIdentityReaderNegativeVectorsThroughPull",
-        "internal/cli:TestIdentityReaderStoreRefusesBadRC2"
+        "internal/cli:TestIdentityReaderStoreRefusesBadRC2",
+        "internal/wire:TestIdentityReaderRegistryIsTheOnlyHook",
+        "internal/identity:TestCriticalRegistryNeverBetterThanWithholding"
       ],
-      "conformance": "partial",
-      "remaining": "Unchanged reader: wire/keylog retain rc/2 unverified, and every resolver view answers without a panic on the signed vectors plus rc/2 resource/task/invalid lines. The production reader (the dual reader) refuses every published bad-signature negative through pull and a bad rc/2 signature before the store's commit point. Remaining: the critical registry."
+      "conformance": "covers",
+      "remaining": "Covered by the listed tests. Unchanged reader: wire/keylog retain rc/2 unverified as unsupported under the same ids, and every resolver view answers without a panic on the signed vectors plus rc/2 resource/task/invalid lines. The production reader (the dual reader) reads rc/2 through the wire reader's critical-extension registry (rc/2 registers x_identity_v1 only, rc/1 nothing): it refuses every published bad-signature negative through pull and a bad rc/2 signature before the store's commit point, and holds an unregistered critical token as verified unsupported, never evaluated."
     },
     {
       "handle": "ID-37",
@@ -609,10 +611,12 @@
         "internal/identity:TestByteMutationsNeverCreateAuthority",
         "internal/wire:TestSignedIdentityVectorsReproduce",
         "internal/wire:TestSignedIdentityNegativeVectors",
-        "internal/identity:TestSignedVectorsNegativesNeverReachEligibility"
+        "internal/identity:TestSignedVectorsNegativesNeverReachEligibility",
+        "internal/identity:TestCriticalRegistryNeverBetterThanWithholding",
+        "internal/wire:TestIdentityReaderCriticalRegistryDecides"
       ],
-      "conformance": "partial",
-      "remaining": "Concrete schema negatives and both algorithms tested; full production critical registry still disabled."
+      "conformance": "covers",
+      "remaining": "Covered by the listed tests. Concrete schema negatives and both algorithms tested; the critical-marker rules (a marker that is not an object or breaks its closed shape, an amendment without an actor, an actor without the marker, an unregistered critical token) run through the production reader's critical-extension registry and are never eligible and never better than withholding, each beside a repaired twin that is eligible."
     },
     {
       "handle": "ID-38",
@@ -669,10 +673,11 @@
         "internal/wire:TestFixedRootCandidateSharedEdition",
         "internal/wire:TestFixedRootCandidateCrypto",
         "internal/identity:TestSliceNegatives",
-        "internal/cli:TestIdentityReaderNegativeVectorsThroughPull"
+        "internal/cli:TestIdentityReaderNegativeVectorsThroughPull",
+        "internal/wire:TestIdentityReaderCriticalRegistryDecides"
       ],
       "conformance": "partial",
-      "remaining": "Raw context schema/crypto checked; through pull a tampered or stripped actor is a bad signature and an rc/2 raw key event is admitted `invalid`, counted toward nothing. Remaining: mixed controller semantics in the resource consumer."
+      "remaining": "Raw context schema/crypto checked; through pull a tampered or stripped actor is a bad signature and an rc/2 raw key event is admitted `invalid`, counted toward nothing. The production reader's critical registry holds a marker that is not an object, an actor on a raw-key kind and an amendment without an actor as verified `invalid`. Remaining: mixed controller semantics in the resource consumer."
     },
     {
       "handle": "ID-42",
