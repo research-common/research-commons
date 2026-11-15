@@ -203,7 +203,7 @@ var limits = []limit{
 	},
 	{
 		id:  "L-08",
-		gap: "The only critical extension registered is the candidate identity profile's `x_identity_v1` (`rc/2`, not activated): a statement marking any other extension critical, or an `rc/1` statement marking that one, is kept, verified and `unsupported`",
+		gap: "The only critical extension registered is the candidate identity profile's `x_identity_v1` (`rc/2` only): a statement marking any other extension critical, or an `rc/1` statement marking that one, is kept, verified and `unsupported`",
 		sources: []limitSource{
 			{file: "docs/READER-EXTENSIONS.md", says: "**The only registration is the candidate identity profile's `x_identity_v1`"},
 		},

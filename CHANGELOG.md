@@ -9,6 +9,8 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ## [Unreleased]
 
+## [0.5.0-alpha.6] - 2026-11-15
+
 ### Added
 - **Identity answers state their freshness, and a delegate key shows both of its axes.** Every identity actor block
   (`show`, `explain`, `--json`) prints `freshness: not_established` ("relative to held evidence; no claim that no cut
@@ -76,7 +78,7 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   its validator, on the same path `wire.Read` offers any extension. No line reads differently: the same statuses,
   reasons, ids and actors on every `rc/1` and `rc/2` line tried (24 kinds, 9 markers, 5 `crit` lists, 4 actor shapes
   against the previous reader). Conformance cases C-id-36 and C-id-37 are covered; known limit L-08 now says that
-  `x_identity_v1` is the one registered extension (`rc/2` only, profile not activated).
+  `x_identity_v1` is the one registered extension (`rc/2` only).
 - **A later anchors line for the same head supersedes the earlier one for display.** When a key holds several
   `anchors` lines for one covered head (the head stamped twice, or a pending stamp beside its upgrade), the time
   shown is the earliest verified bound if any line yields one, otherwise the line latest in the signer's log order
@@ -92,6 +94,18 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   or identity with no eligible claim), `verify` and `explain` ended in `internal error`. They now answer: `verify`
   exits 3 naming the selection's state, and the field reads `no default (reader's selection not met)`. The
   selection states are now in the closed vocabulary (`docs/CLI-OUTPUTS.md`).
+
+### Known issues (open at this tag)
+- Every gap in `docs/KNOWN-LIMITS.md` (L-01…L-16). The ones a first user meets:
+  - Block headers come only from a file the operator obtains (`anchor headers sync --from`, L-02); with no header
+    database every rival construction is `contested` and a task contract with a `deadline` never reaches `ready`. (#59)
+  - `publish` does not stamp and there is no `push` yet (L-16): run `anchor stamp` after `publish`, and
+    `anchor upgrade` once the calendar has committed to a block (typically hours).
+  - A response layout reads JSON only, through one pointer to the record array and one to the state (L-14).
+  - No hardware or wallet connector is built (L-07): an identity root on a device signs through the external-signing
+    package, whose format `rc-signing-package/0` is provisional (L-09).
+  - There is no Windows build (L-11), and `--json` output may change between alphas (L-12).
+- The `next-format` issues are requirements for later stages, not defects in this release.
 
 ## [0.5.0-alpha.5] - 2026-11-14
 
@@ -1026,7 +1040,8 @@ contributions, landed on top of that baseline.
 - **#12** — COMMONS.md review request from an external hub: the first outside use of the
   template and rubric.
 
-[Unreleased]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.5...next
+[Unreleased]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.6...next
+[0.5.0-alpha.6]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.5...v0.5.0-alpha.6
 [0.5.0-alpha.5]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.4...v0.5.0-alpha.5
 [0.5.0-alpha.4]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.3...v0.5.0-alpha.4
 [0.5.0-alpha.3]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.2...v0.5.0-alpha.3

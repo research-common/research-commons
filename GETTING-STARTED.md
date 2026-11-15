@@ -10,7 +10,7 @@ object, and `verify` answers from the statements the reader itself holds.
 ## 1. Install
 
 ```bash
-go install github.com/research-common/research-commons/cmd/commons@v0.5.0-alpha.5
+go install github.com/research-common/research-commons/cmd/commons@v0.5.0-alpha.6
 commons --version
 commons help                    # every command; `commons help <command>` for its options
 ```

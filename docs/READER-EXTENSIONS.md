@@ -3,7 +3,8 @@
 This is an implementation design note for the next-format Go reader in `internal/wire`,
 not an extension specification. **The only registration is the candidate identity profile's
 `x_identity_v1`, in the production identity reader for `rc/2` (see "The production identity
-reader" below); the profile is not activated and no writer signs `rc/2` by default.** The
+reader" below); the profile's reader is active, and `rc/2` is written only by the identity commands and
+`publish --as`.** The
 registry API itself defines no extension body layout, authorization rule, new signature
 algorithm, or resolver behavior. The existing wire-format extension rules are unchanged.
 

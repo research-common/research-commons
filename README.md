@@ -14,7 +14,7 @@ New here? Read [`docs/WHY.md`](docs/WHY.md): the motivation and the epistemics, 
 
 ## Status
 
-**0.5.0-alpha.5: the fifth alpha of the next format.** The next format is a clean break from the 0.4 alpha: a
+**0.5.0-alpha.6: the sixth alpha of the next format.** The next format is a clean break from the 0.4 alpha: a
 signed, append-only statement log per key, a store directory (`rc-store/1`), and a Go command-line tool. It is
 alpha: **the format may still change between alpha releases**, and so may `--json` output, key files and execution
 policy files (all marked provisional). The fixed-root identity profile is a candidate under review: its **reader is
@@ -24,7 +24,8 @@ acts for one, signed from a key file or through an external-signing package (`--
 `key sign` on a machine that holds the key and no store, then `--complete`); no hardware or wallet connector yet.
 `show <key>` prints a delegate key's own key events beside every grant naming it and that grant's state; every
 identity answer is relative to the statements held (`freshness: not_established`: no claim that no cut exists).
-There is no importer from the old format.
+`anchor stamp` and `anchor upgrade` write Bitcoin time evidence for your own log through the calendars you name
+(no default list); `push` is not built yet. There is no importer from the old format.
 
 The previous alpha (Python CLI, hubs, ledgers) lives on the `main` branch and the `v0.4.0-alpha.1` tag. It gets
 security fixes only. This README and everything under `docs/` marked otherwise describe the new format.
@@ -37,7 +38,7 @@ Read it before you rely on an answer.
 Requires Go 1.26 or newer. Developed and tested on Linux; **Windows is not supported** (the sandbox and store use Unix file semantics, and the tool does not build there).
 
 ```bash
-go install github.com/research-common/research-commons/cmd/commons@v0.5.0-alpha.5
+go install github.com/research-common/research-commons/cmd/commons@v0.5.0-alpha.6
 commons --version
 ```
 
