@@ -211,3 +211,152 @@ func TestPushAnchorGate(t *testing.T) {
 		}
 	})
 }
+
+// TestPushWithheldBytes: the withheld precondition (storage note §3.2 "publish of a withheld artifact"; claims-model
+// note §7). The author publishes with availability withheld and --no-holds, stamps it, and commits everything,
+// the blob included: push refuses the blob (reader policy `withheld bytes`, scope the blob's path, naming the
+// declaring statement) while the statements themselves are carried; without the blob the push is clean; with
+// a holds (the reveal) also committed, the blob is carried.
+func TestPushWithheldBytes(t *testing.T) {
+	p := newPushWorld(t)
+	data := "held-out pool with a 128-bit nonce 4f1c9a2e7b3d5a60c8e1f2a3b4c5d6e7"
+	c := p.file("seed", data)
+	a := p.mustPublish("--kind", "authored", "--content", c, "--no-holds",
+		"--availability", `{"obtainable":false,"redistribution":"withheld","withheld_until":"edition 2"}`)
+	cal := okCal(t)
+	if r := p.stamp(builder(cal), "--calendar", cal.srv.URL, "--allow-private"); r.code != 0 {
+		t.Fatalf("stamp: %d %s", r.code, r.stdout)
+	}
+	d := dig(data)
+	blob := "blobs/sha256/" + strings.TrimPrefix(d, "sha256:")
+	p.commitAll("publish, blob included")
+	r := p.push()
+	rep := jsonOf(t, r)
+	wh, _ := rep.Members["withheld"].(canon.Array)
+	if r.code != ExitWrong || len(wh) != 1 {
+		t.Fatalf("withheld blob carried: exit %d\n%s", r.code, r.stdout)
+	}
+	row := wh[0].(*canon.Object)
+	if row.Members["path"] != canon.String(blob) || row.Members["reason"] != canon.String("withheld bytes") ||
+		row.Members["class"] != canon.String("reader policy") || row.Members["scope"] != canon.String("object "+blob) ||
+		!strings.Contains(string(canon.Encode(row.Members["declared_by"])), a) {
+		t.Fatalf("withheld row: %s", canon.Encode(row))
+	}
+	if ag := anchorRow(t, rep, a); ag.Members["verdict"] != canon.String("admitted") {
+		t.Fatalf("the withheld authored is anchored and must be carried: %s", canon.Encode(ag))
+	}
+	if h := runIn(p.root, nil, "push", "--dry-run"); h.code != ExitWrong || !strings.Contains(h.stdout, "withheld bytes") {
+		t.Fatalf("human: %d\n%s", h.code, h.stdout)
+	}
+
+	// drop the blob from the commit (it stays in the store, untracked): clean, and listed as uncommitted
+	gitIn(t, p.root, "rm", "-q", "--cached", blob)
+	gitIn(t, p.root, "commit", "-q", "-m", "drop the blob")
+	r = p.push()
+	rep = jsonOf(t, r)
+	if r.code != ExitOK || len(rep.Members["withheld"].(canon.Array)) != 0 || !strings.Contains(string(canon.Encode(rep.Members["uncommitted"])), blob) {
+		t.Fatalf("without the blob: exit %d\n%s", r.code, r.stdout)
+	}
+
+	// the reveal: a holds, then the blob, committed together
+	p.mustPublish("--kind", "holds", "--content", c)
+	p.commitAll("reveal")
+	r = p.push()
+	rep = jsonOf(t, r)
+	if r.code != ExitOK || len(rep.Members["withheld"].(canon.Array)) != 0 {
+		t.Fatalf("after the reveal: exit %d\n%s", r.code, r.stdout)
+	}
+	if o := objectRow(t, rep, blob); o != nil && o.Members["verdict"] == canon.String("refused") {
+		t.Fatalf("the revealed blob: %s", canon.Encode(o))
+	}
+}
+
+// TestPushProofNotCarried: an anchors line whose proof blob is left out of the commit still covers (the order is in
+// the log), and push warns that readers see missing-proof until the proof is held.
+func TestPushProofNotCarried(t *testing.T) {
+	p := newPushWorld(t)
+	a := p.mustPublish("--kind", "authored", "--content", p.file("a", "required content"))
+	cal := okCal(t)
+	r := p.stamp(builder(cal), "--calendar", cal.srv.URL, "--allow-private")
+	if r.code != 0 {
+		t.Fatalf("stamp: %d %s", r.code, r.stdout)
+	}
+	proof := string(outObj(t, r).Members["proof"].(canon.String))
+	p.commitAll("publish and anchor")
+	gitIn(t, p.root, "rm", "-q", "--cached", "blobs/sha256/"+strings.TrimPrefix(proof, "sha256:"))
+	gitIn(t, p.root, "commit", "-q", "-m", "drop the proof")
+	r = p.push()
+	rep := jsonOf(t, r)
+	if r.code != ExitOK || anchorRow(t, rep, a).Members["verdict"] != canon.String("admitted") ||
+		!strings.Contains(warnings(rep), "proof not carried") || !strings.Contains(warnings(rep), proof) || !strings.Contains(warnings(rep), "missing-proof") {
+		t.Fatalf("proof not carried: exit %d\n%s", r.code, r.stdout)
+	}
+}
+
+// TestPushDryRunWritesNothing: C-core-137's push half. push --dry-run over a change that would be refused and over one
+// that is clean prints its side effects, and a before/after snapshot of the checkout (its .git included) and of the
+// bare hub proves nothing changed. Without --dry-run push exits 2 and changes nothing either.
+func TestPushDryRunWritesNothing(t *testing.T) {
+	conformance.Partial(t, "C-core-137", "push --dry-run states its side effects (no registry change; no fetch; no cache; no transport) and a before/after snapshot of the checkout and the bare hub proves nothing changed; pull is TestPullTrustFloor, fetch TestFetchDryRun")
+	p := newPushWorld(t)
+	a := p.mustPublish("--kind", "authored", "--content", p.file("a", "required content"))
+	p.commitAll("publish")
+	p.file("stray", "x")
+	for _, args := range [][]string{nil, {"--anchor-policy", "none"}} {
+		before, remote := snapshot(t, p.root), p.remoteState()
+		r := p.push(args...)
+		h := runIn(p.root, nil, append([]string{"push", "--dry-run"}, args...)...)
+		if snapshot(t, p.root) != before || p.remoteState() != remote {
+			t.Fatalf("push --dry-run %v changed something", args)
+		}
+		rep := jsonOf(t, r)
+		if rep.Members["side_effects"] != canon.String("no registry change; no fetch; no cache; no transport") ||
+			!strings.Contains(h.stdout, "no registry change; no fetch; no cache; no transport") {
+			t.Fatalf("side effects not stated: %s", r.stdout)
+		}
+		if want := map[bool]int{true: ExitOK, false: ExitWrong}[args != nil]; r.code != want || h.code != want {
+			t.Fatalf("push --dry-run %v: exit %d / %d, want %d\n%s", args, r.code, h.code, want, r.stdout)
+		}
+	}
+	before, remote := snapshot(t, p.root), p.remoteState()
+	if r := runIn(p.root, nil, "push", "--json"); r.code != ExitDidNotStart || !strings.Contains(r.stdout, "transport not built yet") {
+		t.Fatalf("push without --dry-run: %d %s", r.code, r.stdout)
+	}
+	if snapshot(t, p.root) != before || p.remoteState() != remote {
+		t.Fatal("push without --dry-run changed something")
+	}
+	_ = a
+}
+
+// TestPushNeedsAHubCheckout: push reads the change of a git checkout of the hub; a store that is not one, a store
+// nested below the checkout's top level, an unknown remote and an unrecorded default branch exit 2 naming the way
+// out, and change nothing.
+func TestPushNeedsAHubCheckout(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	plain := newPubWorld(t)
+	check := func(label, dir string, want string, args ...string) {
+		t.Helper()
+		before := snapshot(t, dir)
+		r := runIn(dir, nil, append([]string{"push", "--dry-run", "--json"}, args...)...)
+		if r.code != ExitDidNotStart || !strings.Contains(r.stdout, want) || snapshot(t, dir) != before {
+			t.Fatalf("%s: exit %d\n%s", label, r.code, r.stdout)
+		}
+	}
+	check("plain store", plain.root, "not a git checkout")
+	outer := t.TempDir()
+	gitIn(t, outer, "init", "-q", "-b", "main")
+	nested := newPubWorld(t)
+	inner := filepath.Join(outer, "store")
+	os.Rename(nested.root, inner)
+	gitIn(t, outer, "commit", "-q", "--allow-empty", "-m", "x")
+	check("nested store", inner, "top level")
+	p := newPushWorld(t)
+	check("unknown remote", p.root, "no such remote", "--remote", "upstream")
+	gitIn(t, p.root, "remote", "set-head", "origin", "--delete")
+	check("no default branch", p.root, "default branch", "--remote", "origin")
+	if r := p.push("--base", "origin/main"); r.code != ExitOK {
+		t.Fatalf("--base names it: %d %s", r.code, r.stdout)
+	}
+}
