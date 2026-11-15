@@ -761,7 +761,7 @@ func TestRefuseIncompleteKnob(t *testing.T) {
 // amendment of its own claim, and a derivation group (one unit) are not contested, so the boundary is the
 // resolver's answer and not the presence of two `authored` lines. A package with no `authored` never builds a resolver.
 func TestContestedLabel(t *testing.T) {
-	conformance.Partial(t, "C-core-135", "the gate labels an admitted authored whose authorship over the evaluated set is contested, the same token on pull, hub check and push (internal/gate); listing and verify are internal/cli; the push command is not built")
+	conformance.Partial(t, "C-core-135", "the gate labels an admitted authored whose authorship over the evaluated set is contested, the same token on pull, hub check and push (internal/gate); listing, verify and push --dry-run are internal/cli; push transports nothing yet")
 	blob := []byte("rival blob")
 	w := newWorld(t)
 	a := w.authored("A", blob)

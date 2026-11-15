@@ -112,6 +112,7 @@ takes `--json`, which prints one JSON object (an RFC 9457 problem-details object
 | `status` | recovery state, unfinished operations, the durability declaration (`--limits` for scan limits); a row per open `FORK` of a held key log |
 | `gc` | list (default) or delete unreferenced blobs outside the grace window |
 | `hub check` | check a change to a hub as the hub's CI does; writes nothing |
+| `push --dry-run` | in a git checkout of a hub: judge the commits a push would carry as the hub's CI would, and refuse a statement whose standing requires an anchor until an `anchors` line covers it, or a withheld blob before its reveal; writes nothing, and no transport is built yet (send with `git push`) |
 
 ## Hubs
 
@@ -119,6 +120,10 @@ A hub is a git repository holding a store, so collaborators `git clone` it and `
 [hub template](https://github.com/research-common/research-commons-hub-template) carries a `hub-check` CI workflow
 that runs `commons hub check` on every pull request. `commons hub check` needs the hub to be a git repository with at
 least one commit.
+
+To contribute, publish inside a clone of the hub, `anchor stamp` what needs an anchor, commit, and run
+`commons push --dry-run` before `git push`: it answers what the hub's CI will, plus the anchor-before-transport and
+withheld-bytes checks that only the sender can make.
 
 ## Documentation
 

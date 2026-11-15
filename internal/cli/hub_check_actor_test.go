@@ -84,7 +84,7 @@ func TestHubCheckLabelsActor(t *testing.T) {
 // label both lines with the one word `contested`, in JSON (`labels`) and in the human output; the sole author's
 // line carries no such label. The word is the token `list` prints for the blob.
 func TestContestedLabelAcrossGates(t *testing.T) {
-	conformance.Partial(t, "C-core-135", "pull and hub check exit 0 and label each rival authored `contested`, the word list and verify print for the blob (verify exits 3); push is not built")
+	conformance.Partial(t, "C-core-135", "pull and hub check exit 0 and label each rival authored `contested`, the word list and verify print for the blob (verify exits 3); push --dry-run is TestPushContested")
 	w := fixture(t)
 	rivals := map[string]bool{
 		stmtPath(w.signer("K1"), w.ids["A:contested:1"]): true,

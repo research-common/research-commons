@@ -1131,7 +1131,7 @@ func gzTar(t *testing.T, files ...[2]string) []byte {
 // is not reported. A full-tree check labels both halves. Controls: a different blob from the same rival key, and
 // a rival with the same provenance (one derivation unit), are not contested.
 func TestContestedLabel(t *testing.T) {
-	conformance.Partial(t, "C-core-135", "hub check exits 0 and labels an added authored whose authorship over the base plus the change is contested; listing and verify are internal/cli; the push command is not built")
+	conformance.Partial(t, "C-core-135", "hub check exits 0 and labels an added authored whose authorship over the base plus the change is contested; listing and verify are internal/cli; push is TestPushContested (internal/cli), which pushes nothing until push transports")
 	rival, other := []byte("rival bytes"), []byte("other bytes")
 	h := newHub(t, defaultPolicy)
 	s := newSigner()

@@ -124,7 +124,7 @@ func TestSchemaMinimalBodies(t *testing.T) {
 // TestSchemaMissingRequired: dropping any R field of any kind is a malformed statement naming the field. The
 // one exception (observed referent fields) is TestSchemaUnpinned.
 func TestSchemaMissingRequired(t *testing.T) {
-	conformance.Partial(t, "C-core-109", "one validation core: every R field is checked by Read, the only entry point; the four gates calling it (pull, hub CI, push, pre-pin) are not built")
+	conformance.Partial(t, "C-core-109", "one validation core: every R field is checked by Read, the only entry point; the four gates calling it (pull, hub check, push, pre-pin) are internal/gate (TestOneValidationCore)")
 	for _, k := range allKinds() {
 		m := minimal(k)
 		for _, f := range m.Keys {
