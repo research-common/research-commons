@@ -70,7 +70,7 @@ func refused(t *testing.T, err error, class refusal.Class, reason, detail string
 // TestOneFieldTwoIDs: two statements from one key that differ in one field (a reason, an unknown extension,
 // a later authored on the same blob) have two ids; one body signed twice is one id.
 func TestOneFieldTwoIDs(t *testing.T) {
-	conformance.Partial(t, "C-core-02a", "ids only; display needs the resolver")
+	conformance.Partial(t, "C-core-02a", "ids only; the case itself is covered by cli.TestOneFieldTwoStatementsNoReplay")
 	conformance.Partial(t, "C-core-11", "two ids and both verify; retention in the log and the amendment display need steps 5+ and the resolver")
 	for _, k := range testKeys("A", "B") {
 		base := authoredDraft(0, "")

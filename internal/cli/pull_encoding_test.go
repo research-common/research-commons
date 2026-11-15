@@ -21,7 +21,7 @@ import (
 // exactly as a reader that received the canonical form once.
 func TestPullEquivalentEncodingsOneStatement(t *testing.T) {
 	conformance.Covers(t, "C-core-10")
-	conformance.Partial(t, "C-core-02a", "second pair through pull: one id, the stored form only; the first pair's display is elsewhere")
+	conformance.Partial(t, "C-core-02a", "second pair through pull in every delivery order; the case itself is covered by TestOneFieldTwoStatementsNoReplay")
 	src := newWorld(t)
 	src.blob("x", []byte("x"))
 	id := src.authored("A:x", "K2", "x", "licence", "CC0-1.0") // even-length name: an EIP-191 key

@@ -63,7 +63,7 @@ func wantRefusal(t *testing.T, err error, class refusal.Class, reason, detailHas
 // TestPositiveVectors: every positive vector (V1–V10, E1–E2) reads as valid, reproduces its signed string
 // byte for byte, its byte count and its id, and stores its sig unchanged (each is already canonical).
 func TestPositiveVectors(t *testing.T) {
-	conformance.Partial(t, "C-core-02a", "display (neither shown as a replay) needs the resolver and a surface")
+	conformance.Partial(t, "C-core-02a", "the vectors read as one statement each; the case itself is covered by cli.TestOneFieldTwoStatementsNoReplay")
 	v := vectors(t)
 	all := append(append([]conformance.Vector{}, v.Positive...), v.EdPositive...)
 	for _, x := range all {
