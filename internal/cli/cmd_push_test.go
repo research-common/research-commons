@@ -4,11 +4,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/conformance"
+	"github.com/research-common/research-commons/internal/gate"
+	"github.com/research-common/research-commons/internal/wire"
 )
 
 // push --dry-run tests. Every hub is a local bare repository (the remote is a path; nothing is dialled) and every
@@ -358,5 +361,87 @@ func TestPushNeedsAHubCheckout(t *testing.T) {
 	check("no default branch", p.root, "default branch", "--remote", "origin")
 	if r := p.push("--base", "origin/main"); r.code != ExitOK {
 		t.Fatalf("--base names it: %d %s", r.code, r.stdout)
+	}
+}
+
+// TestPushUnsignedDraft: C-core-108 through the command. Unsigned drafts committed into the checkout where statements
+// go (an authored, and an intent naming a task the hub holds) are refused by push --dry-run, intrinsic `unsigned
+// draft`, scoped to each file, with a next step that says to sign; the hub is unchanged.
+func TestPushUnsignedDraft(t *testing.T) {
+	conformance.Partial(t, "C-core-108", "push --dry-run refuses each committed unsigned draft (authored; intent naming a held task), intrinsic, scope the file, next says sign it, the hub unchanged; every kind is TestUnsignedDraftsRefused (gate); the hub's task readiness is unchanged by construction until push transports (L-17)")
+	p := newPushWorld(t)
+	g := p.sign("T", "K9", "genesis", obj("type", "task", "name", "t", "controllers", []string{p.signer9()}, "rule", obj("any_one", true)))
+	p.commitAll("a task")
+	gitIn(t, p.root, "push", "-q", "origin", "change:main")
+	gitIn(t, p.root, "fetch", "-q", "origin")
+	k := p.world.key("B")
+	paths := []string{}
+	for i, d := range []wire.Draft{
+		{Kind: "authored", TS: "2026-10-16T00:00:00Z", Body: obj("content", content("x"), "type", "dataset")},
+		{Kind: "intent", TS: "2026-10-16T00:00:00Z", Body: obj("task", g, "edition", g)},
+	} {
+		rel := gate.StatementPath(k.Signer(), strings.Repeat("0", 63)+strconv.Itoa(i))
+		os.MkdirAll(filepath.Dir(filepath.Join(p.root, rel)), 0o755)
+		os.WriteFile(filepath.Join(p.root, rel), canon.Encode(d.Envelope(k)), 0o644)
+		paths = append(paths, rel)
+	}
+	p.commitAll("drafts")
+	remote := p.remoteState()
+	r := p.push()
+	rep := jsonOf(t, r)
+	if r.code != ExitWrong {
+		t.Fatalf("exit %d\n%s", r.code, r.stdout)
+	}
+	for _, rel := range paths {
+		row := objectRow(t, rep, rel)
+		if row == nil || row.Members["verdict"] != canon.String("refused") || row.Members["class"] != canon.String("intrinsic") ||
+			row.Members["reason"] != canon.String("unsigned draft") || !strings.Contains(string(canon.Encode(row.Members["next"])), "sign") ||
+			!strings.Contains(string(canon.Encode(row.Members["scope"])), rel) {
+			t.Fatalf("%s: %s", rel, canon.Encode(row))
+		}
+	}
+	if p.remoteState() != remote {
+		t.Fatal("the hub changed")
+	}
+}
+
+// TestPushContested: C-core-135's push half. Two keys claim one blob, each anchored (a pending proof and a parseable
+// proof with no backend: no verified bound, so neither is the default author). push --dry-run exits 0 and labels
+// both rival lines `contested`, the word list prints for the blob; verify exits 3.
+func TestPushContested(t *testing.T) {
+	conformance.Partial(t, "C-core-135", "push --dry-run exits 0 and labels each rival authored `contested` (the token list and verify print; verify exits 3); a package containing it is pushed only once push transports (L-17)")
+	p := newPushWorld(t)
+	data := "rival bytes"
+	a := p.mustPublish("--kind", "authored", "--content", p.file("x", data), "--no-holds")
+	cal := okCal(t)
+	if r := p.stamp(builder(cal), "--calendar", cal.srv.URL, "--allow-private"); r.code != 0 {
+		t.Fatalf("stamp: %d %s", r.code, r.stdout)
+	}
+	b := p.world.authored("rival", "K2", data)
+	p.world.anchor("rival anchor", "K2", 800000)
+	p.commitAll("two claims")
+	if v := p.run("verify", dig(data)); v.code != ExitCouldNot {
+		t.Fatalf("verify: exit %d\n%s", v.code, v.stdout)
+	}
+	if l := p.run("list"); !strings.Contains(l.stdout, "contested") {
+		t.Fatalf("list:\n%s", l.stdout)
+	}
+	r := p.push()
+	rep := jsonOf(t, r)
+	if r.code != ExitOK {
+		t.Fatalf("push: exit %d\n%s", r.code, r.stdout)
+	}
+	for _, id := range []string{a, b} {
+		signer := p.signer
+		if id == b {
+			signer = p.world.signer("K2")
+		}
+		row := objectRow(t, rep, stmtPath(signer, id))
+		if row == nil || !strings.Contains(string(canon.Encode(row.Members["labels"])), `"contested"`) {
+			t.Fatalf("%s not labelled contested:\n%s", id, r.stdout)
+		}
+	}
+	if h := runIn(p.root, nil, "push", "--dry-run"); h.code != ExitOK || strings.Count(h.stdout, "contested") < 2 {
+		t.Fatalf("human: %d\n%s", h.code, h.stdout)
 	}
 }
