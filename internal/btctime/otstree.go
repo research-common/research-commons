@@ -219,7 +219,7 @@ func Merge(pending *Tree, commitment, upgrade []byte, lim Limits) (*Tree, error)
 		lim = DefaultLimits()
 	}
 	if pending == nil || pending.Root == nil {
-		return nil, &refusal.Refusal{Class: refusal.Intrinsic, Reason: "upgrade rooted elsewhere", Detail: "no pending tree to merge into"}
+		return nil, &refusal.Refusal{Class: refusal.Intrinsic, Reason: refusal.UpgradeRootedElsewhere, Detail: "no pending tree to merge into"}
 	}
 	if len(upgrade) > MaxUpgradeBytes {
 		return nil, &refusal.Refusal{Class: refusal.Operational, Reason: refusal.SizeLimit,
@@ -251,7 +251,7 @@ func Merge(pending *Tree, commitment, upgrade []byte, lim Limits) (*Tree, error)
 	}
 	walk(work.Root)
 	if len(targets) == 0 {
-		return nil, &refusal.Refusal{Class: refusal.Intrinsic, Reason: "upgrade rooted elsewhere",
+		return nil, &refusal.Refusal{Class: refusal.Intrinsic, Reason: refusal.UpgradeRootedElsewhere,
 			Detail: fmt.Sprintf("no pending attestation's node has message %x", commitment)}
 	}
 	for _, n := range targets {
@@ -262,7 +262,7 @@ func Merge(pending *Tree, commitment, upgrade []byte, lim Limits) (*Tree, error)
 		return nil, fmt.Errorf("merge: merged proof: %w", err)
 	}
 	if out.FileDigest != pending.FileDigest {
-		return nil, &refusal.Refusal{Class: refusal.Intrinsic, Reason: "upgrade rooted elsewhere", Detail: "the merged proof is rooted at another file digest"}
+		return nil, &refusal.Refusal{Class: refusal.Intrinsic, Reason: refusal.UpgradeRootedElsewhere, Detail: "the merged proof is rooted at another file digest"}
 	}
 	return out, nil
 }
@@ -270,7 +270,7 @@ func Merge(pending *Tree, commitment, upgrade []byte, lim Limits) (*Tree, error)
 // parseSubtree reads b as one serialized timestamp for msg (no file header), to its exact end, under lim.
 func parseSubtree(b, msg []byte, lim Limits) (*Node, error) {
 	if len(msg) > maxMsg {
-		return nil, &refusal.Refusal{Class: refusal.Intrinsic, Reason: "upgrade rooted elsewhere", Detail: fmt.Sprintf("commitment over %d bytes", maxMsg)}
+		return nil, &refusal.Refusal{Class: refusal.Intrinsic, Reason: refusal.UpgradeRootedElsewhere, Detail: fmt.Sprintf("commitment over %d bytes", maxMsg)}
 	}
 	p := &parser{b: b, lim: lim, out: &Proof{}}
 	n := &Node{}

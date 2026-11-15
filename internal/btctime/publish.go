@@ -13,7 +13,8 @@ import (
 )
 
 // Stamp-at-publish (bitcoin-time note §2). The order is observable: the statements are signed, the covered head's
-// raw 32 bytes go to the calendars, the pending proof is stored as a blob, an anchors statement naming it is
+// raw 32 bytes go to the calendars, the pending proofs of every calendar that answered are merged into one (a union
+// at the root) and stored as a blob, an anchors statement naming it is
 // appended, and only then does anything reach the transport. This is the writer's side; it never runs during a
 // read.
 
@@ -115,6 +116,7 @@ func Publish(head *wire.Statement, lines [][]byte, blobs map[string][]byte, cals
 	}
 	copy(digest[:], raw) // the raw hash bytes: no hex, no newline, no framing (§2 step 2)
 	var proof []byte
+	var proofs [][]byte
 	var failures []string
 	for _, c := range cals {
 		res.Calendared = append(res.Calendared, c.URI())
@@ -123,10 +125,20 @@ func Publish(head *wire.Statement, lines [][]byte, blobs map[string][]byte, cals
 			failures = append(failures, c.URI()+": "+err.Error())
 			continue
 		}
-		if proof == nil {
-			proof = p
-		}
+		proofs = append(proofs, p)
 		res.Services = append(res.Services, c.URI())
+	}
+	if len(proofs) > 0 {
+		// every answering calendar's tree in one proof: a union at the root (each roots at the stamped digest), as
+		// the reference client writes a multi-calendar stamp
+		u, err := UnionProofs(proofs, Limits{})
+		if err != nil {
+			// not reachable for proofs a calendar client checked (each parses and roots at digest); kept honest:
+			// the first proof alone, and services names only its calendar
+			failures = append(failures, "merging the calendars' proofs: "+err.Error()+"; kept "+res.Services[0]+"'s alone")
+			u, res.Services = proofs[0], res.Services[:1]
+		}
+		proof = u
 	}
 	if proof == nil {
 		def, why := DefaultFor(head)

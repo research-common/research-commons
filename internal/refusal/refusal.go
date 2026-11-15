@@ -31,6 +31,10 @@ const (
 	// InvalidAnchor: an `anchors` statement whose `covered` is a line of its signer's own log that is not in the
 	// anchor line's own prefix (bitcoin-time note §4 check 2, C-btc-09). Scoped to the statement.
 	InvalidAnchor = "invalid-anchor"
+	// UpgradeRootedElsewhere: a calendar's answer to an upgrade, or a proof merged with another, that does not root
+	// at a pending attestation's node (or at the proof's file digest) (bitcoin-time note §2 "Upgrade"). Scoped to
+	// the calendar that answered.
+	UpgradeRootedElsewhere = "upgrade rooted elsewhere"
 )
 
 // Refusal is an error that names its class, its reason and what it applies to.

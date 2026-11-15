@@ -191,8 +191,8 @@ func Assemble(d [32]byte, timestamp []byte) ([]byte, error) {
 }
 
 // ErrPending is Upgrade's answer when the calendar says the commitment is not yet in a Bitcoin block (HTTP 404):
-// still pending, not a failure of the calendar.
-var ErrPending = errors.New("still pending (the calendar has no completed timestamp for this commitment yet)")
+// still pending, not a failure of the calendar. It is btctime.ErrStillPending, so a Client is a btctime.Upgrader.
+var ErrPending = btctime.ErrStillPending
 
 // Upgrade asks the calendar for the completed timestamp of commitment (the message at a pending attestation's
 // node): GET <base>/timestamp/<lowercase hex commitment> with the protocol's Accept header, under the same dial,
