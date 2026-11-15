@@ -253,8 +253,12 @@ func TestPropertyNoThirdPartyVeto(t *testing.T) {
 				a, _ := alone.Result(o.Path)
 				m, _ := mixed.Result(o.Path)
 				h, _ := heldL.Result(o.Path)
-				if signature(*a) != signature(*m) || signature(*a) != signature(*h) {
-					return fmt.Sprintf("%s: %s alone %q, with others in the package %q, with others held %q", g, o.Path, signature(*a), signature(*m), signature(*h))
+				// The `contested` label is excluded by construction: authorship is a function of every claimant of the
+				// blob, so another key's rival `authored` is exactly what makes an admitted `authored` contested.
+				// It is a label (admission and exit never change); every other token, the verdict, the class and
+				// the reason must still be identical.
+				if sa, sm, sh := noAuthorship(*a), noAuthorship(*m), noAuthorship(*h); sa != sm || sa != sh {
+					return fmt.Sprintf("%s: %s alone %q, with others in the package %q, with others held %q", g, o.Path, sa, sm, sh)
 				}
 			}
 			for _, o := range others {
@@ -267,6 +271,12 @@ func TestPropertyNoThirdPartyVeto(t *testing.T) {
 		}
 		return ""
 	})
+}
+
+// noAuthorship is signature without the `contested` label token.
+func noAuthorship(r Result) string {
+	r.Labels = slices.DeleteFunc(slices.Clone(r.Labels), func(l Label) bool { return l.Token == LabelContested })
+	return signature(r)
 }
 
 func admitFn(g string) func(Package, Held, *Policy, Options) (*Report, error) {

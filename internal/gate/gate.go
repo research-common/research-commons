@@ -147,6 +147,10 @@ const (
 	LabelFork        = "FORK"
 	LabelIncoherent  = "incoherent"
 	LabelUnsupported = "unsupported"
+	// LabelContested: an admitted `authored` whose blob's authorship, over the evaluated set, is `contested`
+	// (several claimant units and none strictly earliest at a verified quality, claims §5.2 (3)). It is the same
+	// word `list`, `show` and `verify` print for that blob. A label only: admission and exit are never changed by it.
+	LabelContested   = string(resolve.ContestedAuthorship)
 	LabelUnknownKind = "unknown kind"
 	// LabelInvalid: a verified rc/2 line that breaks a rule of the identity profile. It is kept, not refused: an
 	// authenticated invalid control is evidence (an invalid cut still denies its grant, profile §3, §4), and it
@@ -493,8 +497,10 @@ func Admit(gate string, pkg Package, held Held, pol *Policy, opt Options) (*Repo
 	}
 
 	// 5. Resolver-level policy: intended_for re-application (C-core-98) and the freeze policy (C-core-104).
+	// The resolver over the evaluated set is built once, when a step needs it, and shared with step 6.
+	var res *resolve.Resolver
 	if pol.Freeze != nil || pol.RefuseIncomplete || anyIntendedFor(results, cands) {
-		res := resolver(evaluated, pol)
+		res = resolver(evaluated, pol)
 		for _, i := range cands {
 			r := &results[i]
 			if r.Verdict == Admitted {
@@ -503,11 +509,26 @@ func Admit(gate string, pkg Package, held Held, pol *Policy, opt Options) (*Repo
 		}
 	}
 
-	// 6. Blob and statement availability labels, now that the evaluated set is known.
+	// 6. Blob and statement availability labels, now that the evaluated set is known; and the authorship label of
+	// an admitted `authored` (LabelContested), which needs the resolver only when the package carries one.
+	contested := map[string]bool{}
 	for i := range results {
 		r := &results[i]
 		if r.Verdict != Admitted {
 			continue
+		}
+		if d := authoredDigest(r); d != "" {
+			c, seen := contested[d]
+			if !seen {
+				if res == nil {
+					res = resolver(evaluated, pol)
+				}
+				c = res.Artifact(d).State == resolve.ContestedAuthorship
+				contested[d] = c
+			}
+			if c {
+				r.label(LabelContested, "authorship of "+keylog.Short(d)+" has several claimants and none is the default, over the evaluated set")
+			}
 		}
 		switch r.Kind {
 		case KindBlob:
@@ -547,6 +568,26 @@ func Admit(gate string, pkg Package, held Held, pol *Policy, opt Options) (*Repo
 	}
 	rep.Results = results
 	return rep, nil
+}
+
+// authoredDigest is the content digest an admitted, added `authored` names, or "" for anything else (a deleted
+// path is not a claim being brought).
+func authoredDigest(r *Result) string {
+	if r.Kind != KindStatement || r.st == nil || r.st.Kind != "authored" || r.Change == Delete || r.st.Body == nil ||
+		r.st.Status != wire.Valid || !r.st.Verified {
+		return ""
+	}
+	c, ok := r.st.Body.Get("content")
+	if !ok {
+		return ""
+	}
+	o, ok := c.(*canon.Object)
+	if !ok {
+		return ""
+	}
+	d, _ := o.Get("digest")
+	s, _ := d.(canon.String)
+	return string(s)
 }
 
 // classify places a path on the data surface. The control plane is the policy's list (a hub reviews changes

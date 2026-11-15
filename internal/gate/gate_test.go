@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/conformance"
 	"github.com/research-common/research-commons/internal/refusal"
+	"github.com/research-common/research-commons/internal/resolve"
 	"github.com/research-common/research-commons/internal/store"
 	"github.com/research-common/research-commons/internal/wire"
 )
@@ -749,5 +751,92 @@ func TestRefuseIncompleteKnob(t *testing.T) {
 	}
 	if DefaultPolicy().RefuseIncomplete {
 		t.Fatal("default policy refuses incomplete editions")
+	}
+}
+
+// TestContestedLabel: C-core-135 (gate half). An admitted `authored` whose blob's authorship, over the evaluated
+// set (the receiver's held lines plus the package's admitted statements), is `contested` carries the label
+// `contested`, on every gate alike, whichever half of the rivalry the package brings and whichever order it
+// arrives in. It is a label only: the verdict stays admitted and the exit stays 0. Controls: a sole author, one key's
+// amendment of its own claim, and a derivation group (one unit) are not contested, so the boundary is the
+// resolver's answer and not the presence of two `authored` lines. A package with no `authored` never builds a resolver.
+func TestContestedLabel(t *testing.T) {
+	conformance.Partial(t, "C-core-135", "the gate labels an admitted authored whose authorship over the evaluated set is contested, the same token on pull, hub check and push (internal/gate); listing and verify are internal/cli; the push command is not built")
+	blob := []byte("rival blob")
+	w := newWorld(t)
+	a := w.authored("A", blob)
+	b := w.authored("B", blob)
+	sole := []byte("lonely blob")
+	s1 := w.authored("A", sole)
+	amend := []byte("amended blob")
+	am1 := w.authored("C", amend)
+	am2 := w.authored("C", amend, "description", "second statement, same key, same blob")
+	prov := canon.Value(obj("workflow", blobDigest([]byte("wf")), "inputs", []string{blobDigest([]byte("in"))}))
+	derived := []byte("derived blob")
+	d1 := w.authored("D", derived, "provenance", prov)
+	d2 := w.authored("E", derived, "provenance", prov)
+
+	for _, g := range []string{"pull", "hub check", "push"} {
+		// both halves in one package
+		rep := mustAdmit(t, g, Package{Objects: []Object{w.object(a), w.object(b), w.object(s1), w.object(am1), w.object(am2), w.object(d1), w.object(d2)}}, MemHeld{}, nil, Options{})
+		for _, id := range []string{a, b} {
+			r := wantAdmitted(t, rep, w.path(id))
+			if !r.HasLabel(LabelContested) || LabelContested != "contested" {
+				t.Fatalf("%s: %s lacks the contested label: %v", g, w.path(id), r.Labels)
+			}
+		}
+		for _, id := range []string{s1, am1, am2, d1, d2} {
+			if r := wantAdmitted(t, rep, w.path(id)); r.HasLabel(LabelContested) {
+				t.Fatalf("%s: %s is not contested but is labelled: %v", g, w.path(id), r.Labels)
+			}
+		}
+		if rep.Exit() != 0 {
+			t.Fatalf("%s: a label changed the exit: %d\n%s", g, rep.Exit(), rep.Render())
+		}
+		// the package brings one half, the receiver already holds the rival: the evaluated set is what counts
+		rep = mustAdmit(t, g, Package{Objects: []Object{w.object(b)}}, w.held(a), nil, Options{})
+		if r := wantAdmitted(t, rep, w.path(b)); !r.HasLabel(LabelContested) {
+			t.Fatalf("%s: rival held, labels %v", g, r.Labels)
+		}
+		// the same statement with no rival anywhere is a sole author
+		rep = mustAdmit(t, g, Package{Objects: []Object{w.object(b)}}, MemHeld{}, nil, Options{})
+		if r := wantAdmitted(t, rep, w.path(b)); r.HasLabel(LabelContested) {
+			t.Fatalf("%s: alone yet labelled %v", g, r.Labels)
+		}
+	}
+
+	// the same word on every gate for every object (one validation core), and independent of delivery order
+	objs := []Object{w.object(a), w.object(b), w.object(am1), w.object(am2)}
+	want := ""
+	for i, g := range []string{"pull", "hub check", "push", "pull"} {
+		o := slices.Clone(objs)
+		if i == 3 {
+			slices.Reverse(o)
+		}
+		rep := mustAdmit(t, g, Package{Objects: o}, MemHeld{}, nil, Options{})
+		got := ""
+		for _, r := range rep.Results {
+			got += r.Path + "=" + signature(r) + ";"
+		}
+		if i == 0 {
+			want = got
+		} else if got != want {
+			t.Fatalf("%s: %s\nwant %s", g, got, want)
+		}
+	}
+
+	// a resolver is built only for a package carrying an `authored`: a counting option sees no construction for
+	// blobs and a `holds`, and one construction for the contested pair (not one per statement)
+	built := 0
+	pol := DefaultPolicy()
+	pol.Resolver = []resolve.Option{func(*resolve.Resolver) { built++ }}
+	h := w.sign("F", "holds", obj("content", canon.Value(contentOf(blob))))
+	mustAdmit(t, "pull", Package{Objects: []Object{w.object(h), blobObject(blob)}}, w.held(a, b), pol, Options{})
+	if built != 0 {
+		t.Fatalf("a resolver was built for a package with no authored: %d", built)
+	}
+	mustAdmit(t, "pull", Package{Objects: []Object{w.object(a), w.object(b)}}, MemHeld{}, pol, Options{})
+	if built != 1 {
+		t.Fatalf("one resolver for two authored statements, got %d", built)
 	}
 }
