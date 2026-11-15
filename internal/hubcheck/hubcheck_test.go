@@ -965,6 +965,30 @@ func TestRawGitRead(t *testing.T) {
 	}
 }
 
+// TestReplaceObjectsIgnored: H-03, and what `git push` sends. A replacement ref (`git replace`) makes porcelain and an
+// unhardened `cat-file` show other bytes for an object id, while `git push` sends the object as stored. The
+// reader ignores replacements, so the gate judges the stored bytes: a blob whose stored bytes are refused stays
+// refused although its replacement would pass.
+func TestReplaceObjectsIgnored(t *testing.T) {
+	h := newHub(t, defaultPolicy)
+	h.branch("data")
+	good := []byte("the bytes the digest names")
+	path := gate.BlobPath(dig(good))
+	h.write(path, []byte("other bytes under that name"))
+	h.commit("a blob whose bytes are not its name")
+	stored := h.git("rev-parse", "HEAD:"+path)
+	tmp := filepath.Join(t.TempDir(), "good")
+	os.WriteFile(tmp, good, 0o644)
+	h.git("replace", stored, h.git("hash-object", "-w", "--no-filters", tmp))
+	// the boundary: without the hardening, git itself shows the replacement
+	if shown := h.git("cat-file", "blob", stored); shown != string(good) {
+		t.Fatalf("the replacement is not in effect (%q): the test proves nothing", shown)
+	}
+	if r := verdict(t, h.check("main"), path); r.Verdict != gate.Refused {
+		t.Fatalf("judged the replacement, not the stored object git push would send: %s", r.Verdict)
+	}
+}
+
 // TestRefuseIncomplete: selection.refuse_incomplete. With the knob in the base policy, a pushed resource
 // edition whose completeness claim fails against the readings the hub holds is refused under reader policy,
 // scope that edition (exit 1); a claim that cannot be checked is could-not-check (exit 3); a claim that holds

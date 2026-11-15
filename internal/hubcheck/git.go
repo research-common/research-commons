@@ -16,7 +16,8 @@ import (
 // `ls-tree`, `diff --raw -z` and `cat-file`. Objects are read as raw bytes: no text conversion, no textconv,
 // no external diff, no filters, no attributes; no command that runs a hook is ever invoked. The environment
 // drops system and global configuration and attribute files, so nothing outside the repository's own object
-// database shapes what is read.
+// database shapes what is read. Replacement refs (`git replace`) are not honoured: an object is read as stored
+// under its own id, which is also what `git push` sends, so what is judged is what would travel.
 type repo struct {
 	dir string
 	env []string
@@ -31,7 +32,7 @@ func newRepo(dir string) *repo {
 		env = append(env, kv)
 	}
 	env = append(env, "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_ATTR_NOSYSTEM=1",
-		"GIT_TERMINAL_PROMPT=0", "GIT_OPTIONAL_LOCKS=0", "LC_ALL=C")
+		"GIT_TERMINAL_PROMPT=0", "GIT_OPTIONAL_LOCKS=0", "GIT_NO_REPLACE_OBJECTS=1", "LC_ALL=C")
 	return &repo{dir: dir, env: env}
 }
 
