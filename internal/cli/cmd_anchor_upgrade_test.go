@@ -386,3 +386,38 @@ func TestAnchorUpgradeExitTwo(t *testing.T) {
 		t.Fatalf("nothing to upgrade: %d %s", r.code, r.stdout)
 	}
 }
+
+// TestAnchorUpgradeTwoHeads: with no argument, every pending head is upgraded: two heads stamped, both answered,
+// two new anchors lines in one journal record, the second chained after the first, each naming its own head.
+func TestAnchorUpgradeTwoHeads(t *testing.T) {
+	p, a := stampWorld(t)
+	c1 := newUpCal(t, "one")
+	b := upBuilder(c1)
+	if r := p.stamp(b, calArgs(c1)...); r.code != 0 {
+		t.Fatalf("stamp 1: %d %s", r.code, r.stdout)
+	}
+	r := p.publish("--kind", "authored", "--content", p.file("d", "more content"), "--no-holds")
+	if r.code != 0 {
+		t.Fatalf("publish 2: %d %s", r.code, r.stdout)
+	}
+	a2 := idsOf(outObj(t, r))[0]
+	if r := p.stamp(b, calArgs(c1)...); r.code != 0 {
+		t.Fatalf("stamp 2: %d %s", r.code, r.stdout)
+	}
+	c1.attest(a, 5)
+	c1.attest(a2, 6)
+	r = p.upgrade(b, calArgs(c1)...)
+	o := outObj(t, r)
+	sts := statementsOf(o)
+	if r.code != 0 || len(sts) != 2 || sts[1].Members["prev"] != canon.String(idsOf(o)[0]) || !strings.Contains(r.stdout, `"did":`) ||
+		strings.Count(string(canon.Encode(o.Members["did"])), "in one journal record") != 1 {
+		t.Fatalf("two heads: %d %s", r.code, r.stdout)
+	}
+	got := map[string]bool{}
+	for _, id := range idsOf(o) {
+		got[bodyString(heldStatement(t, p, id).Body, "covered")] = true
+	}
+	if !got[a] || !got[a2] {
+		t.Fatalf("covered heads %v", got)
+	}
+}
