@@ -13,8 +13,12 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/research-common/research-commons/internal/btctime"
+	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/gate"
+	"github.com/research-common/research-commons/internal/keylog"
 	"github.com/research-common/research-commons/internal/resolve"
+	"github.com/research-common/research-commons/internal/wire"
 )
 
 // The sender's side of `push` (storage note §4.5: a hub kept in a version-control repository receives a package
@@ -44,6 +48,8 @@ type PushPlan struct {
 	Uncommitted []string
 	// Held is the hub's history at the base (the receiver's held set).
 	Held gate.MemHeld
+
+	pkg gate.Package
 }
 
 // PlanPush reads the change a push from the hub checkout containing dir would carry and runs gate.Push over it.
@@ -98,7 +104,7 @@ func PlanPush(dir string, cfg PushConfig) (*PushPlan, error) {
 	if err != nil {
 		return nil, err
 	}
-	plan.Result, plan.Held = p.result(rep), p.Held
+	plan.Result, plan.Held, plan.pkg = p.result(rep), p.Held, p.Package
 	if plan.Uncommitted, err = uncommitted(r); err != nil {
 		return nil, err
 	}
@@ -193,4 +199,168 @@ func sameDir(a, b string) bool {
 		return filepath.Clean(a) == filepath.Clean(b)
 	}
 	return ra == rb
+}
+
+// The writer's transport preconditions (bitcoin-time note §2, §10; storage note §3.2; claims-model note §7, §11).
+// They are not admission verdicts and no other gate applies them: they protect the author's own priority and the
+// author's own commitment to withhold, and a transport outside the tool bypasses them at the author's cost.
+
+// AnchorRow is the anchor precondition's answer for one statement the push would carry.
+type AnchorRow struct {
+	Path, ID, Kind string
+	// Standing is btctime.AnchorRequired or btctime.AnchorNone; DecidedBy names the rule or the override.
+	Standing  btctime.AnchorDefault
+	DecidedBy string
+	// CoveredBy lists the anchors lines (carried or held by the hub) that cover the statement.
+	CoveredBy []string
+	// Refused: required and not covered. The push carries nothing while any row is refused.
+	Refused bool
+}
+
+// WithheldRow is a blob the push would carry whose availability a statement declares withheld, with no serving
+// `holds` (no reveal) in the hub's history or the change.
+type WithheldRow struct {
+	Path, Digest string
+	// By lists the statements declaring it withheld.
+	By []string
+}
+
+// Preconditions is the precondition half of a push plan.
+type Preconditions struct {
+	Anchors  []AnchorRow
+	Withheld []WithheldRow
+	Warnings []string
+}
+
+// Refused reports whether any precondition refuses the push.
+func (p *Preconditions) Refused() bool {
+	for _, a := range p.Anchors {
+		if a.Refused {
+			return true
+		}
+	}
+	return len(p.Withheld) > 0
+}
+
+// carried lists the statements and blobs the push would carry: admitted additions the hub does not already hold.
+func (pl *PushPlan) carried(objs map[string][]byte) (sts []carriedStatement, blobs []gate.Result) {
+	for _, x := range pl.Report.Results {
+		if x.Verdict != gate.Admitted || x.Change != gate.Add {
+			continue
+		}
+		switch x.Kind {
+		case gate.KindStatement:
+			if x.HasLabel(gate.LabelAlreadyHeld) {
+				continue
+			}
+			if st, err := wire.ReadStored(objs[x.Path]); err == nil {
+				sts = append(sts, carriedStatement{x.Path, st})
+			}
+		case gate.KindBlob:
+			if !pl.Held.HasBlob(x.ID) {
+				blobs = append(blobs, x)
+			}
+		}
+	}
+	return sts, blobs
+}
+
+type carriedStatement struct {
+	path string
+	st   *wire.Statement
+}
+
+// CheckPreconditions applies the writer's preconditions to what the push would carry, over the evaluated set (the
+// hub's history at the base plus the carried statements). override, when set, replaces the default by standing
+// for every statement (the author's local policy, bitcoin-time note §2 step 3).
+//
+// The anchor precondition: a statement whose standing requires an anchor is refused unless an `anchors` line by
+// its signer in the evaluated set covers it (resolve.CoveringAnchors: structural, a pending proof covers; an
+// anchor operation that never reached a commit is not in the evaluated set, so it is absent). A statement whose
+// standing is `anchor: none` and that nothing covers is carried with a warning naming the rule. An `anchors` line
+// is the time evidence itself and gets a row, never a warning.
+//
+// The withheld precondition: a carried blob that a statement of the evaluated set declares withheld
+// (availability.redistribution) while no serving `holds` for it is in the evaluated set is refused: carrying it
+// would release the bytes the author committed to withhold, and that cannot be walked back.
+//
+// A carried anchors line whose proof blob neither travels nor is held by the hub is a warning: the line still
+// fixes the order in the log, and readers see `missing-proof` until the proof is held.
+func (pl *PushPlan) CheckPreconditions(override btctime.AnchorDefault) *Preconditions {
+	objs := map[string][]byte{}
+	for _, o := range pl.pkg.Objects {
+		objs[o.Path] = o.Data
+	}
+	sts, blobs := pl.carried(objs)
+	ks := keylog.NewStoredStore()
+	for _, id := range sortedKeys(pl.Held.Lines) {
+		_, _ = ks.Log(signerOf(pl.Held.Lines[id])).Add(pl.Held.Lines[id])
+	}
+	for _, c := range sts {
+		_, _ = ks.Log(c.st.Signer).Add(c.st.Line())
+	}
+	res := resolve.New(ks)
+	out := &Preconditions{}
+	carriedBlobs := map[string]bool{}
+	for _, b := range blobs {
+		carriedBlobs[b.ID] = true
+	}
+	for _, c := range sts {
+		std, why := btctime.DefaultFor(c.st)
+		if override != "" {
+			std, why = override, "--anchor-policy "+anchorPolicyWord(override)+" (your local policy, replacing the default by standing)"
+		}
+		row := AnchorRow{Path: c.path, ID: c.st.ID, Kind: c.st.Kind, Standing: std, DecidedBy: why, CoveredBy: res.CoveringAnchors(c.st.ID)}
+		row.Refused = std == btctime.AnchorRequired && len(row.CoveredBy) == 0
+		out.Anchors = append(out.Anchors, row)
+		if std == btctime.AnchorNone && len(row.CoveredBy) == 0 && c.st.Kind != "anchors" {
+			out.Warnings = append(out.Warnings, "carried with anchor: none, no anchors line covers "+c.st.ID+" ("+why+")")
+		}
+		if c.st.Kind == "anchors" {
+			if d := str(c.st, "proof"); d != "" && !carriedBlobs[d] && !pl.Held.HasBlob(d) {
+				out.Warnings = append(out.Warnings, "proof not carried: anchors "+c.st.ID+" names proof "+d+", which neither travels nor is held by the hub; readers see missing-proof until it is held")
+			}
+		}
+	}
+	for _, b := range blobs {
+		if by := res.WithheldBy(b.ID); len(by) > 0 && len(res.Holders(b.ID)) == 0 {
+			out.Withheld = append(out.Withheld, WithheldRow{Path: b.Path, Digest: b.ID, By: by})
+		}
+	}
+	return out
+}
+
+func anchorPolicyWord(d btctime.AnchorDefault) string {
+	if d == btctime.AnchorRequired {
+		return "required"
+	}
+	return "none"
+}
+
+func str(st *wire.Statement, k string) string {
+	if st.Body == nil {
+		return ""
+	}
+	v, ok := st.Body.Get(k)
+	if !ok {
+		return ""
+	}
+	s, _ := v.(canon.String)
+	return string(s)
+}
+
+func signerOf(line []byte) string {
+	if st, err := wire.ReadStored(line); err == nil {
+		return st.Signer
+	}
+	return ""
+}
+
+func sortedKeys(m map[string][]byte) []string {
+	ks := make([]string, 0, len(m))
+	for k := range m {
+		ks = append(ks, k)
+	}
+	slices.Sort(ks)
+	return ks
 }
