@@ -300,7 +300,7 @@ func TestSliceCutAtExactLine(t *testing.T) {
 
 // Step 4: the worker's own revocation does not erase opted-in history; bare-key behavior stays legacy.
 func TestSliceWorkerSelfRevocation(t *testing.T) {
-	conformance.Partial(t, "C-id-10", "identity half (warning, grant still eligible); the bare-key half belongs to the legacy evaluator and the combined view needs a consumer")
+	conformance.Partial(t, "C-id-10", "identity half (warning, grant still eligible); the bare-key half is the legacy evaluator's; the combined view through the commands is internal/cli TestIdentitySliceSelfRevokeRotate")
 	w := base(t)
 	w.sign(stmt{name: "Krev", by: "K1", rc: "rc/1", parent: "A2", kind: "revoke_key", body: obj("reason", "key_compromise", "last_good", w.ids["K1.0"])})
 	w.sign(stmt{name: "K1.after", by: "K1", rc: "rc/1", parent: "Krev", kind: "authored", body: authoredBody(7)})
@@ -453,7 +453,7 @@ func TestSliceNegatives(t *testing.T) {
 // evidence-relative limitation (no freshness claim).
 func TestSliceCutUncertainty(t *testing.T) {
 	conformance.Partial(t, "C-id-08", "signed adapter and model; the production reader asks this evaluator, but this case is not yet run through a command")
-	conformance.Partial(t, "C-id-09", "evidence-relative eligible with freshness not_established at the adapter; no surface prints the limitation")
+	conformance.Partial(t, "C-id-09", "evidence-relative eligible with freshness not_established at the adapter; printed by the commands in internal/cli TestIdentitySliceStaleBundle")
 	t.Run("cut whose last_good is not held", func(t *testing.T) {
 		w := base(t)
 		w.sign(stmt{name: "C1", by: "R", parent: "G2", kind: "identity_cut", body: cutBody(w, "G1", "A1")})

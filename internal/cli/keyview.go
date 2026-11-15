@@ -118,17 +118,6 @@ func grantRow(g identity.Grant) *Obj {
 	return setFreshness(o)
 }
 
-// grantsNotClosed is what a revoke or rotate of key prints: every grant naming the key, by id, with its state.
-// A key event closes none of them (profile §4.1), so every grant is listed: one already cut by its root shows that
-// state, and is not closed by this key event either. Nil when no grant names the key.
-func (v *view) grantsNotClosed(key string) listV {
-	l := v.grantsObj(key)
-	if len(l) == 0 {
-		return nil
-	}
-	return l
-}
-
 // grantsNotClosedNote is the line printed beside grantsNotClosed.
 func grantsNotClosedNote() string {
 	return "this key event closes none of the grants below: an act under an open grant after it still counts for the grant's identity " +
@@ -156,10 +145,11 @@ func (v *view) keyInputs(key string) []string {
 	return out
 }
 
-// setGrantsNotClosed adds, to a revoke or rotate output, every grant naming key that the key event does not close,
-// with the note saying so. Nothing is added when no grant names the key.
+// setGrantsNotClosed adds, to a revoke or rotate output, every grant naming key, by id with its state: a key event
+// closes none of them (profile §4.1), so a grant already cut by its root is listed too, showing that state. Nothing
+// is added when no grant names the key.
 func setGrantsNotClosed(out *Obj, v *view, key string) {
-	if l := v.grantsNotClosed(key); len(l) > 0 {
+	if l := v.grantsObj(key); len(l) > 0 {
 		out.set("grants_not_closed", l).set("grants_note", textV(grantsNotClosedNote()))
 	}
 }

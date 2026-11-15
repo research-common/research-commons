@@ -146,10 +146,12 @@
       "scenario": "Stale bundle omits entire cut",
       "schema_vectors": [],
       "isolated_tests": [
-        "internal/identity:TestSliceCutUncertainty"
+        "internal/identity:TestSliceCutUncertainty",
+        "internal/identitymodel:TestGrantState",
+        "internal/cli:TestIdentitySliceStaleBundle"
       ],
-      "conformance": "partial",
-      "remaining": "Limitation fixture must allow evidence-relative eligibility without claiming freshness."
+      "conformance": "covers",
+      "remaining": "Covered through the commands (internal/cli:TestIdentitySliceStaleBundle): the root cuts G (keep nothing); a reader holding the full set reads the act denied and the grant `cut null`, a reader given a bundle omitting the cut reads the act eligible and the grant `open`. Every identity answer (show and explain of the act, its actor block; show and explain of the key, each grant row; publish --as; hub check rows) carries `freshness: not_established` with the note `relative to held evidence; no claim that no cut exists`, on a direct and a pulled store. The model's grant-level state (TestGrantState) also carries NotEstablished."
     },
     {
       "handle": "ID-10",
@@ -162,10 +164,13 @@
       "isolated_tests": [
         "internal/keylog:TestFixedRootCandidateOldReaderMixedHistory",
         "internal/identity:TestSliceWorkerSelfRevocation",
-        "internal/resolve:TestActorCountGate"
+        "internal/resolve:TestActorCountGate",
+        "internal/identitymodel:TestGrantState",
+        "internal/identity:TestActorsGrants",
+        "internal/cli:TestIdentitySliceSelfRevokeRotate"
       ],
-      "conformance": "partial",
-      "remaining": "Raw events stay rc/1 and are seen by old keylog; identity history exception requires model/consumer integration. The resolver counts an identity-context statement by actor eligibility with its key's bare-key status shown beside it (D-1108-2), through a test-only evaluator; no production reader wires the real one."
+      "conformance": "covers",
+      "remaining": "Covered through the commands (internal/cli:TestIdentitySliceSelfRevokeRotate, both algorithms): after publish --as, the worker's own revoke (dry run and signed) and rotate each list G by id under `grants_not_closed` with its state `open`; show of the act stays eligible and counted with the delegate_self_event warning; show <key> prints the two axes side by side, `bare_key` (self-revoked, each event's effect: soft revoke, rotated) and `grants` (G open); the successor inherits no grant; only the root's identity cut closes G (`cut null`), the bare-key axis unchanged. Raw key events stay rc/1 and are seen by the old keylog. The grant-level state comes from the same root scan as an act's evaluation (identitymodel GrantState, TestGrantState checks it agrees with Evaluate per act)."
     },
     {
       "handle": "ID-11",
@@ -361,10 +366,11 @@
       "scenario": "Cut preserves claim but loses anchor",
       "schema_vectors": [],
       "isolated_tests": [
-        "internal/resolve:TestGateAnchorsKeyScoped"
+        "internal/resolve:TestGateAnchorsKeyScoped",
+        "internal/cli:TestIdentitySliceCutDropsAnchor"
       ],
-      "conformance": "partial",
-      "remaining": "Partial: the resolver's bound of a statement loses an anchor the evaluator excludes (a cut) while the claim keeps its authority (internal/resolve:TestGateAnchorsKeyScoped); an anchor bounds only its own signer's log. No command surface prints authority and time quality as two named outcomes for a cut anchor, so the case is not run end to end through show."
+      "conformance": "covers",
+      "remaining": "Covered end to end (internal/cli:TestIdentitySliceCutDropsAnchor) over a synced test chain: K's act A for I and K's anchor N for I (grant permissions authored + anchors) bound A at bitcoin height 10; after the root's cut of G at last_good A, show of the blob reads I the sole author (A counted, eligible) and the claimant's `time.quality` `none` (N denied, cut_excluded): authority and time quality are two members, `authorship` and the claimant's `time`. The resolver half stays in internal/resolve:TestGateAnchorsKeyScoped (an anchor bounds only its own signer's log)."
     },
     {
       "handle": "ID-24",

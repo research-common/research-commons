@@ -377,6 +377,15 @@ status ("G from I: open / cut at L / cut null / unknown"); an identity act under
 G after a visible self-revoke is never shown as a clean `eligible` (the
 `delegate_self_event` warning travels with it); and a self-revoke command prints, by id,
 every grant it does not close.
+The tool meets these as follows. `show <key>` and `explain <key>` (a signer,
+`ed25519:<hex>` or `0x<hex>`, as the argument) print `bare_key` (the key's own
+`rotate_key`/`revoke_key`, each with what it leaves counting) beside `grants` (every grant
+naming the key, by id, with its state `open`, `cut at last_good` and the `last_good` ids,
+`cut null`, `unknown` or `denied`, and the reasons). The grant state is computed by the
+same root scan as an act's evaluation: `open` means no root-side reason applies to an act
+under the grant; each act is still judged on its own ancestry, scope and binding. `revoke`
+(dry run included) and `rotate` print `grants_not_closed`: every grant naming the key, by
+id with its state, and a note that the key event closes none of them.
 
 The reader must separate cryptographic verification, complete linkage, understanding,
 bare-key eligibility and actor eligibility. It must not discard identity evidence by
@@ -600,6 +609,9 @@ relevant cuts, raw-key status, policy digest, evaluator/profile version and evid
 snapshot digest. Report definite failures as well as simultaneous uncertainty.
 Core freshness is always `not_established`; a named external freshness policy must be
 separately implemented before any stronger claim. Offline inclusion is not non-omission.
+Every identity answer the tool prints (the `actor` block of `show`, `explain`, `publish
+--as` and `hub check`, and each grant row) carries `freshness: not_established` with the
+note `relative to held evidence; no claim that no cut exists`.
 
 Transport uses the existing statements/blobs store. Include I, G, root/delegate
 ancestry, held relevant cuts, amendment/predecessor targets and time proofs; request

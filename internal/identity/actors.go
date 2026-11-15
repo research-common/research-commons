@@ -127,12 +127,9 @@ func (a *Actors) bound(st *wire.Statement) bool {
 	return idText(g.Body, "identity") == id && text(object(g.Body, "delegate"), "key") == st.Signer
 }
 
-// GrantCutNull and NotEstablished are the model's words, re-exported for consumers (only this adapter imports the
-// model).
-const (
-	GrantCutNull   = string(identitymodel.GrantCutNull)
-	NotEstablished = identitymodel.NotEstablished
-)
+// NotEstablished is the freshness of every identity answer (the model's word, re-exported: only this adapter
+// imports the model).
+const NotEstablished = identitymodel.NotEstablished
 
 // Grant is one grant naming a delegate key, with its grant-level state (profile §4.1, "requirements on
 // consumers"): the second axis of every view of a delegate, beside the key's bare-key status.
