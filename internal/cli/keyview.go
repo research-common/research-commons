@@ -2,7 +2,6 @@ package cli
 
 import (
 	"github.com/research-common/research-commons/internal/identity"
-	"github.com/research-common/research-commons/internal/identitymodel"
 	"github.com/research-common/research-commons/internal/keylog"
 )
 
@@ -19,7 +18,7 @@ const freshnessNote = "relative to held evidence; no claim that no cut exists"
 // setFreshness adds the freshness member and its note to an identity answer block. The value is the evaluator's
 // own word, printed as text: `freshness` is not a token member (anchor status prints a chain view's freshness there).
 func setFreshness(o *Obj) *Obj {
-	return o.set("freshness", textV(identitymodel.NotEstablished)).set("freshness_note", textV(freshnessNote))
+	return o.set("freshness", textV(identity.NotEstablished)).set("freshness_note", textV(freshnessNote))
 }
 
 // isKeyRef reports whether s is a signer as the wire writes it (ed25519:<64 hex> or 0x<40 hex>).

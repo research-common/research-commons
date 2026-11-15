@@ -157,3 +157,48 @@ func TestActorsEvaluatorContext(t *testing.T) {
 		t.Fatalf("key-only answer %+v", k)
 	}
 }
+
+// TestActorsGrants: a delegate key's grants with their grant-level state, by grant id. K1's own revoke leaves G1
+// open (with the delegate_self_event warning: profile §4.1); a root cut at A1 reads `cut at last_good` naming A1;
+// a grant signed by a key that is not its identity's root names no binding and is never open.
+func TestActorsGrants(t *testing.T) {
+	w := base(t)
+	w.sign(stmt{name: "K1rev", by: "K1", rc: "rc/1", parent: "A2", kind: "revoke_key", body: obj("reason", "superseded")})
+	// an outsider S signs a grant of I to K1: S is not I's root
+	w.sign(stmt{name: "SG", by: "S", kind: "identity_grant", body: w.grantBody("K1", authoredAny())})
+	grants := func(names ...string) []identity.Grant {
+		var ls [][]byte
+		for _, n := range names {
+			ls = append(ls, w.lines[n])
+		}
+		a, err := identity.NewActors(ls)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return a.Grants(w.signer("K1"))
+	}
+	byID := func(gs []identity.Grant) map[string]identity.Grant {
+		m := map[string]identity.Grant{}
+		for _, g := range gs {
+			m[g.Grant] = g
+		}
+		return m
+	}
+	m := byID(grants(w.order...))
+	g1 := m[w.ids["G1"]]
+	if g1.State != "open" || g1.Identity != w.ids["I"] || g1.Freshness != identitymodel.NotEstablished ||
+		!slices.ContainsFunc(g1.Why, func(s string) bool { return strings.HasPrefix(s, "warning delegate_self_event") }) {
+		t.Fatalf("G1 after K1's self-revoke: %+v", g1)
+	}
+	if sg, ok := m[w.ids["SG"]]; !ok || sg.State != "denied" || !slices.ContainsFunc(sg.Why, func(s string) bool { return strings.HasPrefix(s, "wrong_signer") }) {
+		t.Fatalf("an outsider's grant reads %+v", sg)
+	}
+	if _, ok := m[w.ids["G2"]]; ok {
+		t.Fatal("G2 names K2, not K1")
+	}
+	w.sign(stmt{name: "C", by: "R", parent: "G2", kind: "identity_cut", body: obj("identity", w.ids["I"], "grant", w.ids["G1"], "last_good", w.ids["A1"], "reason", "key_compromise")})
+	g1 = byID(grants(w.order...))[w.ids["G1"]]
+	if g1.State != "cut at last_good" || !slices.Equal(g1.LastGood, []string{w.ids["A1"]}) || !slices.Equal(g1.Cuts, []string{w.ids["C"]}) {
+		t.Fatalf("G1 after the root's cut: %+v", g1)
+	}
+}

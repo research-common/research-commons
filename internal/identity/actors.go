@@ -127,6 +127,13 @@ func (a *Actors) bound(st *wire.Statement) bool {
 	return idText(g.Body, "identity") == id && text(object(g.Body, "delegate"), "key") == st.Signer
 }
 
+// GrantCutNull and NotEstablished are the model's words, re-exported for consumers (only this adapter imports the
+// model).
+const (
+	GrantCutNull   = string(identitymodel.GrantCutNull)
+	NotEstablished = identitymodel.NotEstablished
+)
+
 // Grant is one grant naming a delegate key, with its grant-level state (profile §4.1, "requirements on
 // consumers"): the second axis of every view of a delegate, beside the key's bare-key status.
 type Grant struct {
@@ -144,8 +151,8 @@ type Grant struct {
 }
 
 // Grants lists every grant of the snapshot naming delegate as its delegate key, by grant id, each with its
-// grant-level state. A grant whose issuer-authenticated binding (an authenticated grant signed by its identity's
-// held, authenticated inception key) is missing reads unknown, never open: the grant then binds the key to no one.
+// grant-level state. A grant not signed by its identity's root key is never open: the model's root-ancestry check
+// denies it (wrong_signer), as it denies every act under it.
 func (a *Actors) Grants(delegate string) []Grant {
 	var out []Grant
 	for _, gid := range a.s.model.GrantsTo(identitymodel.Key(delegate)) {
@@ -158,25 +165,9 @@ func (a *Actors) Grants(delegate string) []Grant {
 			g.Cuts = append(g.Cuts, string(c))
 		}
 		g.Why = reasons(identitymodel.Result{Reasons: gs.Reasons, Warnings: gs.Warnings})
-		if gs.Status == identitymodel.GrantOpen && !a.issued(string(gid)) {
-			g.State = string(identitymodel.GrantUnknown)
-			g.Why = append(g.Why, "no issuer-authenticated binding of this grant to identity "+short(g.Identity))
-		}
 		out = append(out, g)
 	}
 	return out
-}
-
-// issued is bound's grant half: the grant and its identity's inception are held and authenticated, and the grant
-// is signed by the inception's key.
-func (a *Actors) issued(gid string) bool {
-	g, ok := a.s.held[gid]
-	if !ok || !a.s.Authenticated(gid) || g.Kind != "identity_grant" || g.Body == nil {
-		return false
-	}
-	id := idText(g.Body, "identity")
-	root, ok := a.s.held[id]
-	return ok && a.s.Authenticated(id) && root.Kind == "identity_inception" && g.Signer == root.Signer
 }
 
 func mapStatus(s identitymodel.Status) string {
