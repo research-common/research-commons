@@ -24,7 +24,8 @@ import (
 // The sender's side of `push` (storage note §4.5: a hub kept in a version-control repository receives a package
 // as the change between a base revision and the change's head). The store is the hub checkout, and the change is
 // read exactly as `hub check` reads it, through Prepare, then judged by gate.Push: the receiving hub's history at
-// the base and its policy as it is there. Nothing here writes, fetches or transports.
+// the base and its policy as it is there. Nothing here writes, fetches or transports; Send (transport.go) is the
+// one step that does, and only on the caller's word.
 
 // PushConfig is one push's own choices.
 type PushConfig struct {
@@ -33,6 +34,11 @@ type PushConfig struct {
 	// Base is the revision the change is judged against; "" means the remote's default branch as this checkout
 	// last saw it (refs/remotes/<remote>/HEAD).
 	Base string
+	// Branch names the remote branch the change goes to (refs/heads/<Branch>); "" means the base's branch, when the
+	// base is a branch of Remote.
+	Branch string
+	// Transport says the caller will Send the plan: a branch that cannot be determined is then a did-not-start.
+	Transport bool
 	// Resolver adds the reader's verifiers, as Config.Resolver.
 	Resolver []resolve.Option
 }
@@ -48,8 +54,12 @@ type PushPlan struct {
 	Uncommitted []string
 	// Held is the hub's history at the base (the receiver's held set).
 	Held gate.MemHeld
+	// Branch is the remote branch Send would update (refs/heads/<Branch>), "" when it is not determined (a dry run
+	// only); BranchFrom says where it came from: "--branch" or the base's remote-tracking ref.
+	Branch, BranchFrom string
 
-	pkg gate.Package
+	pkg  gate.Package
+	repo *repo
 }
 
 // PlanPush reads the change a push from the hub checkout containing dir would carry and runs gate.Push over it.
@@ -96,6 +106,9 @@ func PlanPush(dir string, cfg PushConfig) (*PushPlan, error) {
 		}
 		base, plan.BaseFrom = ref, ref
 	}
+	if err := plan.chooseBranch(r, cfg, base); err != nil {
+		return nil, err
+	}
 	p, err := prepareAt(r, root, Config{Base: base, Resolver: cfg.Resolver})
 	if err != nil {
 		return nil, err
@@ -105,11 +118,49 @@ func PlanPush(dir string, cfg PushConfig) (*PushPlan, error) {
 	if err != nil {
 		return nil, err
 	}
-	plan.Result, plan.Held, plan.pkg = p.result(rep), p.Held, p.Package
+	plan.Result, plan.Held, plan.pkg, plan.repo = p.result(rep), p.Held, p.Package, r
 	if plan.Uncommitted, err = uncommitted(r); err != nil {
 		return nil, err
 	}
 	return plan, nil
+}
+
+// chooseBranch sets the branch a push updates: --branch, else the base's own branch when the base is a branch of the
+// remote pushed to (refs/remotes/<remote>/<branch>, or refs/remotes/<remote>/HEAD's target). Anything else (a base
+// that is a commit id, a tag, a local branch, another remote's branch) determines nothing: guessing would update
+// a branch the user never named. Without a branch a transport does not start; a dry run says so.
+func (pl *PushPlan) chooseBranch(r *repo, cfg PushConfig, base string) error {
+	if cfg.Branch != "" {
+		pl.Branch, pl.BranchFrom = cfg.Branch, "--branch"
+	} else if out, err := r.git(nil, "rev-parse", "--symbolic-full-name", base); err == nil {
+		full := strings.TrimSpace(string(out))
+		prefix := "refs/remotes/" + pl.Remote + "/"
+		if b, ok := strings.CutPrefix(full, prefix); ok && b != "HEAD" && b != "" {
+			pl.Branch, pl.BranchFrom = b, full
+		}
+	}
+	if pl.Branch == "" {
+		if cfg.Transport {
+			return &gate.DidNotStart{Title: "the branch to push to is not known", Scope: "option --branch",
+				Detail: "the base " + base + " is not a branch of the remote " + pl.Remote + ", so it names no branch to update there",
+				Next:   "name the branch with --branch <name> (a branch of the hub or of your fork, then open a pull request), or base the change on a branch of " + pl.Remote + " (--base " + pl.Remote + "/<branch>)"}
+		}
+		return nil
+	}
+	if !BranchName(pl.Branch) {
+		return &gate.DidNotStart{Title: "not a branch name", Detail: pl.Branch + " is not a valid branch name", Scope: "option --branch", Next: "name a branch: --branch <name>"}
+	}
+	if _, err := r.git(nil, "check-ref-format", "refs/heads/"+pl.Branch); err != nil {
+		return &gate.DidNotStart{Title: "not a branch name", Detail: "git does not accept refs/heads/" + pl.Branch + " as a ref name", Scope: "option --branch", Next: "name a branch: --branch <name>"}
+	}
+	return nil
+}
+
+// BranchName is the static half of a branch name's check (git check-ref-format is the other): a short name, so the
+// refspec is <sha>:refs/heads/<name>, never a pattern, a deletion or anything git would read as an option.
+func BranchName(b string) bool {
+	return b != "" && b != "HEAD" && !strings.HasPrefix(b, "-") && !strings.HasPrefix(b, "+") && !strings.HasPrefix(b, "refs/") &&
+		!strings.ContainsAny(b, " \t\n:*?[\\^~") && !strings.Contains(b, "@{")
 }
 
 // uncommitted lists the data-surface paths (under blobs/ and statements/) where the working tree and HEAD differ:
