@@ -886,7 +886,9 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
 - **Only signed statements enter a hub.** Unsigned work is a local draft that cannot be pushed, whatever its
   type (#14, #24). Generating a key is part of first-run setup.
 - **One validation core.** `pull`, hub CI, `push` and the pre-pin check at `publish` (§8) call one validation
-  function. They differ only in what history they hold and whose policy applies (I12).
+  function. They differ only in what history they hold and whose policy applies (I12). `push` also applies the
+  writer's own transport precondition (the anchor before transport, bitcoin-time note §2). It is not an admission
+  verdict, and no other gate applies it.
 - **Refusal classes (I8).** *Intrinsic:* hash mismatch, bad signature, malformed statement (including one
   asserting more than one observation class), a line in another key's log, unsafe paths,
   anything outside the data surface. *Reader policy:* trust floors,

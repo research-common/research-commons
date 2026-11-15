@@ -151,8 +151,10 @@ An operation that needs two keys (a k-of-n edition) is two operations: each cont
 own unit. The edition is authorized when the reader holds enough of them, which is a view, not a write.
 
 The anchor that `publish` places before bytes leave the machine (claims-model note §10) is a *following*
-operation on the same key's log: the authored statement must exist to be anchored. `push` refuses while the
-anchor operation for the statements it would carry is absent or `pending`.
+operation on the same key's log: the authored statement must exist to be anchored. `push` refuses to carry a
+statement whose standing requires an anchor (bitcoin-time note §2 step 3) while no `anchors` statement by its signer
+that covers it is installed: an anchor operation that is absent, or whose journal record is still `pending` (§3.1),
+does not count. A pending *proof* does: the anchor carries it before transport (bitcoin-time note §2, §17).
 
 ### 3.3 Crash at each point (C-core-125, P-10)
 

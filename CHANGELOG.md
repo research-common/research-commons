@@ -45,6 +45,9 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   appended. Every calendar failing: exit 3. `--dry-run` contacts nothing. `publish` still does not stamp and no `push`
   gate is built (KNOWN-LIMITS L-16).
 ### Changed
+- **Design notes: the anchor before transport, per statement.** The storage note now says `push` refuses a statement whose
+  standing requires an anchor while no installed `anchors` line by its signer covers it, and that a pending proof counts
+  (the bitcoin-time and claims-model notes agree); new conformance case C-btc-03c. `push` itself is not built yet.
 - **`provenance_partial` is stricter (pre-1.0 tightening).** `unpinned` must name at least one input and name each
   once, and every key of `supplied` must be one of the `unpinned` names (order is not constrained). A line that
   breaks either rule is refused at every gate, as intrinsic `malformed statement` naming the member; before, an
