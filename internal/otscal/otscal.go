@@ -1,9 +1,11 @@
 // Package otscal is an OpenTimestamps calendar client: the network half of stamping (bitcoin-time note §2 steps
-// 3–4). It submits a stamped digest to a calendar and returns the calendar's pending proof as a complete
-// `ots-detached-v1` file, checked by the profile's own parser before it is returned.
+// 3–4) and of upgrading (§2 "Upgrade"). It submits a stamped digest to a calendar and returns the calendar's
+// pending proof as a complete `ots-detached-v1` file, checked by the profile's own parser before it is returned;
+// and it asks a calendar for the completed timestamp of a pending commitment, returning the bare answer for the
+// caller to merge (btctime.Merge parses it strictly).
 //
 // It is the only package that dials a calendar. Nothing here runs unless the binary wires a Client into the
-// command line (cmd/commons does, for `anchor stamp`); the command package and the bitcoin-time package import no
+// command line (cmd/commons does, for `anchor stamp` and `anchor upgrade`); the command package and the bitcoin-time package import no
 // network code. The dial rules are fetch's (internal/store): https only, no proxy, loopback, private, link-local,
 // shared and other non-global addresses refused at connect time unless AllowPrivate names a local calendar or
 // mirror, at most three redirects and only to https on the same host, a bounded response.
@@ -19,6 +21,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -185,4 +188,50 @@ func Assemble(d [32]byte, timestamp []byte) ([]byte, error) {
 		return nil, errors.New("the response carries no pending attestation")
 	}
 	return f, nil
+}
+
+// ErrPending is Upgrade's answer when the calendar says the commitment is not yet in a Bitcoin block (HTTP 404):
+// still pending, not a failure of the calendar.
+var ErrPending = errors.New("still pending (the calendar has no completed timestamp for this commitment yet)")
+
+// Upgrade asks the calendar for the completed timestamp of commitment (the message at a pending attestation's
+// node): GET <base>/timestamp/<lowercase hex commitment> with the protocol's Accept header, under the same dial,
+// redirect and timeout rules as Submit. HTTP 200 returns the body, a bare timestamp rooted at commitment, of at
+// most btctime.MaxUpgradeBytes bytes (a longer body is the calendar's failure); HTTP 404 returns ErrPending; any
+// other status is the calendar's failure, named. The body is not interpreted here: btctime.Merge parses it under
+// the profile's limits and refuses one that does not root at a pending node.
+func (c *Client) Upgrade(commitment []byte) ([]byte, error) {
+	if len(commitment) == 0 {
+		return nil, errors.New("empty commitment")
+	}
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, c.base+"/timestamp/"+hex.EncodeToString(commitment), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", MediaType)
+	req.Header.Set("User-Agent", UserAgent)
+	req.Header.Set("Accept-Encoding", "identity")
+	resp, err := c.client().Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	switch resp.StatusCode {
+	case http.StatusOK:
+	case http.StatusNotFound:
+		return nil, ErrPending
+	default:
+		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, btctime.MaxUpgradeBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("reading the response: %w", err)
+	}
+	if len(body) > btctime.MaxUpgradeBytes {
+		return nil, fmt.Errorf("response over %d bytes", btctime.MaxUpgradeBytes)
+	}
+	if len(body) == 0 {
+		return nil, errors.New("empty response")
+	}
+	return body, nil
 }
