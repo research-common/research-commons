@@ -12,6 +12,20 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 ## [0.5.0-alpha.6] - 2026-11-15
 
 ### Added
+- **`push --dry-run`: what a push would carry, judged as the hub's CI would.** Run in a git checkout of the hub
+  (the store is the checkout): the change is `merge-base(<base>, HEAD)..HEAD`, with `--base` defaulting to
+  `refs/remotes/<remote>/HEAD` (`--remote`, default `origin`; exit 2 when it is not set). Every object gets the
+  verdict `hub check` would give, through the same gate, against the hub's history and `hub-policy.json` at the base.
+  Beside the verdicts, two writer preconditions that are not admission verdicts (no other gate applies them): the
+  anchor before transport (C-btc-03c: a statement whose standing requires an anchor is refused, reader policy
+  `anchor required`, until an `anchors` line by its signer, carried or held by the hub, covers it; a pending proof
+  covers; coverage is per statement; a statement with standing `anchor: none` and no anchor is carried with a warning
+  naming the rule; `--anchor-policy required|none` replaces the standing for every statement), and withheld bytes (a
+  blob whose availability a statement declares withheld, with no serving `holds`, is refused: carrying it would
+  release it). An `anchors` line whose proof blob neither travels nor is held is a warning (`missing-proof` until it
+  is). Data files the working tree has and HEAD does not are listed as uncommitted. Exit 0/1/3 as `hub check`, 1 also
+  on a precondition refusal. Writes nothing (`no registry change; no fetch; no cache; no transport`). No transport is
+  built yet (KNOWN-LIMITS L-17): without `--dry-run`, `push` exits 2 and does nothing.
 - **Identity answers state their freshness, and a delegate key shows both of its axes.** Every identity actor block
   (`show`, `explain`, `--json`) prints `freshness: not_established` ("relative to held evidence; no claim that no cut
   exists"): no input the tool reads can establish that a root has not cut a grant elsewhere. `show <key>` and
@@ -55,12 +69,12 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   Bitcoin attestation does it commit the new proof blob and a new anchors statement (the same `covered`, `services`:
   the calendars that answered) after the old one, signed by the same key, as one journal record. After
   `anchor headers sync`, readers show the head's bound `verified` at that block. Still pending: exit 0, nothing
-  appended. Every calendar failing: exit 3. `--dry-run` contacts nothing. `publish` still does not stamp and no `push`
-  gate is built (KNOWN-LIMITS L-16).
+  appended. Every calendar failing: exit 3. `--dry-run` contacts nothing. `publish` still does not stamp (KNOWN-LIMITS L-16):
+  run `anchor stamp`, commit, then `push --dry-run`.
 ### Changed
 - **Design notes: the anchor before transport, per statement.** The storage note now says `push` refuses a statement whose
   standing requires an anchor while no installed `anchors` line by its signer covers it, and that a pending proof counts
-  (the bitcoin-time and claims-model notes agree); new conformance case C-btc-03c. `push` itself is not built yet.
+  (the bitcoin-time and claims-model notes agree); new conformance case C-btc-03c. `push --dry-run` applies it (above).
 - **`provenance_partial` is stricter (pre-1.0 tightening).** `unpinned` must name at least one input and name each
   once, and every key of `supplied` must be one of the `unpinned` names (order is not constrained). A line that
   breaks either rule is refused at every gate, as intrinsic `malformed statement` naming the member; before, an

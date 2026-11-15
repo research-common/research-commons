@@ -401,18 +401,15 @@ var limits = []limit{
 	},
 	{
 		id:  "L-16",
-		gap: "`publish` does not stamp and there is no `push`, so nothing makes a head's anchor exist before its bytes leave the machine (bitcoin-time note §2, \"stamp before transport\"): run `anchor stamp` after `publish`, and `anchor upgrade` once the calendars have answered",
+		gap: "`publish` does not stamp, so a head's anchor exists before its bytes leave the machine only if the author runs `anchor stamp` after `publish` (bitcoin-time note §2, \"stamp before transport\"); `push --dry-run` checks it, and a transport outside the tool (`git push`) does not",
 		sources: []limitSource{
-			{file: "CHANGELOG.md", says: "`publish` still does not stamp and no `push` gate is built (KNOWN-LIMITS L-16)"},
-			{help: []string{"anchor", "stamp"}, says: "publish does not stamp, and nothing yet checks that a head was stamped before it leaves this machine: run anchor stamp after publish."},
+			{file: "CHANGELOG.md", says: "`publish` still does not stamp (KNOWN-LIMITS L-16)"},
+			{help: []string{"anchor", "stamp"}, says: "publish does not stamp: run anchor stamp after publish, commit, and check with push --dry-run"},
 		},
-		probe:  "`publish` has no option naming a stamp or a calendar, and no command is named `push`",
-		closes: "a stamping `publish`, or a `push` that refuses a head whose standing is `anchor required` and that no held anchors line covers",
+		probe:  "`publish` has no option naming a stamp or a calendar",
+		closes: "a stamping `publish`",
 		open: func(t *testing.T) (bool, string) {
 			for _, c := range Commands() {
-				if c.Name == "push" {
-					return false, c.Name
-				}
 				if c.Name == "publish" {
 					for _, f := range c.Flags {
 						if strings.Contains(f.Name, "stamp") || strings.Contains(f.Name, "calendar") {
@@ -421,7 +418,24 @@ var limits = []limit{
 					}
 				}
 			}
-			return true, "publish does not stamp; no push"
+			return true, "publish does not stamp"
+		},
+	},
+	{
+		id:  "L-17",
+		gap: "`push` transports nothing yet: only `push --dry-run` is built (the hub's verdicts and the anchor and withheld-bytes preconditions); send the commits with `git push` and a pull request. It needs the store to be a git checkout of the hub",
+		sources: []limitSource{
+			{file: "CHANGELOG.md", says: "No transport is built yet (KNOWN-LIMITS L-17)"},
+			{help: []string{"push"}, says: "No transport is built yet: without --dry-run, push exits 2 and does nothing."},
+			{help: []string{"push"}, says: "Run inside a git checkout of the hub whose top level holds rc-store"},
+		},
+		probe:  "`push` without `--dry-run` exits 2 (`transport not built yet; use --dry-run`) and changes nothing",
+		closes: "`push` sends the commits to the hub (`git push <remote> <sha>:<branch>`, never forced)",
+		open: func(t *testing.T) (bool, string) {
+			d := t.TempDir()
+			before := snapshot(t, d)
+			r := runIn(d, nil, "push", "--json")
+			return r.code == ExitDidNotStart && strings.Contains(r.stdout, "transport not built yet") && snapshot(t, d) == before, r.stdout
 		},
 	},
 }
