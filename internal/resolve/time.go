@@ -2,8 +2,6 @@ package resolve
 
 import (
 	"fmt"
-	"slices"
-	"strings"
 
 	"github.com/research-common/research-commons/internal/keylog"
 	"github.com/research-common/research-commons/internal/wire"
@@ -161,51 +159,42 @@ func (r *Resolver) anchorBound(a *Placed) (Bound, bool) {
 }
 
 // bounds is every bound the reader derives for statement st from the counting anchors of st's signer whose
-// covered head has st in its history, by anchor id. bound picks the best of them. A statement on an incoherent
-// line has none.
+// covered head has st in its history, by anchor id. bound picks the displayed one of them. A statement on an
+// incoherent line has none.
 func (r *Resolver) bounds(st *wire.Statement) []Bound {
 	if r.incoherent(st.ID) {
 		return nil
 	}
 	var out []Bound
-	for _, a := range r.byKind["anchors"] {
-		if a.St.Signer != st.Signer || !r.anchorCounts(a) {
-			continue
-		}
-		cov := str(a.St.Body, "covered")
-		if !r.precedes(st.Signer, cov, a.St.ID) || !closure(cov, r.chained[st.Signer])[st.ID] {
-			continue
-		}
-		if b, ok := r.anchorBound(a); ok {
-			out = append(out, b)
+	for _, c := range r.anchorCands(st) {
+		if c.ok {
+			out = append(out, c.b)
 		}
 	}
-	slices.SortFunc(out, func(a, b Bound) int { return strings.Compare(a.Anchor, b.Anchor) })
 	return out
 }
 
-// bound is the best bound the reader holds for statement st: the earliest verified bound among the counting
-// anchors of st's signer whose covered head has st in its history; else a local one; else none. An anchor
-// bounds only its signer's own log (§10). A statement on an incoherent line has no bound (IncoherentWhy).
+// bound is the bound the reader shows for statement st: the earliest verified bound among the counting anchors
+// of st's signer whose covered head has st in its history; else a local one; else none. An anchor bounds only
+// its signer's own log (§10). A statement on an incoherent line has no bound (IncoherentWhy).
+//
+// Per covered head one anchors line is displayed (supersede.go, bitcoin-time note §1 rule 5): a later line of
+// the head supersedes an earlier one for display, a verified bound is preferred, and a refused line never
+// displaces a usable one. Across covered heads the displayed lines are combined as before: the earliest
+// verified, else a local one, else a refused one, ties by anchor id. Only verified bounds order anything, so
+// which unverified line is displayed changes no answer.
 func (r *Resolver) bound(st *wire.Statement) Bound {
 	if r.incoherent(st.ID) {
 		return Bound{Quality: NoBound, Why: IncoherentWhy}
 	}
 	best := Bound{Quality: NoBound}
-	for _, a := range r.byKind["anchors"] {
-		if a.St.Signer != st.Signer || !r.anchorCounts(a) {
-			continue
-		}
-		// covered is a line of the signer's own log that the anchor line itself reaches (wire §5), and st is in
-		// its history
-		cov := str(a.St.Body, "covered")
-		if !r.precedes(st.Signer, cov, a.St.ID) || !closure(cov, r.chained[st.Signer])[st.ID] {
-			continue
-		}
-		b, ok := r.anchorBound(a)
+	heads, groups := byHead(r.anchorCands(st))
+	for _, h := range heads {
+		c, ok := r.displayedFor(st.Signer, groups[h])
 		if !ok {
 			continue
 		}
+		b := c.b
 		switch {
 		case b.verified() && (!best.verified() || b.Height < best.Height || (b.Height == best.Height && b.Anchor < best.Anchor)):
 			best = b
@@ -214,7 +203,7 @@ func (r *Resolver) bound(st *wire.Statement) Bound {
 		case b.Quality == Local && best.Quality == NoBound:
 			best = b // a local bound beats an anchor the verifier refused
 		case b.Quality == Local && best.Quality == Local && b.Anchor < best.Anchor:
-			best = b // deterministic choice among unverified bounds; none of them orders anything
+			best = b // deterministic choice across covered heads among unverified bounds; none of them orders anything
 		}
 	}
 	return best
