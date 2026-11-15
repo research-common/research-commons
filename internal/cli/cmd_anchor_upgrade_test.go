@@ -17,6 +17,7 @@ import (
 
 	"github.com/research-common/research-commons/internal/btctime"
 	"github.com/research-common/research-commons/internal/canon"
+	"github.com/research-common/research-commons/internal/conformance"
 )
 
 // anchor upgrade tests: every calendar is a loopback httptest TLS server reached through the real calendar client;
@@ -195,8 +196,9 @@ func TestAnchorStampMultiCalendar(t *testing.T) {
 // synthetic chain whose header at that height commits to the proof's digest, and show/verify read the head's bound
 // verified at that height, quality bitcoin. A second upgrade finds nothing to do and contacts nothing.
 func TestAnchorUpgradeEndToEnd(t *testing.T) {
-	// No conformance case names the upgrade path itself; C-btc-03 (stamp before transport) needs the push gate
-	// through a command, which is not built.
+	// C-btc-03b (a), (b), (d) here; (c), (e) in TestAnchorUpgradeOutcomes. C-btc-03 (stamp before transport) needs
+	// the push gate through a command, which is not built.
+	conformance.Covers(t, "C-btc-03b")
 	const n, height = 20, 10
 	now := testChainStart.Add(time.Duration(n+1) * 600 * time.Second)
 	useTestChain(t, &now, 0)
@@ -302,6 +304,7 @@ func TestAnchorUpgradeEndToEnd(t *testing.T) {
 // calendar beside one that answers (upgraded, services names only the one merged, a warning); naming the old anchor
 // explicitly.
 func TestAnchorUpgradeOutcomes(t *testing.T) {
+	conformance.Covers(t, "C-btc-03b")
 	p, a := stampWorld(t)
 	c1, c2 := newUpCal(t, "one"), newUpCal(t, "two")
 	if r := p.stamp(upBuilder(c1, c2), calArgs(c1, c2)...); r.code != 0 {
