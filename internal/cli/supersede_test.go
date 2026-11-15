@@ -7,6 +7,7 @@ import (
 
 	"github.com/research-common/research-commons/internal/btctime"
 	"github.com/research-common/research-commons/internal/canon"
+	"github.com/research-common/research-commons/internal/conformance"
 	"github.com/research-common/research-commons/internal/keylog"
 )
 
@@ -44,6 +45,7 @@ func anchorRows(t *testing.T, o *canon.Object) map[string]*canon.Object {
 // "superseded by" it; both are inputs of the answer. With one anchors line explain prints no `anchors` member,
 // so that answer is as before.
 func TestExplainListsSupersededAnchors(t *testing.T) {
+	conformance.Covers(t, "C-btc-31")
 	w := newWorld(t)
 	h := w.authored("A1", "A", "X")
 	single := w.anchorHead("AA1", "A", h, 100)

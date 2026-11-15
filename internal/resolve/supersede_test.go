@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/research-common/research-commons/internal/conformance"
 	"github.com/research-common/research-commons/internal/keylog"
 	"github.com/research-common/research-commons/internal/wire"
 )
@@ -107,6 +108,7 @@ func lineOf(t *testing.T, ls []AnchorLine, id string) AnchorLine {
 // the earlier one "superseded by" the later. The claim's bound names the later anchor. Priority is unchanged:
 // two unverified lines still rank nothing against a verified rival.
 func TestSupersessionLaterPendingDisplayed(t *testing.T) {
+	conformance.Covers(t, "C-btc-31")
 	for _, newerLower := range []bool{true, false} {
 		pp := withIDOrder(t, newerLower, twoLines(t, "local:pending-1#%d", "local:pending-2"))
 		w, h, a1, a2 := pp.w, pp.h, pp.a1, pp.a2
@@ -137,6 +139,7 @@ func TestSupersessionLaterPendingDisplayed(t *testing.T) {
 // TestSupersessionForkedLowerID: two anchors lines of one head on forked branches of the signer's log: neither
 // descends from the other, so the lower id is displayed, and explain says why.
 func TestSupersessionForkedLowerID(t *testing.T) {
+	conformance.Covers(t, "C-btc-31")
 	w := newWorld(t)
 	h := w.authored("A1", "A", "X")
 	seq := w.seq["A"]
@@ -163,6 +166,7 @@ func TestSupersessionForkedLowerID(t *testing.T) {
 // one is displayed and used, whichever id is lower; explain marks the newer one "verified preferred". The
 // priority answer is the verified one's: A (verified at 100 through its older line) ranks before B (101).
 func TestSupersessionVerifiedPreferred(t *testing.T) {
+	conformance.Covers(t, "C-btc-31")
 	for _, newerLower := range []bool{true, false} {
 		pp := withIDOrder(t, newerLower, twoLines(t, "btc:100", "local:pending#%d", "licence", "CC0-1.0"))
 		w, h, a1, a2 := pp.w, pp.h, pp.a1, pp.a2
@@ -193,6 +197,7 @@ func TestSupersessionVerifiedPreferred(t *testing.T) {
 // one is still the displayed bound (a refused anchor never displaces a usable one). With only refused lines, the
 // latest refused line is shown as refused, and still no bound.
 func TestSupersessionRefusedNeverDisplaces(t *testing.T) {
+	conformance.Covers(t, "C-btc-31")
 	for _, newerLower := range []bool{true, false} {
 		pp := withIDOrder(t, newerLower, twoLines(t, "local:pending#%d", "refused:big"))
 		w, h, a1, a2 := pp.w, pp.h, pp.a1, pp.a2
