@@ -119,7 +119,7 @@ func TestUpgradeProofOutcomes(t *testing.T) {
 		t.Fatalf("merged: %v %+v", err, p)
 	}
 	// bob answers with trailing bytes after a valid answer (refused by the strict parser), finney answers well: the
-	// refusal is scoped to bob and finney.s answer is still merged
+	// refusal is scoped to bob and finney's answer is still merged
 	cals = map[string]Upgrader{
 		bob:    &mockUpgrader{uri: bob, answers: map[string][]byte{string(byURI[bob]): append(append([]byte{}, answerFor(5)...), 0x00)}},
 		finney: &mockUpgrader{uri: finney, answers: map[string][]byte{string(byURI[finney]): answerFor(701)}},

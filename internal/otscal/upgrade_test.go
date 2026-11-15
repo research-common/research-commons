@@ -100,7 +100,9 @@ func TestUpgradeFailures(t *testing.T) {
 		})
 	}
 	// exactly at the bound is returned whole (Merge judges it)
-	s := newUpgradeCal(t, func(w http.ResponseWriter, _ *http.Request) { w.Write(bytes.Repeat([]byte{0}, btctime.MaxUpgradeBytes)) })
+	s := newUpgradeCal(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Write(bytes.Repeat([]byte{0}, btctime.MaxUpgradeBytes))
+	})
 	if b, err := s.client(t, true).Upgrade(commitment); err != nil || len(b) != btctime.MaxUpgradeBytes {
 		t.Fatalf("at the bound: %v %d", err, len(b))
 	}
