@@ -361,6 +361,8 @@ func checkShape(a Arg, v string) *Problem {
 		// a display alias has the shape of a ref too; it is resolved against the store once the store is known
 		// (resolveAliases), before any work starts
 		ok, want = isDigest(v) || isID(v) || store.IsAlias(v), "a content digest (sha256: + 64 lowercase hex), a statement id (64 lowercase hex), or a display alias of either (12 lowercase hex, optionally after sha256:)"
+	case ShapeRefOrKey:
+		ok, want = isDigest(v) || isID(v) || store.IsAlias(v) || isKeyRef(v), "a content digest (sha256: + 64 lowercase hex), a statement id (64 lowercase hex), a display alias of either (12 lowercase hex, optionally after sha256:), or a key (ed25519: + 64 lowercase hex, or 0x + 40 lowercase hex)"
 	case ShapeDigest:
 		ok, want = isDigest(v), "a content digest (sha256: + 64 lowercase hex)"
 	case ShapeID:
@@ -399,7 +401,7 @@ func resolveAliases(cmd *Command, c *Ctx) *Problem {
 			continue
 		}
 		v, ok := c.Args[a.Name]
-		if !ok || a.Shape != ShapeRef || !store.IsAlias(v) {
+		if !ok || (a.Shape != ShapeRef && a.Shape != ShapeRefOrKey) || !store.IsAlias(v) {
 			continue
 		}
 		full, prob := resolveAlias(c, a, v)

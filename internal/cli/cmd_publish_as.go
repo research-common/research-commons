@@ -81,7 +81,7 @@ func actingAnswer(c *Ctx, s signed) (*Obj, *Problem) {
 		if len(why) > 0 {
 			a.set("reasons", texts(why...))
 		}
-		return a, nil
+		return setFreshness(a), nil
 	}
 	detail := "the identity evaluator over the statements this store holds plus this line reads the act " + state
 	if id == "" {

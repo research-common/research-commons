@@ -31,6 +31,8 @@ const (
 	ShapeID
 	// ShapeText is free text, checked by the command (before any work) if at all.
 	ShapeText
+	// ShapeRefOrKey is a ShapeRef or a signer key (ed25519:<64 hex> or 0x<40 hex>): show and explain of a key.
+	ShapeRefOrKey
 )
 
 // Arg is a positional argument.

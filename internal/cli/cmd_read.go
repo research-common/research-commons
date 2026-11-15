@@ -17,8 +17,10 @@ import (
 
 func init() {
 	ref := []Arg{{Name: "digest|id", Shape: ShapeRef}}
-	Register(&Command{Name: "show", Summary: "show a blob (authorship, grade, every disclosure), a statement, or a resource", Args: ref, Store: true, ReaderPolicy: true,
-		Help: "A digest shows the blob: authorship and every claimant, labels, whether the bytes are held here, the grade with the full disclosure set beside it, derivation groups, and every other statement about it. An id shows the statement. A resource's id is its genesis statement's id: show prints the genesis and the resource view beside it (controllers and rule, the current edition and the chain behind it by hash, every edition with its approvals, any FORK, the current edition's members and the receiver's check of a completeness claim). An edition id, or the statement id of one of its approvals, shows the resource pinned at that edition. An observation's statement shows its corroboration status. A statement on a fork of its signer's log shows the fork (FORK with its tips, or merged with the clearing line); it never changes whether the statement counts.",
+	// show and explain also take a key: its bare-key status beside each grant naming it (identity profile §4.1)
+	refKey := []Arg{{Name: "digest|id", Shape: ShapeRefOrKey}}
+	Register(&Command{Name: "show", Summary: "show a blob (authorship, grade, every disclosure), a statement, a resource, or a key", Args: refKey, Store: true, ReaderPolicy: true,
+		Help: "A digest shows the blob: authorship and every claimant, labels, whether the bytes are held here, the grade with the full disclosure set beside it, derivation groups, and every other statement about it. An id shows the statement. A resource's id is its genesis statement's id: show prints the genesis and the resource view beside it (controllers and rule, the current edition and the chain behind it by hash, every edition with its approvals, any FORK, the current edition's members and the receiver's check of a completeness claim). An edition id, or the statement id of one of its approvals, shows the resource pinned at that edition. An observation's statement shows its corroboration status. A statement on a fork of its signer's log shows the fork (FORK with its tips, or merged with the clearing line); it never changes whether the statement counts. An identity statement shows its actor (identity, grant, eligible / denied / unknown, the reasons) with freshness not_established: relative to held evidence; no claim that no cut exists. A key (ed25519:<64 hex> or 0x<40 hex>) shows its two axes side by side: bare_key, its own rotate_key and revoke_key and what each leaves counting, and grants, every grant naming the key by id with its state (open, cut at last_good, cut null, unknown, denied); a key's own key event closes no grant.",
 		Run:  showCmd})
 	Register(&Command{Name: "verify", Summary: "check a blob or a statement from the statements held; exit per the exit table", Args: ref, Store: true, ReaderPolicy: true,
 		Flags:   rerunFlags,
@@ -26,7 +28,7 @@ func init() {
 		Before:  rerunBefore,
 		Help:    "Statement-only by default: verify reads the statements this store holds and runs nothing. With --rerun (a blob only) and --exec-policy <file>, the reader re-runs the derivation under its own execution policy and the re-run's token replaces the derivation cause; without a policy the re-run is unchecked and nothing runs. Exit 0 checked and passed, 1 a completed comparison disagreed, 3 could not check, 4 nothing to re-run, 5 environment mismatch.",
 		Run:     verifyCmd})
-	Register(&Command{Name: "explain", Summary: "the statements, policy, evaluator and time context behind every token shown", Args: ref, Store: true, ReaderPolicy: true,
+	Register(&Command{Name: "explain", Summary: "the statements, policy, evaluator and time context behind every token shown", Args: refKey, Store: true, ReaderPolicy: true,
 		Flags:   []Flag{sinceFlag},
 		Prepare: prepareSince,
 		Before:  sinceBefore,
@@ -75,6 +77,9 @@ func showCmd(c *Ctx) (*Obj, int, error) {
 	ref := c.Args["digest|id"]
 	if isDigest(ref) {
 		return v.scoped(v.showArtifact(ref)), ExitOK, nil
+	}
+	if isKeyRef(ref) {
+		return v.scoped(v.keyObj(ref)), ExitOK, nil
 	}
 	return v.scoped(v.showRef(ref, false)), ExitOK, nil
 }
@@ -432,6 +437,9 @@ func explainCmd(c *Ctx) (*Obj, int, error) {
 		o.set("verify", newObj().set("causes", causes).set("exit", intV(int64(code))))
 		o.set("reasoning", texts(a.Explain...))
 		v.setAnchorLines(o, &inputs, claimantAnchors(a)...)
+	} else if isKeyRef(ref) {
+		o = v.keyObj(ref)
+		inputs = v.keyInputs(ref)
 	} else {
 		o = v.showRef(ref, true)
 		v.setAnchorLines(o, &inputs, ref)

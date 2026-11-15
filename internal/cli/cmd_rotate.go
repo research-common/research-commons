@@ -49,6 +49,7 @@ func init() {
 	Register(&Command{Name: "rotate", Summary: "rotate your signing key: sign a rotate_key naming its successor",
 		Store: true, Writes: true, Flags: flags, Prepare: prepareRotate, Run: rotateCmd,
 		Help: "A rotation retires your key and names its successor; the successor starts its own log and inherits no claims. " +
+			"Every identity grant naming your key is printed by id with its state (grants_not_closed): a rotation closes none of them and the successor inherits none. " +
 			"Like a soft revocation, it merges every tip this store holds of your log, so nothing is cut; a tip whose branch carries a rotate_key or revoke_key outside the line you extend is refused (exit 1): use revoke --reason key_compromise with --last-good instead. " +
 			"With a forked log and no --prev, the rotation extends the highest tip when no branch carries a key event, and otherwise asks for --prev. " +
 			"It is refused (exit 1) when the history it extends already holds an in-force key event (the rotation would count toward nothing) and when the successor's log here carries a key event. " +
@@ -143,6 +144,8 @@ func rotateCmd(c *Ctx) (*Obj, int, error) {
 	noteLock(out, wl)
 	afterHead()
 	out.set("tips", rotateTips(lv, plan))
+	// a rotation closes no grant naming the key (identity profile §4.1), and a successor inherits none
+	setGrantsNotClosed(out, v, k.Signer())
 	body := &canon.Object{Members: map[string]canon.Value{}}
 	setMember(body, "successor", canon.String(p.successor))
 	st, err := wire.Write(wire.Draft{Kind: "rotate_key", Seq: plan.h.seq, Prev: plan.h.prev, Merges: plan.merges, TS: p.ts, Body: body}, k, Now())

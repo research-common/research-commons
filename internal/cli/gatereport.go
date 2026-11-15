@@ -55,7 +55,7 @@ func gateReport(rep *gate.Report) *Obj {
 			if len(x.Actor.Reasons) > 0 {
 				a.set("reasons", texts(x.Actor.Reasons...))
 			}
-			row.set("actor", a)
+			row.set("actor", setFreshness(a))
 		}
 		if x.Scope != "" && x.Verdict != gate.Admitted {
 			row.set("scope", peerV(x.Scope))

@@ -92,7 +92,12 @@ JSON members carrying tokens: `authorship`, `role`, `state`, `grade`, `step`, `q
 | `counted` | statement | chained, verified, understood and not excluded by a key event; for an identity statement, its actor eligible for the identity it names (its key's status shown beside it, not applied) |
 | `not counted` | statement | held and shown, counted toward nothing (the reason is named) |
 | `eligible` | actor | the statement's signer acts for the identity it names under the grant it names, on the evidence held |
-| `denied` | actor | the held evidence shows the signer does not act for that identity (the reason is named) |
+| `denied` | actor | the held evidence shows the signer does not act for that identity (the reason is named); for a grant, no act under it can count (the root retired, the grant or a cut of it is invalid) |
+| `open` | grant | the grant is valid on its identity's lineage and no cut of it is held: an act under it may count (each act is still judged on its own) |
+| `cut at last_good` | grant | the root cut the grant keeping the delegate's acts through last_good (named beside it); acts outside that history count toward nothing for the identity |
+| `cut null` | grant | the root cut the grant keeping nothing: no act under it counts for the identity |
+| `no key event` | bare key | no rotate_key or revoke_key of the key is in force: its bare-key lines count by the usual rules |
+| `self-revoked` | bare key | the key's own rotate_key or revoke_key is in force: its bare-key lines after it do not count (each event's effect is named); it closes no grant naming the key |
 | `retained` | line | an unverified line kept and not placed |
 | `FORK` | line | two lines of one key's log from one sequence point, not yet merged; for a resource, two authorized editions with one predecessor and no merge: no edition is current |
 | `merged` | line | a fork of one key's log that has cleared: a later line of the key names every other tip, so every branch is in its history; both branches stay and count |

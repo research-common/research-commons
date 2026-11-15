@@ -95,7 +95,7 @@ func init() {
 			"Soft reasons (superseded, cessation_of_operation) merge every tip this store holds of your log, so nothing is cut; a tip whose branch carries a rotate_key or revoke_key outside the line you extend is refused (exit 1), because merging it would let that event outrank the revocation: use key_compromise with --last-good instead. " +
 			"With a forked log and no --prev, a soft revocation extends the highest tip when no branch carries a key event, and otherwise asks for --prev. " +
 			"key_compromise merges nothing unless you name it with --merge and needs --last-good <id> or --last-good none; on a forked log it needs --prev. " +
-			"Every tip is listed with what happens to it, and the lines that stop counting are named. --dry-run signs nothing and writes nothing (with key_compromise it runs without --last-good, to list the tips). " +
+			"Every tip is listed with what happens to it, and the lines that stop counting are named. Every identity grant naming the key is printed by id with its state (grants_not_closed): a key's own revocation closes none of them; only the identity's root does (identity cut). --dry-run signs nothing and writes nothing (with key_compromise it runs without --last-good, to list the tips). " +
 			"Exit 0 signed and committed (or the dry run); 1 refused after the check over your log completed (nothing signed); 2 did not start (no reason and no terminal, a missing --last-good, conflicting options, no usable key); 3 could not decide (a forked log without --prev, a line it names not held) or a failure after work started.",
 	})
 }
@@ -223,6 +223,8 @@ func revokeCmd(c *Ctx) (*Obj, int, error) {
 		out.set("reason_kind", textV("soft: the key retired; its history keeps counting"))
 	}
 	out.set("tips", revokeTips(lv, plan))
+	// a key's own revocation closes no grant naming it (identity profile §4.1): each is printed by id, dry run or not
+	setGrantsNotClosed(out, v, k.Signer())
 	if hard && p.lastGood == "" {
 		// a dry run without --last-good: the tips are the answer; nothing to sign yet
 		return out.set("dry_run", boolV(true)).set("committed", boolV(false)).

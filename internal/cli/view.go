@@ -181,7 +181,8 @@ func (v *view) evaluatorObj() *Obj {
 }
 
 // actorObj is the signed actor of an identity statement and the evaluator's answer about it: the identity and grant
-// it names, the state (`eligible`, `denied`, `unknown`) and the evaluator's reasons. An actor the evaluator binds
+// it names, the state (`eligible`, `denied`, `unknown`), the evaluator's reasons and the freshness every identity
+// answer carries (not_established: relative to the held evidence, profile §1). An actor the evaluator binds
 // to no identity is never `eligible` (it acts for no one; never its key's either). Nil for a statement with no
 // actor (every rc/1 line).
 func (v *view) actorObj(p *resolve.Placed) *Obj {
@@ -194,5 +195,5 @@ func (v *view) actorObj(p *resolve.Placed) *Obj {
 	if len(why) > 0 {
 		a.set("reasons", texts(why...))
 	}
-	return a
+	return setFreshness(a)
 }
