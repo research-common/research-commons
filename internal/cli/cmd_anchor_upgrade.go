@@ -143,6 +143,10 @@ func (v *view) upgradeTargets(c *Ctx, signer string) ([]upgradeTarget, []*Obj, *
 			return nil, nil, &Problem{Slug: "proof-not-held", Title: "the anchors line's proof is not held here", Class: refusal.Operational,
 				Scope: "argument anchors-statement", Detail: why + "; nothing was contacted or appended", Next: "fetch or pull the proof blob, then run anchor upgrade again", Peer: t.proofID, Exit: ExitCouldNot}
 		}
+		if pp, err := btctime.ParseProof(t.proof, btctime.DefaultLimits()); err == nil && len(pp.Bitcoin) > 0 {
+			return nil, []*Obj{rowObj().set("anchor", refV(id)).set("covered", refV(t.covered)).
+				set("why", textV("its proof already carries a Bitcoin attestation"))}, nil
+		}
 		return []upgradeTarget{t}, nil, nil
 	}
 	// newest anchors line per covered head
@@ -221,7 +225,7 @@ func upgradeCmd(c *Ctx) (*Obj, int, error) {
 	}
 	if len(targets) == 0 {
 		return out.set("heads", listV{}).set("committed", boolV(false)).
-			set("note", textV("nothing to upgrade: no anchors line of your log here is the newest for its head with a pending-only proof; nothing was contacted or appended")), ExitOK, nil
+			set("note", textV("nothing to upgrade: no anchors line here is the newest for its head with a pending-only proof (see skipped); nothing was contacted or appended")), ExitOK, nil
 	}
 	// the placement: the line the new anchors lines extend; every old anchor must be in its history (or be it), so
 	// each covered head stays in its new anchor's prefix (bitcoin-time note §1 rule 3)

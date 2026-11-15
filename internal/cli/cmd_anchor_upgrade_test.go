@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -16,7 +17,6 @@ import (
 
 	"github.com/research-common/research-commons/internal/btctime"
 	"github.com/research-common/research-commons/internal/canon"
-	"github.com/research-common/research-commons/internal/conformance"
 )
 
 // anchor upgrade tests: every calendar is a loopback httptest TLS server reached through the real calendar client;
@@ -109,7 +109,12 @@ func upBuilder(cals ...*upCal) CalendarBuilder {
 
 func runUpgrade(root string, b CalendarBuilder, env map[string]string, args ...string) result {
 	var o, e bytes.Buffer
-	code := Main(append([]string{"anchor", "upgrade", "--json"}, args...), &Env{Stdout: &o, Stderr: &e, Getenv: func(k string) string { return env[k] },
+	if !slices.Contains(args, "--human") {
+		args = append([]string{"--json"}, args...)
+	} else {
+		args = slices.DeleteFunc(slices.Clone(args), func(a string) bool { return a == "--human" })
+	}
+	code := Main(append([]string{"anchor", "upgrade"}, args...), &Env{Stdout: &o, Stderr: &e, Getenv: func(k string) string { return env[k] },
 		Getwd: func() (string, error) { return root, nil }, Build: Build{Version: "test", Commit: "0000000"}, Calendars: b})
 	return result{code, o.String(), e.String()}
 }
@@ -190,7 +195,8 @@ func TestAnchorStampMultiCalendar(t *testing.T) {
 // synthetic chain whose header at that height commits to the proof's digest, and show/verify read the head's bound
 // verified at that height, quality bitcoin. A second upgrade finds nothing to do and contacts nothing.
 func TestAnchorUpgradeEndToEnd(t *testing.T) {
-	conformance.Partial(t, "C-btc-03", "publish → anchor stamp → anchor upgrade → verified bound runs through the commands; the push gate (stamp before transport) is not built")
+	// No conformance case names the upgrade path itself; C-btc-03 (stamp before transport) needs the push gate
+	// through a command, which is not built.
 	const n, height = 20, 10
 	now := testChainStart.Add(time.Duration(n+1) * 600 * time.Second)
 	useTestChain(t, &now, 0)
@@ -271,6 +277,17 @@ func TestAnchorUpgradeEndToEnd(t *testing.T) {
 	}
 	if v := runIn(p.root, env, "verify", nw.ID, "--json"); !strings.Contains(v.stdout, `"quality":"bitcoin"`) {
 		t.Fatalf("verify anchors line: %d %s", v.code, v.stdout)
+	}
+	// naming the upgraded anchor: already carries a Bitcoin attestation, nothing contacted, exit 0
+	gets0 := c1.gets.Load() + c2.gets.Load()
+	r = p.upgrade(b, append(calArgs(c1, c2), nw.ID)...)
+	if r.code != 0 || !strings.Contains(r.stdout, "already carries a Bitcoin attestation") || c1.gets.Load()+c2.gets.Load() != gets0 {
+		t.Fatalf("named upgraded anchor: %d %s", r.code, r.stdout)
+	}
+	// the human surface prints the outcome per head
+	if h := runUpgrade(p.root, b, nil, append([]string{"--human", "--key", p.key, "--dry-run", old}, calArgs(c1, c2)...)...); h.code != 0 ||
+		!strings.Contains(h.stdout, "would ask") || !strings.Contains(h.stdout, "dry run") {
+		t.Fatalf("human dry run: %d %s", h.code, h.stdout)
 	}
 	// nothing left to upgrade: no calendar contacted
 	gets := c1.gets.Load() + c2.gets.Load()
