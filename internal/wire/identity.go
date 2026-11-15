@@ -52,10 +52,29 @@ type Actor struct {
 // being refused, so an authentic but malformed root control stays visible as non-passing evidence instead of
 // disappearing and turning a denial into a pass. Lines whose linkage envelope (rc, kind, signer, alg, seq,
 // prev, merges) or signature is malformed are still refused: no reader can place them.
-type IdentityReader struct{}
+type IdentityReader struct {
+	// v1 and v2 are the critical-extension registries of the two majors this reader interprets (the same registry
+	// type the unchanged reader carries, extensions.go). rc/1 registers nothing: any crit is unsupported, and
+	// x_identity_v1 is not admitted there. rc/2 registers x_identity_v1 and nothing else. Each reader is built
+	// once and never changed, so no received byte can register an extension.
+	v1, v2 *Reader
+}
 
-// NewIdentityReader returns the candidate reader. It has no configuration and no extension registry.
-func NewIdentityReader() *IdentityReader { return &IdentityReader{} }
+// NewIdentityReader returns the candidate reader. It has no configuration: its rc/2 critical-extension registry
+// holds exactly x_identity_v1, with its validator (identityExtension).
+func NewIdentityReader() *IdentityReader {
+	return newIdentityReader(map[string]ExtensionValidator{IdentityCrit: identityExtension})
+}
+
+// newIdentityReader builds the reader with the given rc/2 registry. Production passes the one registration
+// NewIdentityReader makes; tests pass others to show what each registration decides.
+func newIdentityReader(rc2 map[string]ExtensionValidator) *IdentityReader {
+	r2, err := NewReader(rc2)
+	if err != nil {
+		panic(err) // programmer error: the registry is a constant of the build
+	}
+	return &IdentityReader{v1: &Reader{}, v2: r2}
+}
 
 // Read parses one received line. See IdentityReader.
 func (r *IdentityReader) Read(line []byte) (*Statement, error) {
@@ -148,9 +167,9 @@ func (r *IdentityReader) read(env *canon.Object, sigS string, verify bool) (*Sta
 	var st Status
 	var why string
 	if major == Major {
-		st, why = interpretV1(s, env)
+		st, why = r.interpretV1(s, env)
 	} else {
-		st, why = interpretCandidate(s, env)
+		st, why = r.interpretCandidate(s, env)
 	}
 	if st != Valid {
 		s.Status, s.Why = st, why
@@ -257,11 +276,11 @@ func common(s *Statement, env *canon.Object) (string, bool) {
 // interpretV1 is Read's evaluation of an rc/1 line, after verification. The identity reader registers no rc/1
 // extension, so any crit (including x_identity_v1, which this profile does not admit in rc/1) is Unsupported.
 // An rc/1 envelope actor is NOT read: rc/1 is never upgraded to an identity act.
-func interpretV1(s *Statement, env *canon.Object) (Status, string) {
+func (r *IdentityReader) interpretV1(s *Statement, env *canon.Object) (Status, string) {
 	if why, ok := common(s, env); !ok {
 		return Invalid, why
 	}
-	if len(s.Crit) > 0 {
+	if !r.v1.supports(s.Crit) {
 		return Unsupported, "crit " + strings.Join(s.Crit, ",")
 	}
 	return baseBody(s)
@@ -306,7 +325,7 @@ var candidateBase = map[string]bool{
 	"refutes": true, "retracts": true, "anchors": true, "describes": true,
 }
 
-func interpretCandidate(s *Statement, env *canon.Object) (Status, string) {
+func (r *IdentityReader) interpretCandidate(s *Statement, env *canon.Object) (Status, string) {
 	// The actor is read first so that a later failure still reports an invalid identity context, never a bare key.
 	actorWhy := candidateActor(s, env)
 	why, ok := common(s, env)
@@ -319,7 +338,7 @@ func interpretCandidate(s *Statement, env *canon.Object) (Status, string) {
 		// Profile syntax cap, rc/2 only (rc/1 and the default readers are unchanged).
 		return Invalid, "merges has more than " + strconv.Itoa(maxSetEntries) + " entries"
 	}
-	return candidateBody(s)
+	return r.candidateBody(s, env)
 }
 
 // candidateActor reads x_actor_v1 when present. A non-empty result is the reason the statement is Invalid; s.Actor
@@ -345,77 +364,48 @@ func candidateActor(s *Statement, env *canon.Object) string {
 	return ""
 }
 
-func candidateBody(s *Statement) (Status, string) {
+// candidateBody reads an rc/2 line's critical declaration through the registry, then its kind. The order is the
+// profile's: the declaration must name x_identity_v1 (Invalid otherwise); a declaration naming an extension this
+// reader has not registered is Unsupported and its body is read no further (the registry's preflight: nothing
+// partial runs); the registered validator then checks the marker and its pairing with the actor (Invalid on any
+// error, retained like every other verified body failure); only then is the kind's body read.
+func (r *IdentityReader) candidateBody(s *Statement, env *canon.Object) (Status, string) {
 	switch {
 	case len(s.Crit) == 0:
 		return Invalid, "rc/2 requires crit [" + IdentityCrit + "]"
 	case !slices.Contains(s.Crit, IdentityCrit):
 		return Invalid, "rc/2 crit lacks " + IdentityCrit
-	case len(s.Crit) != 1:
+	case !r.v2.supports(s.Crit):
 		return Unsupported, "crit " + strings.Join(s.Crit, ",")
 	}
-	markerV, _ := s.Body.Get(IdentityCrit)
-	marker, ok := markerV.(*canon.Object)
-	if !ok {
-		return Invalid, "body." + IdentityCrit + " is not an object"
-	}
-	admin := s.Kind == "identity_inception" || s.Kind == "identity_grant" || s.Kind == "identity_cut"
-	if s.Actor != nil && (admin || s.Kind == "genesis" || s.Kind == "describes") {
-		return Invalid, s.Kind + " is a raw-key statement and takes no " + ActorField
+	if err := r.v2.runValidators(s.Crit, env); err != nil {
+		return Invalid, err.Error()
 	}
 	switch {
 	case s.Kind == "identity_inception":
-		return inceptionBody(s, marker)
+		return inceptionBody(s)
 	case s.Kind == "identity_grant":
-		return grantBody(s, marker)
+		return grantBody(s)
 	case s.Kind == "identity_cut":
-		return cutBody(s, marker)
+		return cutBody(s)
 	case s.Kind == "rotate_key" || s.Kind == "revoke_key":
 		return Invalid, "raw key events stay rc/1 in this profile"
 	case candidateNotImplemented[s.Kind]:
 		return Unsupported, "rc/2 " + s.Kind + " not implemented by this reader"
 	case candidateTask[s.Kind]:
-		return taskBody(s, marker)
+		return taskBody(s)
 	case candidateResource[s.Kind]:
-		return resourceBody(s, marker)
+		return resourceBody(s)
 	case candidateBase[s.Kind]:
-		if s.Kind == "authored" || s.Kind == "observed" {
-			if why := closed(marker, "body."+IdentityCrit, "amends"); why != "" {
-				return Invalid, why
-			}
-			if av, ok := marker.Get("amends"); ok {
-				if err := boundedSet(av, "body."+IdentityCrit+".amends", id()); err != nil {
-					return Invalid, err.Error()
-				}
-				if s.Actor == nil {
-					return Invalid, "amends requires an identity actor"
-				}
-			}
-		} else if len(marker.Keys) != 0 {
-			return Invalid, "body." + IdentityCrit + " must be {} for " + s.Kind
-		}
 		return baseBody(s)
 	default:
 		return UnknownKind, s.Kind
 	}
 }
 
-// taskBody reads an rc/2 task lifecycle statement (§2.3, §5.3): `progress` and `withdraw` carry exactly
-// {intent: <statement id>} in the marker; the other task kinds carry {}. The body is the rc/1 schema unchanged.
-func taskBody(s *Statement, marker *canon.Object) (Status, string) {
-	mp := "body." + IdentityCrit
-	if s.Kind == "progress" || s.Kind == "withdraw" {
-		if why := closed(marker, mp, "intent"); why != "" {
-			return Invalid, why
-		}
-		if _, ok := idValue(marker, "intent"); !ok {
-			return Invalid, mp + ".intent is required for " + s.Kind + " and must be a statement id (the attempt's intent)"
-		}
-	} else if len(marker.Keys) != 0 {
-		return Invalid, mp + " must be {} for " + s.Kind
-	}
-	return baseBody(s)
-}
+// taskBody reads an rc/2 task lifecycle statement (§2.3, §5.3): the body is the rc/1 schema unchanged. Its marker
+// (`progress` and `withdraw` pin an `intent`, the other task kinds carry {}) is the registered validator's.
+func taskBody(s *Statement) (Status, string) { return baseBody(s) }
 
 // IntentPin is the `intent` an rc/2 `progress` or `withdraw` pins in its marker ("" for any other statement, or
 // when the marker carries none).
@@ -429,10 +419,7 @@ func IntentPin(s *Statement) string {
 	return v
 }
 
-func inceptionBody(s *Statement, marker *canon.Object) (Status, string) {
-	if len(marker.Keys) != 0 {
-		return Invalid, "body." + IdentityCrit + " must be {}"
-	}
+func inceptionBody(s *Statement) (Status, string) {
 	if s.Seq != 0 {
 		return Invalid, "identity_inception must be seq 0"
 	}
@@ -447,10 +434,7 @@ func inceptionBody(s *Statement, marker *canon.Object) (Status, string) {
 	return Valid, ""
 }
 
-func grantBody(s *Statement, marker *canon.Object) (Status, string) {
-	if len(marker.Keys) != 0 {
-		return Invalid, "body." + IdentityCrit + " must be {}"
-	}
+func grantBody(s *Statement) (Status, string) {
 	if s.Seq < 1 {
 		return Invalid, "identity_grant must follow the identity inception"
 	}
@@ -625,10 +609,7 @@ func permission(v canon.Value, p string) (unsupported, why string) {
 	return amendMode, ""
 }
 
-func cutBody(s *Statement, marker *canon.Object) (Status, string) {
-	if len(marker.Keys) != 0 {
-		return Invalid, "body." + IdentityCrit + " must be {}"
-	}
+func cutBody(s *Statement) (Status, string) {
 	if s.Seq < 1 {
 		return Invalid, "identity_cut must follow the identity inception"
 	}

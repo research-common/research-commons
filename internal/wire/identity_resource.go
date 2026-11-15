@@ -109,20 +109,10 @@ func candidateEditionContents() []field {
 // carry task_roles; a task_roles object and a contents.contract come together or not at all; a contract carries
 // no top-level role declaration; a controller change names both complete typed controllers and a rule (§2.1:
 // partial changes are refused); a genesis rule is satisfiable by its controllers.
-func resourceBody(s *Statement, marker *canon.Object) (Status, string) {
+func resourceBody(s *Statement) (Status, string) {
 	mp := "body." + IdentityCrit
-	if s.Kind == "edition" {
-		if why := closed(marker, mp, "task_roles"); why != "" {
-			return Invalid, why
-		}
-		if tr, ok := marker.Get("task_roles"); ok {
-			if err := taskRoles()(tr, mp+".task_roles", &schemaCtx{}); err != nil {
-				return Invalid, err.Error()
-			}
-		}
-	} else if len(marker.Keys) != 0 {
-		return Invalid, mp + " must be {} for " + s.Kind
-	}
+	markerV, _ := s.Body.Get(IdentityCrit)
+	marker, _ := markerV.(*canon.Object) // an object: the registered validator (identityExtension) has accepted it
 	ctx := &schemaCtx{}
 	if err := checkFields(s.Body, "body", ctx, candidateResourceKinds[s.Kind]); err != nil {
 		return Invalid, err.Error()
