@@ -10,6 +10,12 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 ## [Unreleased]
 
 ### Added
+- **Identity answers state their freshness, and a delegate key shows both of its axes.** Every identity actor block
+  (`show`, `explain`, `--json`) prints `freshness: not_established` ("relative to held evidence; no claim that no cut
+  exists"): no input the tool reads can establish that a root has not cut a grant elsewhere. `show <key>` and
+  `explain <key>` print the key's own revoke/rotate status beside every grant naming it, each with its grant-level
+  state (open, cut at its last good line, cut null, unknown, denied). `revoke` (including `--dry-run`) and `rotate`
+  by a delegate key list, by id, every grant they do not close. Conformance cases C-id-09, C-id-10 and C-id-23 are covered.
 - **`package show` and `key sign` warn about a future `ts`.** When an external-signing package's envelope `ts` is
   more than 300 s ahead of the local clock, both print an advisory (and `--json` carries `advisories`) that the
   store refuses it at `--complete` and the package should be prepared again with a current `--ts`. Exit codes
