@@ -29,9 +29,21 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   blob whose availability a statement declares withheld, with no serving `holds`, is refused: carrying it would
   release it). An `anchors` line whose proof blob neither travels nor is held is a warning (`missing-proof` until it
   is). Data files the working tree has and HEAD does not are listed as uncommitted. Exit 0/1/3 as `hub check`, 1 also
-  on a precondition refusal. Writes nothing (`no registry change; no fetch; no cache; no transport`). No transport is
-  built yet (KNOWN-LIMITS L-17): without `--dry-run`, `push` exits 2 and does nothing. `publish` still does not stamp
-  (KNOWN-LIMITS L-16): run `anchor stamp`, commit, then `push --dry-run`.
+  on a precondition refusal. Writes nothing (`no registry change; no fetch; no cache; no transport`). `publish` still
+  does not stamp (KNOWN-LIMITS L-16): run `anchor stamp`, commit, then `push`.
+- **`push` sends.** Without `--dry-run`, and only when the judgement is clean (every object admitted, no precondition
+  refused), `push` runs `git push <remote> <judged commit>:refs/heads/<branch>` in your own git environment (your
+  credentials, configuration and hooks): never forced, no tags, and the commit sent is the one judged, not whatever
+  `HEAD` is by then. A judgement that exits 1 or 3 sends nothing. The branch is `--branch <name>`, else the base's
+  branch on the remote (`origin/HEAD` → `main`); a base that is not a branch of the remote is exit 2 asking for
+  `--branch`. To contribute through a pull request, push to a branch of your own (`--branch <name>`, or `--remote
+  <your fork> --base origin/main --branch <name>`) and open the pull request. A refusal by git (the branch moved on,
+  authentication, a hook, a protected branch) is exit 3 with `transported: false`, git's message with any URL
+  credentials removed, and the next step (for a moved branch: fetch, rebase your data commits onto the hub, push
+  again). Output gains `transported`, `branch`, `pushed`, `update` and, on a refusal, `git` and `next`. The git reader
+  `hub check` and `push` share now ignores replacement refs (`git replace`), so the bytes judged are the bytes `git
+  push` sends. Conformance cases C-core-108, C-core-135, C-core-148 and C-btc-03c are covered. `push` still needs the
+  store to be a git checkout of the hub (KNOWN-LIMITS L-17).
 
 ## [0.5.0-alpha.6] - 2026-11-15
 

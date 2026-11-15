@@ -25,7 +25,8 @@ acts for one, signed from a key file or through an external-signing package (`--
 `show <key>` prints a delegate key's own key events beside every grant naming it and that grant's state; every
 identity answer is relative to the statements held (`freshness: not_established`: no claim that no cut exists).
 `anchor stamp` and `anchor upgrade` write Bitcoin time evidence for your own log through the calendars you name
-(no default list); `push` is not built yet. There is no importer from the old format.
+(no default list); `push` sends a hub checkout's commits with `git push` once the hub's verdicts and the anchor and
+withheld-bytes checks are clean. There is no importer from the old format.
 
 The previous alpha (Python CLI, hubs, ledgers) lives on the `main` branch and the `v0.4.0-alpha.1` tag. It gets
 security fixes only. This README and everything under `docs/` marked otherwise describe the new format.
@@ -112,7 +113,7 @@ takes `--json`, which prints one JSON object (an RFC 9457 problem-details object
 | `status` | recovery state, unfinished operations, the durability declaration (`--limits` for scan limits); a row per open `FORK` of a held key log |
 | `gc` | list (default) or delete unreferenced blobs outside the grace window |
 | `hub check` | check a change to a hub as the hub's CI does; writes nothing |
-| `push --dry-run` | in a git checkout of a hub: judge the commits a push would carry as the hub's CI would, and refuse a statement whose standing requires an anchor until an `anchors` line covers it, or a withheld blob before its reveal; writes nothing, and no transport is built yet (send with `git push`) |
+| `push` | in a git checkout of a hub: judge the commits as the hub's CI would, refuse a statement whose standing requires an anchor until an `anchors` line covers it, or a withheld blob before its reveal; when all is clean, `git push` the judged commit to `--branch` (default: the base's branch), never forced; `--dry-run` sends nothing |
 
 ## Hubs
 
@@ -122,8 +123,11 @@ that runs `commons hub check` on every pull request. `commons hub check` needs t
 least one commit.
 
 To contribute, publish inside a clone of the hub, `anchor stamp` what needs an anchor, commit, and run
-`commons push --dry-run` before `git push`: it answers what the hub's CI will, plus the anchor-before-transport and
-withheld-bytes checks that only the sender can make.
+`commons push --branch <your-branch>` (or `--remote <your fork> --base origin/main --branch <your-branch>`), then
+open a pull request from that branch. `push` answers what the hub's CI will, plus the anchor-before-transport and
+withheld-bytes checks that only the sender can make, and sends the commit it judged only when all of that is clean
+(`--dry-run` to see the answer without sending). It never forces: if the hub's branch moved on, fetch, rebase your
+data commits onto it, and push again. Pushing straight to the hub's default branch works where the hub allows it.
 
 ## Documentation
 

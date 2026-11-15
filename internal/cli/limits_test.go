@@ -401,10 +401,10 @@ var limits = []limit{
 	},
 	{
 		id:  "L-16",
-		gap: "`publish` does not stamp, so a head's anchor exists before its bytes leave the machine only if the author runs `anchor stamp` after `publish` (bitcoin-time note §2, \"stamp before transport\"); `push --dry-run` checks it, and a transport outside the tool (`git push`) does not",
+		gap: "`publish` does not stamp, so a head's anchor exists before its bytes leave the machine only if the author runs `anchor stamp` after `publish` (bitcoin-time note §2, \"stamp before transport\"); `push` refuses to send an uncovered required statement, and a transport outside the tool (a plain `git push`) does not check",
 		sources: []limitSource{
 			{file: "CHANGELOG.md", says: "`publish` still does not stamp (KNOWN-LIMITS L-16)"},
-			{help: []string{"anchor", "stamp"}, says: "publish does not stamp: run anchor stamp after publish, commit, and check with push --dry-run"},
+			{help: []string{"anchor", "stamp"}, says: "publish does not stamp: run anchor stamp after publish, commit, then push"},
 		},
 		probe:  "`publish` has no option naming a stamp or a calendar",
 		closes: "a stamping `publish`",
@@ -423,19 +423,27 @@ var limits = []limit{
 	},
 	{
 		id:  "L-17",
-		gap: "`push` transports nothing yet: only `push --dry-run` is built (the hub's verdicts and the anchor and withheld-bytes preconditions); send the commits with `git push` and a pull request. It needs the store to be a git checkout of the hub",
+		gap: "`push` sends only from a git checkout of the hub (the store at the checkout's top level) and only through git: a store kept elsewhere is pulled into a hub checkout first, and there is no package file (`push --out`) for a hub that is not a git repository",
 		sources: []limitSource{
-			{file: "CHANGELOG.md", says: "No transport is built yet (KNOWN-LIMITS L-17)"},
-			{help: []string{"push"}, says: "No transport is built yet: without --dry-run, push exits 2 and does nothing."},
+			{file: "CHANGELOG.md", says: "`push` still needs the store to be a git checkout of the hub (KNOWN-LIMITS L-17)"},
 			{help: []string{"push"}, says: "Run inside a git checkout of the hub whose top level holds rc-store"},
 		},
-		probe:  "`push` without `--dry-run` exits 2 (`transport not built yet; use --dry-run`) and changes nothing",
-		closes: "`push` sends the commits to the hub (`git push <remote> <sha>:<branch>`, never forced)",
+		probe:  "`push` in a store that is not a git checkout exits 2 (`the store is not a git checkout`) and changes nothing, and `push` has no option naming an output file",
+		closes: "`push --out <file>` (a package archive any channel can carry), or a push from a store kept elsewhere",
 		open: func(t *testing.T) (bool, string) {
-			d := t.TempDir()
-			before := snapshot(t, d)
-			r := runIn(d, nil, "push", "--json")
-			return r.code == ExitDidNotStart && strings.Contains(r.stdout, "transport not built yet") && snapshot(t, d) == before, r.stdout
+			for _, c := range Commands() {
+				if c.Name == "push" {
+					for _, f := range c.Flags {
+						if f.Name == "out" || strings.Contains(f.Name, "file") || strings.Contains(f.Name, "archive") {
+							return false, "push --" + f.Name
+						}
+					}
+				}
+			}
+			w := newWorld(t)
+			before := snapshot(t, w.root)
+			r := runIn(w.root, nil, "push", "--json")
+			return r.code == ExitDidNotStart && strings.Contains(r.stdout, "the store is not a git checkout") && snapshot(t, w.root) == before, r.stdout
 		},
 	},
 }

@@ -23,7 +23,7 @@ import (
 // statement naming a real task edition among them) is refused at push, intrinsic, scope that object, and
 // reported as a draft; the hub's held set is unchanged. Control: the same body signed is admitted.
 func TestUnsignedDraftsRefused(t *testing.T) {
-	conformance.Partial(t, "C-core-108", "push refuses every unsigned draft (intrinsic, scope the object, reported as a draft) and the hub is unchanged; commons key new generates a key and publish never stores a draft unsigned (internal/cli), and first-run setup tells the user to generate a key (no implicit key, no default key path; decided): a signing command without a key exits 2 pointing at key new, which is the CLI's surface")
+	conformance.Partial(t, "C-core-108", "the gate half: push refuses every unsigned draft of every kind (intrinsic, scope the object, reported as a draft) and the held set is unchanged; the command, the hub's refs and the task's readiness are TestPushUnsignedDraft (internal/cli), which Covers the case")
 	w := newWorld(t)
 	g := w.sign("A", "genesis", obj("type", "task", "name", "t", "controllers", []string{w.signer("A")}, "rule", obj("any_one", true)))
 	held := w.held(g)
@@ -761,7 +761,7 @@ func TestRefuseIncompleteKnob(t *testing.T) {
 // amendment of its own claim, and a derivation group (one unit) are not contested, so the boundary is the
 // resolver's answer and not the presence of two `authored` lines. A package with no `authored` never builds a resolver.
 func TestContestedLabel(t *testing.T) {
-	conformance.Partial(t, "C-core-135", "the gate labels an admitted authored whose authorship over the evaluated set is contested, the same token on pull, hub check and push (internal/gate); listing, verify and push --dry-run are internal/cli; push transports nothing yet")
+	conformance.Partial(t, "C-core-135", "the gate labels an admitted authored whose authorship over the evaluated set is contested, the same token on pull, hub check and push (internal/gate); listing, verify and push (label and transport) are internal/cli, TestPushContested")
 	blob := []byte("rival blob")
 	w := newWorld(t)
 	a := w.authored("A", blob)

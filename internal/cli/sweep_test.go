@@ -101,7 +101,7 @@ func (w *world) badInvocations(c *Command) [][]string {
 	case "hub check":
 		return [][]string{{"--base", "no-such-rev"}, {"--base", "--output=/tmp/x"}, {"--store", w.root}}
 	case "push":
-		// no --dry-run (no transport is built); a base that is not here; an unknown remote; a remote name that is a
+		// a transport with no branch to update (the base main is a local branch, not the remote's); a base that is not here; an unknown remote; a remote name that is a
 		// path; an anchor policy that is neither; --store (push reads the checkout it runs in); the remote's default
 		// branch not recorded
 		return [][]string{{"--base", "main"}, {"--dry-run", "--base", "no-such-rev"}, {"--dry-run", "--base", "main", "--remote", "nope"},

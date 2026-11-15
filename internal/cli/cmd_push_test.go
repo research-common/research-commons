@@ -14,7 +14,7 @@ import (
 	"github.com/research-common/research-commons/internal/wire"
 )
 
-// push --dry-run tests. Every hub is a local bare repository (the remote is a path; nothing is dialled) and every
+// push tests. Every hub is a local bare repository (the remote is a path; nothing is dialled) and every
 // calendar a loopback httptest server (cmd_anchor_stamp_test.go). The author's store is a clone of the hub, as the
 // hub template's contribute flow has it.
 
@@ -29,6 +29,9 @@ func newPushWorld(t *testing.T) *pushWorld {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not installed")
 	}
+	// push runs git in the caller's environment: no system or global configuration reaches the throwaway hub
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	p := newPubWorld(t)
 	os.WriteFile(filepath.Join(p.root, ".gitignore"), []byte("/journal/\n/quarantine/\n/tmp/\n/cache/\n"), 0o644)
 	gitIn(t, p.root, "init", "-q", "-b", "main")
@@ -53,6 +56,40 @@ func (p *pushWorld) commitAll(msg string) {
 
 func (p *pushWorld) push(args ...string) result {
 	return runIn(p.root, nil, append([]string{"push", "--dry-run", "--json"}, args...)...)
+}
+
+// send runs push without --dry-run: the transport runs when the judgement is clean.
+func (p *pushWorld) send(args ...string) result {
+	return runIn(p.root, nil, append([]string{"push", "--json"}, args...)...)
+}
+
+// remoteHas reports whether the bare hub's branch holds path with exactly these bytes.
+func (p *pushWorld) remoteHas(branch, path string, want []byte) bool {
+	p.t.Helper()
+	out, err := exec.Command("git", "-C", p.remote, "cat-file", "blob", "refs/heads/"+branch+":"+path).Output()
+	return err == nil && string(out) == string(want)
+}
+
+// remoteHead is the bare hub's branch tip ("" when the branch does not exist).
+func (p *pushWorld) remoteHead(branch string) string {
+	out, err := exec.Command("git", "-C", p.remote, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// sentOK asserts a push that transported the checkout's HEAD to branch.
+func (p *pushWorld) sentOK(r result, branch string) *canon.Object {
+	p.t.Helper()
+	rep := jsonOf(p.t.(*testing.T), r)
+	head := gitIn(p.t, p.root, "rev-parse", "HEAD")
+	if r.code != ExitOK || rep.Members["transported"] != canon.Bool(true) || rep.Members["pushed"] != canon.String(head) ||
+		rep.Members["branch"] != canon.String(branch) || p.remoteHead(branch) != head ||
+		rep.Members["side_effects"] != canon.String(PushSentSideEffects) {
+		p.t.Fatalf("push did not transport HEAD %s to %s (remote %s): exit %d\n%s", head, branch, p.remoteHead(branch), r.code, r.stdout)
+	}
+	return rep
 }
 
 func (p *pushWorld) mustPublish(args ...string) string {
@@ -89,22 +126,25 @@ func (p *pushWorld) remoteState() string {
 	return gitIn(p.t, p.remote, "for-each-ref") + "\n" + gitIn(p.t, p.remote, "count-objects", "-v") + "\n" + snapshot(p.t, p.remote)
 }
 
-// TestPushAnchorGate: C-btc-03c's precondition half through the command (no transport is built). (a) an authored
-// without provenance and no anchor is refused, reader policy `anchor required`, scope the statement; (b) after
-// `anchor stamp` (a pending proof) and a commit it is covered and the push is clean; (c) an authored with
+// TestPushAnchorGate: C-btc-03c through the command. (a) an authored without provenance and no anchor is refused,
+// reader policy `anchor required`, scope the statement, and push without --dry-run sends nothing (the bare hub's refs
+// and objects are byte-identical); (b) after `anchor stamp` (a pending proof) and a commit it is covered, the push is
+// clean, and push sends it: the hub's branch then holds the authored line, the anchors line and the proof blob; (c) an authored with
 // provenance, unanchored, is carried with a warning naming the rule; (d) (a) under --anchor-policy none is carried
 // with a warning naming the override; (e) (c) under --anchor-policy required is refused; (f) a required statement
 // appended after the anchored head is refused while the earlier one stays covered (coverage is per statement); (g)
 // a statement on an incoherent line (ts earlier than its predecessor's) covered by an anchor is carried: coverage
 // is structural, not a time bound.
 func TestPushAnchorGate(t *testing.T) {
-	conformance.Partial(t, "C-btc-03c", "the precondition through push --dry-run: uncovered required statements refused (reader policy, anchor required, scope the statement), a pending proof covers, anchor: none carried with a warning naming the rule, --anchor-policy swaps both, coverage per statement and structural; \"nothing is transported\" is vacuous until push transports (L-17)")
+	conformance.Covers(t, "C-btc-03c")
 	cal := okCal(t)
-	stamp := func(p *pushWorld, id string) {
+	stamp := func(p *pushWorld, id string) string {
 		t.Helper()
-		if r := p.stamp(builder(cal), "--calendar", cal.srv.URL, "--allow-private", id); r.code != 0 {
+		r := p.stamp(builder(cal), "--calendar", cal.srv.URL, "--allow-private", id)
+		if r.code != 0 {
 			t.Fatalf("stamp: %d %s", r.code, r.stdout)
 		}
+		return string(outObj(t, r).Members["proof"].(canon.String))
 	}
 
 	t.Run("a-b required, then stamped", func(t *testing.T) {
@@ -131,8 +171,16 @@ func TestPushAnchorGate(t *testing.T) {
 		if h.code != ExitWrong || !strings.Contains(h.stdout, "anchor required") {
 			t.Fatalf("(a) human: %d\n%s", h.code, h.stdout)
 		}
+		// (a) without --dry-run: refused, nothing transported
+		remote := p.remoteState()
+		r = p.send()
+		rep = jsonOf(t, r)
+		if r.code != ExitWrong || rep.Members["transported"] != canon.Bool(false) || anchorRow(t, rep, a).Members["verdict"] != canon.String("refused") ||
+			rep.Members["side_effects"] != canon.String(PushSideEffects) || p.remoteState() != remote {
+			t.Fatalf("(a) push sent an uncovered required statement: exit %d\n%s", r.code, r.stdout)
+		}
 
-		stamp(p, a)
+		proof := stamp(p, a)
 		p.commitAll("anchor")
 		r = p.push()
 		rep = jsonOf(t, r)
@@ -142,6 +190,21 @@ func TestPushAnchorGate(t *testing.T) {
 		}
 		if w := warnings(rep); strings.Contains(w, "proof not carried") {
 			t.Fatalf("(b) the proof travels, yet: %s", w)
+		}
+		// (b) without --dry-run: sent; the hub's branch holds the authored line, the anchors line and the proof
+		p.sentOK(p.send(), "main")
+		cov := row.Members["covered_by"].(canon.Array)
+		anc := string(cov[0].(canon.String))
+		for _, id := range []string{a, anc} {
+			path := stmtPath(p.signer, id)
+			b, err := os.ReadFile(filepath.Join(p.root, filepath.FromSlash(path)))
+			if err != nil || !p.remoteHas("main", path, b) {
+				t.Fatalf("(b) the hub's branch lacks %s: %v", path, err)
+			}
+		}
+		pb, err := os.ReadFile(filepath.Join(p.root, "blobs", "sha256", strings.TrimPrefix(proof, "sha256:")))
+		if proof == "" || err != nil || !p.remoteHas("main", "blobs/sha256/"+strings.TrimPrefix(proof, "sha256:"), pb) {
+			t.Fatalf("(b) the hub's branch lacks the proof blob %q: %v", proof, err)
 		}
 	})
 
@@ -218,10 +281,11 @@ func TestPushAnchorGate(t *testing.T) {
 // TestPushWithheldBytes: the withheld precondition (storage note §3.2 "publish of a withheld artifact"; claims-model
 // note §7). The author publishes with availability withheld and --no-holds, stamps it, and commits everything,
 // the blob included: push refuses the blob (reader policy `withheld bytes`, scope the blob's path, naming the
-// declaring statement) while the statements themselves are carried; without the blob the push is clean; with
-// a holds (the reveal) also committed, the blob is carried.
+// declaring statement) while the statements themselves are carried, and push without --dry-run sends nothing;
+// without the blob the push is clean and sends the statements, the blob listed as uncommitted and absent from the
+// hub; with a holds (the reveal) also committed, the blob is carried and the hub's branch holds it.
 func TestPushWithheldBytes(t *testing.T) {
-	conformance.Partial(t, "C-core-148", "push --dry-run only: the refusal, the clean push without the blob and the carried blob after the reveal are asserted; nothing is transported yet, so the transport half waits for push")
+	conformance.Covers(t, "C-core-148")
 	p := newPushWorld(t)
 	data := "held-out pool with a 128-bit nonce 4f1c9a2e7b3d5a60c8e1f2a3b4c5d6e7"
 	c := p.file("seed", data)
@@ -252,6 +316,10 @@ func TestPushWithheldBytes(t *testing.T) {
 	if h := runIn(p.root, nil, "push", "--dry-run"); h.code != ExitWrong || !strings.Contains(h.stdout, "withheld bytes") {
 		t.Fatalf("human: %d\n%s", h.code, h.stdout)
 	}
+	remote := p.remoteState()
+	if r := p.send(); r.code != ExitWrong || jsonOf(t, r).Members["transported"] != canon.Bool(false) || p.remoteState() != remote {
+		t.Fatalf("push sent a withheld blob: exit %d\n%s", r.code, r.stdout)
+	}
 
 	// drop the blob from the commit (it stays in the store, untracked): clean, and listed as uncommitted
 	gitIn(t, p.root, "rm", "-q", "--cached", blob)
@@ -260,6 +328,11 @@ func TestPushWithheldBytes(t *testing.T) {
 	rep = jsonOf(t, r)
 	if r.code != ExitOK || len(rep.Members["withheld"].(canon.Array)) != 0 || !strings.Contains(string(canon.Encode(rep.Members["uncommitted"])), blob) {
 		t.Fatalf("without the blob: exit %d\n%s", r.code, r.stdout)
+	}
+	p.sentOK(p.send(), "main")
+	line, _ := os.ReadFile(filepath.Join(p.root, filepath.FromSlash(stmtPath(p.signer, a))))
+	if !p.remoteHas("main", stmtPath(p.signer, a), line) || p.remoteHas("main", blob, []byte(data)) {
+		t.Fatal("without the blob: the hub's branch should hold the authored line and not the withheld bytes")
 	}
 
 	// the reveal: a holds, then the blob, committed together
@@ -272,6 +345,10 @@ func TestPushWithheldBytes(t *testing.T) {
 	}
 	if o := objectRow(t, rep, blob); o != nil && o.Members["verdict"] == canon.String("refused") {
 		t.Fatalf("the revealed blob: %s", canon.Encode(o))
+	}
+	p.sentOK(p.send(), "main")
+	if !p.remoteHas("main", blob, []byte(data)) {
+		t.Fatal("after the reveal the hub's branch lacks the blob")
 	}
 }
 
@@ -299,9 +376,9 @@ func TestPushProofNotCarried(t *testing.T) {
 
 // TestPushDryRunWritesNothing: C-core-137's push half. push --dry-run over a change that would be refused and over one
 // that is clean prints its side effects, and a before/after snapshot of the checkout (its .git included) and of the
-// bare hub proves nothing changed. Without --dry-run push exits 2 and changes nothing either.
+// bare hub proves nothing changed, the clean one included (which push without --dry-run would send).
 func TestPushDryRunWritesNothing(t *testing.T) {
-	conformance.Partial(t, "C-core-137", "push --dry-run states its side effects (no registry change; no fetch; no cache; no transport) and a before/after snapshot of the checkout and the bare hub proves nothing changed; pull is TestPullTrustFloor, fetch TestFetchDryRun")
+	conformance.Partial(t, "C-core-137", "push --dry-run states its side effects (no registry change; no fetch; no cache; no transport) and a before/after snapshot of the checkout and the bare hub proves nothing changed, for a change push would send; pull is TestPullTrustFloor, fetch TestFetchDryRun")
 	p := newPushWorld(t)
 	a := p.mustPublish("--kind", "authored", "--content", p.file("a", "required content"))
 	p.commitAll("publish")
@@ -314,7 +391,8 @@ func TestPushDryRunWritesNothing(t *testing.T) {
 			t.Fatalf("push --dry-run %v changed something", args)
 		}
 		rep := jsonOf(t, r)
-		if rep.Members["side_effects"] != canon.String("no registry change; no fetch; no cache; no transport") ||
+		if rep.Members["transported"] != canon.Bool(false) || rep.Members["transport"] != canon.String("none: dry run") ||
+			rep.Members["side_effects"] != canon.String("no registry change; no fetch; no cache; no transport") ||
 			!strings.Contains(h.stdout, "no registry change; no fetch; no cache; no transport") {
 			t.Fatalf("side effects not stated: %s", r.stdout)
 		}
@@ -322,13 +400,8 @@ func TestPushDryRunWritesNothing(t *testing.T) {
 			t.Fatalf("push --dry-run %v: exit %d / %d, want %d\n%s", args, r.code, h.code, want, r.stdout)
 		}
 	}
-	before, remote := snapshot(t, p.root), p.remoteState()
-	if r := runIn(p.root, nil, "push", "--json"); r.code != ExitDidNotStart || !strings.Contains(r.stdout, "transport not built yet") {
-		t.Fatalf("push without --dry-run: %d %s", r.code, r.stdout)
-	}
-	if snapshot(t, p.root) != before || p.remoteState() != remote {
-		t.Fatal("push without --dry-run changed something")
-	}
+	// control: the clean change (under --anchor-policy none) is sent by push without --dry-run
+	p.sentOK(p.send("--anchor-policy", "none"), "main")
 	_ = a
 }
 
@@ -365,11 +438,14 @@ func TestPushNeedsAHubCheckout(t *testing.T) {
 	}
 }
 
-// TestPushUnsignedDraft: C-core-108 through the command. Unsigned drafts committed into the checkout where statements
-// go (an authored, and an intent naming a task the hub holds) are refused by push --dry-run, intrinsic `unsigned
-// draft`, scoped to each file, with a next step that says to sign; the hub is unchanged.
+// TestPushUnsignedDraft: C-core-108 through the command. An unsigned draft of each statement kind, committed into the
+// checkout where a statement would go (the task lifecycle ones naming a task edition the hub holds), is refused by
+// push, intrinsic `unsigned draft`, scoped to its file, with a next step that says to sign; push without --dry-run
+// exits 1 and sends nothing: the bare hub's refs and objects are byte-identical, and the task as a fresh clone of the
+// hub reads it (state and readiness) is unchanged. First-run setup (init) tells the user to generate a key, and a
+// signing command with no key generates none (TestFirstRunNoKey holds every signing command).
 func TestPushUnsignedDraft(t *testing.T) {
-	conformance.Partial(t, "C-core-108", "push --dry-run refuses each committed unsigned draft (authored; intent naming a held task), intrinsic, scope the file, next says sign it, the hub unchanged; every kind is TestUnsignedDraftsRefused (gate); the hub's task readiness is unchanged by construction until push transports (L-17)")
+	conformance.Covers(t, "C-core-108")
 	p := newPushWorld(t)
 	g := p.sign("T", "K9", "genesis", obj("type", "task", "name", "t", "controllers", []string{p.signer9()}, "rule", obj("any_one", true)))
 	p.commitAll("a task")
@@ -377,9 +453,15 @@ func TestPushUnsignedDraft(t *testing.T) {
 	gitIn(t, p.root, "fetch", "-q", "origin")
 	k := p.world.key("B")
 	paths := []string{}
+	ts := "2026-10-16T00:00:00Z"
 	for i, d := range []wire.Draft{
-		{Kind: "authored", TS: "2026-10-16T00:00:00Z", Body: obj("content", content("x"), "type", "dataset")},
-		{Kind: "intent", TS: "2026-10-16T00:00:00Z", Body: obj("task", g, "edition", g)},
+		{Kind: "authored", TS: ts, Body: obj("content", content("x"), "type", "dataset")},
+		{Kind: "holds", TS: ts, Body: obj("content", content("x"))},
+		{Kind: "describes", TS: ts, Body: obj("about", obj("content", dig("x")))},
+		{Kind: "retracts", TS: ts, Body: obj("of", g)},
+		{Kind: "intent", TS: ts, Body: obj("task", g, "edition", g)},
+		{Kind: "submit", TS: ts, Body: obj("task", g, "edition", g, "result", dig("x"))},
+		{Kind: "genesis", TS: ts, Body: obj("type", "collection", "name", "c", "controllers", []string{k.Signer()}, "rule", obj("any_one", true))},
 	} {
 		rel := gate.StatementPath(k.Signer(), strings.Repeat("0", 63)+strconv.Itoa(i))
 		os.MkdirAll(filepath.Dir(filepath.Join(p.root, rel)), 0o755)
@@ -388,6 +470,17 @@ func TestPushUnsignedDraft(t *testing.T) {
 	}
 	p.commitAll("drafts")
 	remote := p.remoteState()
+	task := func() string {
+		t.Helper()
+		c := filepath.Join(t.TempDir(), "clone")
+		gitIn(t, filepath.Dir(c), "clone", "-q", p.remote, c)
+		r := runIn(c, nil, "show", g, "--json")
+		if r.code != ExitOK || !strings.Contains(r.stdout, `"readiness"`) {
+			t.Fatalf("show task in a clone of the hub: %d\n%s", r.code, r.stdout)
+		}
+		return r.stdout
+	}
+	taskBefore := task()
 	r := p.push()
 	rep := jsonOf(t, r)
 	if r.code != ExitWrong {
@@ -404,13 +497,35 @@ func TestPushUnsignedDraft(t *testing.T) {
 	if p.remoteState() != remote {
 		t.Fatal("the hub changed")
 	}
+	s := p.send()
+	if s.code != ExitWrong || jsonOf(t, s).Members["transported"] != canon.Bool(false) {
+		t.Fatalf("push: exit %d\n%s", s.code, s.stdout)
+	}
+	if p.remoteState() != remote {
+		t.Fatal("push sent unsigned drafts: the hub changed")
+	}
+	if task() != taskBefore {
+		t.Fatal("the task's state or readiness changed at the hub")
+	}
+	// first-run setup: init names the key step; no key is generated implicitly, there is no default key path
+	in := runIn(t.TempDir(), nil, "init", filepath.Join(t.TempDir(), "s"))
+	if !strings.Contains(in.stdout, "commons key new --out <file>") || !strings.Contains(in.stdout, KeyEnv) {
+		t.Fatalf("init does not tell the user to generate a key:\n%s", in.stdout)
+	}
+	c := p.file("nokey", "x")
+	before := snapshot(t, p.root)
+	if r := runIn(p.root, nil, "publish", "--kind", "authored", "--content", c, "--json"); r.code != ExitDidNotStart ||
+		!strings.Contains(r.stdout, "commons key new") || snapshot(t, p.root) != before {
+		t.Fatalf("publish with no key: exit %d (or it wrote something)\n%s", r.code, r.stdout)
+	}
 }
 
-// TestPushContested: C-core-135's push half. Two keys claim one blob, each anchored (a pending proof and a parseable
-// proof with no backend: no verified bound, so neither is the default author). push --dry-run exits 0 and labels
-// both rival lines `contested`, the word list prints for the blob; verify exits 3.
+// TestPushContested: C-core-135. Two keys claim one blob, each anchored (a pending proof and a parseable proof with
+// no backend: no verified bound, so neither is the default author). list shows `contested`; push exits 0, labels
+// both rival lines `contested` and sends the package (the hub's branch holds both lines); verify exits 3 with the
+// same word. The dry run gives the same answer.
 func TestPushContested(t *testing.T) {
-	conformance.Partial(t, "C-core-135", "push --dry-run exits 0 and labels each rival authored `contested` (the token list and verify print; verify exits 3); a package containing it is pushed only once push transports (L-17)")
+	conformance.Covers(t, "C-core-135")
 	p := newPushWorld(t)
 	data := "rival bytes"
 	a := p.mustPublish("--kind", "authored", "--content", p.file("x", data), "--no-holds")
@@ -445,4 +560,91 @@ func TestPushContested(t *testing.T) {
 	if h := runIn(p.root, nil, "push", "--dry-run"); h.code != ExitOK || strings.Count(h.stdout, "contested") < 2 {
 		t.Fatalf("human: %d\n%s", h.code, h.stdout)
 	}
+	// the push itself: exit 0, the same label, and the package is at the hub
+	sent := p.sentOK(p.send(), "main")
+	for _, id := range []string{a, b} {
+		signer := p.signer
+		if id == b {
+			signer = p.world.signer("K2")
+		}
+		path := stmtPath(signer, id)
+		row := objectRow(t, sent, path)
+		line, _ := os.ReadFile(filepath.Join(p.root, filepath.FromSlash(path)))
+		if row == nil || !strings.Contains(string(canon.Encode(row.Members["labels"])), `"contested"`) || !p.remoteHas("main", path, line) {
+			t.Fatalf("%s: pushed without the contested label, or not at the hub:\n%s", id, canon.Encode(sent))
+		}
+	}
+	if v := p.run("verify", dig(data)); v.code != ExitCouldNot || !strings.Contains(v.stdout, "contested") {
+		t.Fatalf("verify after the push: exit %d\n%s", v.code, v.stdout)
+	}
+}
+
+// TestPushTransport: the transport's own outcomes through the command, each against a bare hub. (1) An undecided
+// object (could not check, exit 3) sends nothing: only a clean judgement is sent. (2) The remote's branch moved on
+// while this checkout's view is stale: the judgement is clean, git rejects the non-fast-forward, push exits 3 with
+// transported false, git's reason, and the next step "fetch, rebase, push again"; the hub keeps the other commit.
+// (3) --branch sends to a branch of its own (the pull-request flow), leaving the hub's default branch alone; a base
+// that is not a branch of the remote and no --branch is exit 2 naming --branch, before anything is sent.
+func TestPushTransport(t *testing.T) {
+	t.Run("undecided sends nothing", func(t *testing.T) {
+		p := newPushWorld(t)
+		src, _, _ := settlementPackage(t)
+		copyData(t, src.root, p.root)
+		os.WriteFile(filepath.Join(p.root, PolicyFile), []byte(`{"policy":"rc-hub-policy/1","series":{"refuse_premature_freeze":true}}`), 0o644)
+		gitIn(t, p.root, "add", PolicyFile)
+		gitIn(t, p.root, "commit", "-q", "-m", "policy")
+		gitIn(t, p.root, "push", "-q", "origin", "change:main")
+		gitIn(t, p.root, "fetch", "-q", "origin")
+		p.commitAll("the series")
+		remote := p.remoteState()
+		r := p.send("--anchor-policy", "none")
+		rep := jsonOf(t, r)
+		if r.code != ExitCouldNot || rep.Members["transported"] != canon.Bool(false) || !strings.Contains(r.stdout, "judgement is not clean (exit 3)") ||
+			p.remoteState() != remote {
+			t.Fatalf("an undecided judgement was sent: exit %d\n%s", r.code, r.stdout)
+		}
+	})
+
+	t.Run("non-fast-forward", func(t *testing.T) {
+		p := newPushWorld(t)
+		other := filepath.Join(t.TempDir(), "other")
+		gitIn(t, filepath.Dir(other), "clone", "-q", p.remote, other)
+		gitIn(t, other, "commit", "-q", "--allow-empty", "-m", "theirs")
+		gitIn(t, other, "push", "-q", "origin", "HEAD:main")
+		theirs := p.remoteHead("main")
+		p.mustPublish("--kind", "authored", "--content", p.file("a", "mine"))
+		p.commitAll("mine")
+		r := p.send("--anchor-policy", "none")
+		rep := jsonOf(t, r)
+		if r.code != ExitCouldNot || rep.Members["transported"] != canon.Bool(false) || p.remoteHead("main") != theirs ||
+			!strings.Contains(string(canon.Encode(rep.Members["update"])), "rejected") ||
+			!strings.Contains(string(canon.Encode(rep.Members["next"])), "fetch, rebase your data commits onto the hub, push again") ||
+			rep.Members["git"] == nil {
+			t.Fatalf("non-fast-forward: exit %d (remote %s, theirs %s)\n%s", r.code, p.remoteHead("main"), theirs, r.stdout)
+		}
+		// the human surface says the same
+		if h := runIn(p.root, nil, "push", "--anchor-policy", "none"); h.code != ExitCouldNot || !strings.Contains(h.stdout, "transported: no") || !strings.Contains(h.stdout, "fetch, rebase") {
+			t.Fatalf("human: %d\n%s\n%s", h.code, h.stdout, h.stderr)
+		}
+	})
+
+	t.Run("branch", func(t *testing.T) {
+		p := newPushWorld(t)
+		main := p.remoteHead("main")
+		p.mustPublish("--kind", "authored", "--content", p.file("a", "mine"))
+		p.commitAll("mine")
+		rep := p.sentOK(p.send("--anchor-policy", "none", "--branch", "contrib/a"), "contrib/a")
+		if p.remoteHead("main") != main || rep.Members["branch_from"] != canon.String("--branch") {
+			t.Fatalf("--branch: the default branch moved, or the branch's source is not named\n%s", canon.Encode(rep))
+		}
+		remote := p.remoteState()
+		r := p.send("--anchor-policy", "none", "--base", main)
+		if r.code != ExitDidNotStart || !strings.Contains(r.stdout, "--branch") || p.remoteState() != remote {
+			t.Fatalf("no branch: exit %d\n%s", r.code, r.stdout)
+		}
+		// the dry run with the same base needs no branch
+		if r := p.push("--anchor-policy", "none", "--base", main); r.code != ExitOK {
+			t.Fatalf("dry run without a branch: exit %d\n%s", r.code, r.stdout)
+		}
+	})
 }

@@ -78,7 +78,7 @@ func TestInitRefuses(t *testing.T) {
 // TestFirstRunNoKey: every signing command with no key exits 2, changes nothing, and tells the user to run
 // commons key new --out <file> and give --key or COMMONS_KEY; so does init's own output.
 func TestFirstRunNoKey(t *testing.T) {
-	conformance.Partial(t, "C-core-108", "the CLI half: no signing command generates a key implicitly (publish, publish task, gc --release exit 2 and point at commons key new); the refusal of a committed unsigned draft at push --dry-run is TestPushUnsignedDraft; every kind is the gate test")
+	conformance.Partial(t, "C-core-108", "the CLI half: no signing command generates a key implicitly (publish, publish task, gc --release exit 2 and point at commons key new); push refusing and not sending a committed unsigned draft of each kind is TestPushUnsignedDraft")
 	p := newPubWorld(t)
 	c := p.file("c", "bytes")
 	ct := p.file("ct.json", `{}`)
