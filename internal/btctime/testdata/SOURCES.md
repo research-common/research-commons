@@ -36,3 +36,26 @@ included.
 The 1433 transaction ids of block 358 391, display order, one per line, from the blockstream.info REST API
 (`/block/<hash>/txids`), identical to mempool.space's list. The test recomputes the block's Merkle root from them
 and checks it equals the header's, an independent cross-check of the digest the proof reaches (§13 item 8).
+
+## `incomplete-upgrade-428648.bin`, `incomplete-upgraded.txt.ots`, `multi.txt.ots`
+
+Reference-client data for the proof writer and `anchor upgrade`, fetched once by hand on 2026-11-14. All of it is
+machine output of a public calendar or of the OpenTimestamps client (hashes, operation tags, calendar URIs, a block
+height); no OpenTimestamps code is included.
+
+- `incomplete-upgrade-428648.bin` (699 bytes, sha256 `4acea6404115ad0fe73589dc1e2ebdd39752decac1120b7a35873ec518619e24`):
+  the raw body of the HTTP 200 answer to
+  `GET https://alice.btc.calendar.opentimestamps.org/timestamp/57cfa5c46716df9bd9e83595bce439c58108d8fcc1678f30d4c6731c3f1fa6c79ed712c66fb1ac8d4e4eb0e7`
+  sent with `Accept: application/vnd.opentimestamps.v1`. The commitment is the message at `incomplete.txt.ots`'s
+  pending node; the answer is a bare timestamp (no file header) ending in a Bitcoin attestation for block 428 648.
+- `incomplete-upgraded.txt.ots` (875 bytes, sha256 `965b5f4090439cc3f4a79576d48c93cb0b372176c76fccbb8e910afac5ac3413`):
+  the file the OpenTimestamps client (`ots` 0.7.2, python-opentimestamps 0.4.5) wrote with `ots -v upgrade` on a
+  copy of `incomplete.txt.ots` after fetching that same answer. It keeps the pending attestation and adds the
+  Bitcoin attestation deeper in the tree. The tests require `Merge` of the answer into `incomplete.txt.ots` to
+  serialize to exactly these bytes.
+- `multi.txt.ots` (584 bytes, sha256 `de3927daebed0e07ce67e71c2c3576f75124f7ef17222ee7793dceda829ce332`): written by
+  `ots stamp` (same client version) for a file holding the line `research-commons anchor upgrade fixture 2026-11-15`
+  (with a trailing newline). Four calendars were asked and three answered, so it holds three pending attestations
+  (alice, bob, finney). The reference client prepends a random 16-byte nonce (`append`, then `sha256`) before
+  branching; this tool's `anchor stamp` submits the covered id itself. The tests require a byte-identical round
+  trip.
