@@ -14,6 +14,9 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   more than 300 s ahead of the local clock, both print an advisory (and `--json` carries `advisories`) that the
   store refuses it at `--complete` and the package should be prepared again with a current `--ts`. Exit codes
   are unchanged and `key sign` still signs.
+- **`package show` and `key sign` take `--expect-pae-sha256 <hex>`**, the `pae_sha256` that `--prepare` printed, carried by
+  a separate channel. A match prints `pae sha256: matches expected`; a different digest is exit 1 naming both digests,
+  and `--pae-out` writes nothing and `key sign` signs nothing; anything but 64 lowercase hex is exit 2.
 - **`package show --pae-out <file>`** writes the exact PAE bytes a signature covers (no newline) to a new file,
   for a signer that is not this tool. An existing file is never overwritten, and nothing is written unless every
   package check passes.

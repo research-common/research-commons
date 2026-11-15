@@ -715,7 +715,11 @@ writes it in the encoding above, newline-terminated, to a new file (never overwr
 standard output. Every refusal writes nothing; `--dry-run` prints what would be signed.
 It signs only the PAE of an envelope the tool would prepare, never bytes it is handed.
 `package show --pae-out <file>` writes those PAE bytes (the decoded `pae`, no newline) to a new
-file, only once every check has passed, for a signer that is not this tool. When the
+file, only once every check has passed, for a signer that is not this tool.
+`--expect-pae-sha256 <hex>` (on `package show` and `key sign`) compares the sha256 of the
+recomputed PAE with a digest carried by a separate channel: a match prints
+`pae sha256: matches expected`, a different digest is exit 1 naming both and writes or signs
+nothing, and anything but 64 lowercase hex is exit 2. When the
 envelope's `ts` is more than 300 s ahead of the signing machine's clock, both commands add an
 advisory (the store refuses such a `ts` at `--complete`); the exit is unchanged and `key sign`
 still signs, because that machine's clock is the weaker reference. The

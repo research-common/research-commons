@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/research-common/research-commons/internal/canon"
@@ -35,6 +36,7 @@ func init() {
 		Args: []Arg{{Name: "file", Shape: ShapeText}},
 		Flags: []Flag{
 			{Name: "pae-out", Value: "file", Help: "write the exact PAE bytes a signature covers (the decoded pae member, no newline) to this new file, for a signer that is not this tool; never overwritten; written only when every check passes"},
+			expectPAEFlag,
 		},
 		Help: "Reads a package written by --prepare (" + SigningPackageFormat + ", provisional) and recomputes, from its envelope alone, " +
 			"everything the package derives from it: the PAE bytes, the statement id, the alg, the signer, the log head's shape and the summary, exactly as --complete does. " +
@@ -43,13 +45,16 @@ func init() {
 			"It reads no store, so the log head is not checked against one: --complete checks it. " +
 			"Compare its pae_sha256 with the one --prepare printed, carried by a separate channel. " +
 			"When the envelope's ts is more than 300 s ahead of this machine's clock it adds an advisory (the store refuses such a ts at --complete); the exit is unchanged. " +
-			"--pae-out <file> writes the PAE bytes themselves for a signer that is not this tool.",
+			"--pae-out <file> writes the PAE bytes themselves for a signer that is not this tool. " +
+			"--expect-pae-sha256 <hex> compares the sha256 of the PAE bytes with a digest you carried by a separate channel: a match prints \"pae sha256: matches expected\"; " +
+			"a different digest is exit 1 naming both, and --pae-out then writes nothing.",
 		Run: packageShowCmd})
 	Register(&Command{Name: "key sign", Summary: "sign an external-signing package's PAE bytes with a key file (reads no store)",
 		Flags: []Flag{
 			{Name: "package", Value: "file", Help: "the package written by --prepare; checked exactly as package show checks it, and refused, nothing written, when any derived member differs"},
 			{Name: "key", Value: "file", Help: "the key file (else $" + KeyEnv + "); its signer must be the package's signer"},
 			{Name: "out", Value: "file|-", Help: "the new file to write the signature to (never overwritten); - (the default) writes the signature line to standard output and the summary to standard error"},
+			expectPAEFlag,
 			{Name: "dry-run", Help: "check the package and the key and print what would be signed; sign nothing, write nothing"},
 		},
 		Help: "Signs, with a key file, the PAE bytes recomputed from a package written by --prepare, on a machine that holds no store: " +
@@ -57,9 +62,42 @@ func init() {
 			"and verified over the recomputed bytes before it is written, in the statement encoding --complete --signature reads (ed25519: 128 lowercase hex; " +
 			"eip191-secp256k1: 0x + 130 lowercase hex), newline-terminated. Every refusal writes nothing. There is no prompt: review the summary with package show " +
 			"(or --dry-run) first. It signs only the PAE of a statement the tool would prepare, never bytes it is given. " +
+			"--expect-pae-sha256 <hex> refuses, exit 1 and nothing signed or written, unless the sha256 of the PAE bytes is that digest. " +
 			"Carry the signature back and run the prepared command with --complete <package> --signature <file|->. A key file is not a hardware or wallet connector. " +
 			"Like package show it adds an advisory, and still signs, when the envelope's ts is more than 300 s ahead of this machine's clock.",
 		Run: keySignCmd})
+}
+
+// expectPAEFlag is --expect-pae-sha256, shared by package show and key sign.
+var expectPAEFlag = Flag{Name: "expect-pae-sha256", Value: "hex", Help: "the sha256 of the PAE bytes (64 lowercase hex) that --prepare printed, carried by a separate channel: " +
+	"a match prints \"pae sha256: matches expected\"; a different digest is exit 1 naming both, and nothing is written"}
+
+// expectedPAE reads --expect-pae-sha256: ("", false, nil) when absent; a value that is not 64 lowercase hex is exit 2.
+func expectedPAE(c *Ctx) (string, bool, *Problem) {
+	v, ok := c.Flag("expect-pae-sha256")
+	if !ok {
+		return "", false, nil
+	}
+	if len(v) != 64 || strings.Trim(v, "0123456789abcdef") != "" {
+		return "", true, usage("bad-pae-digest", "--expect-pae-sha256 is not a sha256 digest", "the digest is 64 lowercase hex characters; nothing was done",
+			"option --expect-pae-sha256", "give the pae_sha256 that --prepare printed, unchanged", v)
+	}
+	return v, true, nil
+}
+
+// checkExpectedPAE compares the sha256 of the recomputed PAE with the digest the caller expects: a different digest
+// is exit 1 (the class of a failed check), naming both.
+func checkExpectedPAE(st *wire.Statement, want, path string) *Problem {
+	sum := sha256.Sum256(st.SignedString)
+	got := hex.EncodeToString(sum[:])
+	if got == want {
+		return nil
+	}
+	p := usage("pae-digest-mismatch", "the PAE's sha256 is not the one expected",
+		"the PAE bytes recomputed from the package's envelope hash to "+got+", but --expect-pae-sha256 is "+want+"; nothing was done",
+		"option --expect-pae-sha256", "do not sign: the package is not the one that was prepared; ask for the package again by a trusted channel", path)
+	p.Exit = ExitWrong
+	return p
 }
 
 // logHeadUnchecked is what package show and key sign say about the log head.
@@ -129,6 +167,10 @@ func packageObj(out *Obj, path string, st *wire.Statement) *Obj {
 func packageShowCmd(c *Ctx) (*Obj, int, error) {
 	path := c.Args["file"]
 	paeOut, _ := c.Flag("pae-out")
+	want, expecting, prob := expectedPAE(c)
+	if prob != nil {
+		return nil, 0, prob
+	}
 	if paeOut != "" {
 		if _, err := os.Lstat(paeOut); err == nil {
 			return nil, 0, usage("pae-file-exists", "the PAE file already exists", "a PAE file is never overwritten; nothing was done",
@@ -139,7 +181,15 @@ func packageShowCmd(c *Ctx) (*Obj, int, error) {
 	if prob != nil {
 		return nil, 0, prob
 	}
+	if expecting {
+		if prob := checkExpectedPAE(st, want, path); prob != nil {
+			return nil, 0, prob
+		}
+	}
 	out := packageObj(newObj(), path, st)
+	if expecting {
+		out.set("pae_check", textV("pae sha256: matches expected"))
+	}
 	if paeOut != "" {
 		// only after every check passed: the bytes are the recomputed PAE (equal to the decoded pae member), no newline
 		if p := writeNewFile(paeOut, st.SignedString, "option --pae-out", "pae-file-exists", "a PAE file is never overwritten"); p != nil {
@@ -163,6 +213,10 @@ func keySignCmd(c *Ctx) (*Obj, int, error) {
 		out = "-"
 	}
 	_, dry := c.Flag("dry-run")
+	want, expecting, prob := expectedPAE(c)
+	if prob != nil {
+		return nil, 0, prob
+	}
 	if out == "-" && c.JSON && !dry {
 		return nil, 0, conflicting("json", "--json and --out - both write standard output",
 			"--out - writes the signature line there for --complete --signature - to read", "give --out <file> with --json, or drop --json")
@@ -176,6 +230,11 @@ func keySignCmd(c *Ctx) (*Obj, int, error) {
 	st, prob := shownPackage(path, "option --package")
 	if prob != nil {
 		return nil, 0, prob
+	}
+	if expecting {
+		if prob := checkExpectedPAE(st, want, path); prob != nil {
+			return nil, 0, prob
+		}
 	}
 	lk, prob := signingKey(c)
 	if prob != nil {
