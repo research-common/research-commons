@@ -381,6 +381,15 @@ func (r *IdentityReader) candidateBody(s *Statement, env *canon.Object) (Status,
 	if err := r.v2.runValidators(s.Crit, env); err != nil {
 		return Invalid, err.Error()
 	}
+	// Defense in depth, not a second rule: the kind readers below, and the evaluator's adapter, take the marker to be
+	// an object. That is the registered validator's guarantee, but a registry is configuration, so the reader does
+	// not let a validator that accepted more than it should hand them a missing marker (an accept-all registration
+	// once made the adapter dereference nil).
+	if m, _ := s.Body.Get(IdentityCrit); m == nil {
+		return Invalid, "body." + IdentityCrit + " is not an object"
+	} else if _, ok := m.(*canon.Object); !ok {
+		return Invalid, "body." + IdentityCrit + " is not an object"
+	}
 	switch {
 	case s.Kind == "identity_inception":
 		return inceptionBody(s)
