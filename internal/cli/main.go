@@ -44,9 +44,9 @@ type Env struct {
 	// Fetch builds the network transport `fetch` dials through; nil in a build without network access (fetch then
 	// answers from what is held, exit 3 for anything not held). This package never dials anything itself.
 	Fetch Fetcher
-	// Calendars builds the timestamp calendar clients `anchor stamp` submits through; nil in a build without network
-	// access (anchor stamp then answers "calendars are not available in this build", exit 3). This package dials
-	// nothing itself.
+	// Calendars builds the timestamp calendar clients `anchor stamp` submits through and `anchor upgrade` asks (a
+	// client that is also a btctime.Upgrader); nil in a build without network access (both then answer "calendars are
+	// not available in this build", exit 3). This package dials nothing itself.
 	Calendars CalendarBuilder
 }
 

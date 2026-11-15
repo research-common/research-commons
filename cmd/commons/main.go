@@ -1,6 +1,6 @@
 // Command commons is the Research Commons tool. All logic lives in internal/cli; this is the process
 // boundary only: it wires the one execution bridge (internal/clirun) that `verify --rerun` and `run` call and the one
-// network transport that `fetch` dials through, and the calendar client `anchor stamp` submits through.
+// network transport that `fetch` dials through, and the calendar client `anchor stamp` and `anchor upgrade` use.
 package main
 
 import (
@@ -28,7 +28,8 @@ func main() {
 	env.Exec = bridge
 	// The HTTPS transport is dialled only by `fetch`, the reader's explicit request; no other command reaches it.
 	env.Fetch = transport
-	// The OpenTimestamps calendar client is dialled only by `anchor stamp`, the author's explicit request.
+	// The OpenTimestamps calendar client is dialled only by `anchor stamp` and `anchor upgrade`, the author's explicit
+	// requests.
 	env.Calendars = calendar
 	os.Exit(cli.Main(os.Args[1:], env))
 }

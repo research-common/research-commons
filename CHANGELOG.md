@@ -22,17 +22,28 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   package check passes.
 - **`anchor stamp` writes anchors.** `commons anchor stamp [<statement-id>]` timestamps a line of your own log (by
   default your log's tip): it submits the raw 32 bytes of the line's id to the OpenTimestamps calendars you name
-  (`--calendar <https url>`, repeatable, or `COMMONS_CALENDARS`; there is no default list) and, on the first pending
-  proof returned, commits the proof blob and an `anchors` statement (`covered`, `proof`, `proof_format:
+  (`--calendar <https url>`, repeatable, or `COMMONS_CALENDARS`; there is no default list), merges the pending proofs
+  of every calendar that answered into one proof (as the reference OpenTimestamps client does), and commits the
+  proof blob and an `anchors` statement (`covered`, `proof`, `proof_format:
   ots-detached-v1`, `services`: the calendars that answered) as one journal record. A calendar's answer is checked
   before it is kept (it must parse, root at the digest submitted and carry a pending attestation; at most 10000
   bytes). Calendars are dialled over https only, with no proxy, never on a loopback, private or other non-global
   address unless `--allow-private`, and may redirect only to https on their own host. Every calendar failing
   appends nothing (exit 3) and prints the line's standing: `anchor required` (an `authored` without provenance, a
   `fulfills`, a withheld availability, an anchored-at-capture observation) or `anchor: none`, with the rule that
-  decided. `--dry-run` contacts nothing. Readers show the anchor `pending`, quality `local`: no `anchor upgrade` yet:
-  a stamped anchor stays `pending` until a later release (KNOWN-LIMITS L-16). `publish` does not stamp: run
-  `anchor stamp` after it.
+  decided. `--dry-run` contacts nothing. Readers show the anchor `pending`, quality `local`, until it is upgraded.
+- **`anchor upgrade` completes pending anchors.** `commons anchor upgrade [<anchors-statement>]` asks the calendars
+  of your policy (the same `--calendar` / `COMMONS_CALENDARS`) for each pending attestation of an anchors line of your
+  own log (by default every one that is the newest for its head and has no Bitcoin attestation yet):
+  `GET <calendar>/timestamp/<hex commitment>`, where 404 means still pending. Each answer (at most 10000 bytes) is
+  parsed strictly and merged into the proof, keeping the pending attestations, byte for byte as the reference client
+  writes it. An answer that does not root at the pending node is refused for that calendar only. A pending
+  attestation naming a calendar outside your policy is reported and not contacted. Only when the merged proof gains a
+  Bitcoin attestation does it commit the new proof blob and a new anchors statement (the same `covered`, `services`:
+  the calendars that answered) after the old one, signed by the same key, as one journal record. After
+  `anchor headers sync`, readers show the head's bound `verified` at that block. Still pending: exit 0, nothing
+  appended. Every calendar failing: exit 3. `--dry-run` contacts nothing. `publish` still does not stamp and no `push`
+  gate is built (KNOWN-LIMITS L-16).
 ### Changed
 - **`provenance_partial` is stricter (pre-1.0 tightening).** `unpinned` must name at least one input and name each
   once, and every key of `supplied` must be one of the `unpinned` names (order is not constrained). A line that

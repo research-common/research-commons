@@ -13,10 +13,14 @@
 //   - verify.go: the binding checks of §4, attestation selection of §5, the local policy of §7, and the evidence
 //     record and state tokens of §8.1, §10;
 //   - adapter.go: the resolver's TimeVerifier, so priority among rival claims reads reader-verified bounds only;
-//   - publish.go: stamp-at-publish (§2): the anchors statement is appended before anything is transported;
+//   - publish.go: stamp-at-publish (§2): every answering calendar's pending proof merged into one (UnionProofs), and
+//     the anchors statement appended before anything is transported;
 //   - otstree.go: the operation tree as data for the writer side: ParseTree (ParseProof's parser, same refusals),
 //     Serialize (the reference writer's sibling order, byte-identical on its files), PendingCommitments and Merge
 //     (splice a calendar's completed subtree in at a pending attestation's node, the core of `anchor upgrade`);
+//   - upgrade.go: UpgradeProof (ask the calendars of the author's policy for each pending commitment through an
+//     Upgrader, merge every answer, report each question's outcome, and return a new proof only when it gains a
+//     Bitcoin attestation) and UnionProofs (one proof from several calendars' pending proofs for one digest);
 //   - location.go, receipt.go: the receipt store of §9: receiver-local state under the git directory Git resolves
 //     (or an explicitly configured directory, else none), receipts binding every §9.2 field by content hash,
 //     the five eligibility checks of §9.3 on every read, the immutable binding kept apart from chain eligibility,
@@ -41,9 +45,8 @@
 //     foreign, of another network, of an unknown version, corrupt or tampered. Sync reads raw headers from a
 //     source the operator chose (a file today), bounded and cancellable; a header that fails validation stops it.
 //
-// The calendar client that serves Publish's Calendar is internal/otscal (the only package that dials a calendar);
-// the command that stamps is `anchor stamp`.
+// The calendar client that serves Publish's Calendar and UpgradeProof's Upgrader is internal/otscal (the only
+// package that dials a calendar); the commands are `anchor stamp` and `anchor upgrade`.
 //
-// Not built yet: `anchor upgrade` (fetching a completed attestation), an operator-node provider (§6.2), a network
-// header source, and the persisted policy of §9.1.
+// Not built yet: an operator-node provider (§6.2), a network header source, and the persisted policy of §9.1.
 package btctime

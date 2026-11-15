@@ -97,6 +97,7 @@ takes `--json`, which prints one JSON object (an RFC 9457 problem-details object
 | `revoke` | revoke your signing key, keeping the history you choose |
 | `rotate` | retire your signing key and name its successor |
 | `anchor stamp` | timestamp a line of your log: submit its id to the OpenTimestamps calendars you name (`--calendar`, no default list) and commit the pending proof with an `anchors` statement; every calendar failing appends nothing and prints whether the line's standing requires an anchor |
+| `anchor upgrade` | complete pending anchors: ask your calendars for the Bitcoin path of each pending proof, merge it in, and commit the upgraded proof with a new `anchors` statement for the same head; still pending appends nothing |
 | `anchor headers sync` / `anchor status` | validate Bitcoin block headers from a file you obtain and persist them as this reader's chain view / report that view |
 | `pull` | admit a package (a store directory or a tar archive) under this reader's policy |
 | `fetch` | obtain blobs from the locations a `holds` statement names, verified by full hash |

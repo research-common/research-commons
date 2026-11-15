@@ -401,17 +401,16 @@ var limits = []limit{
 	},
 	{
 		id:  "L-16",
-		gap: "`anchor stamp` stores a calendar's pending proof, and nothing upgrades it: no `anchor upgrade` is built, so a stamped anchor stays `pending` (quality `local`) and orders nothing until a later release. `publish` does not stamp: run `anchor stamp` after it",
+		gap: "`publish` does not stamp and there is no `push`, so nothing makes a head's anchor exist before its bytes leave the machine (bitcoin-time note §2, \"stamp before transport\"): run `anchor stamp` after `publish`, and `anchor upgrade` once the calendars have answered",
 		sources: []limitSource{
-			{file: "CHANGELOG.md", says: "no `anchor upgrade` yet: a stamped anchor stays `pending`"},
-			{help: []string{"anchor", "stamp"}, says: "no anchor upgrade is built yet"},
-			{help: []string{"anchor", "stamp"}, says: "publish does not stamp: run anchor stamp after it."},
+			{file: "CHANGELOG.md", says: "`publish` still does not stamp and no `push` gate is built (KNOWN-LIMITS L-16)"},
+			{help: []string{"anchor", "stamp"}, says: "publish does not stamp, and nothing yet checks that a head was stamped before it leaves this machine: run anchor stamp after publish."},
 		},
-		probe:  "no command is named `anchor upgrade` and `publish` has no option naming a stamp or a calendar",
-		closes: "`anchor upgrade` (fetch the completed attestation, append the upgraded proof) or a stamping `publish`",
+		probe:  "`publish` has no option naming a stamp or a calendar, and no command is named `push`",
+		closes: "a stamping `publish`, or a `push` that refuses a head whose standing is `anchor required` and that no held anchors line covers",
 		open: func(t *testing.T) (bool, string) {
 			for _, c := range Commands() {
-				if c.Name == "anchor upgrade" {
+				if c.Name == "push" {
 					return false, c.Name
 				}
 				if c.Name == "publish" {
@@ -422,7 +421,7 @@ var limits = []limit{
 					}
 				}
 			}
-			return true, "no anchor upgrade; publish does not stamp"
+			return true, "publish does not stamp; no push"
 		},
 	},
 }

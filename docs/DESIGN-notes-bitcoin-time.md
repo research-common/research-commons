@@ -49,7 +49,7 @@ the implementation evaluating statements on the user's machine; "the author" is 
 | **statement id** | hash of a statement's canonical signed body (claims-model note §4; encoding per the wire-format note) |
 | **covered head** | the statement id an anchor stamps; the last statement of the bounded prefix |
 | **bounded prefix** | the covered head plus every statement reachable from it through signed `prev` and `merges` links in the same key's log |
-| **`anchors` statement** | a statement in the signer's own log carrying `covered`, `proof` (blob hash), `proof_format` (`ots-detached-v1` here), and `services` (the calendars submitted to; informational) |
+| **`anchors` statement** | a statement in the signer's own log carrying `covered`, `proof` (blob hash), `proof_format` (`ots-detached-v1` here), and `services` (the calendars that answered: whose pending attestation the proof carries or whose upgrade answer was merged; informational) |
 | **stamped digest** | the raw 32 bytes of `covered`: what is submitted to calendars and what the proof's tree is rooted at. Derived, never carried in the statement, so it cannot disagree with `covered` |
 | **bound** | the reader's conclusion "statement S existed by chain position P", at a quality the reader assigns |
 
@@ -95,7 +95,11 @@ unsigned prefixes, `sig2`, anchor JSON records and `.root` files. The next forma
    an `observed` whose `capture.evidence` is `anchored-at-capture`; `anchor: none` with a warning for every
    other statement (other `observed` captures, members of a derivation group), so a calendar outage does not
    stop a capture whose window is closing. Local policy may override either default; neither is silent.
-4. Store the returned pending proof as a blob; its id is the hash of the exact proof bytes.
+4. Store the returned pending proof as a blob; its id is the hash of the exact proof bytes. A calendar answers
+   a bare timestamp (no file header) rooted at the stamped digest; the client prefixes the file header and the
+   digest itself, and refuses an answer that is a complete proof file. When several calendars answer, their
+   timestamps are merged into one proof (a union at the root, as the reference client writes it), so the one
+   blob carries every answering calendar's pending attestation.
 5. Append an `anchors` statement: `covered = H`, `proof = <blob hash>`, `proof_format = ots-detached-v1`,
    `services = [<calendar URIs>]`.
 6. Only now transport anything: blobs, statements, the proof blob.
@@ -109,8 +113,16 @@ so the stamp-before-transport order is observable to everyone (C-btc-03) and the
 the author's machine as soon as anything has been pushed.
 
 **Upgrade.** `anchor upgrade` (explicit, networked) fetches the completed attestation from the calendar,
-stores the upgraded proof as a new blob and appends a second `anchors` statement for the same head. Readers
-never dereference calendar URIs themselves; a pending proof held by a reader stays `pending`.
+stores the upgraded proof as a new blob and appends a second `anchors` statement for the same head. For each
+pending attestation it asks `GET <calendar>/timestamp/<lowercase hex of the commitment>`, the commitment being
+the message at the pending attestation's node; a 404 means still pending. It asks only calendars named in the
+author's local calendar policy (the same policy as stamping; a URI matches with or without one trailing `/`);
+a pending URI outside it is reported "not in local calendar policy" and not contacted. The upgraded proof is
+the pending proof merged with each calendar's answer: a union, so the pending attestations are kept (and verify
+as notes), byte for byte as the reference client writes it (§5.1). An answer that does not root at a pending
+node is refused for that calendar only. The new `anchors` statement is appended only when the merged proof
+gains a Bitcoin attestation it did not have; its `services` names the calendars whose answer was merged.
+Readers never dereference calendar URIs themselves; a pending proof held by a reader stays `pending`.
 
 **Pending proofs grant nothing.** A pending calendar attestation is the calendar's promise. Its display
 token is `pending`; its quality is `local` at best.
@@ -437,7 +449,7 @@ whether freshness policy holds:
 verify <statement> [--time] [--offline]   evaluate bounds; writes receipts when --time
 anchor stamp [<statement>]                 submit a line's id to the author's calendars; store the pending proof, append an anchors statement
 anchor headers sync                        the only header-acquiring command; bounded, cancellable
-anchor upgrade <anchors-statement>         fetch completed proof, store blob, append a new anchors statement
+anchor upgrade [<anchors-statement>]       fetch completed proof, store blob, append a new anchors statement
 anchor status                              provider, mode, tip, freshness, policy, receipt counts; no secrets
 explain <statement>                        the bound record, the relation, and every check performed
 ```
@@ -448,6 +460,12 @@ first byte out as long as the command that transports (a hub push) refuses a hea
 anchor and that has none (storage note §3.2). Calendars are the author's local policy: the tool ships no default
 list; the public OpenTimestamps calendars are examples an author may name, not defaults. Every calendar failing
 appends nothing and reports the head's standing under the §2 default.
+
+`anchor upgrade` with no argument upgrades every anchors line of the author's log that is the newest for its
+head and whose proof has no Bitcoin attestation yet, one new anchors line per upgraded head, all in one journal
+record. Still pending everywhere appends nothing and is not a failure; every calendar asked failing appends
+nothing and is. The push gate that would make "stamp before transport" a command-level guarantee is not built
+yet, and neither is a stamping `publish`.
 
 **Exit codes** follow the claims-model note §13 for `verify`:
 
@@ -495,7 +513,7 @@ such; the tool never states the rival could not have published earlier.
 - Helpers are invoked with argument arrays (no shell), over a versioned, bounded JSON protocol; unknown
   versions, missing required fields, malformed output or mismatched echoed input hashes fail closed.
 - Resource limits (local, operator-adjustable, never sender-set): `anchors` statement 64 KiB; proof blob
-  8 MiB; tree depth 256; 100 000 nodes; 30 s and 256 MiB per proof helper; 60 s per provider request; total
+  8 MiB; tree depth 256; 100 000 nodes; a calendar's answer (stamp or upgrade) 10 000 bytes; 30 s and 256 MiB per proof helper; 60 s per provider request; total
   sync budget with cancellation. Limits apply during parsing, not after.
 - The verifier never follows calendar URLs during `verify`, never reads outside the blob store and state
   directory, and never prints credentials or key material in diagnostics.

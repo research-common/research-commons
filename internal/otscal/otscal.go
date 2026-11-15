@@ -235,3 +235,9 @@ func (c *Client) Upgrade(commitment []byte) ([]byte, error) {
 	}
 	return body, nil
 }
+
+// A Client is both halves of the calendar protocol the writer uses.
+var (
+	_ btctime.Calendar = (*Client)(nil)
+	_ btctime.Upgrader = (*Client)(nil)
+)

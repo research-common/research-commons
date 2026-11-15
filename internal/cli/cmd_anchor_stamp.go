@@ -17,8 +17,9 @@ import (
 )
 
 // anchor stamp [<statement-id>]: the anchor writer's first slice (bitcoin-time note §1, §2; storage note §3.2). It
-// stamps a line of the signing key's own log: the raw 32 bytes of its id go to each calendar the author names, and
-// on the first pending proof returned the proof blob and an `anchors` statement {covered, proof, proof_format,
+// stamps a line of the signing key's own log: the raw 32 bytes of its id go to each calendar the author names, the
+// pending proofs of every calendar that answered are merged into one (a union at the root, as the reference client
+// writes a multi-calendar stamp), and the proof blob and an `anchors` statement {covered, proof, proof_format,
 // services} are committed as one journal record. The anchors line extends a line whose history holds the covered
 // head (rule 3: the head is in the anchor's own prefix). Every calendar failing appends nothing (exit 3) and prints
 // the head's standing under the default by standing (§2 step 3), so the author and a later push see whether the
@@ -54,10 +55,10 @@ func init() {
 		Args:  []Arg{{Name: "statement-id", Shape: ShapeID, Optional: true}},
 		Store: true, Writes: true, Flags: flags, Prepare: prepareStamp, Run: stampCmd,
 		Help: "The covered head is the statement named (a line of your own log: an anchor bounds only its signer's log), else your log's one tip; a FORK in your log is refused until --prev names the line the anchors statement extends. " +
-			"The raw 32 bytes of the head's id are submitted to each calendar in turn; with at least one pending proof back, the proof (checked: it parses, roots at the digest submitted, carries a pending attestation) is stored as a blob and an anchors statement {covered, proof, proof_format: " + btctime.ProofFormat + ", services: the calendars that answered} is appended after a line whose history holds the head, the two as one journal record. " +
-			"A pending proof is a calendar's promise: readers show it pending, quality local, until an upgraded proof is held (no anchor upgrade is built yet). Stamping the same head again appends another anchors statement. " +
+			"The raw 32 bytes of the head's id are submitted to each calendar in turn; with at least one pending proof back, the proofs of every calendar that answered (each checked: it parses, roots at the digest submitted, carries a pending attestation) are merged into one proof holding every calendar's pending attestation, stored as a blob, and an anchors statement {covered, proof, proof_format: " + btctime.ProofFormat + ", services: the calendars that answered} is appended after a line whose history holds the head, the two as one journal record. " +
+			"A pending proof is a calendar's promise: readers show it pending, quality local, until an upgraded proof is held: run anchor upgrade once the calendars have put the commitment in a Bitcoin block (hours). Stamping the same head again appends another anchors statement. " +
 			"Calendars are local policy: --calendar or $" + CalendarsEnv + ", no default list (the public OpenTimestamps calendars are examples, not defaults). Only https is dialled, with no proxy; non-global addresses are refused unless --allow-private; a calendar may redirect at most three times, only to https on its own host; a response over 10000 bytes is that calendar's failure. " +
-			"publish does not stamp: run anchor stamp after it. --dry-run prints the head, the digest, the calendars and the head's standing, and contacts nothing. " +
+			"publish does not stamp, and nothing yet checks that a head was stamped before it leaves this machine: run anchor stamp after publish. --dry-run prints the head, the digest, the calendars and the head's standing, and contacts nothing. " +
 			"Exit 0 stamped and committed (or the dry run; a calendar that failed beside one that answered is a warning); 1 refused after the check over your log (your key has a key event); 2 did not start (no calendar named, a calendar URL that is not https, the statement is not a line of your log, no usable key); 3 every calendar failed (nothing appended; the head's standing is printed: anchor required or anchor: none, and the rule that decided), a forked log without --prev, or calendars not available in this build.",
 	})
 }
@@ -71,6 +72,22 @@ type stampPrep struct {
 
 func prepareStamp(c *Ctx) *Problem {
 	p := &stampPrep{}
+	var prob *Problem
+	if p.urls, p.cals, p.cfg, prob = prepareCalendars(c, "anchor stamp submits to"); prob != nil {
+		return prob
+	}
+	if prob := prepareCommon(c, &p.pubPrep); prob != nil {
+		return prob
+	}
+	c.Prep = p
+	return nil
+}
+
+// prepareCalendars reads the author's calendar policy (--calendar, else $COMMONS_CALENDARS), --timeout and
+// --allow-private, and builds one client per calendar through the binary's factory (nil clients in a build without
+// one). Nothing is dialled. what completes "no default list" in the problem text ("anchor stamp submits to").
+func prepareCalendars(c *Ctx, what string) ([]string, []btctime.Calendar, CalendarConfig, *Problem) {
+	var cfg CalendarConfig
 	urls := c.Repeated["calendar"]
 	scope := "option --calendar"
 	if len(urls) == 0 {
@@ -78,41 +95,37 @@ func prepareStamp(c *Ctx) *Problem {
 		scope = "environment " + CalendarsEnv
 	}
 	if len(urls) == 0 {
-		return usage("no-calendar", "no calendar named",
-			"anchor stamp submits to the calendars you choose and there is no default list; nothing was contacted or appended", "invocation",
+		return nil, nil, cfg, usage("no-calendar", "no calendar named",
+			what+" the calendars you choose and there is no default list; nothing was contacted or appended", "invocation",
 			"give --calendar <https url> (repeatable) or set "+CalendarsEnv+" (comma- or space-separated)", "")
 	}
 	seen := map[string]bool{}
 	for _, u := range urls {
 		if sc := uriScheme(u); sc != "https" {
-			return usage("calendar-refused", "a calendar URL is not https",
+			return nil, nil, cfg, usage("calendar-refused", "a calendar URL is not https",
 				"a calendar is reached over https only; refused before dialling; nothing was contacted or appended", scope, "name an https calendar", u)
 		}
 		if seen[u] {
-			return usage("calendar-refused", "a calendar is named twice", "nothing was contacted or appended", scope, "name each calendar once", u)
+			return nil, nil, cfg, usage("calendar-refused", "a calendar is named twice", "nothing was contacted or appended", scope, "name each calendar once", u)
 		}
 		seen[u] = true
 	}
-	p.urls = urls
 	if t, ok := c.Flag("timeout"); ok {
-		p.cfg.Timeout, _ = time.ParseDuration(t)
+		cfg.Timeout, _ = time.ParseDuration(t)
 	}
-	_, p.cfg.AllowPrivate = c.Flag("allow-private")
+	_, cfg.AllowPrivate = c.Flag("allow-private")
+	var cals []btctime.Calendar
 	if b := c.Env.Calendars; b != nil {
 		for _, u := range urls {
-			cal, err := b(u, p.cfg)
+			cal, err := b(u, cfg)
 			if err != nil {
-				return usage("calendar-refused", "a calendar URL cannot name a calendar",
+				return nil, nil, cfg, usage("calendar-refused", "a calendar URL cannot name a calendar",
 					"refused before dialling ("+err.Error()+"); nothing was contacted or appended", scope, "name an https calendar URL with a host and no query", u)
 			}
-			p.cals = append(p.cals, cal)
+			cals = append(cals, cal)
 		}
 	}
-	if prob := prepareCommon(c, &p.pubPrep); prob != nil {
-		return prob
-	}
-	c.Prep = p
-	return nil
+	return urls, cals, cfg, nil
 }
 
 // recordingCalendar remembers each calendar's outcome for the output.
@@ -227,7 +240,7 @@ func stampCmd(c *Ctx) (*Obj, int, error) {
 			l = append(l, peerV(u))
 		}
 		return out.set("calendars", l).set("dry_run", boolV(true)).set("committed", boolV(false)).
-			set("would", texts("submit the stamped digest to each calendar in turn", "on the first pending proof: install the proof blob and append one anchors statement to "+signer+"'s log in one journal record")).
+			set("would", texts("submit the stamped digest to each calendar in turn", "with at least one pending proof: merge every answering calendar's proof into one, install it and append one anchors statement to "+signer+"'s log in one journal record")).
 			set("note", textV("dry run: no calendar was contacted; nothing was written")), ExitOK, nil
 	}
 	if p.cals == nil {
