@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -217,7 +218,7 @@ func TestWithheldReveal(t *testing.T) {
 // explain), the mirror is still listed as a holder, the fetch from the mirror succeeds, and after the fetch the
 // label is still shown (and the reader's copy shows bytes held here).
 func TestRetractionEverywhere(t *testing.T) {
-	conformance.Partial(t, "C-core-139", "retracted on show, list, verify and explain in a reader store that pulled the statements; the mirror's holds still serves through the `fetch` command; `the mirror shows the token` is checked on the reader's view of the mirror's holds, since the hub view of another hub is not a command")
+	conformance.Partial(t, "C-core-139", "this layer of the case; the case itself is covered by TestRetractionAtTheMirror in internal/cli")
 	src := newWorld(t)
 	src.blob("x", []byte("x"))
 	a := src.authored("A:x", "K1", "x", "licence", "CC0-1.0")
@@ -457,6 +458,138 @@ func TestDisclosureBesideGradeSurfaces(t *testing.T) {
 		}
 		if len(seen) != len(values[field])+1 {
 			t.Fatalf("%s: the displayed value did not change with every mutation: %v", field, seen)
+		}
+	}
+}
+
+// TestRetractionAtTheMirror: C-core-139, the mirror half. Three stores stand for three hubs. The author's holds the
+// statements `authored` and `retracts`; the mirror (a second key) pulled both and installed the bytes, and has its
+// own `holds` naming a location; a reader pulled only the author's statements and the mirror's `holds`. Each store
+// answers over what it holds: `retracted` is on every surface of the author's store and of the mirror's (the
+// mirror serves the bytes, shows the token, and still lists itself as a holder); the reader's fetch from the
+// mirror's location succeeds and the token is still shown. Controls: a mirror that pulled the statements before
+// the retraction exists shows no token (nothing it holds says so; the answer is scoped to what it holds), serves
+// the same bytes, and shows the token once it pulls the retraction; a hub that never serves the bytes still shows it.
+func TestRetractionAtTheMirror(t *testing.T) {
+	conformance.Covers(t, "C-core-139")
+	data := []byte("mirrored bytes")
+	author := newWorld(t)
+	d := author.blob("x", data)
+	a := author.authored("A:x", "K1", string(data), "licence", "CC0-1.0")
+	const loc = "https://mirror.example/x"
+	pullAll := func(dst *world, from ...*world) {
+		t.Helper()
+		for _, src := range from {
+			pkg := t.TempDir()
+			copyData(t, src.root, pkg)
+			if r := dst.run("pull", pkg, "--json"); r.code != 0 {
+				t.Fatalf("pull: %d %s", r.code, r.stdout)
+			}
+		}
+	}
+	hasRetracted := func(o *canon.Object) bool {
+		l, ok := o.Members["labels"]
+		return ok && strings.Contains(string(canon.Encode(l)), `"retracted"`)
+	}
+	surfaceLabels := func(w *world, name string) bool {
+		t.Helper()
+		var shown []bool
+		list := jsonOf(t, w.run("list", "--json")).Members["blobs"].(canon.Array)
+		var listed *canon.Object
+		for _, b := range list {
+			if o := b.(*canon.Object); o.Members["digest"] == canon.String(d) {
+				listed = o
+			}
+		}
+		if listed == nil {
+			t.Fatalf("%s: %s is not listed", name, d)
+		}
+		shown = append(shown, hasRetracted(listed))
+		for _, c := range []string{"show", "verify", "explain"} {
+			shown = append(shown, hasRetracted(jsonOf(t, w.run(c, d, "--json"))))
+			// the human surface agrees with the JSON one
+			if h := strings.Contains(w.run(c, d).stdout, "retracted"); h != shown[len(shown)-1] {
+				t.Fatalf("%s %s: human and JSON surfaces disagree on the retracted label", name, c)
+			}
+		}
+		for _, s := range shown[1:] {
+			if s != shown[0] {
+				t.Fatalf("%s: the label is on some surfaces and not others: %v", name, shown)
+			}
+		}
+		return shown[0]
+	}
+
+	// the mirror pulls the statements BEFORE the retraction exists, holds the bytes, and publishes its holds
+	mirror := newWorld(t)
+	pullAll(mirror, author)
+	mirror.holds("H:mirror", "K2", data, -1, loc)
+	if surfaceLabels(mirror, "mirror before the retraction") {
+		t.Fatal("a mirror that holds no retraction shows the token")
+	}
+	if !mirror.s.HasBlob(store.Digest(d)) {
+		t.Fatal("the mirror does not hold the bytes")
+	}
+
+	// the author retracts; the author's own store shows it, the mirror (not yet pulled) still does not
+	author.sign("R:x", "K1", "retracts", obj("of", a, "reason", "superseded"))
+	if !surfaceLabels(author, "author") {
+		t.Fatal("the author's store does not show its own retraction")
+	}
+	if surfaceLabels(mirror, "mirror, retraction not yet pulled") {
+		t.Fatal("the mirror shows a retraction it does not hold")
+	}
+
+	// the mirror pulls the retraction: the token appears on every surface; the bytes and the holds are untouched
+	pullAll(mirror, author)
+	if !surfaceLabels(mirror, "mirror after the retraction") {
+		t.Fatal("the mirror holds the retraction and does not show the token")
+	}
+	if !mirror.s.HasBlob(store.Digest(d)) {
+		t.Fatal("the mirror dropped the bytes on a retraction")
+	}
+	show := jsonOf(t, mirror.run("show", d, "--json"))
+	if !strings.Contains(string(canon.Encode(show.Members["holders"])), mirror.signer("K2")) || !strings.Contains(string(canon.Encode(show.Members["bytes"])), "held here") {
+		t.Fatalf("the mirror is no longer a holder serving the bytes: %s", canon.Encode(show))
+	}
+
+	// a reader pulls the author's statements and the mirror's holds only, and fetches from the mirror's location,
+	// which serves the mirror's own copy of the bytes
+	reader := newWorld(t)
+	pkg := t.TempDir()
+	copyData(t, author.root, pkg)
+	trashBlobs(t, pkg)
+	if r := reader.run("pull", pkg, "--json"); r.code != 0 {
+		t.Fatalf("reader pull: %d %s", r.code, r.stdout)
+	}
+	line := mustRead(t, filepath.Join(mirror.root, stmtPath(mirror.signer("K2"), mirror.ids["H:mirror"])))
+	hp := t.TempDir()
+	os.WriteFile(filepath.Join(hp, "rc-store"), mustRead(t, filepath.Join(mirror.root, "rc-store")), 0o644)
+	os.MkdirAll(filepath.Join(hp, filepath.Dir(stmtPath(mirror.signer("K2"), mirror.ids["H:mirror"]))), 0o755)
+	os.WriteFile(filepath.Join(hp, stmtPath(mirror.signer("K2"), mirror.ids["H:mirror"])), line, 0o644)
+	if r := reader.run("pull", hp, "--json"); r.code != 0 {
+		t.Fatalf("reader pull of the mirror's holds: %d %s", r.code, r.stdout)
+	}
+	if !surfaceLabels(reader, "reader before fetch") {
+		t.Fatal("the reader does not show the token before the fetch")
+	}
+	f, err := mirror.s.OpenBlob(store.Digest(d))
+	if err != nil {
+		t.Fatal(err)
+	}
+	served, _ := io.ReadAll(f)
+	f.Close()
+	r := runFetch(reader.root, func(FetchConfig) store.Transport { return store.MapTransport{loc: served} }, "fetch", d, "--json")
+	if row := fetchRows(t, r)[0]; r.code != 0 || stateOf(row) != store.StateFetched || attemptsOf(row)[0].Members["holds"] != canon.String(mirror.ids["H:mirror"]) {
+		t.Fatalf("fetch from the mirror: %d %s", r.code, r.stdout)
+	}
+	if !surfaceLabels(reader, "reader after fetch") || !reader.s.HasBlob(store.Digest(d)) {
+		t.Fatal("after the fetch the token is gone or the bytes are not held")
+	}
+	// every store's verify exit is the same with and without the label (display only)
+	for _, w := range []*world{author, mirror, reader} {
+		if x := w.run("verify", d); x.code != 0 {
+			t.Fatalf("verify exit %d with a retraction held (display only)", x.code)
 		}
 	}
 }
