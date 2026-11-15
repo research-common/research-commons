@@ -206,9 +206,12 @@ func TestAnchorStamp(t *testing.T) {
 	if r.code != 0 || statementsOf(outObj(t, r))[0].Members["prev"] != canon.String(an.ID) || outObj(t, r).Members["covered"] != canon.String(a) {
 		t.Fatalf("second stamp: %d %s", r.code, r.stdout)
 	}
-	// the reader as it is with two anchors of one head: it reads the bound of the anchor with the lower id
-	// (resolve: a deterministic choice among unverified bounds); both stay in the log
-	t.Logf("claimant time after a second stamp: %s", claim())
+	// two anchors of one head: the later line supersedes the earlier for display (bitcoin-time note §1 rule 5);
+	// both stay in the log, and explain lists both
+	an2 := idsOf(outObj(t, r))[0]
+	if c := claim(); an2 == an.ID || !strings.Contains(c, `"time":{"anchor":"`+an2+`","quality":"local","time_state":"pending"}`) {
+		t.Fatalf("claimant time after a second stamp: %s (second line %s)", c, an2)
+	}
 	if cal.hits.Load() != 2 {
 		t.Fatalf("calendar hit %d times", cal.hits.Load())
 	}

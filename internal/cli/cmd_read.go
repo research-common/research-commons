@@ -431,8 +431,10 @@ func explainCmd(c *Ctx) (*Obj, int, error) {
 		code, causes := v.verifyArtifact(ref)
 		o.set("verify", newObj().set("causes", causes).set("exit", intV(int64(code))))
 		o.set("reasoning", texts(a.Explain...))
+		v.setAnchorLines(o, &inputs, claimantAnchors(a)...)
 	} else {
 		o = v.showRef(ref, true)
+		v.setAnchorLines(o, &inputs, ref)
 		if rr, ok := v.resourceOf(ref); ok {
 			inputs = append(inputs, v.resourceInputs(rr.res)...)
 			if t, ok := v.taskOf(rr.res); ok {
