@@ -10,6 +10,9 @@ type evaluation struct {
 	basis  map[ID]bool
 	cuts   map[ID]bool
 	w      *walker
+	// grantCuts, set only by a grant-level query (GrantState), collects the attributable, effective cuts addressed
+	// to the grant instead of applying them to one act: there is no act to place against last_good.
+	grantCuts *[]Fact
 }
 
 // Evaluate answers only: may this explicitly opted-in signature act for its
@@ -238,6 +241,10 @@ func (s *Snapshot) rootState(e *evaluation, root Fact, actor Actor, grant *Grant
 			}
 			if p.closure != Eligible || f.Validity != Understood || len(shapeReasons(f)) != 0 {
 				continue // Invalid attributable cuts are non-passing, not omitted.
+			}
+			if e.grantCuts != nil {
+				*e.grantCuts = append(*e.grantCuts, f)
+				continue
 			}
 			s.applyCut(e, f, grant)
 			continue
