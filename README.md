@@ -134,7 +134,7 @@ least one commit.
 | [`docs/READER-POLICY.md`](docs/READER-POLICY.md) | the reader policy file (`pull --policy`, `verify --policy`) |
 | [`docs/EXEC-POLICY.md`](docs/EXEC-POLICY.md) | the execution policy file (`verify --rerun`, `run`) |
 | [`docs/KEY-FILES.md`](docs/KEY-FILES.md) | the key file format and how to keep keys |
-| [`docs/READER-EXTENSIONS.md`](docs/READER-EXTENSIONS.md) | critical extensions (none enabled) |
+| [`docs/READER-EXTENSIONS.md`](docs/READER-EXTENSIONS.md) | critical extensions (only the candidate identity profile's `x_identity_v1` is registered) |
 | [`internal/README.md`](internal/README.md) | package map, build and test commands |
 
 Documents describing the 0.4 alpha say so in their first line and are kept for reference.

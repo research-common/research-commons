@@ -1,9 +1,11 @@
 # Opt-in critical-extension validation
 
 This is an implementation design note for the next-format Go reader in `internal/wire`,
-not an extension specification. **No concrete extension is implemented or enabled.**
-It defines no extension body layout, authorization rule, new signature algorithm, or
-resolver behavior. The existing wire-format extension rules are unchanged.
+not an extension specification. **The only registration is the candidate identity profile's
+`x_identity_v1`, in the production identity reader for `rc/2` (see "The production identity
+reader" below); the profile is not activated and no writer signs `rc/2` by default.** The
+registry API itself defines no extension body layout, authorization rule, new signature
+algorithm, or resolver behavior. The existing wire-format extension rules are unchanged.
 
 ## Small, local API
 
@@ -20,11 +22,10 @@ resolver behavior. The existing wire-format extension rules are unchanged.
   envelope. Returning nil accepts that extension; any non-nil error refuses the
   entire statement as an intrinsic malformed-statement refusal naming the extension.
 
-There is no global registration function, received-data registration mechanism,
-plugin loader, or production registration. Registry construction is a deliberate
-local code decision, not something a peer's data can request. Existing log, store,
-resolver, and writer callers still use the empty-registry `wire.Read`; this change
-does not silently opt any of them into new semantics.
+There is no global registration function, received-data registration mechanism, or
+plugin loader. Registry construction is a deliberate local code decision, not something
+a peer's data can request. `wire.Read` keeps its empty registry; the one production
+registration is the identity reader's (below), made once at construction.
 
 ## Ordering and invariants
 
@@ -56,6 +57,30 @@ any check.
 Unknown major/algorithm handling is unchanged: those statements remain unsupported
 and unverified under the existing linkage contract, and no extension callback runs.
 The registry never supplies cryptography or adds a base kind.
+
+## The production identity reader
+
+The reader that reads `rc/2` (the candidate fixed-root identity profile) holds one
+registry per major it interprets, each built once from the same `Reader` type:
+
+- `rc/2` registers exactly `x_identity_v1`. Its validator checks the marker object and its
+  pairing with the signed `x_actor_v1`: the marker is an object; the raw-key kinds
+  (`identity_inception`, `identity_grant`, `identity_cut`, `genesis`, `describes`) take no
+  actor; each kind's marker has its closed shape; `amends` needs an actor.
+- `rc/1` registers nothing, so an `rc/1` statement naming `x_identity_v1` (or any other
+  extension) is retained verified and `unsupported`, as under `wire.Read`.
+
+A critical list naming any unregistered extension is preflighted as a whole: the statement
+is retained verified and `unsupported`, its body is read no further, and no validator runs.
+Otherwise the validator runs after the signature verifies, and the kind's own body schema
+runs after it (a recognized marker never replaces the base schema).
+
+One difference from the registry as `wire.Read` uses it: this reader holds a verified
+statement that breaks a rule as `invalid` (retained, attributable, never authority) instead
+of refusing it, so an authentic but malformed control stays visible as non-passing evidence.
+The reason a validator returns is the statement's `Why`, unchanged from before the registry
+carried these rules. A recognized marker is fail-closed: a validator that accepted a body
+whose marker is not an object still reads `invalid`.
 
 ## Purity and tradeoffs
 

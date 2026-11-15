@@ -45,6 +45,13 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   the writer is `identity new|grant|cut` and `publish --as --grant`; hardware and connector signing is not built.
   Ten identity conformance cases (03, 05, 06, 11, 12, 13, 14, 16, 18, 33) now pass through the commands, and the
   coverage file states what the remaining ones still lack.
+- **The production identity reader reads `x_identity_v1` through the critical-extension registry.** The `rc/2` marker
+  and actor-pairing rules moved out of the reader's body code into the one validator the reader registers, so an
+  unregistered critical token is now refused by the registry's preflight and a marker that breaks its shape by
+  its validator, on the same path `wire.Read` offers any extension. No line reads differently: the same statuses,
+  reasons, ids and actors on every `rc/1` and `rc/2` line tried (24 kinds, 9 markers, 5 `crit` lists, 4 actor shapes
+  against the previous reader). Conformance cases C-id-36 and C-id-37 are covered; known limit L-08 now says that
+  `x_identity_v1` is the one registered extension (`rc/2` only, profile not activated).
 
 ### Fixed
 - **An unmet reader-policy selection is an answer, not an internal error.** With `--policy` holding an

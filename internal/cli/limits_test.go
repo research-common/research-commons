@@ -203,20 +203,33 @@ var limits = []limit{
 	},
 	{
 		id:  "L-08",
-		gap: "No critical extension is implemented: any statement marking one critical is kept, verified and `unsupported`",
+		gap: "The only critical extension registered is the candidate identity profile's `x_identity_v1` (`rc/2`, not activated): a statement marking any other extension critical, or an `rc/1` statement marking that one, is kept, verified and `unsupported`",
 		sources: []limitSource{
-			{file: "docs/READER-EXTENSIONS.md", says: "**No concrete extension is implemented or enabled.**"},
+			{file: "docs/READER-EXTENSIONS.md", says: "**The only registration is the candidate identity profile's `x_identity_v1`"},
 		},
-		probe:  "a signed statement with `crit: [x_ext]` reads verified and `unsupported`, naming the extension",
-		closes: "a registered extension in the production reader",
+		probe:  "through the production reader, a signed rc/1 statement with `crit: [x_ext]`, an rc/1 statement with `crit: [x_identity_v1]`, and an rc/2 statement with `crit: [x_ext, x_identity_v1]` each read verified and `unsupported`, naming the extensions",
+		closes: "a registered extension other than `x_identity_v1` in the production reader, or `rc/1` registering one",
 		open: func(t *testing.T) (bool, string) {
-			line, _ := wire.Sign(wire.Draft{Kind: "describes", TS: "2026-10-16T00:00:00Z", Crit: []string{"x_ext"},
-				Body: obj("about", canon.Value(obj("content", dig("x"))), "note", "n", "x_ext", true)}, testKey("limits"))
-			st, err := wire.Read(line)
-			if err != nil {
-				return false, err.Error()
+			k := testKey("limits")
+			var got []string
+			all := true
+			for _, c := range []struct {
+				rc   string
+				crit []string
+			}{{"rc/1", []string{"x_ext"}}, {"rc/1", []string{"x_identity_v1"}}, {"rc/2", []string{"x_ext", "x_identity_v1"}}} {
+				b := obj("about", canon.Value(obj("content", dig("x"))), "note", "n")
+				for _, n := range c.crit {
+					b = withMember(b, n, canon.Value(obj()))
+				}
+				line, _ := wire.Sign(wire.Draft{RC: c.rc, Kind: "describes", TS: "2026-10-16T00:00:00Z", Crit: c.crit, Body: b}, k)
+				st, err := wire.ReadStored(line)
+				if err != nil {
+					return false, err.Error()
+				}
+				got = append(got, c.rc+" "+string(st.Status)+" "+st.Why)
+				all = all && st.Verified && st.Status == wire.Unsupported && st.Why == "crit "+strings.Join(c.crit, ",")
 			}
-			return st.Verified && st.Status == wire.Unsupported && strings.Contains(st.Why, "x_ext"), string(st.Status) + " " + st.Why
+			return all, strings.Join(got, "; ")
 		},
 	},
 	{
