@@ -267,7 +267,7 @@ func TestOutputsDoc(t *testing.T) {
 // grade and disclosure tokens for each blob, and every one prints the full disclosure set beside the grade.
 func TestOneAnswer(t *testing.T) {
 	conformance.Partial(t, "C-core-134", "authorship, grade, disclosures and labels agree across show, list, verify and explain; corroboration status on every surface is TestCorroborationOnEverySurface")
-	conformance.Partial(t, "C-core-135", "listing exits 0 and verify exits 3, both showing contested; push is not built")
+	conformance.Partial(t, "C-core-135", "listing exits 0 and verify exits 3, both showing contested; pull and hub check label it (TestContestedLabelAcrossGates); push is not built")
 	conformance.Covers(t, "C-core-66") // with TestGradeSurfacesCarryDisclosures: the surfaces that print a grade, and only those
 	w := fixture(t)
 	listing := jsonOf(t, w.run("list", "--json"))

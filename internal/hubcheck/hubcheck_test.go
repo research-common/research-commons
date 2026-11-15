@@ -1124,3 +1124,56 @@ func gzTar(t *testing.T, files ...[2]string) []byte {
 	}
 	return b.Bytes()
 }
+
+// TestContestedLabel: C-core-135 (hub check half; contract §2.3 "possibly with labels (`contested`, …)"). A change
+// that adds a rival `authored` for a blob the base already has an `authored` for exits 0 and labels the added
+// line `contested`, in the human output and in the report; the base's own line is not part of the change, so it
+// is not reported. A full-tree check labels both halves. Controls: a different blob from the same rival key, and
+// a rival with the same provenance (one derivation unit), are not contested.
+func TestContestedLabel(t *testing.T) {
+	conformance.Partial(t, "C-core-135", "hub check exits 0 and labels an added authored whose authorship over the base plus the change is contested; listing and verify are internal/cli; the push command is not built")
+	rival, other := []byte("rival bytes"), []byte("other bytes")
+	h := newHub(t, defaultPolicy)
+	s := newSigner()
+	pa, la, _ := s.sign("A", "authored", obj("content", contentOf(rival), "type", "dataset"))
+	h.write(pa, la)
+	prov := obj("workflow", dig([]byte("wf")), "inputs", []string{dig([]byte("in"))})
+	pd, ld, _ := s.sign("D", "authored", obj("content", contentOf(other), "type", "dataset", "provenance", prov))
+	h.write(pd, ld)
+	h.commit("base")
+
+	h.branch("rival")
+	pb, lb, _ := s.sign("B", "authored", obj("content", contentOf(rival), "type", "dataset"))
+	pc, lc, _ := s.sign("C", "authored", obj("content", contentOf([]byte("unrelated bytes")), "type", "dataset"))
+	pe, le, _ := s.sign("E", "authored", obj("content", contentOf(other), "type", "dataset", "provenance", prov))
+	h.write(pb, lb)
+	h.write(pc, lc)
+	h.write(pe, le)
+	h.commit("a rival, an unrelated claim and a same-derivation claim")
+	res := h.check("main")
+	if r := verdict(t, res, pb); r.Verdict != gate.Admitted || !r.HasLabel(gate.LabelContested) {
+		t.Fatalf("rival: %s %v\n%s", r.Verdict, r.Labels, res.Render())
+	}
+	for _, p := range []string{pc, pe} {
+		if r := verdict(t, res, p); r.Verdict != gate.Admitted || r.HasLabel(gate.LabelContested) {
+			t.Fatalf("control %s: %s %v", p, r.Verdict, r.Labels)
+		}
+	}
+	if _, ok := res.Report.Result(pa); ok {
+		t.Fatal("the base's own line is reported as part of the change")
+	}
+	if res.Report.Exit() != 0 || !strings.Contains(res.Render(), "contested") {
+		t.Fatalf("exit %d\n%s", res.Report.Exit(), res.Render())
+	}
+
+	// the full tree: both halves of the rivalry are in the checked set
+	full := h.check("")
+	for _, p := range []string{pa, pb} {
+		if r := verdict(t, full, p); !r.HasLabel(gate.LabelContested) {
+			t.Fatalf("full tree %s: %v", p, r.Labels)
+		}
+	}
+	if full.Report.Exit() != 0 {
+		t.Fatal(full.Render())
+	}
+}

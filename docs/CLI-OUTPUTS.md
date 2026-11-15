@@ -35,7 +35,7 @@ JSON members carrying tokens: `authorship`, `role`, `state`, `grade`, `step`, `q
 | `sole author` | authorship | one claimant unit of one key |
 | `derived` | authorship | one derivation group of two or more keys; priority is not computed within it |
 | `default author` | authorship | several claimant units; one is strictly earliest at a quality this reader verified |
-| `contested` | authorship | several claimants (or several values of one field) and none is the default; every claimant is listed. For an edition: authorized only if approvals a key event doubts are counted, or built on an edition that is; never current, authorizes nothing |
+| `contested` | authorship | several claimants (or several values of one field) and none is the default; every claimant is listed. For an edition: authorized only if approvals a key event doubts are counted, or built on an edition that is; never current, authorizes nothing. On a gate (pull, hub check, push) a label on an admitted authored whose blob is contested over the evaluated set; a label only, admission and exit are unchanged |
 | `within statements you hold` | scope | every status of the view is computed from the statements this reader holds; nothing is claimed about statements it never received |
 | `within this hub` | scope | every status of the view is computed from one hub's own holdings only |
 | `author` | role | the only claimant unit |

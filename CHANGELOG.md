@@ -16,6 +16,11 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   `explain <key>` print the key's own revoke/rotate status beside every grant naming it, each with its grant-level
   state (open, cut at its last good line, cut null, unknown, denied). `revoke` (including `--dry-run`) and `rotate`
   by a delegate key list, by id, every grant they do not close. Conformance cases C-id-09, C-id-10 and C-id-23 are covered.
+- **The gate labels a contested authorship.** An admitted `authored` whose blob has several claimants and no default
+  over the evaluated set (what the receiver holds plus the package's admitted statements) now carries the label
+  `contested`, the word `list`, `show` and `verify` print for that blob. It appears on `pull` and `hub check` alike
+  (the hub-check contract already listed it), and will on `push`. A label only: the line is still admitted and the
+  exit is still 0, and a package with no `authored` builds no resolver.
 - **`package show` and `key sign` warn about a future `ts`.** When an external-signing package's envelope `ts` is
   more than 300 s ahead of the local clock, both print an advisory (and `--json` carries `advisories`) that the
   store refuses it at `--complete` and the package should be prepared again with a current `--ts`. Exit codes

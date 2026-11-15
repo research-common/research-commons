@@ -78,3 +78,53 @@ func TestHubCheckLabelsActor(t *testing.T) {
 		})
 	}
 }
+
+// TestContestedLabelAcrossGates: C-core-135, C-core-134. The fixture's two rival `authored` lines for one blob make
+// it `contested` (exit 3 on verify). A pull of the same data and a `hub check` of the same tree each exit 0 and
+// label both lines with the one word `contested`, in JSON (`labels`) and in the human output; the sole author's
+// line carries no such label. The word is the token `list` prints for the blob.
+func TestContestedLabelAcrossGates(t *testing.T) {
+	conformance.Partial(t, "C-core-135", "pull and hub check exit 0 and label each rival authored `contested`, the word list and verify print for the blob (verify exits 3); push is not built")
+	w := fixture(t)
+	rivals := map[string]bool{
+		stmtPath(w.signer("K1"), w.ids["A:contested:1"]): true,
+		stmtPath(w.signer("K2"), w.ids["A:contested:2"]): true,
+	}
+	sole := stmtPath(w.signer("K1"), w.ids["A:sole"])
+	if len(rivals) != 2 || sole == "" {
+		t.Fatalf("fixture rows: %v %q", rivals, sole)
+	}
+	if v := w.run("verify", dig("contested")); v.code != ExitCouldNot {
+		t.Fatalf("verify: exit %d", v.code)
+	}
+	if l := w.run("list"); !strings.Contains(l.stdout, "contested") {
+		t.Fatal("list does not say contested")
+	}
+
+	check := func(gate string, r result, human result) {
+		t.Helper()
+		if r.code != ExitOK {
+			t.Fatalf("%s: exit %d: a label changed the exit\n%s", gate, r.code, r.stdout)
+		}
+		rep := jsonOf(t, r)
+		for p := range rivals {
+			row := objectRow(t, rep, p)
+			if row == nil || row.Members["verdict"] != canon.String("admitted and labelled") ||
+				!strings.Contains(string(canon.Encode(row.Members["labels"])), `"contested"`) {
+				t.Fatalf("%s: %s is not labelled contested: %s", gate, p, canon.Encode(row))
+			}
+		}
+		if row := objectRow(t, rep, sole); row != nil && strings.Contains(string(canon.Encode(row.Members["labels"])), "contested") {
+			t.Fatalf("%s: the sole author is labelled contested: %s", gate, canon.Encode(row))
+		}
+		if human.code != ExitOK || strings.Count(human.stdout, "contested") < 2 {
+			t.Fatalf("%s human: exit %d\n%s", gate, human.code, human.stdout)
+		}
+	}
+
+	dst := newWorld(t)
+	check("pull", dst.run("pull", w.pkgDir(), "--dry-run", "--json"), newWorld(t).run("pull", w.pkgDir(), "--dry-run"))
+
+	// the fixture is already a hub clone (fixture_test.go)
+	check("hub check", w.run("hub", "check", "--json"), w.run("hub", "check"))
+}
