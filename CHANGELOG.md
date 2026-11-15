@@ -63,6 +63,14 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   reasons, ids and actors on every `rc/1` and `rc/2` line tried (24 kinds, 9 markers, 5 `crit` lists, 4 actor shapes
   against the previous reader). Conformance cases C-id-36 and C-id-37 are covered; known limit L-08 now says that
   `x_identity_v1` is the one registered extension (`rc/2` only, profile not activated).
+- **A later anchors line for the same head supersedes the earlier one for display.** When a key holds several
+  `anchors` lines for one covered head (the head stamped twice, or a pending stamp beside its upgrade), the time
+  shown is the earliest verified bound if any line yields one, otherwise the line latest in the signer's log order
+  (on forked branches, where neither descends from the other, the lower id). A refused line never displaces a
+  usable one. Before, the line with the lower id was shown. `explain` now lists every anchors line of such a head
+  with its quality, state, whether it is displayed and why (`superseded by <id>`, `verified preferred`, ...); with
+  one line per head its output is unchanged. Priority and every other answer read verified bounds only and are
+  unchanged.
 
 ### Fixed
 - **An unmet reader-policy selection is an answer, not an internal error.** With `--policy` holding an

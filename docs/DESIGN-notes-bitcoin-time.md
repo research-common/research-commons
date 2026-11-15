@@ -71,6 +71,9 @@ Rules:
    or `observed` statement still verifies that statement's own signature and log membership.
 5. **Supersession.** A later `anchors` statement by the same key for the same `covered` head replaces the
    earlier one for display (typically pending → upgraded). Both stay in the log; `explain` lists both.
+   "Later" is the signer's log order (one line descends from the other through `prev`); a verified bound is
+   displayed in preference to any unverified one, a refused anchor never displaces a usable one, and two lines on
+   forked branches (neither descends from the other) are ordered by the lower statement id.
 6. **Timestamps stay subordinate.** The `anchors` statement's own timestamp is the `local` bound and nothing
    more. An `anchors` statement timestamped earlier than its head is `incoherent` under the claims-model
    note §10 (C-core-106): its local bound is discarded, its signature is still reported valid, and its proof
