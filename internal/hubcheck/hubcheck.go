@@ -73,21 +73,60 @@ func FindRoot(dir string) (string, error) {
 	}
 }
 
+// Prepared is everything a gate over one change needs, read from the repository and nothing else: the package
+// (the change, or the whole tree for a full check), the held history (the tree at the base), and the hub policy as
+// it is at the policy revision, with the reader's resolver options appended. `hub check` and `push` both start
+// here, so they judge one change with the same inputs (claims-model note §11: they differ only in the entry point).
+type Prepared struct {
+	Root string
+	// Head, Base and MergeBase are full commit ids (Base and MergeBase "" for a full check).
+	Head, Base, MergeBase string
+	// PolicyRev is the commit the policy was read from; PolicyAbsent says the file was absent there.
+	PolicyRev    string
+	PolicyAbsent bool
+	Package      gate.Package
+	Held         gate.MemHeld
+	Policy       *gate.Policy
+
+	repo *repo
+}
+
 // Check runs `hub check` in the hub containing dir. Every condition about the change is a verdict in the
 // report; the error is non-nil only when the check did not start (*gate.DidNotStart: no hub root, unknown
 // layout, base not a commit, unusable policy file at the policy revision; the CLI maps it to exit 2), or when
 // git itself failed.
 func Check(dir string, cfg Config) (*Result, error) {
+	p, err := Prepare(dir, cfg)
+	if err != nil {
+		return nil, err
+	}
+	rep, err := gate.HubCheck(p.Package, p.Held, p.Policy, gate.Options{Overrides: cfg.Overrides, Audit: cfg.Base == "", ActorLabels: true})
+	if err != nil {
+		return nil, err
+	}
+	return p.result(rep), nil
+}
+
+func (p *Prepared) result(rep *gate.Report) *Result {
+	return &Result{Report: rep, Root: p.Root, Head: p.Head, Base: p.Base, MergeBase: p.MergeBase, PolicyRev: p.PolicyRev, PolicyAbsent: p.PolicyAbsent}
+}
+
+// Prepare reads the change in the hub containing dir: the root, the revisions, the hub policy at the policy
+// revision, the package and the held history. It judges nothing. Its errors are Check's.
+func Prepare(dir string, cfg Config) (*Prepared, error) {
 	root, err := FindRoot(dir)
 	if err != nil {
 		return nil, err
 	}
-	r := newRepo(root)
+	return prepareAt(newRepo(root), root, cfg)
+}
+
+func prepareAt(r *repo, root string, cfg Config) (*Prepared, error) {
 	head, err := r.commit("HEAD")
 	if err != nil {
 		return nil, &gate.DidNotStart{Title: "no commit at HEAD", Detail: err.Error(), Scope: "repository " + root, Next: "commit the change to check"}
 	}
-	res := &Result{Root: root, Head: head, PolicyRev: head}
+	res := &Prepared{Root: root, Head: head, PolicyRev: head, repo: r}
 	if cfg.Base != "" {
 		base, err := r.commit(cfg.Base)
 		if err != nil {
@@ -143,11 +182,7 @@ func Check(dir string, cfg Config) (*Result, error) {
 		pol.Resolver = append(pol.Resolver, resolve.WithSegments(resolve.ProfileSegments{Rules: rules}))
 	}
 	pol.Resolver = append(pol.Resolver, cfg.Resolver...)
-	rep, err := gate.HubCheck(pkg, held, pol, gate.Options{Overrides: cfg.Overrides, Audit: cfg.Base == "", ActorLabels: true})
-	if err != nil {
-		return nil, err
-	}
-	res.Report = rep
+	res.Package, res.Held, res.Policy = pkg, held, pol
 	return res, nil
 }
 
