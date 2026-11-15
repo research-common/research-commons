@@ -17,7 +17,19 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 - **`package show --pae-out <file>`** writes the exact PAE bytes a signature covers (no newline) to a new file,
   for a signer that is not this tool. An existing file is never overwritten, and nothing is written unless every
   package check passes.
-
+- **`anchor stamp` writes anchors.** `commons anchor stamp [<statement-id>]` timestamps a line of your own log (by
+  default your log's tip): it submits the raw 32 bytes of the line's id to the OpenTimestamps calendars you name
+  (`--calendar <https url>`, repeatable, or `COMMONS_CALENDARS`; there is no default list) and, on the first pending
+  proof returned, commits the proof blob and an `anchors` statement (`covered`, `proof`, `proof_format:
+  ots-detached-v1`, `services`: the calendars that answered) as one journal record. A calendar's answer is checked
+  before it is kept (it must parse, root at the digest submitted and carry a pending attestation; at most 10000
+  bytes). Calendars are dialled over https only, with no proxy, never on a loopback, private or other non-global
+  address unless `--allow-private`, and may redirect only to https on their own host. Every calendar failing
+  appends nothing (exit 3) and prints the line's standing: `anchor required` (an `authored` without provenance, a
+  `fulfills`, a withheld availability, an anchored-at-capture observation) or `anchor: none`, with the rule that
+  decided. `--dry-run` contacts nothing. Readers show the anchor `pending`, quality `local`: no `anchor upgrade` yet:
+  a stamped anchor stays `pending` until a later release (KNOWN-LIMITS L-16). `publish` does not stamp: run
+  `anchor stamp` after it.
 ### Changed
 - **`provenance_partial` is stricter (pre-1.0 tightening).** `unpinned` must name at least one input and name each
   once, and every key of `supplied` must be one of the `unpinned` names (order is not constrained). A line that

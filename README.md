@@ -96,6 +96,8 @@ takes `--json`, which prints one JSON object (an RFC 9457 problem-details object
 | `publish grant` | as a task edition's coordinator, grant a key for that edition (refused when the grant would have no effect) |
 | `revoke` | revoke your signing key, keeping the history you choose |
 | `rotate` | retire your signing key and name its successor |
+| `anchor stamp` | timestamp a line of your log: submit its id to the OpenTimestamps calendars you name (`--calendar`, no default list) and commit the pending proof with an `anchors` statement; every calendar failing appends nothing and prints whether the line's standing requires an anchor |
+| `anchor headers sync` / `anchor status` | validate Bitcoin block headers from a file you obtain and persist them as this reader's chain view / report that view |
 | `pull` | admit a package (a store directory or a tar archive) under this reader's policy |
 | `fetch` | obtain blobs from the locations a `holds` statement names, verified by full hash |
 | `list` / `show` | the blobs, resources and statements the store holds (`list`: one line each), with authorship, grade and disclosures; an observation's referent status (finality, read through the source profiles the store's policy pins) and corroboration status; for a resource (its genesis id), an edition id or an approval id, the resource view: controllers and rule, current edition and the chain behind it, every edition with its approvals, any `FORK`, members, and the check of a completeness claim; a statement on a fork of its signer's log, the fork (`FORK` with its tips, or `merged`); for a task, its terms, readiness, every submission (`counted`, `undecided`, `not counted`, with every reason), grants, bound refutations and decisions |

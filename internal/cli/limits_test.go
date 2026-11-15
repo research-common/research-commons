@@ -386,6 +386,32 @@ var limits = []limit{
 				strings.Contains(b.stdout, "no referent checker for this class"), a.stdout + b.stdout
 		},
 	},
+	{
+		id:  "L-16",
+		gap: "`anchor stamp` stores a calendar's pending proof, and nothing upgrades it: no `anchor upgrade` is built, so a stamped anchor stays `pending` (quality `local`) and orders nothing until a later release. `publish` does not stamp: run `anchor stamp` after it",
+		sources: []limitSource{
+			{file: "CHANGELOG.md", says: "no `anchor upgrade` yet: a stamped anchor stays `pending`"},
+			{help: []string{"anchor", "stamp"}, says: "no anchor upgrade is built yet"},
+			{help: []string{"anchor", "stamp"}, says: "publish does not stamp: run anchor stamp after it."},
+		},
+		probe:  "no command is named `anchor upgrade` and `publish` has no option naming a stamp or a calendar",
+		closes: "`anchor upgrade` (fetch the completed attestation, append the upgraded proof) or a stamping `publish`",
+		open: func(t *testing.T) (bool, string) {
+			for _, c := range Commands() {
+				if c.Name == "anchor upgrade" {
+					return false, c.Name
+				}
+				if c.Name == "publish" {
+					for _, f := range c.Flags {
+						if strings.Contains(f.Name, "stamp") || strings.Contains(f.Name, "calendar") {
+							return false, "publish --" + f.Name
+						}
+					}
+				}
+			}
+			return true, "no anchor upgrade; publish does not stamp"
+		},
+	},
 }
 
 // TestDocumentedLimits: C-core-07.

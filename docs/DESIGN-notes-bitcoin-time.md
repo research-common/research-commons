@@ -435,11 +435,19 @@ whether freshness policy holds:
 
 ```text
 verify <statement> [--time] [--offline]   evaluate bounds; writes receipts when --time
+anchor stamp [<statement>]                 submit a line's id to the author's calendars; store the pending proof, append an anchors statement
 anchor headers sync                        the only header-acquiring command; bounded, cancellable
 anchor upgrade <anchors-statement>         fetch completed proof, store blob, append a new anchors statement
 anchor status                              provider, mode, tip, freshness, policy, receipt counts; no secrets
 explain <statement>                        the bound record, the relation, and every check performed
 ```
+
+`anchor stamp` is §2 steps 2–5 as a command of its own: in the first build `publish` does not stamp, so the author
+runs `anchor stamp` after `publish`. Nothing is transported by either command, so the anchor still precedes the
+first byte out as long as the command that transports (a hub push) refuses a head whose standing requires an
+anchor and that has none (storage note §3.2). Calendars are the author's local policy: the tool ships no default
+list; the public OpenTimestamps calendars are examples an author may name, not defaults. Every calendar failing
+appends nothing and reports the head's standing under the §2 default.
 
 **Exit codes** follow the claims-model note §13 for `verify`:
 

@@ -41,5 +41,9 @@
 //     foreign, of another network, of an unknown version, corrupt or tampered. Sync reads raw headers from a
 //     source the operator chose (a file today), bounded and cancellable; a header that fails validation stops it.
 //
-// Not built yet: an operator-node provider (§6.2), a network header source, and the persisted policy of §9.1.
+// The calendar client that serves Publish's Calendar is internal/otscal (the only package that dials a calendar);
+// the command that stamps is `anchor stamp`.
+//
+// Not built yet: `anchor upgrade` (fetching a completed attestation), an operator-node provider (§6.2), a network
+// header source, and the persisted policy of §9.1.
 package btctime
