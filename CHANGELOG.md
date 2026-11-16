@@ -9,6 +9,21 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ## [Unreleased]
 
+### Added
+
+- **A Ledger device can sign an external-signing package (`key sign --ledger`).** `key sign --package <file> --ledger
+  --ledger-path m/44'/60'/<account>'/0/<index>` asks a Ledger device running the official Ethereum app to sign the
+  package's recomputed PAE bytes with EIP-191 `personal_sign` (`eip191-secp256k1`: no new algorithm or preimage). The tool
+  first checks the package, that the open app is the Ethereum app, that the device's address at the path is the package's
+  signer and that the PAE fits; it prints what the device will show (the PAE's length, its text start and the EIP-191
+  message hash); you approve on the device; the signature is normalised (low `s`, `v` 27/28), verified as every reader
+  verifies it, and written exactly as a key-file signature. A refusal on the device is exit 1; locked, closed or other app,
+  too long for the device, disconnect or timeout is exit 3; each writes nothing. `key show --ledger --ledger-path <path>`
+  prints the device's address (`--ledger-confirm` shows it on the device too). There is no default path: use an account
+  that never holds funds. USB works on Linux (hidraw, no cgo); `--ledger-device tcp:<host>:<port>` reaches a Speculos
+  emulator (labelled as such). `--complete`, `identity` and `publish` never open a device. Tested through the commands
+  against an in-process fake of the app only: every device model is an untested target (KNOWN-LIMITS L-07, L-20).
+
 ## [0.5.0-alpha.7] - 2026-11-16
 
 **`push` sends, and the store finishes what it starts.** `push` now transports the judged commit with `git push`
