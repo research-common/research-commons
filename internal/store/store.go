@@ -16,11 +16,13 @@ const layoutMarker = `{"layout":"rc-store/1"}`
 // conformance result. Values are the note's vocabulary.
 type Durability struct {
 	FileSync, DirSync, Rename, ExclusiveCreate, SameFilesystem, Locks, GCGrace, Assumes string
+	// History is §7 `history`: `off`, or `on (<bound>)` (§3.6; history.go).
+	History string
 }
 
 func (d Durability) String() string {
-	return fmt.Sprintf("file_sync=%s dir_sync=%s rename=%s exclusive_create=%s same_filesystem=%s locks=%s gc_grace=%s assumes=%q",
-		d.FileSync, d.DirSync, d.Rename, d.ExclusiveCreate, d.SameFilesystem, d.Locks, d.GCGrace, d.Assumes)
+	return fmt.Sprintf("file_sync=%s dir_sync=%s rename=%s exclusive_create=%s same_filesystem=%s locks=%s gc_grace=%s history=%q assumes=%q",
+		d.FileSync, d.DirSync, d.Rename, d.ExclusiveCreate, d.SameFilesystem, d.Locks, d.GCGrace, d.History, d.Assumes)
 }
 
 // Projector is step 5 of the commit protocol: it updates whatever projections the caller keeps from one
@@ -38,6 +40,9 @@ type Options struct {
 	GCGrace time.Duration
 	// LockWait bounds how long a writer waits for the per-key writer lock (§4.3); zero means DefaultLockWait.
 	LockWait time.Duration
+	// NoHistory turns the operation history off (§3.6; history.go): nothing is appended and the declaration says
+	// `off`. The zero value keeps it.
+	NoHistory bool
 	// Fault, when set, is called at each named fault point: the commit points below (journal.go, gc.go, blob.go)
 	// and the ones a command names through FaultPoint. It is a test seam, nil in every production path (a test
 	// guards that no non-test file sets it). A test's Fault typically records the point and ends the process
@@ -134,7 +139,7 @@ func (s *Store) Root() string { return s.root }
 func (s *Store) Durability() Durability {
 	d := Durability{FileSync: "fsync", DirSync: "fsync", Rename: "atomic", ExclusiveCreate: "link",
 		SameFilesystem: "checked", Locks: lockDeclaration, GCGrace: DefaultGrace.String(),
-		Assumes: "POSIX rename and link semantics; a local filesystem (not NFS)"}
+		History: s.opt.historyDeclaration(), Assumes: "POSIX rename and link semantics; a local filesystem (not NFS)"}
 	if s.opt.GCGrace != 0 {
 		d.GCGrace = s.opt.GCGrace.String()
 	}

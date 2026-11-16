@@ -175,7 +175,7 @@ func (s *Store) Commit(kind string, lines [][]byte, blobs []Digest) (Outcome, er
 	out.Committed = true
 	err = s.hook(AfterRecord)
 	if err == nil {
-		err = s.finish(r, &out)
+		err = s.finish(r, &out, false)
 	}
 	if err != nil {
 		if out.Installed {
@@ -187,7 +187,9 @@ func (s *Store) Commit(kind string, lines [][]byte, blobs []Digest) (Outcome, er
 }
 
 // finish runs steps 3–5 for a committed record. It is the replay path too, so every step is idempotent.
-func (s *Store) finish(r Record, out *Outcome) error {
+//
+// replay says the call is a replay or a repair (not the commit that wrote the record): the history line says so.
+func (s *Store) finish(r Record, out *Outcome, replay bool) error {
 	pending := s.dir("journal", "pending", r.Op+".json")
 	done := s.dir("journal", "done", r.Op+".json")
 	if _, err := os.Stat(pending); err != nil {
@@ -205,11 +207,13 @@ func (s *Store) finish(r Record, out *Outcome) error {
 		}
 		out.Installed = true
 	} else {
+		var ids []string
 		for _, l := range r.Lines {
 			id, res, err := s.installStatement(l)
 			if err != nil {
 				return err
 			}
+			ids = append(ids, id)
 			if res == Replaced {
 				out.Replaced = append(out.Replaced, id)
 			}
@@ -222,15 +226,24 @@ func (s *Store) finish(r Record, out *Outcome) error {
 			return err
 		}
 		// Another committer of the identical operation (same record, same op id) may have renamed it first;
-		// steps 3–5 are idempotent, so that is success.
-		if err := os.Rename(pending, done); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return err
+		// steps 3–5 are idempotent, so that is success. Only the call whose rename moved the record writes its
+		// history line, so an operation gets one line at most.
+		moved := true
+		if err := os.Rename(pending, done); err != nil {
+			if !errors.Is(err, fs.ErrNotExist) {
+				return err
+			}
+			moved = false
 		}
 		if err := s.syncDir(filepath.Dir(done)); err != nil {
 			return err
 		}
 		if err := s.syncDir(filepath.Dir(pending)); err != nil {
 			return err
+		}
+		if moved {
+			// the operation history (§3.6): after step 4, before step 5; best-effort, never fails the operation
+			s.historyFinished(r, ids, replay)
 		}
 		if err := s.hook(AfterDone); err != nil {
 			return err
@@ -410,8 +423,9 @@ func (s *Store) recover() error {
 				if err := s.quarantine(p, "record"); err != nil {
 					return err
 				}
-				s.Recovered = append(s.Recovered, RecoveryEvent{Op: strings.TrimSuffix(e.Name(), ".json"),
-					What: "quarantined", Detail: derr.Error()})
+				op := strings.TrimSuffix(e.Name(), ".json")
+				s.Recovered = append(s.Recovered, RecoveryEvent{Op: op, What: "quarantined", Detail: derr.Error()})
+				s.historyQuarantined(op)
 			}
 		}
 	}
@@ -434,7 +448,7 @@ func (s *Store) recover() error {
 func (s *Store) replay(h held) []RecoveryEvent {
 	var out Outcome
 	var evs []RecoveryEvent
-	err := s.finish(h.rec, &out)
+	err := s.finish(h.rec, &out, true)
 	for _, id := range out.Replaced {
 		evs = append(evs, RecoveryEvent{Op: h.rec.Op, Kind: h.rec.Kind, What: "replaced statement",
 			Detail: id + ": stored copy corrupt, quarantined; verified line installed"})
