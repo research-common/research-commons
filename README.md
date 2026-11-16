@@ -111,6 +111,7 @@ takes `--json`, which prints one JSON object (an RFC 9457 problem-details object
 | `explain` | the statements, policy, evaluator and time context behind every token shown; `--since <file>` names what changed since an earlier `explain --json`, and why |
 | `fsck` | re-hash blobs, re-read statements, resolve references, check the journal; list every fork of a held key log (`FORK` or `merged`, informational) |
 | `status` | recovery state, unfinished operations, the durability declaration (`--limits` for scan limits); a row per open `FORK` of a held key log |
+| `history` | the operations this store finished, newest first (`--op`, `--limit`): a local, best-effort log under `journal/` that nothing else reads and no pull carries |
 | `gc` | list (default) or delete unreferenced blobs outside the grace window |
 | `hub check` | check a change to a hub as the hub's CI does; writes nothing |
 | `push` | in a git checkout of a hub: judge the commits as the hub's CI would, refuse a statement whose standing requires an anchor until an `anchors` line covers it, or a withheld blob before its reveal; when all is clean, `git push` the judged commit to `--branch` (default: the base's branch), never forced; `--dry-run` sends nothing |

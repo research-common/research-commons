@@ -241,6 +241,14 @@ convenience log, not part of the store:
 - the local time it records is the operator's clock and evidence of nothing beyond this machine (a received
   statement's time is its signed `ts` and its anchors).
 
+This implementation keeps it on by default in `journal/history.jsonl`: one canonical JSON line per operation, written
+by the call that moved the operation's record to `done/` (the committing command, or a later open or `repair`, which
+the line marks `replayed`), and one line per journal record an open moves to `quarantine/`. It is appended without
+a sync and a write error never fails the operation. At 8 MiB the file is renamed to `history.1.jsonl` (replacing the
+older one), so the bound is two files; §7 declares `history: on (8 MiB × 2, rotate)`. A hub's `.gitignore` already
+leaves `journal/` out, and `pull` of a store directory or archive skips both files and reports them as skipped. The
+`history` command is their only reader; a test guards that no other code names them.
+
 ## 4. Concurrent writers
 
 ### 4.1 Per-key logs and sequence
@@ -495,7 +503,7 @@ conformance result (CONFORMANCE "how a result is recorded"):
 | `same_filesystem` | `required` · `checked` · `assumed` | whether the temporary directory is verified to share the destination filesystem |
 | `locks` | `advisory` · `none` | §4.3 |
 | `gc_grace` | duration | the grace window in force (§6.1.1; local policy, default 24 h) |
-| `history` | `off` · `on (<bound>)` | whether the optional operation history is kept, and its size or age bound (§3.6) |
+| `history` | `off` · `on (<bound>)` | whether the optional operation history is kept, and its size or age bound (§3.6). A property of the implementation and its configuration, never of the history file: deleting the file does not change it. This implementation: `on (8 MiB × 2, rotate)` |
 | `assumes` | free text | filesystem assumptions (POSIX rename semantics, no network filesystem, …) |
 
 A declaration of `none` or `best-effort` is conforming. What is not conforming is behaving as if a guarantee
