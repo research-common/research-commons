@@ -53,6 +53,7 @@ func init() {
 		Flags: []Flag{
 			{Name: "package", Value: "file", Help: "the package written by --prepare; checked exactly as package show checks it, and refused, nothing written, when any derived member differs"},
 			{Name: "key", Value: "file", Help: "the key file (else $" + KeyEnv + "); its signer must be the package's signer"},
+			ledgerFlag, ledgerPathFlag, ledgerDeviceFlag,
 			{Name: "out", Value: "file|-", Help: "the new file to write the signature to (never overwritten); - (the default) writes the signature line to standard output and the summary to standard error"},
 			expectPAEFlag,
 			{Name: "dry-run", Help: "check the package and the key and print what would be signed; sign nothing, write nothing"},
@@ -63,8 +64,13 @@ func init() {
 			"eip191-secp256k1: 0x + 130 lowercase hex), newline-terminated. Every refusal writes nothing. There is no prompt: review the summary with package show " +
 			"(or --dry-run) first. It signs only the PAE of a statement the tool would prepare, never bytes it is given. " +
 			"--expect-pae-sha256 <hex> refuses, exit 1 and nothing signed or written, unless the sha256 of the PAE bytes is that digest. " +
-			"Carry the signature back and run the prepared command with --complete <package> --signature <file|->. A key file is not a hardware or wallet connector. " +
-			"Like package show it adds an advisory, and still signs, when the envelope's ts is more than 300 s ahead of this machine's clock.",
+			"Carry the signature back and run the prepared command with --complete <package> --signature <file|->. " +
+			"Like package show it adds an advisory, and still signs, when the envelope's ts is more than 300 s ahead of this machine's clock." + ledgerHelp +
+			" With --ledger the package must be for eip191-secp256k1, the open app must be the Ethereum app (else exit 3, naming the open app), and the device's address at the path must be the package's signer (else exit 2); " +
+			"before the device is asked, standard error shows what it will display: the PAE's length, that it is shown as text starting \"DSSEv1 \", and the EIP-191 message hash the device shows when its \"display hash\" setting is on. " +
+			"You approve on the device; the signature is verified as every reader verifies it before it is written. A refusal on the device is exit 1; a locked device, a closed app, " +
+			"a message too long for the device, a disconnect or a timeout is exit 3. Every one writes nothing. --dry-run with --ledger checks the package, the app and the address and asks for no signature. " +
+			"The Ledger connector is the only hardware or wallet connector; --complete, identity and publish never open a device.",
 		Run: keySignCmd})
 }
 
@@ -227,6 +233,10 @@ func keySignCmd(c *Ctx) (*Obj, int, error) {
 				"option --out", "name a new file", out)
 		}
 	}
+	lo, prob := ledgerOptions(c)
+	if prob != nil {
+		return nil, 0, prob
+	}
 	st, prob := shownPackage(path, "option --package")
 	if prob != nil {
 		return nil, 0, prob
@@ -235,6 +245,9 @@ func keySignCmd(c *Ctx) (*Obj, int, error) {
 		if prob := checkExpectedPAE(st, want, path); prob != nil {
 			return nil, 0, prob
 		}
+	}
+	if lo != nil {
+		return keySignLedger(c, lo, st, path, out, dry)
 	}
 	lk, prob := signingKey(c)
 	if prob != nil {
@@ -266,21 +279,7 @@ func keySignCmd(c *Ctx) (*Obj, int, error) {
 		return nil, 0, failed(errors.New("the signature made does not verify: "+why), "option --key", false, "report the bug with the package")
 	}
 	res.set("statement", refV(st.ID)).set("signature", refV(sig)).set("signed", boolV(true)).set("dry_run", boolV(false))
-	line := []byte(sig + "\n")
-	if out == "-" {
-		if _, err := c.Env.Stdout.Write(line); err != nil {
-			return nil, 0, failed(err, "standard output", false, "run the command again")
-		}
-		if c.Env.Stderr != nil {
-			io.WriteString(c.Env.Stderr, human(newObj().set("written", textV("standard output")).set("next", textV("carry the signature back and run "+completeCommand(st)))))
-		}
-		return nil, ExitOK, nil
-	}
-	if p := writeNewFile(out, line, "option --out", "signature-file-exists", "a signature file is never overwritten"); p != nil {
-		return nil, 0, p
-	}
-	return res.set("written", peerV(out)).
-		set("next", textV("carry the signature file back and run "+completeCommand(st))), ExitOK, nil
+	return writeSignature(c, res, st, out, sig)
 }
 
 // writeNewFile writes b to a new file at path (never overwriting), synced; on failure nothing is left behind.

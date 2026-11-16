@@ -5,7 +5,8 @@ interprets `rc/2` under this profile and evaluates identity actors from the stat
 signs `rc/2` for the administrative kinds (`identity new`, `identity grant`, `identity cut`) and for an act
 for an identity (`publish --as <I> --grant <G>`); every other statement, raw `rotate_key`/`revoke_key`
 included, is still written `rc/1` (§2.1). Each of those commands can stop at an external-signing package and
-commit a signature made elsewhere (§8). No hardware or wallet connector is built (§8).
+commit a signature made elsewhere (§8). The one hardware connector is a Ledger device running the Ethereum app
+(`eip191-secp256k1`, §8); no other hardware or wallet connector is built.
 The wire format is still a candidate: nothing here is frozen.
 This document selects one wire proposal, `fixed-root-v1` on **`rc/2`**, rather than
 changing `rc/1` fields through a critical-extension handler. It does not change
@@ -740,9 +741,37 @@ by a separate channel, to the signing machine; `package show` and compare the ha
 sign`; carry the signature back; `--complete`. A key file signer is not a hardware or
 wallet connector.
 
-Ledger Nano X, Flex and Stax are **untested targets** for Ethereum-account EIP-191 via
-an explicitly tested connector. Test firmware/app/connector, exact payload fidelity,
-size limits, display readability and rejection/disconnect separately per model.
+**The Ledger connector.** `key sign --package <file> --ledger --ledger-path <path>` signs the
+package with a Ledger device running the official Ethereum app, as `eip191-secp256k1`
+(EIP-191 `personal_sign` over the recomputed PAE bytes, wire §4): no new algorithm, no new
+preimage, no custom device app. `key show --ledger --ledger-path <path>` prints the address of
+the device's key at that path (`--ledger-confirm` also shows it on the device for the holder
+to confirm, recommended once before an inception). The path is explicit, with no default;
+use an account that never holds funds (wire §4.1). Before the device is asked, the tool
+checks the package as `package show` does, that the open app is the Ethereum app, that the
+device's address at the path is the package's signer, and that the PAE fits what the
+connector sends; it prints what the device will show (the PAE's length, the message as
+text starting `DSSEv1 `, and the EIP-191 message hash the device shows when its "display
+hash" setting is on). The holder approves on the device. The returned signature is put in
+the stored encoding (low `s`, `v` 27/28), verified as every reader verifies the signed line,
+and written exactly as a key-file signature is. A refusal on the device is exit 1; a locked
+device, a closed or other app, a message the device cannot hold or show, a disconnect or a
+timeout is exit 3; each writes nothing. The package flow stays the boundary: `--complete`,
+`identity` and `publish` never open a device, so the device never sits on the store's
+machine. Transport: USB HID on Linux (hidraw, Ledger framing); the Speculos emulator's APDU
+port (`--ledger-device tcp:<host>:<port>`, labelled an emulator: no hardware protects its
+key). USB on macOS and Windows is not built.
+
+Tested through the commands with an in-process fake of the Ethereum app (every refusal
+above, each signature encoding the device may return) over the emulator's APDU protocol and
+the HID framing. Those tests check the connector against the app's documented commands, not
+against the app: no run against the Speculos emulator or a physical device is recorded here.
+Nano S Plus, Nano X, Flex and Stax run the same commands and are all **untested targets**;
+so is the original Nano S. A hardware
+signing drill on a physical device is not recorded here. Display readability is limited:
+the device shows the PAE as text a screen at a time, so a long statement takes many
+screens; compare the message hash when the device shows it.
+
 YubiKey 5 is an **untested family**: exact variant/firmware and interface matter;
 Ed25519 PIV support must be established, not inferred from the family name (5.7+
 capability is not every YubiKey 5). WebAuthn assertions or OpenPGP packets do not replace
@@ -816,9 +845,10 @@ the same way, and each committed line equals what direct signing writes at the s
 signature completed on the store and equal to direct signing; a package with any derived
 member changed, the wrong key, or an existing output file is refused with nothing written.
 
-Not drilled: a compromised operational host, and hardware or connector signing.
-C-id-40 is therefore partial: its simple-path and package halves are the tests above;
-the host-compromise and hardware halves stay open.
+Not drilled: a compromised operational host, and signing on a physical hardware device.
+`TestLedgerKeySignEndToEnd` and `TestLedgerKeySignAborts` run the Ledger connector against an
+in-process fake of the Ethereum app. C-id-40 is therefore partial: its simple-path, package
+and connector halves are the tests above; the host-compromise and hardware-drill halves stay open.
 
 ## 9. Schemas, vectors and reproducible checks
 
@@ -908,8 +938,8 @@ statement's actor, the evaluator's state and reasons, and the evaluator context 
 evidence digest, receipt); `counted` is the counting gate's answer; the admission cap
 reads `unknown` (exit 3). Signed end-to-end tests run the published vectors and the
 amendment scenarios through the commands. The writer is the simple-path commands: `identity new`, `identity grant`, `identity cut` and `publish --as --grant`
-sign `rc/2` with a key file or through a detached-signing package. Still required: hardware and connector signing
-(none is built); the critical registry; a
+sign `rc/2` with a key file, through a detached-signing package, or with a Ledger device through that package. Still required: a hardware
+signing drill on a physical device, and any connector beyond the Ledger Ethereum app; the critical registry; a
 concrete identity task-contract profile; the production evidence-snapshot serialization,
 caches and replay; independent review of the major transition; detached signing
 packages/connectors and custody/hardware usability drills. No release, deployment, live
@@ -920,7 +950,7 @@ keys or devices are implied by these artifacts.
 The 45 scenario handles of §9 are registered conformance cases, one to one: handle `ID-NN` is case `C-id-NN`.
 The conformance harness reads them from this table, like the bitcoin-time profile's supplementary cases. They are
 cases **of this candidate profile**: the reader is active and the writer is the simple-path commands
-(`identity new|grant|cut`, `publish --as --grant`); hardware and connector signing is not built. A case is checked
+(`identity new|grant|cut`, `publish --as --grant`); the one hardware connector is the Ledger Ethereum app through the package. A case is checked
 through the commands over `rc/2` lines written by those commands or signed by the test builders, or at the layers below
 (the rc/2 reader, the admission adapter and the reference model); a case whose remaining outcome needs a connector, a
 consumer that does not exist yet or a custody drill stays partial. A case is covered only when its whole required outcome is checked by a signed,

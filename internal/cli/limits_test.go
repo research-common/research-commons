@@ -4,6 +4,7 @@ import (
 	"go/build"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -173,32 +174,32 @@ var limits = []limit{
 	},
 	{
 		id:  "L-07",
-		gap: "No hardware or wallet connector is built: an identity root kept on a device signs through the external-signing package (`--prepare` / `--complete`), with the bytes moved to and from the device by hand",
+		gap: "The only hardware connector is a Ledger device running the Ethereum app (`eip191-secp256k1`, through `key sign --ledger`); no other device or wallet is driven, and no run against a physical device or the emulator is recorded",
 		sources: []limitSource{
-			{file: "docs/DESIGN-notes-fixed-root-identity.md", says: "No hardware or wallet connector is built (§8)."},
+			{file: "docs/DESIGN-notes-fixed-root-identity.md", says: "no other hardware or wallet connector is built."},
 			{file: "docs/DESIGN-notes-fixed-root-identity.md", says: "A key file signer is not a hardware or wallet connector."},
-			{help: []string{"key", "sign"}, says: "A key file is not a hardware or wallet connector."},
+			{help: []string{"key", "sign"}, says: "The Ledger connector is the only hardware or wallet connector"},
 		},
-		probe:  "`identity grant --help` offers `--prepare` and `--complete`, `key sign` signs from a key file only, and neither names a device, wallet or connector option",
-		closes: "a connector that drives a device or wallet",
+		probe:  "`key sign --help` offers `--key` and `--ledger` and no other device, wallet or connector option; `identity grant --help` offers `--prepare`/`--complete` and opens no device",
+		closes: "a connector for another device or wallet (an Ed25519 signer, a wallet), or a recorded drill on a physical device",
 		open: func(t *testing.T) (bool, string) {
 			h := runIn(t.TempDir(), nil, "identity", "grant", "--help")
 			if !strings.Contains(h.stdout, "--prepare") || !strings.Contains(h.stdout, "--complete") {
 				return false, "identity grant offers no external-signing package"
 			}
 			k := runIn(t.TempDir(), nil, "key", "sign", "--help")
-			if !strings.Contains(k.stdout, "--key") {
-				return false, "key sign takes no key file"
+			if !strings.Contains(k.stdout, "--key") || !strings.Contains(k.stdout, "--ledger") {
+				return false, "key sign takes no key file or no --ledger"
 			}
-			for _, w := range []string{"--device", "--wallet", "--connector", "--hardware"} {
-				if strings.Contains(h.stdout, w) {
-					return false, "identity grant offers " + w
+			for _, w := range []string{"--device", "--wallet", "--connector", "--hardware", "--yubikey", "--trezor"} {
+				if strings.Contains(h.stdout, w) || strings.Contains(h.stdout, "--ledger") {
+					return false, "identity grant offers a device option"
 				}
 				if strings.Contains(k.stdout, w) {
 					return false, "key sign offers " + w
 				}
 			}
-			return true, "external-signing package and key-file signing only; no connector option"
+			return true, "key file, external-signing package and the Ledger Ethereum app only"
 		},
 	},
 	{
@@ -444,6 +445,31 @@ var limits = []limit{
 			before := snapshot(t, w.root)
 			r := runIn(w.root, nil, "push", "--json")
 			return r.code == ExitDidNotStart && strings.Contains(r.stdout, "the store is not a git checkout") && snapshot(t, w.root) == before, r.stdout
+		},
+	},
+	{
+		id:  "L-20",
+		gap: "The Ledger connector's USB transport is built for Linux only (hidraw); on macOS and Windows `key sign --ledger` reaches only an emulator",
+		sources: []limitSource{
+			{file: "docs/DESIGN-notes-fixed-root-identity.md", says: "USB on macOS and Windows is not built."},
+			{help: []string{"key", "sign"}, says: "on other systems the USB connector is not built"},
+		},
+		probe:  "for GOOS=darwin and GOOS=windows, `internal/ledger` builds `hid_other.go`, which declares `HIDBuilt = false`",
+		closes: "a USB HID transport for macOS (IOKit) and Windows (the HID API)",
+		open: func(t *testing.T) (bool, string) {
+			root, _ := conformance.RepoRoot()
+			for _, goos := range []string{"darwin", "windows"} {
+				ctx := build.Default
+				ctx.GOOS, ctx.GOARCH, ctx.CgoEnabled = goos, "amd64", false
+				pkg, err := ctx.ImportDir(filepath.Join(root, "internal", "ledger"), 0)
+				if err != nil {
+					return false, err.Error()
+				}
+				if !slices.Contains(pkg.GoFiles, "hid_other.go") {
+					return false, goos + " builds a USB transport"
+				}
+			}
+			return true, "darwin and windows build hid_other.go (HIDBuilt = false)"
 		},
 	},
 }

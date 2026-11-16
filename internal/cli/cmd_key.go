@@ -19,9 +19,13 @@ func init() {
 		},
 		Help: "Writes the key as a small JSON file (format " + KeyFormat + ") holding the 32-byte Ed25519 seed or the secp256k1 scalar, mode 0600. The tool keeps no copy and uses no default location: name the file with --key or " + KeyEnv + " on every signing command. Back it up once, somewhere only you can read; never reuse a payment key as a Commons key (wire-format note §4.1). Seed-phrase derivation is not built.",
 		Run:  keyNewCmd})
-	Register(&Command{Name: "key show", Summary: "print the signer and algorithm of a key file (never the key)",
-		Args: []Arg{{Name: "file", Shape: ShapeText}},
-		Run:  keyShowCmd})
+	Register(&Command{Name: "key show", Summary: "print the signer and algorithm of a key file (never the key), or of a Ledger device's key",
+		Args:  []Arg{{Name: "file", Shape: ShapeText, Optional: true}},
+		Flags: []Flag{ledgerFlag, ledgerPathFlag, ledgerDeviceFlag, ledgerConfirmFlag},
+		Help: "With a key file: its signer and algorithm. With --ledger --ledger-path <path> (no file): the address of a Ledger device's key at that path, " +
+			"read from the Ethereum app, with the app's name and version, the path and the device; --ledger-confirm also shows the address on the device " +
+			"and waits for you to confirm it there (a refusal on the device is exit 1, and no signer is printed)." + ledgerHelp,
+		Run: keyShowCmd})
 }
 
 // bareKeyRecovery is the onboarding label (Gate W3) printed by key new and init: a bare key has no recovery, and an
@@ -74,6 +78,17 @@ func keyNewCmd(c *Ctx) (*Obj, int, error) {
 }
 
 func keyShowCmd(c *Ctx) (*Obj, int, error) {
+	o, prob := ledgerOptions(c)
+	if prob != nil {
+		return nil, 0, prob
+	}
+	if o != nil {
+		return keyShowLedger(c, o)
+	}
+	if c.Args["file"] == "" {
+		return nil, 0, usage("missing-argument", "a required argument is missing", "name the key file, or give --ledger --ledger-path <path>; nothing was done",
+			"argument file", "see commons help key show", "")
+	}
 	lk, p := loadKey(c.Args["file"], "argument file")
 	if p != nil {
 		return nil, 0, p

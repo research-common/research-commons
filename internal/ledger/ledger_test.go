@@ -203,6 +203,13 @@ func TestStatusWords(t *testing.T) {
 			t.Fatalf("%s: signed", c.name)
 		}
 	}
+	// 0x6a80 after the last chunk is the app's page limit; on an earlier chunk it is bad data
+	if _, err := ledger.PersonalSign(lastChunk{sw: 0x6a80}, p, long); !ledger.IsSlug(err, ledger.TooLong) {
+		t.Fatalf("page limit: %v", err)
+	}
+	if _, err := ledger.PersonalSign(fixed{resp: []byte{0x6a, 0x80}}, p, long); !ledger.IsSlug(err, ledger.BadData) {
+		t.Fatalf("bad data on the first chunk: %v", err)
+	}
 	// a message over the connector's bound is refused before anything is sent
 	f := ledgertest.New("sw")
 	if _, err := ledger.PersonalSign(f, p, make([]byte, ledger.MaxMessage+1)); !ledger.IsSlug(err, ledger.TooLong) || len(f.Received) != 0 {
@@ -224,6 +231,16 @@ func TestStatusWords(t *testing.T) {
 	if !strings.Contains(ledger.SWText(0x6985), "0x6985") || ledger.SWText(0x15) != "0x0015" {
 		t.Fatal("SWText")
 	}
+}
+
+// lastChunk accepts every chunk and answers the last one (P1 0x80 with fewer than 255 bytes) with sw.
+type lastChunk struct{ sw uint16 }
+
+func (l lastChunk) Exchange(a []byte) ([]byte, error) {
+	if a[2] == 0x80 && len(a)-5 < 255 {
+		return []byte{byte(l.sw >> 8), byte(l.sw)}, nil
+	}
+	return []byte{0x90, 0}, nil
 }
 
 // fixed answers every APDU with one response.
@@ -453,8 +470,13 @@ func TestTCPTransport(t *testing.T) {
 	if _, err := ledger.AppAndVersion(d); !ledger.IsSlug(err, ledger.Disconnected) {
 		t.Fatalf("disconnect: %v", err)
 	}
-	for _, spec := range []string{"hidraw0", "tcp:", "tcp:nohost", "usb:1"} {
+	for _, spec := range []string{"hidraw0", "tcp:", "tcp:nohost", "usb:1", "/dev/hidraw", "/dev/hidrawx", "/dev/sda", "tcp::99"} {
 		if _, err := ledger.Open(spec); !ledger.IsSlug(err, ledger.BadDeviceSpec) {
+			t.Fatalf("%q: %v", spec, err)
+		}
+	}
+	for _, spec := range []string{"/dev/hidraw0", "/dev/hidraw12", "tcp:127.0.0.1:9999", "tcp:[::1]:9999", "tcp:speculos:9999"} {
+		if err := ledger.CheckSpec(spec); err != nil {
 			t.Fatalf("%q: %v", spec, err)
 		}
 	}

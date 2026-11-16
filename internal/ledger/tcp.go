@@ -89,8 +89,26 @@ func Open(spec string) (*Device, error) {
 		}
 		return &Device{Transport: t, Where: "emulator at " + rest, Emulator: true, close: t.Close}, nil
 	}
-	if spec != "" && !strings.HasPrefix(spec, "/") {
-		return nil, &Error{Slug: BadDeviceSpec, Detail: "a device is a hidraw node (/dev/hidrawN) or an emulator (tcp:<host>:<port>)"}
+	if spec != "" {
+		if err := CheckSpec(spec); err != nil {
+			return nil, &Error{Slug: BadDeviceSpec, Detail: err.Error()}
+		}
 	}
 	return openHID(spec)
+}
+
+// CheckSpec checks the shape of a device spec without opening anything: a hidraw node (/dev/hidrawN) or an emulator
+// (tcp:<host>:<port>).
+func CheckSpec(spec string) error {
+	if rest, ok := strings.CutPrefix(spec, "tcp:"); ok {
+		host, port, err := net.SplitHostPort(rest)
+		if err != nil || host == "" || port == "" {
+			return errors.New("an emulator is named tcp:<host>:<port>")
+		}
+		return nil
+	}
+	if n, ok := strings.CutPrefix(spec, "/dev/hidraw"); ok && n != "" && strings.Trim(n, "0123456789") == "" {
+		return nil
+	}
+	return errors.New("a device is a hidraw node (/dev/hidrawN) or an emulator (tcp:<host>:<port>)")
 }

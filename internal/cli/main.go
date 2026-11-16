@@ -48,6 +48,10 @@ type Env struct {
 	// client that is also a btctime.Upgrader); nil in a build without network access (both then answer "calendars are
 	// not available in this build", exit 3). This package dials nothing itself.
 	Calendars CalendarBuilder
+	// Ledger opens the hardware signer `key show --ledger` and `key sign --ledger` talk to (a device spec: "" for the
+	// one attached by USB, a hidraw node, or tcp:<host>:<port> for an emulator); nil in a build without the
+	// connector (both then answer "the Ledger connector is not available in this build", exit 3).
+	Ledger LedgerOpener
 }
 
 // Ctx is one invocation as a command's Run sees it: arguments and flags already validated, the store (when

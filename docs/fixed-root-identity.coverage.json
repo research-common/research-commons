@@ -662,10 +662,12 @@
       "isolated_tests": [
         "internal/cli:TestIdentitySimplePathDrill",
         "internal/cli:TestExternalSigningAborts",
-        "internal/cli:TestPackageShowKeySignEndToEnd"
+        "internal/cli:TestPackageShowKeySignEndToEnd",
+        "internal/cli:TestLedgerKeySignEndToEnd",
+        "internal/cli:TestLedgerKeySignAborts"
       ],
       "conformance": "partial",
-      "remaining": "Partial: the simple path (profile §8, rc-key/0 files, the CLI signs) is drilled through the commands on separate stores, both algorithms: inception, grant, acts counted, a stolen worker key cut at last_good, aborts leave nothing appended, a root key file restored from backup signs as the same root. The external-signing package (prepare/complete) is exercised through the commands: a key held off the store signs over the exact PAE bytes, each line equal to direct signing; every abort (bad signature, wrong key, moved head, mutated envelope, mismatched derived member, lost eligibility) appends nothing. The signing side runs with no store: package show recomputes every derived member and key sign signs the recomputed PAE from a key file, each completed line equal to direct signing. A compromised operational host and hardware or connector signing are not drilled; no signer adapter is claimed."
+      "remaining": "Partial: the simple path (profile §8, rc-key/0 files, the CLI signs) is drilled through the commands on separate stores, both algorithms: inception, grant, acts counted, a stolen worker key cut at last_good, aborts leave nothing appended, a root key file restored from backup signs as the same root. The external-signing package (prepare/complete) is exercised through the commands: a key held off the store signs over the exact PAE bytes, each line equal to direct signing; every abort (bad signature, wrong key, moved head, mutated envelope, mismatched derived member, lost eligibility) appends nothing. The signing side runs with no store: package show recomputes every derived member and key sign signs the recomputed PAE from a key file, each completed line equal to direct signing. The Ledger connector (key sign --ledger, eip191-secp256k1) is exercised through the commands against an in-process fake of the Ethereum app: each committed line equal to direct signing whatever signature encoding the device returns, and every device or invocation failure (refusal, locked, closed or other app, too long, disconnect, a signature over other bytes, wrong path or seed, an ed25519 package, no connector) writes and appends nothing. A compromised operational host and signing on a physical device (or the emulator) are not drilled."
     },
     {
       "handle": "ID-41",

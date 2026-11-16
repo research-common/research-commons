@@ -3,6 +3,7 @@ package ledger
 import (
 	"bytes"
 	"encoding/hex"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -195,6 +196,12 @@ func PersonalSign(t Transport, path Path, msg []byte) ([]byte, error) {
 		}
 		d, err := exchange(t, to, a, "sign the message")
 		if err != nil {
+			var e *Error
+			if i == len(reqs)-1 && errors.As(err, &e) && e.SW == SWIncorrectData {
+				// after the last chunk the app has the whole message; it refuses one needing more review pages than
+				// it can show (app-ethereum: ui_191_message_fits) with this word
+				return nil, &Error{Slug: TooLong, SW: e.SW, Detail: "the app refused the whole message: it needs more review pages than the app can show"}
+			}
 			return nil, err
 		}
 		if i < len(reqs)-1 && len(d) != 0 {

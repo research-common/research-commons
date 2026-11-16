@@ -1,6 +1,7 @@
 // Command commons is the Research Commons tool. All logic lives in internal/cli; this is the process
 // boundary only: it wires the one execution bridge (internal/clirun) that `verify --rerun` and `run` call and the one
-// network transport that `fetch` dials through, and the calendar client `anchor stamp` and `anchor upgrade` use.
+// network transport that `fetch` dials through, the calendar client `anchor stamp` and `anchor upgrade` use, and the
+// Ledger connector `key show --ledger` and `key sign --ledger` open.
 package main
 
 import (
@@ -10,6 +11,7 @@ import (
 	"github.com/research-common/research-commons/internal/btctime"
 	"github.com/research-common/research-commons/internal/cli"
 	"github.com/research-common/research-commons/internal/clirun"
+	"github.com/research-common/research-commons/internal/ledger"
 	"github.com/research-common/research-commons/internal/otscal"
 	"github.com/research-common/research-commons/internal/store"
 )
@@ -31,6 +33,9 @@ func main() {
 	// The OpenTimestamps calendar client is dialled only by `anchor stamp` and `anchor upgrade`, the author's explicit
 	// requests.
 	env.Calendars = calendar
+	// The Ledger connector is opened only by `key show --ledger` and `key sign --ledger`, the signer's explicit
+	// requests.
+	env.Ledger = ledger.Open
 	os.Exit(cli.Main(os.Args[1:], env))
 }
 
