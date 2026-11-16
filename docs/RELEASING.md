@@ -103,7 +103,7 @@ A plan, not a schedule; the maintainers make the final call and may revise this 
    ```
    A dry run (Actions → release → Run workflow) builds and checksums without attesting or
    uploading.
-8. **Python wheels** (manual; nothing in CI builds or uploads them). The Python package in `python/` carries the
+8. **Python wheels** (built and published by CI; the manual path below is the pre-release check). The Python package in `python/` carries the
    binary in one platform wheel per release archive. Its version must already equal `VERSION` mapped to
    PEP 440 (`0.5.0-alpha.3` → `0.5.0a3`): set `version` in `python/pyproject.toml` and `__version__` in
    `python/src/research_commons/__init__.py` in the step-2 version PR, or the build refuses. After step 7,
@@ -116,9 +116,13 @@ A plan, not a schedule; the maintainers make the final call and may revise this 
    ```
    The script checks every archive against `SHA256SUMS` before opening it, refuses a version, platform or
    binary-format mismatch, and prints a digest per wheel; building twice gives identical bytes. Install one
-   wheel in a clean virtualenv and run `commons --version` before uploading. **Publishing to PyPI is a
-   maintainer action** (a trusted publisher configured on the `research-commons` project; no API token in
-   the repository), done from the tagged commit.
+   wheel in a clean virtualenv and run `commons --version` before trusting a release.
+   **Publishing to PyPI** runs `.github/workflows/publish-python.yml` when the release is published: it repeats
+   the download → checksum-verify → build → smoke-test steps and uploads the wheels by OIDC trusted publishing
+   (environment `pypi`, `pypa/gh-action-pypi-publish` pinned by full SHA; no API token exists anywhere). The one
+   maintainer action is configuring the PyPI trusted publisher once (owner `research-common`, repository
+   `research-commons`, workflow `publish-python.yml`, environment `pypi`); after that every release publishes its
+   wheels automatically, and Actions → publish-python → Run workflow can republish any existing tag's wheels.
 9. **Hub template pin.** In `research-commons-hub-template`, on its `next` branch, set
    `TOOL_REF` to the tag's **full 40-character commit SHA** (immutable), with the tag as a
    trailing comment (`# v0.5.0-alpha.1`).

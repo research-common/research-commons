@@ -19,6 +19,7 @@ process crash. The writer's majors are unchanged since alpha.5 (`rc/1`, and `rc/
 `publish --as`). All 190 core conformance cases are covered.
 
 ### Added
+
 - **An operation history, and `commons history`.** A store now appends one line to `journal/history.jsonl` when an
   operation finishes (its statements installed): the operation id, kind, statement ids, blob digests, this machine's
   time, and whether a later open or `repair` finished it; and one line when an open moves a journal record to
@@ -30,6 +31,16 @@ process crash. The writer's majors are unchanged since alpha.5 (`rc/1`, and `rc/
   matching). Nothing else reads the file (a test guards it): `status`, `explain`, `fsck`, `repair` and every answer
   are byte-identical with the file deleted or edited. `status` declares `history: on (8 MiB × 2, rotate)` instead
   of `off`. Closes KNOWN-LIMITS L-19.
+
+- **Python wheels publish to PyPI from CI.** A `publish-python` workflow runs when a release is published (or by
+  hand for any existing tag): it builds the four platform wheels from that release's checksum-verified archives,
+  smoke-tests one wheel in a clean virtualenv, and uploads them by OIDC trusted publishing
+  (environment `pypi`; no API token exists anywhere; published wheels carry PEP 740 attestations by default).
+  The build verifies every archive against the release workflow's build attestations before opening it, and a
+  manual dispatch checks out and builds the tag's own commit, so an existing release can be (re)published
+  exactly as it was cut. The maintainer action is the one-time PyPI trusted-publisher entry (environment
+  `pypi`, refs scoped to `next` and `v*`); `docs/RELEASING.md` step 8 describes the new path.
+
 - **CI runs the OCI sandbox tests, and the conformance scan counts them.** A new `test-sandbox-oci` job runs
   `go test -tags sandbox_oci` on `internal/run` and `internal/clirun` against the runner's docker with an image pinned by
   digest (a skipped OCI test fails the job); it is not a required check. `internal/conformance/ci-tags.txt` lists the
