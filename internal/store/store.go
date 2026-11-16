@@ -49,6 +49,8 @@ type Store struct {
 	// Recovered lists what Open's journal replay did.
 	Recovered []RecoveryEvent
 	sameFS    bool
+	// blocked are the records whose replay failed (degraded open, see replay).
+	blocked []blockedOp
 }
 
 // Open opens (creating if needed) the store at root and replays the journal (§3.4).

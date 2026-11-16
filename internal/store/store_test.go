@@ -235,9 +235,13 @@ func TestCrashAtEveryPoint(t *testing.T) {
 					t.Fatalf("no crash at %s: %v", point, err)
 				}
 				committed := point != AfterBlobs
-				// The caller can tell "nothing committed" from "committed, install incomplete" (§3.5).
-				if out.Committed != committed || committed != strings.Contains(err.Error(), "committed, pending install") {
-					t.Fatalf("crash at %s: Committed=%v, err %q", point, out.Committed, err)
+				installed := point == AfterInstall || point == AfterDone || point == AfterProject
+				// The caller can tell "nothing committed" from "committed, install incomplete" (§3.5), and that from
+				// "committed and installed, journal bookkeeping unfinished": only the middle one is pending install.
+				if out.Committed != committed || out.Installed != installed ||
+					(committed && !installed) != strings.Contains(err.Error(), "committed, pending install") ||
+					installed != strings.Contains(err.Error(), "committed and installed") {
+					t.Fatalf("crash at %s: Committed=%v Installed=%v, err %q", point, out.Committed, out.Installed, err)
 				}
 				// Before reopening: what is visible, and what status reports.
 				visible, _ := s.Statements()
@@ -298,7 +302,7 @@ func TestProjectionFailure(t *testing.T) {
 	d, _, _ := s.InstallBlob(strings.NewReader("x"), "")
 	out, err := s.Commit("publish", [][]byte{l0}, []Digest{d})
 	if err != nil || out.NeedsRepair == nil || !strings.Contains(out.NeedsRepair.Error(), "committed, needs repair") ||
-		!strings.Contains(out.NeedsRepair.Error(), "run repair") {
+		!strings.Contains(out.NeedsRepair.Error(), "the next open of the store re-projects it") || strings.Contains(out.NeedsRepair.Error(), "run repair") {
 		t.Fatal(out, err)
 	}
 	if sts, _ := s.Statements(); sts[id0] == nil {

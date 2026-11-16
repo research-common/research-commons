@@ -887,6 +887,15 @@ func commitUnit(c *Ctx, out *Obj, op string, sts []signed, blobs []store.Digest,
 // §3, step 1); a failure before the commit point leaves no statement and no record, and the blobs this attempt
 // installed are removed again (store.Staging), so the store is as it was.
 func commitUnitFrom(c *Ctx, out *Obj, op string, sts []signed, blobs []store.Digest, open func(store.Digest) (io.ReadCloser, error), scope string, h head) (*Obj, int, error) {
+	// a committed operation of this key that the store could not finish on open hides its statements, so the head
+	// above may be stale: refuse before anything is written, naming the operation (degraded open)
+	for _, s := range sts {
+		if err := c.Store.BlockedFor(s.st.Signer); err != nil {
+			pr := failed(err, "this key's log", false, replayFailedNext)
+			pr.Exit = ExitCouldNot
+			return nil, 0, pr
+		}
+	}
 	l := listV{}
 	var lines [][]byte
 	for _, s := range sts {
@@ -973,11 +982,21 @@ func commitUnitFrom(c *Ctx, out *Obj, op string, sts []signed, blobs []store.Dig
 			for i, s := range sts {
 				ids[i] = s.st.ID
 			}
+			if res.Installed {
+				// steps 3 done: the statements are installed and visible; only the journal's bookkeeping (step 4 or
+				// 5) failed, so this is not "pending install"
+				return nil, 0, &Problem{Slug: "committed-finish-failed", Title: "committed and installed, journal record not finished", Class: refusal.Operational,
+					Scope: "operation " + res.Op, Committed: true,
+					Detail: "the operation reached its commit point (journal record " + res.Op + ", statements " + strings.Join(ids, ", ") +
+						") and its statements are installed; finishing the journal record failed; the next open of this store finishes it; the error is in peer_text",
+					Next: "fix the cause in peer_text, then run commons status (it shows the record until an open finishes it); publishing again is safe (idempotent)",
+					Peer: err.Error(), Exit: ExitCouldNot}
+			}
 			return nil, 0, &Problem{Slug: "committed-pending-install", Title: "committed, pending install", Class: refusal.Operational,
 				Scope: "operation " + res.Op, Committed: true,
 				Detail: "the operation reached its commit point (journal record " + res.Op + ", statements " + strings.Join(ids, ", ") +
 					") and installing its statements failed; the record is kept and the next open of this store replays it; the error is in peer_text",
-				Next: "fix the cause in peer_text, then run commons status (any command that opens the store finishes the install); do not publish again",
+				Next: "fix the cause in peer_text, then run commons status (every open of the store replays the record; if the replay keeps failing, status names it and the error); publishing again is safe (idempotent)",
 				Peer: err.Error(), Exit: ExitCouldNot}
 		}
 		return abort(failed(err, "store", false, "nothing was committed; run the command again"))
@@ -1130,6 +1149,9 @@ func (v *view) readinessWith(c *Ctx, sts []signed, task, edition string) (*Obj, 
 	}
 	return o, b.State, ""
 }
+
+// replayFailedNext is the next step for a store whose journal replay failed on open: what works today.
+const replayFailedNext = "fix the cause in peer_text (a permission, a full disk), then run commons status: every open of the store replays the operation, and status and fsck name it until it is finished"
 
 // beforeCommit is a test seam called once every blob of a unit is installed and before its record is written:
 // a test returns an error to abort the unit there. It returns nil in production.

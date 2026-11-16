@@ -108,6 +108,10 @@ type Outcome struct {
 	// and its install is incomplete; the next Open (or Repair) replays it (§3.4). Status reports it as
 	// "committed, pending install" meanwhile.
 	Committed bool
+	// Installed is true once every statement of the operation is installed under its id (step 3 done). An error
+	// with Installed set happened later (step 4 or 5): the statements are visible and only the journal's own
+	// bookkeeping is unfinished, so the operation is not "pending install".
+	Installed bool
 	// IDs of the statements, in the order given.
 	IDs []string
 	// Replaced lists statement ids whose stored file was corrupt: quarantined and replaced by the verified line.
@@ -139,6 +143,9 @@ func (s *Store) Commit(kind string, lines [][]byte, blobs []Digest) (Outcome, er
 		canonical[i] = st.Line()
 		out.IDs = append(out.IDs, st.ID)
 	}
+	if err := s.refuseBlockedSigners(canonical); err != nil {
+		return out, err
+	}
 	for _, b := range blobs {
 		if !s.HasBlob(b) {
 			return out, fmt.Errorf("blob %s is not held: install it before committing", b)
@@ -167,6 +174,9 @@ func (s *Store) Commit(kind string, lines [][]byte, blobs []Digest) (Outcome, er
 		err = s.finish(r, &out)
 	}
 	if err != nil {
+		if out.Installed {
+			return out, fmt.Errorf("operation %s committed and installed; finishing its journal record failed: %w; the next open of the store finishes it", r.Op, err)
+		}
 		return out, fmt.Errorf("operation %s committed, pending install: %w; the next open of the store replays it", r.Op, err)
 	}
 	return out, nil
@@ -176,7 +186,21 @@ func (s *Store) Commit(kind string, lines [][]byte, blobs []Digest) (Outcome, er
 func (s *Store) finish(r Record, out *Outcome) error {
 	pending := s.dir("journal", "pending", r.Op+".json")
 	done := s.dir("journal", "done", r.Op+".json")
-	if _, err := os.Stat(pending); err == nil {
+	if _, err := os.Stat(pending); err != nil {
+		// A done record: step 3 already ran once, but a statement file may have been removed since (by hand, or a
+		// restore of part of the store). Step 3 is idempotent (an identical file already in place is success), so
+		// it runs again here: replay and repair reinstall what the record holds, never anything else.
+		for _, l := range r.Lines {
+			id, res, err := s.installStatement(l)
+			if err != nil {
+				return err
+			}
+			if res == Replaced {
+				out.Replaced = append(out.Replaced, id)
+			}
+		}
+		out.Installed = true
+	} else {
 		for _, l := range r.Lines {
 			id, res, err := s.installStatement(l)
 			if err != nil {
@@ -189,6 +213,7 @@ func (s *Store) finish(r Record, out *Outcome) error {
 				return err
 			}
 		}
+		out.Installed = true
 		if err := s.hook(AfterInstall); err != nil {
 			return err
 		}
@@ -212,13 +237,13 @@ func (s *Store) finish(r Record, out *Outcome) error {
 	// bytes are installed again and Repair finishes it.
 	for _, b := range r.Blobs {
 		if !s.HasBlob(b) {
-			out.NeedsRepair = fmt.Errorf("operation %s committed, needs repair: blob %s missing; install the bytes again (fetch from a hold or publish them), then run repair", r.Op, b)
+			out.NeedsRepair = fmt.Errorf("operation %s committed, needs repair: blob %s missing; install the bytes again (commons fetch %s from a hold, or publish them again); the next open of the store then finishes it (commons status shows it)", r.Op, b, b)
 			return nil
 		}
 	}
 	if s.opt.Project != nil {
 		if err := s.opt.Project(r); err != nil {
-			out.NeedsRepair = fmt.Errorf("operation %s committed, needs repair: projection failed: %w; run repair", r.Op, err)
+			out.NeedsRepair = fmt.Errorf("operation %s committed, needs repair: projection failed: %w; once the cause is fixed, the next open of the store re-projects it (commons status shows it)", r.Op, err)
 			return nil
 		}
 	}
@@ -343,7 +368,8 @@ func (s *Store) records() ([]held, error) {
 type RecoveryEvent struct {
 	Op, Kind string
 	// What: "replayed" (pending → installed), "projected" (done → projections rebuilt), "needs repair",
-	// or "quarantined" (the record failed to decode or to verify).
+	// "replay failed" (the record could not be finished: Detail is the error; see replay), "quarantined" (the
+	// record failed to decode or to verify), or, from Repair only, "nothing to repair" (no record has that id).
 	What   string
 	Detail string
 }
@@ -390,22 +416,97 @@ func (s *Store) recover() error {
 		return err
 	}
 	for _, h := range rs {
-		var out Outcome
-		if err := s.finish(h.rec, &out); err != nil {
-			return fmt.Errorf("replaying %s: %w", h.rec.Op, err)
+		s.Recovered = append(s.Recovered, s.replay(h)...)
+	}
+	return nil
+}
+
+// replay finishes one record and reports what it did. A failure (an unwritable statements/ directory, a full
+// disk) does not stop the open (degraded open): the record stays in the journal, the event "replay failed" names
+// it with the error, the statements it names are hidden from every reader (so the operation is not shown half
+// installed) and a writer refuses a line by any of its signers, naming it (Blocked), until a later open or Repair
+// finishes it. Every other command (status, fsck, reads of other statements) keeps working.
+func (s *Store) replay(h held) []RecoveryEvent {
+	var out Outcome
+	var evs []RecoveryEvent
+	err := s.finish(h.rec, &out)
+	for _, id := range out.Replaced {
+		evs = append(evs, RecoveryEvent{Op: h.rec.Op, Kind: h.rec.Kind, What: "replaced statement",
+			Detail: id + ": stored copy corrupt, quarantined; verified line installed"})
+	}
+	if err != nil {
+		s.block(h.rec, err)
+		return append(evs, RecoveryEvent{Op: h.rec.Op, Kind: h.rec.Kind, What: "replay failed", Detail: err.Error()})
+	}
+	s.unblock(h.rec.Op)
+	ev := RecoveryEvent{Op: h.rec.Op, Kind: h.rec.Kind, What: "projected"}
+	if h.pending {
+		ev.What = "replayed"
+	}
+	if out.NeedsRepair != nil {
+		ev.What, ev.Detail = "needs repair", out.NeedsRepair.Error()
+	}
+	return append(evs, ev)
+}
+
+// blockedOp is a committed record whose replay failed on this open.
+type blockedOp struct {
+	op, kind, err string
+	ids, signers  map[string]bool
+}
+
+func (s *Store) block(r Record, err error) {
+	s.unblock(r.Op)
+	b := blockedOp{op: r.Op, kind: r.Kind, err: err.Error(), ids: map[string]bool{}, signers: map[string]bool{}}
+	for _, l := range r.Lines {
+		if st, rerr := wire.ReadStored(l); rerr == nil {
+			b.ids[st.ID] = true
+			b.signers[st.Signer] = true
 		}
-		ev := RecoveryEvent{Op: h.rec.Op, Kind: h.rec.Kind, What: "projected"}
-		if h.pending {
-			ev.What = "replayed"
+	}
+	s.blocked = append(s.blocked, b)
+}
+
+func (s *Store) unblock(op string) {
+	s.blocked = slices.DeleteFunc(s.blocked, func(b blockedOp) bool { return b.op == op })
+}
+
+// Blocked lists the operations whose replay failed on this open and are still unfinished: each with its kind and
+// the error, as "replay failed" events. Their statements are hidden from readers and their signers' writes refused.
+func (s *Store) Blocked() []RecoveryEvent {
+	var out []RecoveryEvent
+	for _, b := range s.blocked {
+		out = append(out, RecoveryEvent{Op: b.op, Kind: b.kind, What: "replay failed", Detail: b.err})
+	}
+	return out
+}
+
+// ErrReplayFailed is the reason a writer gives when one of its signers is named by a record whose replay failed.
+const ErrReplayFailed = "replay failed"
+
+// BlockedFor is the refusal a writer for signer gets while a record naming that key failed its replay (nil when
+// none does). Commit applies it too; a command calls it first so it refuses before it signs or installs anything.
+func (s *Store) BlockedFor(signer string) error {
+	for _, b := range s.blocked {
+		if b.signers[signer] {
+			return &refusal.Refusal{Class: refusal.Operational, Reason: ErrReplayFailed,
+				Detail: fmt.Sprintf("operation %s (%s) of key %s is committed and could not be installed when this store was opened (%s); nothing was written", b.op, b.kind, signer, b.err)}
 		}
-		if out.NeedsRepair != nil {
-			ev.What, ev.Detail = "needs repair", out.NeedsRepair.Error()
+	}
+	return nil
+}
+
+// refuseBlockedSigners refuses an operation any of whose lines is signed by a key named by a record whose replay
+// failed: the log's head is not known while that record's statements are hidden, so a new line could fork it.
+func (s *Store) refuseBlockedSigners(lines [][]byte) error {
+	for _, l := range lines {
+		st, err := wire.ReadStored(l)
+		if err != nil {
+			continue // Commit refuses it already
 		}
-		for _, id := range out.Replaced {
-			s.Recovered = append(s.Recovered, RecoveryEvent{Op: h.rec.Op, Kind: h.rec.Kind, What: "replaced statement",
-				Detail: id + ": stored copy corrupt, quarantined; verified line installed"})
+		if err := s.BlockedFor(st.Signer); err != nil {
+			return err
 		}
-		s.Recovered = append(s.Recovered, ev)
 	}
 	return nil
 }
@@ -429,25 +530,46 @@ func (s *Store) Status() ([]RecoveryEvent, error) {
 	return out, nil
 }
 
-// Repair re-runs step 5 for every done record (§3.5). It never signs, rewrites or deletes a statement.
-func (s *Store) Repair() ([]RecoveryEvent, error) {
+// Repair finishes the named journal records, or every record when none is named (§3.5): steps 3–5 again, each
+// idempotent (a done record's statements are reinstalled if a file went missing). It continues past a record
+// that fails and returns one event per record, in replay order: "replayed", "projected", "needs repair" or
+// "replay failed" (with the error), and "nothing to repair" for a well-formed id no record has. A malformed id
+// is refused before anything runs. It never signs, rewrites or deletes a statement, never rolls back, and never
+// touches quarantine/. The error is for the journal listing only.
+func (s *Store) Repair(ops ...string) ([]RecoveryEvent, error) {
+	for _, op := range ops {
+		if !reHex.MatchString(op) {
+			return nil, refusal.Malformed("operation id %q is not 64 lowercase hex", op)
+		}
+	}
 	rs, err := s.records()
 	if err != nil {
 		return nil, err
 	}
 	var out []RecoveryEvent
+	found := map[string]bool{}
 	for _, h := range rs {
-		var o Outcome
-		if err := s.finish(h.rec, &o); err != nil {
-			return out, err
+		if len(ops) > 0 && !slices.Contains(ops, h.rec.Op) {
+			continue
 		}
-		ev := RecoveryEvent{Op: h.rec.Op, Kind: h.rec.Kind, What: "projected"}
-		if o.NeedsRepair != nil {
-			ev.What, ev.Detail = "needs repair", o.NeedsRepair.Error()
+		found[h.rec.Op] = true
+		out = append(out, s.replay(h)...)
+	}
+	for _, op := range ops {
+		if !found[op] {
+			out = append(out, RecoveryEvent{Op: op, What: "nothing to repair"})
 		}
-		out = append(out, ev)
 	}
 	return out, nil
+}
+
+func (s *Store) hidden(id string) bool {
+	for _, b := range s.blocked {
+		if b.ids[id] {
+			return true
+		}
+	}
+	return false
 }
 
 // Statements returns every installed statement line, verified through wire.ReadStored, keyed by id. Readers
@@ -466,6 +588,9 @@ func (s *Store) Statements() (map[string][]byte, error) {
 		st, rerr := wire.ReadStored(b)
 		if rerr != nil || st.ID != d.Name() {
 			return nil // fsck reports it; never shown as anyone's word
+		}
+		if s.hidden(st.ID) {
+			return nil // named by a record whose replay failed: the operation is not shown half installed
 		}
 		out[st.ID] = b
 		return nil

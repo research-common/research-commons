@@ -29,8 +29,18 @@ func statusCmd(c *Ctx) (*Obj, int, error) {
 	o := newObj().set("store", refV(c.Root)).set("layout", refV(store.Layout()))
 	state := "nothing pending"
 	ops := listV{}
+	blocked := map[string]store.RecoveryEvent{}
+	for _, b := range c.Store.Blocked() {
+		blocked[b.Op] = b
+	}
 	for _, r := range recs {
-		ops = append(ops, newObj().set("operation", refV(r.Op)).set("kind", textV(r.Kind)).set("store_state", tokV(tok(r.What))))
+		x := newObj().set("operation", refV(r.Op)).set("kind", textV(r.Kind)).set("store_state", tokV(tok(r.What)))
+		if b, ok := blocked[r.Op]; ok {
+			// degraded open: this open could not finish the record; its statements are hidden, its signers' writes
+			// refused, and every other command works
+			x.set("what", tokV(tok("replay failed"))).set("error", peerV(b.Detail)).set("next", textV(replayFailedNext))
+		}
+		ops = append(ops, x)
 		if r.What == "committed, needs repair" || state == "nothing pending" {
 			state = r.What
 		}
