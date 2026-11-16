@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/research-common/research-commons/internal/gate"
+	"github.com/research-common/research-commons/internal/resolve"
 )
 
 // gateReport is a gate's report (hub check, pull) as one result tree (hub template H-50, H-51): one line per
@@ -49,6 +50,22 @@ func gateReport(rep *gate.Report) *Obj {
 				row.set("label_details", ds)
 			}
 		}
+		if x.IntendedFor != nil {
+			// JSON carries the typed object; the one-line human row carries the same two states beside the labels
+			ro := recordedObj(x.IntendedFor)
+			row.setJSON("intended_for", ro)
+			row.setHuman("intended_for_named", ro.get("named").(*Obj).get("state"))
+			if cur, ok := ro.get("current").(*Obj); ok {
+				row.setHuman("intended_for_current", cur.get("state"))
+			}
+		}
+		if x.Completeness != nil {
+			// the receiver's check of the edition's completeness claim (selection.refuse_incomplete): the same typed
+			// state `show` prints on the resource view, on refused, undecided and labelled rows alike
+			co := completenessObj(x.Completeness, false)
+			row.setJSON("completeness", co)
+			row.setHuman("completeness_state", co.get("state"))
+		}
 		if x.Actor != nil {
 			// the same member `show` prints for an identity statement; a label only (hub check), never a verdict
 			a := newObj().set("identity", refV(x.Actor.Identity)).set("grant", refV(x.Actor.Grant)).set("state", tokV(tok(x.Actor.State)))
@@ -82,3 +99,41 @@ func gateReport(rep *gate.Report) *Obj {
 // gateExit is a report's exit (claims §13: 0 all admitted, 1 at least one refused under any class, an
 // operational refusal included, 3 nothing refused and something undecided).
 func gateExit(rep *gate.Report) int { return rep.Exit() }
+
+// recordedObj is the receiver's re-application of a statement's intended_for as typed members beside the label
+// detail (claims-model note §8, §13: every rule evaluation is one of ok, fail, unchecked): the named edition's
+// outcome and, when the resource has a current edition, the current edition's, each a state token; what the
+// publisher recorded is its own word, a peer value, never a state of this reader's.
+func recordedObj(c *resolve.Recorded) *Obj {
+	o := newObj().set("resource", refV(c.Resource)).set("edition", refV(c.NamedEdition))
+	named := newObj().set("edition", refV(c.NamedEdition))
+	if c.Named == "" {
+		// the resource or the edition is not held: nothing was evaluated, which is not a pass
+		named.set("state", tokV(tok(string(resolve.RuleUnchecked))))
+	} else {
+		named.set("state", tokV(tok(string(c.Named))))
+	}
+	o.set("named", named)
+	if c.CurrentEdition != "" {
+		cur := newObj().set("edition", refV(c.CurrentEdition))
+		if c.Current == "" {
+			cur.set("state", tokV(tok(string(resolve.RuleUnchecked))))
+		} else {
+			cur.set("state", tokV(tok(string(c.Current))))
+		}
+		o.set("current", cur)
+	}
+	var why []string
+	for _, e := range c.Evals {
+		why = append(why, e.String())
+	}
+	if len(why) > 0 {
+		ev := listV{}
+		for _, w := range why {
+			ev = append(ev, peerV(w)) // an edition's rule expression is the publisher's text
+		}
+		o.set("evaluations", ev)
+	}
+	o.set("publisher_said", peerV(c.PublisherSaid))
+	return o
+}

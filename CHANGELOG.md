@@ -10,6 +10,13 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 ## [Unreleased]
 
 ### Added
+- **`pull` and `hub check` report a rule evaluation as a typed state, not only prose.** A report row for a statement
+  that records `intended_for` now carries `intended_for` (JSON) with the receiver's own `named` and `current`
+  outcomes, each `ok`, `fail` or `unchecked` (`unchecked` when the resource or the content could not be read, never
+  `ok`), and the publisher's recorded outcome apart as `publisher_said`; a row for an edition judged under
+  `selection.refuse_incomplete` carries the check as `completeness` with the same `state` `show` prints on the
+  resource view. The one-line human row prints the same words (`intended for named`, `intended for current`,
+  `completeness state`). The label detail keeps its prose.
 - **`push --dry-run`: what a push would carry, judged as the hub's CI would.** Run in a git checkout of the hub
   (the store is the checkout): the change is `merge-base(<base>, HEAD)..HEAD`, with `--base` defaulting to
   `refs/remotes/<remote>/HEAD` (`--remote`, default `origin`; exit 2 when it is not set). Every object gets the

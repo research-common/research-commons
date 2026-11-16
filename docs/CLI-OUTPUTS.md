@@ -149,7 +149,7 @@ JSON members carrying tokens: `authorship`, `role`, `state`, `grade`, `step`, `q
 | `control-plane change: needs maintainer review` | label | a change to a hub's own files; not data, reviewed by the maintainers |
 | `removed (not_served)` | label | a blob the hub policy no longer serves was removed |
 | `not served: still present` | label | a blob the hub policy lists in not_served is still in the tree |
-| `intended_for` | label | the receiver's re-application of the statement's intended_for, beside the signer's record |
+| `intended_for` | label | the receiver's re-application of the statement's intended_for, beside the signer's record: the named and the current edition's outcomes are typed `ok`, `fail` or `unchecked` members of the report row (`unchecked` when the resource or its rules could not be read), and what the publisher recorded is carried apart as its word |
 | `admitted by override` | label | a reader-policy refusal lifted by a typed override that names this object |
 | `series boundary` | label | a series boundary the freeze policy could not decide |
 | `completeness claim` | label | the receiver's check of an edition's completeness claim (selection.refuse_incomplete): holds, or could not be checked |
