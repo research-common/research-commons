@@ -121,8 +121,12 @@ A plan, not a schedule; the maintainers make the final call and may revise this 
    the download → checksum-verify → build → smoke-test steps and uploads the wheels by OIDC trusted publishing
    (environment `pypi`, `pypa/gh-action-pypi-publish` pinned by full SHA; no API token exists anywhere). The one
    maintainer action is configuring the PyPI trusted publisher once (owner `research-common`, repository
-   `research-commons`, workflow `publish-python.yml`, environment `pypi`); after that every release publishes its
-   wheels automatically, and Actions → publish-python → Run workflow can republish any existing tag's wheels.
+   `research-commons`, workflow `publish-python.yml`, environment `pypi`, with deployment refs restricted to `next`
+   and tags `v*`); after that every release publishes its wheels automatically, and Actions → publish-python → Run
+   workflow can republish any existing tag's wheels. A dispatch checks out and builds the tag's own commit, so a
+   backfill reproduces that release's wheels, and refuses any archive whose build attestation (signed by
+   `release.yml` at that tag) does not verify. The publish step emits PEP 740 attestations on PyPI by default
+   (`gh-action-pypi-publish` under trusted publishing), so published wheels carry provenance too.
 9. **Hub template pin.** In `research-commons-hub-template`, on its `next` branch, set
    `TOOL_REF` to the tag's **full 40-character commit SHA** (immutable), with the tag as a
    trailing comment (`# v0.5.0-alpha.1`).
