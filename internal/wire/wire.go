@@ -343,30 +343,36 @@ func (r *Reader) fromEnvelope(full *canon.Object) (*Statement, error) {
 }
 
 func (s *Statement) verify(sigS string) error {
+	return s.verifyMemo(sigS, func() (string, error) { return s.verifyCold(sigS) })
+}
+
+// verifyCold is the signature check itself: it returns the canonical signature, or the refusal.
+func (s *Statement) verifyCold(sigS string) (string, error) {
+	var canonSig string
 	switch s.Alg {
 	case AlgEIP191:
 		if !reSigEIP.MatchString(sigS) {
-			return refusal.Malformed("sig is not 0x + 130 lowercase hex")
+			return "", refusal.Malformed("sig is not 0x + 130 lowercase hex")
 		}
 		raw, _ := hex.DecodeString(sigS[2:])
 		addr, _ := hex.DecodeString(s.Signer[2:])
 		c, ok := sig.VerifyEIP191(s.SignedString, raw, addr)
 		if !ok {
-			return refusal.BadSig("does not recover %s", s.Signer)
+			return "", refusal.BadSig("does not recover %s", s.Signer)
 		}
-		s.Sig = "0x" + hex.EncodeToString(c)
+		canonSig = "0x" + hex.EncodeToString(c)
 	case AlgEd25519:
 		if !reSigEd.MatchString(sigS) {
-			return refusal.Malformed("sig is not 128 lowercase hex")
+			return "", refusal.Malformed("sig is not 128 lowercase hex")
 		}
 		raw, _ := hex.DecodeString(sigS)
 		pub, _ := hex.DecodeString(strings.TrimPrefix(s.Signer, "ed25519:"))
 		if step := sig.VerifyEd25519(pub, s.SignedString, raw); step != "" {
-			return refusal.BadSig("ed25519 %s", step)
+			return "", refusal.BadSig("ed25519 %s", step)
 		}
-		s.Sig = sigS
+		canonSig = sigS
 	}
-	return nil
+	return canonSig, nil
 }
 
 // mergesList checks the line-local rules §7 gives merges: a non-empty, sorted, duplicate-free list of statement

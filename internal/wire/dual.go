@@ -61,7 +61,9 @@ var StoredReader LineReader = ReadFunc(ReadStored)
 // read through it. It is the dual-major reader: rc/1 exactly as Read, rc/2 verified under the identity profile (a
 // bad rc/2 signature is refused, as an rc/1 one is), any other major Read's unverified linkage path. Read stays
 // the rc/1-only reader the differential tests compare against.
-func ReadStored(line []byte) (*Statement, error) { return stored.Read(line) }
+//
+// Reads go through the in-process memo (memo.go): the same bytes are verified once per command, whoever asks.
+func ReadStored(line []byte) (*Statement, error) { return memoRead(line) }
 
 // CandidateMajorLine reports whether line is a JSON object whose rc is rc/2: the cheap test a reader uses to tell
 // whether a held set carries any identity-profile evidence before admitting it.

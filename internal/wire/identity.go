@@ -58,12 +58,18 @@ type IdentityReader struct {
 	// x_identity_v1 is not admitted there. rc/2 registers x_identity_v1 and nothing else. Each reader is built
 	// once and never changed, so no received byte can register an extension.
 	v1, v2 *Reader
+	// memo is set on the production reader (NewIdentityReader) only, so the dual reader's rc/2 reads and the
+	// identity evaluator's admission of the same held line share one verification (memo.go); a reader a test builds
+	// with another registry answers by its own registry and is never remembered.
+	memo bool
 }
 
 // NewIdentityReader returns the candidate reader. It has no configuration: its rc/2 critical-extension registry
 // holds exactly x_identity_v1, with its validator (identityExtension).
 func NewIdentityReader() *IdentityReader {
-	return newIdentityReader(map[string]ExtensionValidator{IdentityCrit: identityExtension})
+	r := newIdentityReader(map[string]ExtensionValidator{IdentityCrit: identityExtension})
+	r.memo = true
+	return r
 }
 
 // newIdentityReader builds the reader with the given rc/2 registry. Production passes the one registration
@@ -78,6 +84,14 @@ func newIdentityReader(rc2 map[string]ExtensionValidator) *IdentityReader {
 
 // Read parses one received line. See IdentityReader.
 func (r *IdentityReader) Read(line []byte) (*Statement, error) {
+	if r.memo {
+		return identityMem.read(line, r.readCold)
+	}
+	return r.readCold(line)
+}
+
+// readCold is Read with no memo.
+func (r *IdentityReader) readCold(line []byte) (*Statement, error) {
 	if len(line) > MaxLine {
 		return nil, &refusal.Refusal{Class: refusal.Operational, Reason: refusal.SizeLimit,
 			Detail: "size limit " + strconv.Itoa(MaxSignedString) + " (line of " + strconv.Itoa(len(line)) + " bytes refused before parsing)"}
