@@ -840,3 +840,35 @@ func TestContestedLabel(t *testing.T) {
 		t.Fatalf("one resolver for two authored statements, got %d", built)
 	}
 }
+
+// TestCommitReuseRestartsWindow: a pull naming a blob the store already holds intact installs nothing for it, and
+// the reuse re-hashes the held copy and restarts its grace window (storage note §2 step 5, §6.1.1); a held copy
+// that no longer hashes to its name is replaced from the verified package bytes, never reused.
+func TestCommitReuseRestartsWindow(t *testing.T) {
+	s := openStore(t)
+	data := []byte("held long ago")
+	d, _, err := s.InstallBlob(bytes.NewReader(data), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(s.Root(), "blobs", "sha256", strings.TrimPrefix(string(d), "sha256:"))
+	old := time.Now().Add(-72 * time.Hour)
+	os.Chtimes(p, old, old)
+	rep := mustAdmit(t, "pull", Package{Objects: []Object{blobObject(data)}}, StoreHeld{s}, nil, Options{})
+	out, err := Commit(s, rep)
+	if err != nil || out.Op != "" {
+		t.Fatalf("a held intact blob is no operation: %v %v", out, err)
+	}
+	if fi, _ := os.Stat(p); time.Since(fi.ModTime()) > time.Hour {
+		t.Fatal("the reuse did not restart the held blob's window")
+	}
+	// a corrupt held copy: replaced from the package's verified bytes
+	os.Chmod(p, 0o644)
+	os.WriteFile(p, []byte("damaged copy!"), 0o444)
+	if _, err := Commit(s, rep); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(p); !bytes.Equal(b, data) {
+		t.Fatal("a corrupt held copy was reused")
+	}
+}

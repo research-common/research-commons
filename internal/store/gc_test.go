@@ -3,6 +3,7 @@ package store
 import (
 	"bytes"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -710,5 +711,32 @@ func TestGCPolicyPin(t *testing.T) {
 	// control: unpinned, the same blob goes
 	if p, err := s.GC(GCConfig{}, true); err != nil || !slices.Equal(deleted(p), []Digest{d}) || s.HasBlob(d) {
 		t.Fatalf("unpinned: %v\n%s", err, p.Render())
+	}
+}
+
+// TestReuseBlobRestartsWindow: ReuseBlob (an operation naming a held blob without its bytes) re-hashes the held
+// copy and restarts its window, so gc keeps it; a copy that no longer hashes to its name is refused, naming both
+// hashes, and is left in place untouched.
+func TestReuseBlobRestartsWindow(t *testing.T) {
+	s := open(t, t.TempDir(), Options{NoSync: true})
+	data := []byte("old unreferenced bytes")
+	d, _, _ := s.InstallBlob(bytes.NewReader(data), "")
+	age(t, s, d, hours(72))
+	if err := s.ReuseBlob(d); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := s.GC(GCConfig{}, true); len(p.Deleted) != 0 || !s.HasBlob(d) {
+		t.Fatal("gc deleted a blob whose window restarted at reuse")
+	}
+	os.Chmod(s.blobPath(d), 0o644)
+	os.WriteFile(s.blobPath(d), []byte("damaged"), 0o444)
+	age(t, s, d, hours(72))
+	fi0, _ := os.Stat(s.blobPath(d))
+	refusedAs(t, s.ReuseBlob(d), refusal.Intrinsic, CorruptBlob, "hashes to "+string(digestOf([]byte("damaged"))))
+	if fi, _ := os.Stat(s.blobPath(d)); !fi.ModTime().Equal(fi0.ModTime()) {
+		t.Fatal("a refused reuse restarted the window of a corrupt copy")
+	}
+	if err := s.ReuseBlob(digestOf([]byte("never held"))); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatal(err)
 	}
 }
