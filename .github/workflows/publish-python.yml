@@ -1,0 +1,91 @@
+# Publish the Python wheels of the Python package (`python/`) to PyPI on a release.
+# Runs on `workflow_dispatch` too: a manual run (re)publishes the wheels of the release the
+# chosen tag names, without touching anything else. The action authenticates to PyPI by OIDC
+# trusted publishing only: no API token exists in the repository or the environment, and the
+# PyPI project's publisher entry (owner, repository, workflow name, environment) must match
+# these values exactly or PyPI refuses the upload. Public repo: actions pinned by full commit
+# SHA, a read-only default token, and no other permission than the OIDC id-token this one job
+# needs.
+name: publish-python
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag whose wheels to build and publish (e.g. v0.5.0-alpha.6)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build wheels
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Resolve the release ref and refuse a tag/VERSION mismatch
+        env:
+          TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "+${GITHUB_SHA}:refs/checks/base" "${TAG}:refs/checks/tag"
+          tag_version="$(git show "refs/checks/tag:VERSION" | tr -d '[:space:]')"
+          base_version="$(git show "refs/checks/base:VERSION" | tr -d '[:space:]')"
+          if [ "$tag_version" != "$base_version" ]; then
+            echo "tag $TAG declares VERSION $tag_version, but the workflow checkout is $base_version" >&2
+            exit 1
+          fi
+          echo "TAG=$tag_version" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Download the release archives
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir rel
+          gh release download "$REF" --repo "$GITHUB_REPOSITORY" \
+            --pattern 'SHA256SUMS' --pattern '*.tar.gz' --dir rel --clobber
+      - name: Build the wheels
+        run: |
+          set -euo pipefail
+          python3 python/scripts/build_wheels.py rel --out dist
+      - name: Check the wheels in a clean virtualenv
+        run: |
+          set -euo pipefail
+          python3 -m venv /tmp/smoke
+          /tmp/smoke/bin/pip install --quiet dist/research_commons-*manylinux_2_17_x86_64.whl
+          /tmp/smoke/bin/commons --version
+          test "$(/tmp/smoke/bin/commons --version)" = "$(tr -d '[:space:]' < VERSION)"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wheels
+          path: dist/*.whl
+          if-no-files-found: error
+
+  publish:
+    name: publish to PyPI (trusted publishing)
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: wheels
+          path: dist
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+        with:
+          verbose: true
