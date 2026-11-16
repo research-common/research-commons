@@ -208,6 +208,7 @@ var vocabulary = []Token{
 	{"quarantined", "recovery", "a journal record failed to decode or verify and was moved aside; nothing from it installed"},
 	{"replaced statement", "recovery", "a corrupt stored copy was quarantined and the verified line installed"},
 	{"removed temporary", "recovery", "a stale temporary file was removed"},
+	{"restored blob", "recovery", "a gc run stopped after moving a blob aside and before deciding; the verified file was put back"},
 	// explain --since: each change between a saved explain and the answer now, with its cause (claims §13, I14, I5)
 	{"answer changed", "since", "something explain prints beyond its causes (a token, a count, a view) differs from the saved explain"},
 	{"answer unchanged", "since", "everything explain prints beyond its causes is as in the saved explain"},

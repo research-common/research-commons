@@ -272,10 +272,11 @@ func TestPublishCrashMatrix(t *testing.T) {
 				t.Fatalf("authored and holds are not readable together:\n%s\n%s", a.stdout, h.stdout)
 			}
 
-			// a crash before the record committed nothing: the retry commits, reusing a blob step 1 installed
+			// a crash before the record committed nothing: the retry commits, reusing a blob step 1 installed; the
+			// crashed process held the key's writer lock, and its exit released it
 			if !c.want.committed {
 				rr := runIn(root, nil, args...)
-				if rr.code != 0 || outObj(t, rr).Members["operation"] != canon.String(op) {
+				if rr.code != 0 || outObj(t, rr).Members["operation"] != canon.String(op) || strings.Contains(rr.stdout, "writer_lock") {
 					t.Fatalf("retry: %d %s", rr.code, rr.stdout)
 				}
 				if c.want.raw.blob != strings.Contains(rr.stdout, "blob "+digest+" already held") {
@@ -284,6 +285,20 @@ func TestPublishCrashMatrix(t *testing.T) {
 				if s := crashSnapshot(t, root, digest, ids); s != snapComplete {
 					t.Fatalf("after the retry:\n%s", s)
 				}
+				return
+			}
+			// a committed crash: the key's next line chains on the recovered holds (seq 2, prev = holds), and the
+			// writer lock the crashed process held was released by its exit
+			next := filepath.Join(t.TempDir(), "next.bin")
+			os.WriteFile(next, []byte("the next publish after a crash"), 0o644)
+			nr := runIn(root, nil, "publish", "--key", key, "--json", "--kind", "authored", "--content", next,
+				"--licence", "CC0-1.0", "--description", "next", "--ts", "2026-01-01T00:00:01Z")
+			if nr.code != 0 || strings.Contains(nr.stdout, "writer_lock") {
+				t.Fatalf("the next publish after the crash: %d %s", nr.code, nr.stdout)
+			}
+			first := outObj(t, nr).Members["statements"].(canon.Array)[0].(*canon.Object)
+			if first.Members["seq"] != canon.Int(2) || first.Members["prev"] != canon.String(holdsID) {
+				t.Fatalf("the next line does not chain on the recovered operation: %s", canon.Encode(first))
 			}
 		})
 	}
@@ -457,4 +472,82 @@ func TestFaultSeamTestOnly(t *testing.T) {
 			t.Errorf("the guard never saw the declaration of %s: renamed? update the guard", g)
 		}
 	}
+}
+
+// TestReleaseAndGCCrash: P-10 for the store's other writers, with a real process crash. gc --release (one
+// operation: the withdrawal is committed, then the blob removed) crashes at each of its points; gc --apply crashes
+// with the blob moved aside, before its re-check decides. After each crash the next status reports what the
+// replay did, the blob is never gone while the serving holds is current, the withdrawal is installed exactly when
+// its record was written, and running the command again finishes the work.
+func TestReleaseAndGCCrash(t *testing.T) {
+	conformance.Partial(t, "P-10", "release and gc's move-aside with a process crash at each of their points, through the commands; the commit points of publish are TestPublishCrashMatrix")
+	points := []string{store.AfterBlobs, store.AfterRecord, store.AfterStatement, store.AfterInstall, store.AfterDone,
+		store.AfterProject, store.AfterWithdrawal, store.AfterBlobRemoved}
+	for _, point := range points {
+		t.Run("release "+point, func(t *testing.T) {
+			w, b, keyFile := releaseWorld(t)
+			held := len(readRaw(t, w.root, b).statements)
+			code, childOut, reached := crashRun(t, w.root, point, 1, "gc", "--release", b, "--key", keyFile, "--json")
+			if !reached || code != crashExit {
+				t.Fatalf("the crash point was not reached: marker %v, exit %d\n%s", reached, code, childOut)
+			}
+			committed := point != store.AfterBlobs
+			raw := readRaw(t, w.root, b)
+			if !raw.blob && point != store.AfterBlobRemoved {
+				t.Fatalf("blob deleted at %q, before the withdrawal was committed and installed: %+v", point, raw)
+			}
+			if (len(raw.pending)+len(raw.done) == 1) != (committed && point != store.AfterWithdrawal && point != store.AfterBlobRemoved) {
+				t.Fatalf("journal after a crash at %q: %+v", point, raw)
+			}
+			st := outObj(t, w.run("status", "--json"))
+			if st.Members["store_state"] != canon.String("nothing pending") {
+				t.Fatalf("status after the replay: %s", canon.Encode(st))
+			}
+			show := w.run("show", b, "--json").stdout
+			serving := strings.Contains(show, `"holders":["`+w.signer("OPR")+`"]`)
+			if serving == committed {
+				t.Fatalf("after a crash at %q (committed=%v) the serving holds is current=%v: %s", point, committed, serving, show)
+			}
+			// the release run again finishes it: the withdrawal (signed again only if none was committed), the blob gone
+			r := runIn(w.root, map[string]string{KeyEnv: keyFile}, "gc", "--release", b, "--json")
+			if point == store.AfterBlobRemoved {
+				if _, err := os.Stat(filepath.Join(w.root, "blobs", "sha256", strings.TrimPrefix(b, "sha256:"))); err == nil {
+					t.Fatal("the blob came back after its removal")
+				}
+				return
+			}
+			if r.code != 0 {
+				t.Fatalf("release again after a crash at %q: %d %s", point, r.code, r.stdout)
+			}
+			// one withdrawal in all: a committed one is reused, not signed again
+			if n := len(readRaw(t, w.root, b).statements); n != held+1 {
+				t.Fatalf("after a crash at %q and a second release the store holds %d statements, want %d", point, n, held+1)
+			}
+			if after := w.run("show", b, "--json").stdout; !strings.Contains(after, `"bytes":"not held here"`) || !strings.Contains(after, `"holders":[]`) {
+				t.Fatalf("after the second release: %s", after)
+			}
+		})
+	}
+	t.Run("gc apply, moved aside", func(t *testing.T) {
+		p := newPubWorld(t)
+		d, path := heldUnreferenced(t, p, "an unreferenced blob gc is deleting", 72*time.Hour)
+		code, childOut, reached := crashRun(t, p.root, store.GCMoved, 1, "gc", "--apply", "--json")
+		if !reached || code != crashExit {
+			t.Fatalf("the crash point was not reached: marker %v, exit %d\n%s", reached, code, childOut)
+		}
+		if raw := readRaw(t, p.root, d); raw.blob || raw.temps != 1 {
+			t.Fatalf("a crash with the blob moved aside leaves it in tmp/: %+v", raw)
+		}
+		st := outObj(t, p.run("status", "--json"))
+		rec, _ := st.Members["recovered_on_open"].(canon.Array)
+		if len(rec) != 1 || rec[0].(*canon.Object).Members["what"] != canon.String("restored blob") {
+			t.Fatalf("status should report the blob restored: %s", canon.Encode(st))
+		}
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("the blob is not back: %v", err)
+		}
+		if g := p.run("gc", "--apply", "--json"); g.code != 0 || !strings.Contains(string(canon.Encode(jsonOf(t, g).Members["deleted"])), d) {
+			t.Fatalf("gc again: %d %s", g.code, g.stdout)
+		}
+	})
 }
