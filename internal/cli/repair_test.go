@@ -94,9 +94,12 @@ func TestRepairMissingBlob(t *testing.T) {
 	showAll := func(when string) {
 		t.Helper()
 		for _, id := range ids {
-			if s := p.run("show", id, "--json"); s.code == ExitDidNotStart || !strings.Contains(s.stdout, id) || strings.Contains(s.stdout, "not-held") {
-				t.Fatalf("%s: statement %s does not resolve: %d %s", when, id, s.code, s.stdout)
+			if s := p.run("show", id, "--json"); s.code == ExitDidNotStart || !strings.Contains(s.stdout, id) || strings.Contains(s.stdout, "no statement held") {
+				t.Fatalf("%s: statement %s is not shown (hidden or rolled back): %d %s", when, id, s.code, s.stdout)
 			}
+		}
+		if l := p.run("list", "--json"); l.code != ExitOK || !strings.Contains(l.stdout, d) {
+			t.Fatalf("%s: list does not show the committed blob's statements: %d %s", when, l.code, l.stdout)
 		}
 	}
 	showAll("needs repair")
