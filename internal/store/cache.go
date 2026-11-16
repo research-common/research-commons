@@ -9,7 +9,11 @@ package store
 // (C-core-129). Entries live under <root>/cache/<projection>/<key digest>; the whole directory is a
 // projection (deleting it is a cold start, §5.2) and nothing authoritative is ever read from it.
 //
-// This is a store-side facility. Nothing in the resolver uses it yet.
+// This is a store-side facility that nothing in this implementation wires: no read command consults or writes
+// cache/, and no production code calls NewVerifyCache or VerifyCache.Check (a guard test, cli
+// TestNoProductionCodeReadsTheVerifyCache, fails if one does). It is kept for a future projection, tested on
+// its own, and declared by `status` as "no persistent cache". The one cache a command keeps is the in-process
+// verification memo of package wire (memo.go).
 
 import (
 	"bytes"

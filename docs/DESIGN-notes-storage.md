@@ -375,6 +375,19 @@ blobs plus statements could answer.
 
 ### 5.3 Invalidation list
 
+This implementation (1.0) keeps **no persistent resolver or verification cache**: every command reads the blobs
+and statements cold, so "every answer equals a cold rebuild" holds by construction. What a command does keep is
+one in-memory fact, that a given sequence of bytes has been verified, so the same stored line is verified once
+per command rather than once per reader of it. It is keyed on the SHA-256 of the line's bytes and on nothing
+else (not the file's name, size or modification time: a same-name, same-size, same-mtime rewrite is another
+key), it is bounded, never written to disk, and it changes no output (`status` declares both). The cases below
+(C-core-129, C-core-129a, P-07) read "every cache the implementation keeps": an implementation that keeps a
+persistent cache holds it to the list that follows; one that keeps none shows it keeps none. A same-name rewrite
+of a statement file with different valid content is not read as new content: the file's name no longer matches
+the statement it holds, so the statement leaves every answer and `explain --since` cites it as removed.
+`internal/store/cache.go` is the unwired projection cache and verification cache kept for a future projection;
+no read command touches `cache/`.
+
 An entry is dropped (or ignored, which is equivalent) when any of the following changes:
 
 1. any statement hash in its input set (a new statement by any key that the projection *would* read is a new

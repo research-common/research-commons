@@ -88,7 +88,7 @@ func sprintOrder(o []int) string {
 // answers byte for byte, including after the first resolver has answered everything (comparator and view
 // caches inside the resolver must not leak into a fresh one).
 func TestPropertyColdRecompute(t *testing.T) {
-	conformance.Partial(t, "P-07", "resolver half: two resolvers over one store, and one over a rebuilt store, answer alike, every view; deleting the store-side caches and projections is the store layer's half")
+	conformance.Partial(t, "P-07", "resolver half: two resolvers over one store, and one over a rebuilt store, answer alike, every view; deleting the store-side caches and projections is the store layer's, and every read command through the CLI is cli TestReadsColdAfterDeletingEveryCache, which covers the case")
 	fixture.Check(t, propBaseSeed+2000, propSeeds, fixture.Extended, func(f fixture.Fixture) string {
 		pw := concretize(t, f)
 		s := storeOf(t, pw.deliver(nil))

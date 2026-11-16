@@ -17,6 +17,11 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   `evaluations` of the pre-pin check (`publish --intended-for`) and of a `pull` or `hub check` row's `intended_for` are
   rows with the rule, dialect, expression, member, `state` (`ok`, `fail` or `unchecked`) and `why`, no longer one
   sentence each. The human output says the same things.
+- **One verification per stored line per command.** Reading the same statement through the store, the log view and
+  the identity evaluator checked its signature three times; a line is now verified once per process and the answer
+  reused. The memo lives in memory only, is keyed on the SHA-256 of the line's bytes (never on a name, size or
+  modification time, so a same-name rewrite with the same size and mtime is read afresh), is bounded, and changes
+  no output. `status` now declares the caches the tool keeps: no persistent cache, and this one in-process memo.
 - **`pull` and `hub check` report a rule evaluation as a typed state, not only prose.** A report row for a statement
   that records `intended_for` now carries `intended_for` (JSON) with the receiver's own `named` and `current`
   outcomes, each `ok`, `fail` or `unchecked` (`unchecked` when the resource or the content could not be read, never

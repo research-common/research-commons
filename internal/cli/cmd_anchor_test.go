@@ -404,7 +404,7 @@ func TestReadVerifierReadsTip(t *testing.T) {
 // not writable: receipts used, none written, nothing created), and over receipts made untrustworthy (downgraded,
 // read cold). The stores' counters show each mode reached its path.
 func TestReadsReceiptsByteIdentical(t *testing.T) {
-	conformance.Partial(t, "P-07", "the bitcoin-time receipt store through the read commands: cold, read-write, warm, read-only and untrusted-receipt runs print identical bytes; the resolver's own caches are not wired")
+	conformance.Partial(t, "P-07", "the bitcoin-time receipt store through the read commands: cold, read-write, warm, read-only and untrusted-receipt runs print identical bytes; the case is covered by TestReadsColdAfterDeletingEveryCache, which adds cache/, journal/done and the verification memo")
 	c := newChainWorld(t, 30)
 	now := c.tip.Add(10 * time.Minute)
 	useTestChain(t, &now, 0)

@@ -69,6 +69,9 @@ func statusCmd(c *Ctx) (*Obj, int, error) {
 		set("rename", textV(d.Rename)).set("exclusive_create", textV(d.ExclusiveCreate)).
 		set("same_filesystem", textV(d.SameFilesystem)).set("locks", textV(d.Locks)).set("gc_grace", textV(d.GCGrace)).
 		set("history", textV("off")).set("assumes", textV(d.Assumes)))
+	// the caches this implementation keeps, declared (storage note §5.3; C-core-129, P-07): none is persistent
+	o.set("caches", newObj().set("persistent", textV("none: every command reads the blobs and statements cold")).
+		set("in_process", textV("signature verification, per line, keyed on the sha256 of the line's bytes; held in memory, dropped when the command ends")))
 	o.set("policy", newObj().set("source", textV(c.Policy.Source)).set("digest", refV(c.Policy.Digest)).set("reader_policy", c.Policy.readerObj()))
 	o.set("key", keyStatus(c))
 	// a marker per open fork of a held key log (forks.go): a state of the store's logs, never a failure of status

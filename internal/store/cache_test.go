@@ -64,8 +64,8 @@ func baseKey(s *Store, in []string) CacheKey {
 // change and an evaluator change miss; Why names the changed input; a restore of blobs and statements with
 // every cache removed rebuilds without a prompt and equals the warm answers.
 func TestCacheKeyedOnDigests(t *testing.T) {
-	conformance.Partial(t, "C-core-129", "the store-side cache keyed on input digests, policy, evaluator and time, same-size same-mtime rewrite, restore with caches removed: checked; the resolver is not wired to the cache, so 'every answer' is checked on the store's own projections")
-	conformance.Partial(t, "P-07", "deleting every cache and projection and recomputing gives identical values, checked on the store-side projections; the resolver's own answers are not yet cached")
+	conformance.Partial(t, "C-core-129", "the store-side projection cache keyed on input digests, policy, evaluator and time, same-size same-mtime rewrite, restore with caches removed: checked here for the projections the store keeps (none is wired to a read command); the whole outcome through the CLI is TestReadsColdUnderChange, which covers the case")
+	conformance.Partial(t, "P-07", "deleting every cache and projection and recomputing gives identical values, checked on the store-side projections; every read command through the CLI is TestReadsColdAfterDeletingEveryCache, which covers the case")
 	root := t.TempDir()
 	s := open(t, root, Options{NoSync: true})
 	k := testKey("A")
@@ -212,7 +212,7 @@ func TestCacheMissExplainsStatement(t *testing.T) {
 // warm equals a cold rebuild; deleting the whole cache and recomputing gives identical bytes; a corrupted
 // entry is a miss (never a wrong answer); drift is detected and `--rebuild` fixes it.
 func TestCacheColdEqualsWarm(t *testing.T) {
-	conformance.Partial(t, "P-07", "cold rebuild equals warm for the store-side projections, drift detection and rebuild: checked; the resolver's own caches are not wired")
+	conformance.Partial(t, "P-07", "cold rebuild equals warm for the store-side projections, drift detection and rebuild: checked here; every read command through the CLI is TestReadsColdAfterDeletingEveryCache, which covers the case")
 	root := t.TempDir()
 	s := open(t, root, Options{NoSync: true})
 	k := testKey("A")
@@ -324,7 +324,7 @@ func ptr[T any](v T) *T { return &v }
 // reports verified and UseCache mode is shown to be the thing that would (the planted entry is reached);
 // warm and cold agree on the genuine statements; a changed verifier version misses every entry.
 func TestVerifyCache(t *testing.T) {
-	conformance.Partial(t, "C-core-129a", "the cache itself (poisoned entry never reported verified in a cold run, warm equals cold, a changed verifier version misses) is checked here; running the whole suite's signature-bearing cases twice is the harness's, which verifies through wire.Read with no cache")
+	conformance.Partial(t, "C-core-129a", "the cache itself (poisoned entry never reported verified in a cold run, warm equals cold, a changed verifier version misses) is checked here; running the whole suite's signature-bearing cases twice is the harness's, which verifies through wire.Read with no cache; that no production code reads the cache, and that a planted entry changes no answer, is cli TestNoProductionCodeReadsTheVerifyCache and TestPlantedVerifyEntriesIgnored, which cover the case")
 	s := open(t, t.TempDir(), Options{NoSync: true})
 	good, _ := authored(testKey("A"), 0, "", []byte("x"))
 	good2, _ := authored(testKey("B"), 0, "", []byte("y"))

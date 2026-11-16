@@ -261,7 +261,6 @@ func TestReadsColdUnderChange(t *testing.T) {
 // TestReadsColdUnderBuildChange: (c) of C-core-129 on its own: a different build reads the same statements and
 // the explanation names only the evaluator.
 func TestReadsColdUnderBuildChange(t *testing.T) {
-	conformance.Partial(t, "C-core-129", "part (c) alone; the case is covered by TestReadsColdUnderChange")
 	w := fixture(t)
 	ref := dig("sole")
 	saved := w.run("explain", ref, "--json")

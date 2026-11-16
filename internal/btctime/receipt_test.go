@@ -831,7 +831,7 @@ func TestReceiptReorg(t *testing.T) {
 // end the state directory is deleted and a cold start gives the same answers again (a read-only open then finds no
 // store and reads cold).
 func TestPropertyReceiptsColdEqualsWarm(t *testing.T) {
-	conformance.Partial(t, "P-07", "the bitcoin-time receipt store: warm, read-only, cold and deleted-store answers identical over seeded chain histories, at the evidence, through the resolver and through the read commands (cli TestReadsReceiptsByteIdentical); the resolver's own caches are not wired")
+	conformance.Partial(t, "P-07", "the bitcoin-time receipt store: warm, read-only, cold and deleted-store answers identical over seeded chain histories, at the evidence, through the resolver and through the read commands (cli TestReadsReceiptsByteIdentical); the case is covered by cli TestReadsColdAfterDeletingEveryCache")
 	opts := fixture.Options{Keys: 3, Blobs: 3, MaxStatements: 14, Kinds: []string{"anchors", "anchors", "authored", "authored", "holds", "describes", "observed"}}
 	used := 0
 	fixture.Check(t, 0x7ec0_0000, 30, opts, func(f fixture.Fixture) string {
