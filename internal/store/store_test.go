@@ -287,7 +287,7 @@ func TestCrashAtEveryPoint(t *testing.T) {
 // nothing is rolled back; repair re-projects; a record whose statement fails verification is quarantined on
 // recovery and none of its statements is installed.
 func TestProjectionFailure(t *testing.T) {
-	conformance.Partial(t, "C-core-126", "committed + needs repair, nothing rolled back, repair re-projects, a corrupt record quarantined with nothing installed: checked; the projection cache and its rebuild/drift check exist now (cache.go, TestCacheColdEqualsWarm, fsck --rebuild) and a missing blob after commit is needs repair (TestFsckMissingBlobInRecord); the resolver's own index is not wired to the cache")
+	conformance.Partial(t, "C-core-126", "store level: committed + needs repair on a failed projection, nothing rolled back, Repair re-projects, a corrupt record quarantined with nothing installed; the command end to end is internal/cli TestRepairMissingBlob")
 	root := t.TempDir()
 	fail := true
 	proj := func(Record) error {

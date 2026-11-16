@@ -46,7 +46,7 @@ func candidates(p *GCPlan) []Digest {
 // never a blob a pending record names, never a serving holds' blob; an unreferenced blob outside the window
 // goes. The dry run prints hashes and sizes, states its side effects, and changes nothing.
 func TestGCNeverDeletesReferenced(t *testing.T) {
-	conformance.Partial(t, "C-core-146", "gc keeps, re-checks and prints as specified: checked in TestGC*; publish's reuse-then-crash (a) is internal/cli TestPublishReuseCrashThenGC; the operation history (d) is not built")
+	conformance.Partial(t, "C-core-146", "gc keeps, re-checks and prints as specified: checked in TestGC*; publish's reuse-then-crash (a) is internal/cli TestPublishReuseCrashThenGC; the operation history (d) is internal/cli TestHistoryNeverDecides")
 	root := t.TempDir()
 	s := open(t, root, Options{NoSync: true})
 	k := testKey("A")
@@ -226,7 +226,7 @@ func TestGCReuseRestartsWindow(t *testing.T) {
 // is written before gc removes it: the blob is kept. Also a statement installed after the listing, and a
 // window restarted after the listing.
 func TestGCRecheckAtDeletion(t *testing.T) {
-	conformance.Partial(t, "C-core-146", "gc re-checks references and window at deletion (a pending record, a statement, a reuse after the listing); publish's reuse-then-crash end to end is internal/cli TestPublishReuseCrashThenGC; the history file (d) is not built")
+	conformance.Partial(t, "C-core-146", "gc re-checks references and window at deletion (a pending record, a statement, a reuse after the listing); publish's reuse-then-crash end to end is internal/cli TestPublishReuseCrashThenGC; the history file (d) is internal/cli TestHistoryNeverDecides")
 	k := testKey("A")
 	data := []byte("raced bytes")
 	for _, tc := range []struct {

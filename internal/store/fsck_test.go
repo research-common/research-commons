@@ -15,7 +15,7 @@ import (
 // says what it scanned, and fsck changes nothing authoritative.
 func TestFsckClasses(t *testing.T) {
 	conformance.Partial(t, "C-core-125", "status/fsck list pending and done records and the missing-blob state (committed, needs repair: blob … missing); the crash at each publish boundary is internal/cli TestPublishCrashMatrix")
-	conformance.Partial(t, "C-core-126", "a committed operation whose blob went missing is reported committed, needs repair and repair does not invent it; the index projection remains a later layer")
+	conformance.Partial(t, "C-core-126", "a committed operation whose blob went missing is reported committed, needs repair and repair does not invent it; the command end to end is internal/cli TestRepairMissingBlob")
 	root := t.TempDir()
 	s := open(t, root, Options{NoSync: true})
 	k := testKey("A")

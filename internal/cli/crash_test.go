@@ -314,7 +314,7 @@ func rawEqual(a, b rawState) bool {
 // after step 1 (its record not written); gc --apply runs with the default window; the blob is kept because the
 // reuse restarted its window, and the retry commits without the content file.
 func TestPublishReuseCrashThenGC(t *testing.T) {
-	conformance.Partial(t, "C-core-146", "(a) end to end through publish with a process crash right after step 1: the aged held blob the publish reused survives gc --apply and the retry commits without the bytes; (b) and the policy floor of (c) are the store's (TestGCRecheckAtDeletion, TestGCGraceFloor), the one-run value of (c) is TestGCRelease; (d) needs the operation history")
+	conformance.Partial(t, "C-core-146", "(a) end to end through publish with a process crash right after step 1: the aged held blob the publish reused survives gc --apply and the retry commits without the bytes; (b) and the policy floor of (c) are the store's (TestGCRecheckAtDeletion, TestGCGraceFloor), the one-run value of (c) is TestGCRelease; (d) is TestHistoryNeverDecides")
 	p := newPubWorld(t)
 	data := "bytes this store released long ago, then a crash"
 	d, path := heldUnreferenced(t, p, data, 72*time.Hour)

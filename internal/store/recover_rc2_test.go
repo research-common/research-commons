@@ -14,7 +14,7 @@ import (
 // quarantined whole when the store opens: neither line is installed, and the record is moved aside, not deleted.
 // The release notes say so as an upgrade note.
 func TestRecoverQuarantinesRecordWithBadRC2Line(t *testing.T) {
-	conformance.Partial(t, "C-core-126", "a pending record holding a good rc/1 line and an rc/2 line with a bad signature is quarantined whole on open: nothing from it is installed")
+	conformance.Partial(t, "C-core-126", "a pending record holding a good rc/1 line and an rc/2 line with a bad signature is quarantined whole on open: nothing from it is installed; the rest of the case is internal/cli TestRepairMissingBlob")
 	v, err := conformance.LoadSignedIdentityVectors()
 	if err != nil {
 		t.Fatal(err)

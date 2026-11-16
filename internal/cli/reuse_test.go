@@ -35,7 +35,7 @@ func heldUnreferenced(t *testing.T, p *pubWorld, data string, by time.Duration) 
 // (before its record); gc --apply runs with the default window; the blob is kept because the reuse restarted its
 // window, and the retry commits without the content file.
 func TestPublishReuseRestartsWindow(t *testing.T) {
-	conformance.Partial(t, "C-core-146", "(a) through publish with a refusal before the record (the before-commit test seam, so the abort path runs): the reuse restarted the window, gc keeps the blob, the retry commits without the bytes; the process crash is TestPublishReuseCrashThenGC; (d) needs the operation history")
+	conformance.Partial(t, "C-core-146", "(a) through publish with a refusal before the record (the before-commit test seam, so the abort path runs): the reuse restarted the window, gc keeps the blob, the retry commits without the bytes; the process crash is TestPublishReuseCrashThenGC; (d) is TestHistoryNeverDecides")
 	p := newPubWorld(t)
 	data := "bytes this store released long ago"
 	d, path := heldUnreferenced(t, p, data, 72*time.Hour)
@@ -113,7 +113,7 @@ func TestPublishRefusesCorruptHeldBlob(t *testing.T) {
 // next step; fsck runs; reads work and do not show the half-installed operation; a publish by that key is refused
 // naming the operation, with nothing written; once the cause is fixed, the next open finishes it.
 func TestDegradedOpenCommands(t *testing.T) {
-	conformance.Partial(t, "C-core-126", "through the commands: a committed operation whose replay fails does not block status, fsck or reads (degraded open); its statements stay hidden, its key's writes are refused naming it, and the next open after the fix finishes it; the repair command itself and its exits are a later slice")
+	conformance.Partial(t, "C-core-126", "through the commands: a committed operation whose replay fails does not block status, fsck or reads (degraded open); its statements stay hidden, its key's writes are refused naming it, and the next open after the fix finishes it; the repair command and its exits are TestRepairMissingBlob")
 	if os.Geteuid() == 0 {
 		t.Skip("root ignores directory permissions; the fault cannot be injected")
 	}
