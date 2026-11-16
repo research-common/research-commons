@@ -1,17 +1,21 @@
 package conformance
 
 import (
+	"errors"
+	"fmt"
 	"go/ast"
 	"go/build"
 	"go/build/constraint"
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 // Coverage maps a case id to the tests ("pkg/dir.TestName") that declare it with Covers.
@@ -25,11 +29,65 @@ type PartialCoverage map[string][]string
 // must be able to see every declared id.
 //
 // A test file the default build excludes (a `//go:build` line no default tag satisfies, or a GOOS/GOARCH file
-// name for another platform) is never run by `go test ./...`, which is all CI runs, so its declarations cannot
+// name for another platform) is never run by `go test ./...`, which is what the default CI jobs run, so its declarations cannot
 // pass a case: a Covers in such a file is recorded as a Partial whose remaining text says "covered only under
 // build tag <tag>", and a Partial in one carries the same note. The case then stays skipped until a test the
 // default build runs covers it.
+//
+// One exception: a tag listed in internal/conformance/ci-tags.txt (under root) is a tag the CI workflow runs
+// (`go test -tags <tag> …` in a job; a test keeps the list and the workflow in agreement), so a file whose
+// `//go:build` expression is true under the default tags plus the listed ones is covered like any other.
 func ScanCoverage(root string) (Coverage, PartialCoverage, []string, error) {
+	tags, err := LoadCITags(root)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return ScanCoverageTags(root, tags)
+}
+
+// CITagsFile is the allow-list of build tags the CI workflow runs, relative to the repository root.
+const CITagsFile = "internal/conformance/ci-tags.txt"
+
+// LoadCITags reads the allow-list under root: one tag per line, blank lines and `#` comments ignored (a trailing
+// comment too). A missing file is an empty list; a line that is not a single build-tag word is an error.
+func LoadCITags(root string) ([]string, error) {
+	b, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(CITagsFile)))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var tags []string
+	for i, l := range strings.Split(string(b), "\n") {
+		if c := strings.IndexByte(l, '#'); c >= 0 {
+			l = l[:c]
+		}
+		l = strings.TrimSpace(l)
+		if l == "" {
+			continue
+		}
+		if !validTag(l) {
+			return nil, fmt.Errorf("%s:%d: %q is not a single build tag", CITagsFile, i+1, l)
+		}
+		if !slices.Contains(tags, l) {
+			tags = append(tags, l)
+		}
+	}
+	return tags, nil
+}
+
+func validTag(s string) bool {
+	for _, r := range s {
+		if !(r == '_' || r == '.' || unicode.IsLetter(r) || unicode.IsDigit(r)) {
+			return false
+		}
+	}
+	return s != ""
+}
+
+// ScanCoverageTags is ScanCoverage with the CI tag list given instead of read.
+func ScanCoverageTags(root string, ciTags []string) (Coverage, PartialCoverage, []string, error) {
 	cov := Coverage{}
 	part := PartialCoverage{}
 	var problems []string
@@ -53,7 +111,7 @@ func ScanCoverage(root string) (Coverage, PartialCoverage, []string, error) {
 			return err
 		}
 		rel, _ := filepath.Rel(root, filepath.Dir(path))
-		excluded := excludedFromDefaultBuild(f, path)
+		excluded := excludedFromDefaultBuild(f, path, ciTags)
 		ast.Inspect(f, func(n ast.Node) bool {
 			fn, ok := n.(*ast.FuncDecl)
 			if !ok {
@@ -141,8 +199,9 @@ func literal(e ast.Expr) (string, bool) {
 // tag T" (the tags of its //go:build expression that no default build satisfies), "build constraint E" (an
 // expression excluded by a tag it satisfies, such as !linux) or "a GOOS/GOARCH file name for another platform".
 // The default build is this host's GOOS, GOARCH, the gc compiler, cgo as the host has it, `unix` on a Unix and
-// the release tags of the toolchain; no -tags.
-func excludedFromDefaultBuild(f *ast.File, path string) string {
+// the release tags of the toolchain, plus ciTags (the tags the CI workflow runs; none for a plain `go test ./...`).
+func excludedFromDefaultBuild(f *ast.File, path string, ciTags []string) string {
+	have := func(tag string) bool { return defaultTag(tag) || slices.Contains(ciTags, tag) }
 	for _, cg := range f.Comments {
 		if cg.End() >= f.Package {
 			break
@@ -155,14 +214,14 @@ func excludedFromDefaultBuild(f *ast.File, path string) string {
 			if err != nil {
 				return "an unparsable build constraint (" + err.Error() + ")"
 			}
-			if expr.Eval(defaultTag) {
+			if expr.Eval(have) {
 				continue
 			}
 			var tags []string
 			collectTags(expr, &tags)
 			var missing []string
 			for _, t := range tags {
-				if !defaultTag(t) && !slices.Contains(missing, t) {
+				if !have(t) && !slices.Contains(missing, t) {
 					missing = append(missing, t)
 				}
 			}
@@ -173,7 +232,10 @@ func excludedFromDefaultBuild(f *ast.File, path string) string {
 			return "build tag " + strings.Join(missing, ", ")
 		}
 	}
-	if ok, err := build.Default.MatchFile(filepath.Dir(path), filepath.Base(path)); err == nil && !ok {
+	// the final check is the go command's own file matching (name suffixes and constraints), with the CI tags set
+	ctx := build.Default
+	ctx.BuildTags = slices.Clone(ciTags)
+	if ok, err := ctx.MatchFile(filepath.Dir(path), filepath.Base(path)); err == nil && !ok {
 		return "a GOOS/GOARCH file name for another platform"
 	}
 	return ""

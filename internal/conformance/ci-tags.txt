@@ -1,0 +1,7 @@
+# Build tags the CI workflow (.github/workflows/go.yml) runs tests under, one per line.
+#
+# The conformance scan treats a test file whose `//go:build` expression is true under the default build plus
+# these tags as run, so its Covers count. A test (TestCITagsMatchWorkflow) keeps this list and the workflow's
+# `go test -tags <tag>` lines in agreement in both directions: add a tag here only together with the job that
+# runs it, and remove it when the job goes.
+sandbox_oci

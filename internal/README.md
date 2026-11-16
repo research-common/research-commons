@@ -17,7 +17,7 @@ go test -run TestConformanceCases -v ./internal/conformance       # progress aga
 go test -run '^$' -fuzz FuzzRead -fuzztime 60s ./internal/wire    # one fuzz target (also FuzzParse, FuzzTime)
 CGO_ENABLED=0 go build ./...                                      # static build
 CGO_ENABLED=0 go build -ldflags "-X main.version=0.5.0-alpha.1 -X main.commit=$(git rev-parse HEAD)" ./cmd/commons
-RC_TEST_IMAGE=alpine:latest go test -tags sandbox_oci -run OCI ./internal/run ./internal/clirun   # the OCI sandbox (and `commons run` on it) against a real runtime
+RC_TEST_IMAGE=alpine:latest go test -p 1 -tags sandbox_oci -run OCI ./internal/run ./internal/clirun   # the OCI sandbox (and `commons run` on it) against a real runtime
 ```
 
 ## Packages
@@ -136,10 +136,17 @@ for another platform) never runs there, and a `Covers` in it cannot pass a case.
 declaration as a partial reading `covered only under build tag <tag>` (`build constraint <expr>` when the
 expression is excluded by a tag the host sets), and the case stays skipped until a test the default build runs
 covers it. The default build is this host's GOOS and GOARCH, `gc`, cgo as the host has it, `unix` on a Unix and the
-toolchain's release tags. Today the OCI backend tests (`internal/run/sandbox_oci_test.go`) are the only such file:
-C-exec-10, C-exec-11 and C-exec-12 read partial for that reason. Run them with
-`RC_TEST_IMAGE=alpine:latest go test -tags sandbox_oci -run OCI -v ./internal/run`; the scan reads them from the
-file whatever tags you pass.
+toolchain's release tags, plus the tags in `internal/conformance/ci-tags.txt`: the build tags the CI workflow runs
+(`go test -tags <tag> …` in a job of `.github/workflows/go.yml`). A file whose `//go:build` expression is true under
+those tags too counts as run, and its `Covers` pass a case like any other. `TestCITagsMatchWorkflow` reads `go.yml` as
+plain text and fails when the list and the workflow disagree in either direction (a tag listed with no job that runs
+it, or a job that runs a tag the list lacks), so the list cannot claim a run that does not happen. Today the only
+listed tag is `sandbox_oci`: the OCI backend tests (`internal/run/sandbox_oci_test.go`) cover C-exec-10, C-exec-11 and
+C-exec-12 through the workflow's `test-sandbox-oci` job, which is deliberately not a required check, so the scan
+counts a case as covered when CI is configured to run its test, not when that job last passed. Run them locally with
+`RC_TEST_IMAGE=alpine:latest go test -p 1 -tags sandbox_oci -run OCI -v ./internal/run ./internal/clirun` (`-p 1`: both
+packages find leftover containers by one shared label, so they must not run at the same time); the scan reads the file
+whatever tags you pass.
 
 Negative tests show that their mutation reached the boundary under test (CONFORMANCE.md, "How a result is
 recorded"): a time-rule vector is first checked to carry a valid signature, so only the time rule can refuse

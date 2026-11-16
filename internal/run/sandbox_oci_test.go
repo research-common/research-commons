@@ -2,7 +2,7 @@
 
 // The OCI backend against a real container runtime. Not part of `go test ./...`: run with
 //
-//	RC_TEST_IMAGE=alpine:latest go test -tags sandbox_oci -run OCI -v ./internal/run
+//	RC_TEST_IMAGE=alpine:latest go test -p 1 -tags sandbox_oci -run OCI -v ./internal/run ./internal/clirun
 //
 // The image must already be held by the runtime (it is never pulled) and provide `sh` and `sleep`.
 

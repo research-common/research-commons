@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -289,25 +290,41 @@ func TestScanHonoursBuildConstraints(t *testing.T) {
 	}
 }
 
-// The tagged OCI backend tests claim C-exec-10..12; CI runs no tags, so those cases are partial until a test the
-// default build runs covers them (F16 of the stage-3 review).
+// The tagged OCI backend tests claim C-exec-10..12. Under the default build alone (no tags) they are partial,
+// never covered (F16 of the stage-3 review); they count only because CI runs the tag (ci-tags.txt, kept in step
+// with the workflow by TestCITagsMatchWorkflow).
 func TestTaggedCoverageIsNotCounted(t *testing.T) {
 	root, err := RepoRoot()
 	if err != nil {
 		t.Fatal(err)
 	}
-	cov, part, _, err := ScanCoverage(root)
+	cov, part, _, err := ScanCoverageTags(root, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, id := range []string{"C-exec-10", "C-exec-11", "C-exec-12"} {
 		for _, by := range cov[id] {
-			if strings.Contains(by, "sandbox_oci") || strings.Contains(by, "TestOCI") {
-				t.Errorf("%s is counted as covered by %s, a test in a file only `-tags sandbox_oci` builds", id, by)
+			if strings.Contains(by, "TestOCI") {
+				t.Errorf("%s is counted as covered by %s, a test in a file only `-tags sandbox_oci` builds, with no CI tag listed", id, by)
 			}
 		}
 		if len(part[id]) == 0 {
 			t.Errorf("%s has no partial: the tagged test's declaration was dropped", id)
+		}
+	}
+	// with the CI tag listed (as it is in ci-tags.txt), the same declarations are covered and no longer partial
+	cov, part, _, err = ScanCoverage(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"C-exec-10", "C-exec-11", "C-exec-12"} {
+		if !slices.ContainsFunc(cov[id], func(by string) bool { return strings.Contains(by, "TestOCI") }) {
+			t.Errorf("%s is not covered by its OCI test although ci-tags.txt lists the tag: covers %v, partial %v", id, cov[id], part[id])
+		}
+		for _, p := range part[id] {
+			if strings.Contains(p, "covered only under build tag") {
+				t.Errorf("%s still reads %q with the tag listed", id, p)
+			}
 		}
 	}
 }

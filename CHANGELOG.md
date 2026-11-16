@@ -10,6 +10,12 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 ## [Unreleased]
 
 ### Added
+- **CI runs the OCI sandbox tests, and the conformance scan counts them.** A new `test-sandbox-oci` job runs
+  `go test -tags sandbox_oci` on `internal/run` and `internal/clirun` against the runner's docker with an image pinned by
+  digest (a skipped OCI test fails the job); it is not a required check. `internal/conformance/ci-tags.txt` lists the
+  build tags CI runs, the scan treats a test file whose build expression those tags satisfy as run, and a test keeps the
+  list and `go.yml` in agreement in both directions. C-exec-10, C-exec-11 and C-exec-12 read covered instead of
+  partial.
 - **A departure check is a typed state, and every rule evaluation prints as one.** `explain` of a task prints a
   submission's `departure_check` as an object, `state` (`conforms`, `departed`, `unchecked` or `not comparable`, the
   closed set of the departure check, which is a comparison of a disclosure with a declaration and not a rule) beside
