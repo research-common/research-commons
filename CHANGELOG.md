@@ -38,8 +38,9 @@ process crash. The writer's majors are unchanged since alpha.5 (`rc/1`, and `rc/
   no API token exists anywhere; published wheels carry PEP 740 attestations by default). The build verifies
   every archive against the release workflow's build attestations before opening it, and a manual dispatch
   checks out and builds the tag's own commit, so an existing release can be (re)published exactly as it was
-  cut. The maintainer action is the one-time PyPI trusted-publisher entry (environment `pypi`, refs scoped
-  to `next` and `v*`); `docs/RELEASING.md` step 8 describes the new path.
+  cut. The maintainer actions are the one-time PyPI trusted-publisher entry and, before the first run, a
+  protected `pypi` environment (deployment refs `next` and `v*`, a required reviewer); `docs/RELEASING.md`
+  step 8 describes the new path.
 
 - **CI runs the OCI sandbox tests, and the conformance scan counts them.** A new `test-sandbox-oci` job runs
   `go test -tags sandbox_oci` on `internal/run` and `internal/clirun` against the runner's docker with an image pinned by

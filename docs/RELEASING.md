@@ -119,11 +119,15 @@ A plan, not a schedule; the maintainers make the final call and may revise this 
    wheel in a clean virtualenv and run `commons --version` before trusting a release.
    **Publishing to PyPI** runs `.github/workflows/publish-python.yml` when the release is published: it repeats
    the download → checksum-verify → build → smoke-test steps and uploads the wheels by OIDC trusted publishing
-   (environment `pypi`, `pypa/gh-action-pypi-publish` pinned by full SHA; no API token exists anywhere). The one
-   maintainer action is configuring the PyPI trusted publisher once (owner `research-common`, repository
-   `research-commons`, workflow `publish-python.yml`, environment `pypi`, with deployment refs restricted to `next`
-   and tags `v*`); after that every release publishes its wheels automatically, and Actions → publish-python → Run
-   workflow can republish any existing tag's wheels. A dispatch checks out and builds the tag's own commit, so a
+   (environment `pypi`, `pypa/gh-action-pypi-publish` pinned by full SHA; no API token exists anywhere). Two
+   maintainer actions come first, once: (a) configure the PyPI trusted publisher (owner `research-common`, repository
+   `research-commons`, workflow `publish-python.yml`, environment `pypi`); (b) create the GitHub environment `pypi`
+   with deployment refs restricted to the branch `next` and tags `v*`, and a required reviewer. (b) is a
+   precondition of the first run, not a follow-up: a dispatch runs the dispatching ref's copy of
+   `publish-python.yml`, and that copy is what PyPI accepts, so the environment's ref restriction is the control
+   that keeps a workflow edited on another branch from publishing. After that every release publishes its wheels
+   (after the reviewer approves the deployment), and Actions → publish-python → Run workflow can republish any
+   existing tag's wheels. A dispatch checks out and builds the tag's own commit, so a
    backfill reproduces that release's wheels, and refuses any archive whose build attestation (signed by
    `release.yml` at that tag) does not verify. The publish step emits PEP 740 attestations on PyPI by default
    (`gh-action-pypi-publish` under trusted publishing), so published wheels carry provenance too.

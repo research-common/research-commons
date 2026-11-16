@@ -46,8 +46,11 @@ jobs:
           set -euo pipefail
           git fetch --no-tags origin "+${TAG}:refs/checks/tag"
           tag_sha="$(git rev-parse "refs/checks/tag^{commit}")"
-          if [ "$tag_sha" != "$GITHUB_SHA" ]; then
-            echo "checkout $GITHUB_SHA is not the commit the tag $TAG names ($tag_sha)" >&2
+          # Compare with what is checked out, not GITHUB_SHA: on workflow_dispatch GITHUB_SHA
+          # is the dispatching branch's head and would refuse every backfill.
+          head_sha="$(git rev-parse HEAD)"
+          if [ "$tag_sha" != "$head_sha" ]; then
+            echo "checkout $head_sha is not the commit the tag $TAG names ($tag_sha)" >&2
             exit 1
           fi
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
