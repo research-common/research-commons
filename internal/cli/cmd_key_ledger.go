@@ -60,11 +60,13 @@ func checkLedgerTimeout(v string) error {
 	return nil
 }
 
-const ledgerHelp = " With --ledger the key is a Ledger device running the Ethereum app (tested on the Speculos emulator for Nano S Plus and Nano X; " +
-	"no physical device is tested yet), opened over USB on Linux (hidraw) or as an emulator (tcp:<host>:<port>); " +
+const ledgerHelp = " With --ledger the key is a Ledger device running the Ethereum app (tested on the Speculos emulator for Nano S Plus and Nano X, " +
+	"and drilled by hand on a physical Nano X), opened over USB on Linux (hidraw) or as an emulator (tcp:<host>:<port>); " +
 	"on other systems the USB connector is not built. --ledger-path names the key (m/44'/60'/<account>'/0/<index>, no default): " +
 	"use an account that never holds funds. Identity PAEs are typically 300 to 800 bytes; the Ethereum app 1.23 accepts about 7.6 KB (less when a byte is not printable). " +
-	"While a review is pending on the device every other request is refused (ledger-busy): finish or reject it first. --ledger and --key are exclusive."
+	"Finish or reject a review on the device before running another command: the emulator refuses other requests while one is pending (ledger-busy), " +
+	"but a physical device may answer them and leave the review unresponsive until it is restarted. After an interrupted key sign, check the device's screen first. " +
+	"--ledger and --key are exclusive."
 
 // ledgerOpts is what an invocation says about the device; nil when --ledger is not given.
 type ledgerOpts struct {

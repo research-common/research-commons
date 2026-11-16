@@ -88,7 +88,7 @@ func TestLedgerKeyShow(t *testing.T) {
 // committed line is byte-identical to direct signing with the same key at the same --ts on a twin store, whatever
 // signature encoding the device returns. The device saw exactly the PAE bytes.
 func TestLedgerKeySignEndToEnd(t *testing.T) {
-	conformance.Partial(t, "C-id-40", "the Ledger connector (key sign --ledger) signs an identity's inception and a grant through the package against an in-process fake of the Ethereum app, each committed line equal to direct signing whatever encoding the device returns; the emulator run is opt-in (-tags ledger_speculos) and a physical device is not drilled")
+	conformance.Partial(t, "C-id-40", "the Ledger connector (key sign --ledger) signs an identity's inception and a grant through the package against an in-process fake of the Ethereum app, each committed line equal to direct signing whatever encoding the device returns; the emulator run is opt-in (-tags ledger_speculos); a physical device is drilled by hand (§8), not by a test")
 	forms := map[string]ledgertest.SigForm{"canonical": ledgertest.Canonical, "v01": ledgertest.V01, "high-s": ledgertest.HighS, "high-s-v01": ledgertest.HighSV01}
 	for name, form := range forms {
 		t.Run(name, func(t *testing.T) {

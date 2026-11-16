@@ -777,9 +777,20 @@ command on the same emulators signed through the package an inception on the Nan
 screens) and a cut (603 bytes); each completed, a delegate's act under the grant was eligible
 and counted, and `fsck` was clean. A rejection on the device was exit 1 with nothing
 written; a second signing request while a review was pending was `ledger-busy`, exit 3.
-On a physical Nano X (Ethereum app 1.19.3), `key show --ledger` found the device over USB
-and read its address; **no signing drill on a physical device is recorded**. Nano S Plus,
-Nano X, Flex and Stax run the same commands and remain untested for hardware signing; the
+**Physical-device drill, recorded (Nano X, Ethereum app 1.19.3, Linux USB).** `key show
+--ledger` found the device and read its address. Through the package, in a throwaway store:
+`identity new --prepare` (321-byte PAE), `key sign --ledger` (the device showed the message,
+the holder approved it), `identity new --complete` verified the signature over the recomputed
+bytes and committed the inception, and `fsck` was clean. A second inception rejected on the
+device was exit 1 (`ledger-rejected`) with no signature written and the store unchanged. The
+app's limit matched the emulator's: a 7,652-byte printable message was offered for review, a
+7,653-byte one was refused before any review (status word 0x6a84). One behaviour differed
+from the emulator: with a review left pending by a process that had gone away, the device
+answered further requests instead of refusing them as busy, the pending review stopped
+responding to the buttons, and the device switched itself off. Finish or reject a review
+on the device before running another command, and after an interrupted `key sign`, check
+the device's screen first; a device that stops responding recovers by being restarted.
+Nano S Plus, Flex and Stax run the same commands and remain untested on hardware; the
 original Nano S is an **untested target** (the Ethereum app dropped it after 1.16, and
 Speculos no longer emulates it). Display readability is limited:
 the device shows the PAE as text a screen at a time, so a long statement takes many
@@ -862,10 +873,11 @@ the same way, and each committed line equals what direct signing writes at the s
 signature completed on the store and equal to direct signing; a package with any derived
 member changed, the wrong key, or an existing output file is refused with nothing written.
 
-Not drilled: a compromised operational host, and signing on a physical hardware device.
+Not drilled: a compromised operational host. Signing on a physical device is the manual
+drill recorded above (a Nano X), not an automated test.
 `TestLedgerKeySignEndToEnd` and `TestLedgerKeySignAborts` run the Ledger connector against an
 in-process fake of the Ethereum app. C-id-40 is therefore partial: its simple-path, package
-and connector halves are the tests above; the host-compromise and hardware-drill halves stay open.
+and connector halves are the tests above; the hardware half is the manual drill above; the host-compromise half stays open.
 
 ## 9. Schemas, vectors and reproducible checks
 
@@ -955,8 +967,7 @@ statement's actor, the evaluator's state and reasons, and the evaluator context 
 evidence digest, receipt); `counted` is the counting gate's answer; the admission cap
 reads `unknown` (exit 3). Signed end-to-end tests run the published vectors and the
 amendment scenarios through the commands. The writer is the simple-path commands: `identity new`, `identity grant`, `identity cut` and `publish --as --grant`
-sign `rc/2` with a key file, through a detached-signing package, or with a Ledger device through that package. Still required: a hardware
-signing drill on a physical device, and any connector beyond the Ledger Ethereum app; the critical registry; a
+sign `rc/2` with a key file, through a detached-signing package, or with a Ledger device through that package. A physical-device signing drill is recorded (§8, a Nano X). Still required: any connector beyond the Ledger Ethereum app; the critical registry; a
 concrete identity task-contract profile; the production evidence-snapshot serialization,
 caches and replay; independent review of the major transition; detached signing
 packages/connectors and custody/hardware usability drills. No release, deployment, live
@@ -1015,7 +1026,7 @@ a scenario.
 | C-id-37 | §2.2, §2.3 (handle ID-37) | Tamper / marker / criticality / canonicalization | Any byte tamper, actor/marker without the other, unknown critical token, or non-canonical signed form: never `eligible`; never better than withholding the line. |
 | C-id-38 | §7 (handle ID-38) | Cache / replay / permutation invariance | Duplicate, reordered or re-serialised delivery of the same evidence gives identical results, evidence digest and receipt; a cache/replay gives the same answer as a cold read. |
 | C-id-39 | §7 (handle ID-39) | Deterministic resource caps | Every evaluation cap reached returns `unknown`/non-passing naming the cap (exit 3), never a partial grant or prefix. |
-| C-id-40 | §8 (handle ID-40) | Root backup / compromised operational host | Root backup restore and a compromised operational host: a recorded drill (custody, not protocol). The simple-path drill, root restore included, is recorded (§8); a compromised operational host and hardware signing are not. |
+| C-id-40 | §8 (handle ID-40) | Root backup / compromised operational host | Root backup restore and a compromised operational host: a recorded drill (custody, not protocol). The simple-path drill, root restore included, and a hardware-signing drill on a physical Ledger Nano X are recorded (§8); a compromised operational host is not. |
 | C-id-41 | §2.3 (handle ID-41) | Marker without actor / actor without marker | An actor without the body marker, or a marker without the critical declaration, is invalid even when correctly signed; never read as bare-key. |
 | C-id-42 | §5.3 (handle ID-42) | Decide grant is not beneficiary role | A `decide` grant does not make K the beneficiary: `decide` by an actor that is not the pinned edition's beneficiary is `denied`. |
 | C-id-43 | §5.3 (handle ID-43) | Cross-key exact-intent continuity | `progress`/`withdraw` by K2 for I continues K1-for-I's exact intent; a bare-key K1 intent is not continued; a withdrawn attempt cannot be reopened. |

@@ -174,14 +174,14 @@ var limits = []limit{
 	},
 	{
 		id:  "L-07",
-		gap: "The only hardware connector is a Ledger device running the Ethereum app (`eip191-secp256k1`, through `key sign --ledger`); no other device or wallet is driven, and no drill on a physical device is recorded",
+		gap: "The only hardware connector is a Ledger device running the Ethereum app (`eip191-secp256k1`, through `key sign --ledger`); no other device or wallet is driven",
 		sources: []limitSource{
 			{file: "docs/DESIGN-notes-fixed-root-identity.md", says: "no other hardware or wallet connector is built."},
 			{file: "docs/DESIGN-notes-fixed-root-identity.md", says: "A key file signer is not a hardware or wallet connector."},
 			{help: []string{"key", "sign"}, says: "The Ledger connector is the only hardware or wallet connector"},
 		},
 		probe:  "`key sign --help` offers `--key` and `--ledger` and no other device, wallet or connector option; `identity grant --help` offers `--prepare`/`--complete` and opens no device",
-		closes: "a connector for another device or wallet (an Ed25519 signer, a wallet), or a recorded drill on a physical device",
+		closes: "a connector for another device or wallet (an Ed25519 signer, a wallet)",
 		open: func(t *testing.T) (bool, string) {
 			h := runIn(t.TempDir(), nil, "identity", "grant", "--help")
 			if !strings.Contains(h.stdout, "--prepare") || !strings.Contains(h.stdout, "--complete") {
