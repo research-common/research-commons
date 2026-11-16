@@ -628,6 +628,42 @@ func TestPushTransport(t *testing.T) {
 		}
 	})
 
+	// The fork flow: the hub is `origin` (the base the change is judged against), the branch is sent to the author's
+	// own fork (`--remote fork --base origin/main --branch contrib/a`), and nothing reaches the hub. Two bare
+	// repositories, no network: the base comes from the hub's remote-tracking ref, the transport goes to the fork.
+	t.Run("fork", func(t *testing.T) {
+		p := newPushWorld(t)
+		fork := filepath.Join(t.TempDir(), "fork.git")
+		gitIn(t, p.root, "init", "-q", "--bare", "-b", "main", fork)
+		gitIn(t, p.root, "remote", "add", "fork", fork)
+		gitIn(t, p.root, "push", "-q", "fork", "main")
+		hubMain, forkMain := p.remoteHead("main"), gitIn(t, fork, "rev-parse", "refs/heads/main")
+		p.mustPublish("--kind", "authored", "--content", p.file("a", "mine"))
+		p.commitAll("mine")
+		hub := p.remoteState()
+		r := p.send("--anchor-policy", "none", "--remote", "fork", "--base", "origin/main", "--branch", "contrib/a")
+		rep := jsonOf(t, r)
+		head := gitIn(t, p.root, "rev-parse", "HEAD")
+		if r.code != ExitOK || rep.Members["transported"] != canon.Bool(true) || rep.Members["pushed"] != canon.String(head) ||
+			rep.Members["branch"] != canon.String("contrib/a") || rep.Members["remote"] != canon.String("fork") {
+			t.Fatalf("fork push: exit %d\n%s", r.code, r.stdout)
+		}
+		if got := gitIn(t, fork, "rev-parse", "refs/heads/contrib/a"); got != head {
+			t.Fatalf("the fork's branch is %s, want the judged commit %s", got, head)
+		}
+		if gitIn(t, fork, "rev-parse", "refs/heads/main") != forkMain {
+			t.Fatal("the fork's main moved")
+		}
+		// nothing reached the hub: its branches, objects and files are as they were
+		if p.remoteState() != hub || p.remoteHead("main") != hubMain || p.remoteHead("contrib/a") != "" {
+			t.Fatalf("the hub changed by a push to the fork")
+		}
+		// the same change judged against the hub is the same judgement as for a push to the hub itself
+		if r := p.push("--anchor-policy", "none", "--remote", "fork", "--base", "origin/main", "--branch", "contrib/a"); r.code != ExitOK {
+			t.Fatalf("dry run to the fork: exit %d\n%s", r.code, r.stdout)
+		}
+	})
+
 	t.Run("branch", func(t *testing.T) {
 		p := newPushWorld(t)
 		main := p.remoteHead("main")
