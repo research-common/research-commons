@@ -153,6 +153,17 @@ func TestGateRuleOutcomeIsTyped(t *testing.T) {
 		if cur == nil || cur.Members["state"] != canon.String(state) || cur.Members["edition"] != named.Members["edition"] {
 			t.Fatalf("%s: current %v, want state %s on the same edition", name, cur, state)
 		}
+		// each rule's evaluation is a typed row beside the two outcomes, never only a prose line
+		evs, _ := io.Members["evaluations"].(canon.Array)
+		if len(evs) == 0 {
+			t.Fatalf("%s: no typed evaluation rows: %s", name, canon.Encode(io))
+		}
+		for _, x := range evs {
+			row, _ := x.(*canon.Object)
+			if row == nil || row.Members["state"] == nil || !IsToken(string(row.Members["state"].(canon.String))) {
+				t.Fatalf("%s: an evaluation is not a typed row: %s", name, canon.Encode(x))
+			}
+		}
 		if io.Members["publisher_said"] != canon.String("ok") {
 			t.Fatalf("%s: the publisher's word is not carried apart: %s", name, canon.Encode(io))
 		}

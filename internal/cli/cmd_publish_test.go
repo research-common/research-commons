@@ -318,6 +318,11 @@ func TestPublishPrePin(t *testing.T) {
 	if r.code != 0 || !strings.Contains(r.stdout, `"intended_for":{"edition":"`+e) || !strings.Contains(r.stdout, `"state":"ok"`) {
 		t.Fatalf("control: %d %s", r.code, r.stdout)
 	}
+	// each rule's evaluation is a typed row (a `state` token beside the rule, dialect and member), not a prose line
+	if ev, _ := outObj(t, r).Members["intended_for"].(*canon.Object).Members["evaluations"].(canon.Array); len(ev) != 1 ||
+		ev[0].(*canon.Object).Members["state"] != canon.String("ok") || ev[0].(*canon.Object).Members["rule"] != canon.Int(0) {
+		t.Fatalf("the pre-pin evaluations are not typed rows: %s", r.stdout)
+	}
 	// the pre-pin state was resolved from the statements held: the output carries the view's scope (PROPS-F5)
 	if outObj(t, r).Members["status_scope"] != canon.String(resolve.ScopeHeld) {
 		t.Fatalf("pre-pin state without the scope footer: %s", r.stdout)

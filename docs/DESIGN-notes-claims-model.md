@@ -941,7 +941,10 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
 - **Closed vocabulary.** One documented table of state tokens (`contested`, `unknown`, `unchecked`,
   `corroborated n`, `contradicted m`, `SUPERSEDED`, `FORK`, `retracted`, …), each with one meaning on every
   surface, including `unpinned`, `REVISED-FROZEN`, `timeout` and the referent statuses of §7. Every rule
-  evaluation (edition rules, departure checks, pre-pin checks) is one of `ok`, `fail`, `unchecked`.
+  evaluation (edition rules, pre-pin checks, rubric criteria) is one of `ok`, `fail`, `unchecked`. A departure
+  check (§9.4) compares a disclosure with a declaration and is not a rule: it reports its own closed set,
+  `conforms`, `departed`, `unchecked` or `not comparable`. `departed` is not a failed rule and moves no grade
+  (I6). Each evaluation is printed as a typed member (a `state` token beside its `why`), never only as prose.
 - **Retraction is display.** A `retracts` statement is shown wherever the artifact is; it does not stop
   anyone serving the bytes. Superseded snapshots are often the evidence for their own erratum. A hub that
   must stop serving something does so under its own admission policy (I9).

@@ -185,7 +185,14 @@ func TestExitTwo(t *testing.T) {
 // TestClosedVocabulary: C-core-132. Every surface over the fixture set prints only tokens of the table, and
 // every exit is in the exit table; every token constant of the layers below is documented in the table.
 func TestClosedVocabulary(t *testing.T) {
-	conformance.Partial(t, "C-core-132", "every CLI surface (show, verify, explain, list, status, hub check, pull, gc, fsck) over the fixture set prints only table tokens and table exits, and the table is the docs' source; a rule evaluation's ok/fail/unchecked is a typed state member on the resource view, the pre-pin check and the gate rows (intended_for, completeness: TestGateRuleOutcomeIsTyped, TestGateCompletenessOutcomeIsTyped); open: the departure check prints conforms/departed/unchecked/not comparable as prose in the task view, while claims-model note §13 says every departure check is ok, fail or unchecked (a spec question, CORESWEEP-F1)")
+	// Covers the whole case: this test sweeps every surface over the fixture set (tokens in the table, exits in the
+	// table, JSON and human agree); the rule evaluations are typed `state` members on every surface that prints one,
+	// each checked where the surface is built: the resource view and membership (TestResourceSurfaceSweep), the task
+	// section's conditions and departure checks (TestTaskSurfaceSweep, TestDepartureCheckIsTyped), the pre-pin check
+	// (TestPublishPrePin) and the gate rows (TestGateRuleOutcomeIsTyped, TestGateCompletenessOutcomeIsTyped,
+	// TestGateRuleOutcomeResourceNotHeld); TestNoProseOutcomes fails when one is printed as a sentence; and the table
+	// is the docs' source (TestOutputsDoc), so a token not in it fails the build (`tok` panics).
+	conformance.Covers(t, "C-core-132")
 	w := fixture(t)
 	for _, a := range sweepArgs(w) {
 		r := w.run(append(a, "--json")...)
@@ -225,7 +232,8 @@ func TestClosedVocabulary(t *testing.T) {
 		"replaced statement", "removed temporary", string(resolve.RuleOK), string(resolve.RuleFail), string(resolve.RuleUnchecked),
 		resolve.RefUnpinned, resolve.RefNotCanonical, resolve.RefUnavailable, resolve.RefRevised, resolve.RefFinal,
 		resolve.RefFinalCaptured, resolve.RefFinalHeld, resolve.RefProvisional, resolve.RefCanonical, resolve.RefAvailable, resolve.RefUnknown,
-		resolve.RefPinned, resolve.RefNoneYet, resolve.RefRuleUnchecked)
+		resolve.RefPinned, resolve.RefNoneYet, resolve.RefRuleUnchecked,
+		resolve.Conforms, resolve.Departed, resolve.DepUnchecked, resolve.DepNotComparable)
 	below = append(below, string(resolve.FieldSelectionUnmet), resolve.SelMet, resolve.SelMissing, resolve.SelIneligible, resolve.SelNone,
 		resolve.SelConflict, resolve.SelIdentity, resolve.SelIdentityUnknown)
 	for _, s := range []btctime.State{btctime.StateVerified, btctime.StateVerifiedHistorical, btctime.StatePending, btctime.StateInsufficient,

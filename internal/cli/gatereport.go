@@ -123,17 +123,28 @@ func recordedObj(c *resolve.Recorded) *Obj {
 		}
 		o.set("current", cur)
 	}
-	var why []string
-	for _, e := range c.Evals {
-		why = append(why, e.String())
-	}
-	if len(why) > 0 {
-		ev := listV{}
-		for _, w := range why {
-			ev = append(ev, peerV(w)) // an edition's rule expression is the publisher's text
-		}
-		o.set("evaluations", ev)
+	if len(c.Evals) > 0 {
+		o.set("evaluations", evalsObj(c.Evals))
 	}
 	o.set("publisher_said", peerV(c.PublisherSaid))
 	return o
+}
+
+// evalsObj is a rule's evaluations, one typed row each (claims-model note §13: every rule evaluation is one of ok,
+// fail, unchecked): the outcome is a `state` token and the rest is detail beside it. A rule's dialect, expression
+// and the reason a dialect gives are the edition's text or derived from the content, so they are peer text.
+func evalsObj(es []resolve.Eval) listV {
+	l := listV{}
+	for _, e := range es {
+		r := rowObj().set("rule", intV(int64(e.Rule))).set("dialect", peerV(e.Dialect)).set("expr", peerV(e.Expr)).
+			set("member", refV(e.Member)).set("state", tokV(tok(string(e.Outcome))))
+		if e.Why != "" {
+			r.set("why", peerV(e.Why))
+		}
+		if len(e.Conflicts) > 0 {
+			r.set("conflicts", refs(e.Conflicts...))
+		}
+		l = append(l, r)
+	}
+	return l
 }

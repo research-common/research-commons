@@ -265,7 +265,10 @@ func submissionObj(s *resolve.Submission, full bool) *Obj {
 			o.set("salt", textV("retained, inert: shows possession at most, never independence"))
 		}
 		if s.Departure != "" {
-			o.set("departure_check", textV(s.Departure+" ("+s.DepartureWhy+"); the grade is unchanged"))
+			// a departure check is not a rule evaluation: it reports its own closed set (claims-model note §9.4, §13),
+			// a typed state beside its reason, and it moves no grade
+			o.set("departure_check", newObj().set("state", tokV(tok(s.Departure))).set("why", textV(s.DepartureWhy)).
+				set("note", textV("the grade is unchanged")))
 		}
 	}
 	return o

@@ -734,12 +734,8 @@ func publishCmd(c *Ctx) (*Obj, int, error) {
 		}
 		body = pp.Body
 		pin := newObj().set("resource", refV(pp.Resource)).set("edition", refV(pp.Edition)).set("state", tokV(tok(string(pp.Outcome))))
-		var why []string
-		for _, e := range pp.Evals {
-			why = append(why, e.String())
-		}
-		if len(why) > 0 {
-			pin.set("evaluations", texts(why...))
+		if len(pp.Evals) > 0 {
+			pin.set("evaluations", evalsObj(pp.Evals))
 		}
 		if pp.Outcome == resolve.RuleUnchecked {
 			pin.set("note", textV("a rule could not finish; the statement records unchecked, never ok, and a reader re-applies the rules itself"))

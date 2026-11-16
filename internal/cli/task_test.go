@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -22,6 +23,10 @@ type taskRefs struct {
 	dAccept, dReject, dSuper string
 	refute, review, reviewE  string
 	unread, unreadE          string
+	// samp is a task whose contract declares sampling (30 runs); sampSubs are four submissions whose delivered
+	// sampling conforms, departs, is absent and has another unit, keyed by the departure state each must print.
+	samp, sampE string
+	sampSubs    map[string]string
 }
 
 // v1Contract is a task-contract-v1 contract: beneficiary ben, any issuer, kv adds fields.
@@ -71,6 +76,23 @@ func taskWorld(t *testing.T) (*world, taskRefs) {
 	_, r.reviewE = w.taskEd("R:E1", "Q", r.review, r.review, v1Contract(ben))
 	r.unread = w.taskGenesis("U", "Q")
 	_, r.unreadE = w.taskEd("U:E1", "Q", r.unread, r.unread, obj("profile", "task-contract-v9"))
+	// S: a declared sampling of 30 runs; one submission per departure-check state (claims-model note §9.4)
+	r.samp = w.taskGenesis("S", "Q")
+	_, r.sampE = w.taskEd("S:E1", "Q", r.samp, r.samp, v1Contract(ben, "sampling", canon.Value(obj("n", 30, "unit", "runs"))))
+	r.sampSubs = map[string]string{}
+	for i, x := range []struct {
+		state string
+		kv    []any
+	}{
+		{"conforms", []any{"sampling", canon.Value(obj("n", 30, "unit", "runs"))}},
+		{"departed", []any{"sampling", canon.Value(obj("n", 12, "unit", "runs"))}},
+		{"unchecked", nil},
+		{"not comparable", []any{"sampling", canon.Value(obj("n", 30, "unit", "slots"))}},
+	} {
+		res := "sres" + strconv.Itoa(i)
+		w.authored("SA:"+res, "K3", res, x.kv...)
+		r.sampSubs[x.state] = w.life("SS"+strconv.Itoa(i), "S"+strconv.Itoa(i), "submit", r.samp, r.sampE, "result", dig(res))
+	}
 	return w, r
 }
 
@@ -80,7 +102,7 @@ func (r *taskRefs) supersede(w *world) {
 }
 
 func (r taskRefs) all() []string {
-	return []string{r.g, r.e1, r.e2, r.approval1, r.review, r.reviewE, r.unread, r.unreadE}
+	return []string{r.g, r.e1, r.e2, r.approval1, r.review, r.reviewE, r.unread, r.unreadE, r.samp, r.sampE}
 }
 
 func taskSection(t *testing.T, o *canon.Object) *canon.Object {
@@ -121,7 +143,7 @@ func readinessOf(t *testing.T, sec *canon.Object, ed string) *canon.Object {
 // conflict clears, in both forms: table tokens only, each on the human surface, one footer, one exit, and every
 // id show cites listed by explain.
 func TestTaskSurfaceSweep(t *testing.T) {
-	conformance.Partial(t, "C-core-132", "the task section is done here (show, verify, explain of a task, its editions and approvals: table tokens only, each condition a typed ok/fail/unchecked state); open: the departure check word (conforms/departed vs ok/fail, CORESWEEP-F1)")
+	conformance.Partial(t, "C-core-132", "the task section (show, verify, explain of a task, its editions, approvals and sampling submissions): table tokens only, each condition a typed ok/fail/unchecked state and each departure check a typed conforms/departed/unchecked/not comparable state; the case's whole sweep is TestClosedVocabulary")
 	w, r := taskWorld(t)
 	sweepRefs(t, w, r.all())
 	r.supersede(w)
@@ -533,4 +555,91 @@ func TestTaskRenderSectionDrift(t *testing.T) {
 	check()
 	r.supersede(w)
 	check()
+}
+
+// TestDepartureCheckIsTyped: C-core-132 on the task view. A departure check compares a delivered `sampling`
+// disclosure with the contract's declared one (claims-model note §9.4) and reports its own closed set, not the
+// rule triple: it prints as a typed `departure_check` member, a `state` token (conforms, departed, unchecked,
+// not comparable) beside its `why`, on explain (which lists every condition of a submission), and on the human surface the same words. A
+// departure moves no grade and no exit: verify of the submission's result exits as it does without a declaration.
+func TestDepartureCheckIsTyped(t *testing.T) {
+	conformance.Partial(t, "C-core-132", "the departure check is a typed state member of the submission (`departure_check`: `state` one of conforms, departed, unchecked, not comparable, beside `why`), swept with the rest of the task section (TestTaskSurfaceSweep)")
+	w, r := taskWorld(t)
+	// explain carries every condition of a submission, the departure check among them (show lists the submission)
+	for _, form := range [][]string{{"explain", r.samp}} {
+		sec := taskSection(t, jsonOf(t, w.run(append(form, "--json")...)))
+		h := w.run(form...)
+		for want, id := range r.sampSubs {
+			dc, ok := subState(t, sec, id).Members["departure_check"].(*canon.Object)
+			if !ok {
+				t.Fatalf("%v %s: departure_check is not a typed member: %s", form, want, canon.Encode(subState(t, sec, id)))
+			}
+			if dc.Members["state"] != canon.String(want) || !IsToken(want) {
+				t.Fatalf("%v: departure_check state %s, want %s", form, canon.Encode(dc.Members["state"]), want)
+			}
+			if why, _ := dc.Members["why"].(canon.String); why == "" {
+				t.Fatalf("%v %s: departure_check without a why: %s", form, want, canon.Encode(dc))
+			}
+			if !strings.Contains(h.stdout, "departure check:\n") || !strings.Contains(h.stdout, "state: "+want+"\n") {
+				t.Fatalf("%v: the human surface lacks `state: %s` under the departure check:\n%s", form, want, h.stdout)
+			}
+		}
+	}
+	// the groups case, and a contract with no declared sampling prints no departure check at all
+	sec := taskSection(t, jsonOf(t, w.run("show", r.g, "--json")))
+	for _, x := range sec.Members["submissions"].(canon.Array) {
+		if x.(*canon.Object).Members["departure_check"] != nil {
+			t.Fatalf("a contract without declared sampling printed a departure check: %s", canon.Encode(x))
+		}
+	}
+	// it moves no exit: the task's verify is the same with every delivery
+	if v := w.run("verify", r.samp); v.code != ExitOK && v.code != ExitCouldNot {
+		t.Fatalf("verify of the sampling task: %d", v.code)
+	}
+}
+
+// proseOutcome matches a rule or departure outcome word inside a string.
+var proseOutcome = regexp.MustCompile(`\b(ok|fail|unchecked|conforms|departed)\b`)
+
+// proseOutcomeAllowed are the members that may carry an outcome word in running prose: a tool-worded reason
+// that sits beside a typed state (the readiness's `why`), a referent re-check's history line (the referent's
+// own status is typed under `status`), and the exit's name.
+var proseOutcomeAllowed = map[string]bool{".exit_name": true, ".task.readiness[].why": true, ".referent.history[]": true}
+
+// TestNoProseOutcomes: C-core-132, the negative control of the typed members. Over the task world (every
+// submission state, every departure state) and the resource world, on show, verify and explain, no member that
+// is not a token member carries a rule or departure outcome word in prose: an evaluation that was printed as a
+// sentence instead of a `state` member shows up here by its path.
+func TestNoProseOutcomes(t *testing.T) {
+	conformance.Partial(t, "C-core-132", "no evaluation outcome is printed only as prose in the task and resource worlds (this test); the case is Covered by TestClosedVocabulary")
+	var walk func(v canon.Value, path string, cmd string)
+	walk = func(v canon.Value, path, cmd string) {
+		switch x := v.(type) {
+		case canon.String:
+			if i := strings.LastIndex(path, "."); !IsTokenKey(path[i+1:]) && !proseOutcomeAllowed[path] && proseOutcome.MatchString(string(x)) &&
+				!strings.HasPrefix(path, ".task.terms[].") {
+				t.Errorf("%s: %s = %q carries an outcome word as prose; make it a typed state member", cmd, path, string(x))
+			}
+		case *canon.Object:
+			for _, k := range x.Keys {
+				walk(x.Members[k], path+"."+k, cmd)
+			}
+		case canon.Array:
+			for _, e := range x {
+				walk(e, path+"[]", cmd)
+			}
+		}
+	}
+	w, r := taskWorld(t)
+	w2, refs := resourceWorld(t)
+	for _, wr := range []struct {
+		w    *world
+		refs []string
+	}{{w, r.all()}, {w2, refs}} {
+		for _, ref := range wr.refs {
+			for _, cmd := range []string{"show", "verify", "explain"} {
+				walk(withoutBodies(jsonOf(t, wr.w.run(cmd, ref, "--json"))), "", cmd+" "+ref[:12])
+			}
+		}
+	}
 }

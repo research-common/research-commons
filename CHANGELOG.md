@@ -10,6 +10,13 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 ## [Unreleased]
 
 ### Added
+- **A departure check is a typed state, and every rule evaluation prints as one.** `explain` of a task prints a
+  submission's `departure_check` as an object, `state` (`conforms`, `departed`, `unchecked` or `not comparable`, the
+  closed set of the departure check, which is a comparison of a disclosure with a declaration and not a rule) beside
+  `why` and a note that the grade is unchanged; `conforms` and `departed` join the table of state tokens. The
+  `evaluations` of the pre-pin check (`publish --intended-for`) and of a `pull` or `hub check` row's `intended_for` are
+  rows with the rule, dialect, expression, member, `state` (`ok`, `fail` or `unchecked`) and `why`, no longer one
+  sentence each. The human output says the same things.
 - **`pull` and `hub check` report a rule evaluation as a typed state, not only prose.** A report row for a statement
   that records `intended_for` now carries `intended_for` (JSON) with the receiver's own `named` and `current`
   outcomes, each `ok`, `fail` or `unchecked` (`unchecked` when the resource or the content could not be read, never
