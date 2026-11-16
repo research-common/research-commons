@@ -17,7 +17,7 @@ import (
 
 func init() {
 	Register(&Command{Name: "status", Summary: "store recovery state, unfinished operations and the durability declaration", Store: true, ReaderPolicy: true,
-		Help: "Every open of the store replays unfinished journal records first; status reports what that replay did and every record still unfinished, with the error and the next step when a replay failed. An unfinished operation is finished by commons repair (or by the next open) once its cause is fixed: give a missing blob with repair --blob <file> or fetch it, free the disk, fix a permission. There is no operation history: the journal record of an operation is deleted once it is finished.",
+		Help:  "Every open of the store replays unfinished journal records first; status reports what that replay did and every record still unfinished, with the error and the next step when a replay failed. An unfinished operation is finished by commons repair (or by the next open) once its cause is fixed: give a missing blob with repair --blob <file> or fetch it, free the disk, fix a permission. There is no operation history: the journal record of an operation is deleted once it is finished.",
 		Flags: []Flag{{Name: "limits", Help: "also print every limit this tool applies: name, value, where the value comes from and what it bounds"}},
 		Run:   statusCmd})
 }

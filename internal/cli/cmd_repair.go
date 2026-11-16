@@ -101,7 +101,7 @@ func repairBefore(c *Ctx) *Problem {
 	if err != nil {
 		return &Problem{Slug: "operation-failed", Title: "the journal could not be read", Class: refusal.Operational, Scope: "store",
 			Detail: "repair checks --blob against the journal before it opens the store; the error is in peer_text; nothing was done",
-			Next: "run commons status; if the store is damaged, fsck", Peer: err.Error(), Exit: ExitDidNotStart}
+			Next:   "run commons status; if the store is damaged, fsck", Peer: err.Error(), Exit: ExitDidNotStart}
 	}
 	var named []string
 	for op, bs := range recs {
