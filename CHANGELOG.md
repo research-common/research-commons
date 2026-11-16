@@ -10,6 +10,17 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 ## [Unreleased]
 
 ### Added
+- **An operation history, and `commons history`.** A store now appends one line to `journal/history.jsonl` when an
+  operation finishes (its statements installed): the operation id, kind, statement ids, blob digests, this machine's
+  time, and whether a later open or `repair` finished it; and one line when an open moves a journal record to
+  `quarantine/`. It is on by default, best-effort (appended without a sync; a write error never fails the operation;
+  a crash right after an operation may lose its line), bounded (8 MiB, then rotated to one `history.1.jsonl`) and
+  never transported: `pull` of a store directory or archive skips it and says so under `skipped`. `commons history
+  [--limit N] [--op <id>]` lists it newest first under the header "local, not authoritative; times are this
+  machine's clock", skips and counts malformed lines, and exits 0 always (`history off`, no file yet, nothing
+  matching). Nothing else reads the file (a test guards it): `status`, `explain`, `fsck`, `repair` and every answer
+  are byte-identical with the file deleted or edited. `status` declares `history: on (8 MiB × 2, rotate)` instead
+  of `off`. Closes KNOWN-LIMITS L-19.
 - **CI runs the OCI sandbox tests, and the conformance scan counts them.** A new `test-sandbox-oci` job runs
   `go test -tags sandbox_oci` on `internal/run` and `internal/clirun` against the runner's docker with an image pinned by
   digest (a skipped OCI test fails the job); it is not a required check. `internal/conformance/ci-tags.txt` lists the
@@ -107,8 +118,7 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   operation that is still being installed.
 - **`publish` failure advice.** A failure after the statements were installed is no longer reported as
   `committed, pending install` (new problem type `committed-finish-failed`); the advice says publishing again is
-  safe (idempotent) instead of "do not publish again", and names `commons repair <operation>` (see Added); there is
-  no operation history yet (KNOWN-LIMITS L-19).
+  safe (idempotent) instead of "do not publish again", and names `commons repair <operation>` (see Added).
 
 ## [0.5.0-alpha.6] - 2026-11-15
 

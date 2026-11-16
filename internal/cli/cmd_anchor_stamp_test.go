@@ -164,7 +164,8 @@ func TestAnchorStamp(t *testing.T) {
 		an.Signer != p.signer || an.Prev != a || an.Seq != 1 {
 		t.Fatalf("anchors statement: %s", an.Line())
 	}
-	added, removed := diffLines(before, snapshot(t, p.root))
+	// the operation history (journal/history.jsonl) is local bookkeeping, appended by every finished operation
+	added, removed := diffLines(withoutHistory(before), withoutHistory(snapshot(t, p.root)))
 	var other []string
 	for _, l := range added {
 		f := strings.Fields(l)[0]

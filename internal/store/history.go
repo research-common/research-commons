@@ -44,6 +44,12 @@ func HistoryFiles(root string) []string {
 	return []string{filepath.Join(root, "journal", historyRotated), filepath.Join(root, "journal", historyName)}
 }
 
+// IsHistoryPath says whether a slash-separated path relative to a store root is one of its history files. A pull
+// of a whole store tree (a directory, or an archive of one) skips them: the history is never transported.
+func IsHistoryPath(rel string) bool {
+	return rel == "journal/"+historyName || rel == "journal/"+historyRotated
+}
+
 // historyDeclaration is the storage note §7 `history` value for a store opened with these options.
 func (o Options) historyDeclaration() string {
 	if o.NoHistory {

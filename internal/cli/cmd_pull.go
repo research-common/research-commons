@@ -239,6 +239,19 @@ func pullCmd(c *Ctx) (*Obj, int, error) {
 		}
 		pkg.Objects = kept
 	}
+	// a whole store tree (a directory, or an archive of one) may carry the source store's operation history: local,
+	// never transported (storage note §3.6), so it is not listed to the gate and is reported as skipped
+	if pkg.Tree {
+		kept := pkg.Objects[:0:0]
+		for _, ob := range pkg.Objects {
+			if store.IsHistoryPath(ob.Path) && ob.Mode == gate.Regular {
+				skipped = append(skipped, textV(ob.Path+" (the source store's local operation history, never transported)"))
+				continue
+			}
+			kept = append(kept, ob)
+		}
+		pkg.Objects = kept
+	}
 	if c.Policy.Reader != nil {
 		floor := policy.FloorLabel
 		if v, _ := c.Flag("below-floor"); v == "refuse" {

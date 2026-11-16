@@ -17,7 +17,7 @@ import (
 
 func init() {
 	Register(&Command{Name: "status", Summary: "store recovery state, unfinished operations and the durability declaration", Store: true, ReaderPolicy: true,
-		Help:  "Every open of the store replays unfinished journal records first; status reports what that replay did and every record still unfinished, with the error and the next step when a replay failed. An unfinished operation is finished by commons repair (or by the next open) once its cause is fixed: give a missing blob with repair --blob <file> or fetch it, free the disk, fix a permission. There is no operation history: the journal record of an operation is deleted once it is finished.",
+		Help:  "Every open of the store replays unfinished journal records first; status reports what that replay did and every record still unfinished, with the error and the next step when a replay failed. An unfinished operation is finished by commons repair (or by the next open) once its cause is fixed: give a missing blob with repair --blob <file> or fetch it, free the disk, fix a permission. The journal record of an operation is deleted once it is finished; durability.history declares the local operation history (commons history lists it), which status never reads: what is unfinished is decided from journal records alone.",
 		Flags: []Flag{{Name: "limits", Help: "also print every limit this tool applies: name, value, where the value comes from and what it bounds"}},
 		Run:   statusCmd})
 }
@@ -68,7 +68,7 @@ func statusCmd(c *Ctx) (*Obj, int, error) {
 	o.set("durability", newObj().set("file_sync", textV(d.FileSync)).set("dir_sync", textV(d.DirSync)).
 		set("rename", textV(d.Rename)).set("exclusive_create", textV(d.ExclusiveCreate)).
 		set("same_filesystem", textV(d.SameFilesystem)).set("locks", textV(d.Locks)).set("gc_grace", textV(d.GCGrace)).
-		set("history", textV("off")).set("assumes", textV(d.Assumes)))
+		set("history", textV(d.History)).set("assumes", textV(d.Assumes)))
 	// the caches this implementation keeps, declared (storage note §5.3; C-core-129, P-07): none is persistent
 	o.set("caches", newObj().set("persistent", textV("none: every command reads the blobs and statements cold")).
 		set("in_process", textV("signature verification, per line, keyed on the sha256 of the line's bytes; held in memory, dropped when the command ends")))

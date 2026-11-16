@@ -188,6 +188,9 @@ JSON members carrying tokens: `authorship`, `role`, `state`, `grade`, `step`, `q
 | `replaced statement` | recovery | a corrupt stored copy was quarantined and the verified line installed |
 | `removed temporary` | recovery | a stale temporary file was removed |
 | `restored blob` | recovery | a gc run stopped after moving a blob aside and before deciding; the verified file was put back |
+| `history on` | history | this store appends a line to its local operation history when an operation finishes (bounded, best-effort, never transported, not authoritative) |
+| `history off` | history | this store keeps no operation history; `history` lists nothing |
+| `finished` | history | a history entry: the operation's statements were installed and its journal record moved to done, at the local time shown (this machine's clock) |
 | `answer changed` | since | something explain prints beyond its causes (a token, a count, a view) differs from the saved explain |
 | `answer unchanged` | since | everything explain prints beyond its causes is as in the saved explain |
 | `statement added` | since | a statement is an input of the answer now and was not in the saved explain (its id) |
