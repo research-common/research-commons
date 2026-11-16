@@ -475,12 +475,14 @@ func TestFaultSeamTestOnly(t *testing.T) {
 }
 
 // TestReleaseAndGCCrash: P-10 for the store's other writers, with a real process crash. gc --release (one
-// operation: the withdrawal is committed, then the blob removed) crashes at each of its points; gc --apply crashes
+// operation: the withdrawal is committed, then the blob removed) crashes at each of its points; a pull crashes
+// before and after its commit point (its admitted set is held whole after the replay, or not at all, and pulling
+// again finishes it); gc --apply crashes
 // with the blob moved aside, before its re-check decides. After each crash the next status reports what the
 // replay did, the blob is never gone while the serving holds is current, the withdrawal is installed exactly when
 // its record was written, and running the command again finishes the work.
 func TestReleaseAndGCCrash(t *testing.T) {
-	conformance.Partial(t, "P-10", "release and gc's move-aside with a process crash at each of their points, through the commands; the commit points of publish are TestPublishCrashMatrix")
+	conformance.Partial(t, "P-10", "release, pull and gc's move-aside with a process crash at each of their points, through the commands; the commit points of publish are TestPublishCrashMatrix")
 	points := []string{store.AfterBlobs, store.AfterRecord, store.AfterStatement, store.AfterInstall, store.AfterDone,
 		store.AfterProject, store.AfterWithdrawal, store.AfterBlobRemoved}
 	for _, point := range points {
@@ -525,6 +527,33 @@ func TestReleaseAndGCCrash(t *testing.T) {
 			}
 			if after := w.run("show", b, "--json").stdout; !strings.Contains(after, `"bytes":"not held here"`) || !strings.Contains(after, `"holders":[]`) {
 				t.Fatalf("after the second release: %s", after)
+			}
+		})
+	}
+	// pull is the other writer through the same commit: blobs, then one record with every admitted statement
+	src := newWorld(t)
+	src.blob("P", []byte("bytes a pull brings"))
+	src.authored("A:P", "K1", "P")
+	pkg := t.TempDir()
+	copyData(t, src.root, pkg)
+	for _, point := range []string{store.AfterBlobTemp, store.AfterBlobs, store.AfterRecord, store.AfterStatement, store.AfterDone} {
+		t.Run("pull "+point, func(t *testing.T) {
+			dst := newWorld(t)
+			code, childOut, reached := crashRun(t, dst.root, point, 1, "pull", pkg, "--json")
+			if !reached || code != crashExit {
+				t.Fatalf("the crash point was not reached: marker %v, exit %d\n%s", reached, code, childOut)
+			}
+			committed := point != store.AfterBlobTemp && point != store.AfterBlobs
+			st := outObj(t, dst.run("status", "--json"))
+			if st.Members["store_state"] != canon.String("nothing pending") {
+				t.Fatalf("status after the replay: %s", canon.Encode(st))
+			}
+			if held := !strings.Contains(dst.run("show", src.ids["A:P"], "--json").stdout, "no statement held"); held != committed {
+				t.Fatalf("after a crash at %q the pulled statement is held=%v, committed=%v", point, held, committed)
+			}
+			r := dst.run("pull", pkg, "--json")
+			if r.code != 0 || strings.Contains(dst.run("show", src.ids["A:P"], "--json").stdout, "no statement held") {
+				t.Fatalf("pull again after a crash at %q: %d %s", point, r.code, r.stdout)
 			}
 		})
 	}
