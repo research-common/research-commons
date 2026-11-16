@@ -163,6 +163,29 @@ func (s *Store) OpenBlob(d Digest) (*os.File, error) {
 	return f, nil
 }
 
+// ReuseBlob is §2 step 5 for an operation that names a held blob without bringing its bytes again: the held file
+// is re-hashed (claims-model note §12: verify an existing blob before reusing it) and, when it is intact, its grace
+// window is refreshed (§6.1.1: the window is measured from the last install or reuse), so gc does not remove it
+// between this operation's step 1 and its record. A copy that no longer hashes to d is refused, naming both
+// hashes, and is never reused (C-core-123); it is left where it is for fetch or fsck --quarantine. A blob not held
+// is fs.ErrNotExist.
+func (s *Store) ReuseBlob(d Digest) error {
+	if _, ok := d.hex(); !ok {
+		return refusal.Malformed("digest %q is not sha256: + 64 lowercase hex", d)
+	}
+	p := s.blobPath(d)
+	have, err := hashFile(p)
+	if err != nil {
+		return err
+	}
+	if have != d {
+		return &refusal.Refusal{Class: refusal.Intrinsic, Reason: CorruptBlob,
+			Detail: fmt.Sprintf("blob %s: stored copy corrupt (hashes to %s); refetch", d, have)}
+	}
+	now := time.Now()
+	return os.Chtimes(p, now, now)
+}
+
 // HasBlob reports whether a file is present under d (not whether it is intact; OpenBlob checks that).
 func (s *Store) HasBlob(d Digest) bool {
 	if _, ok := d.hex(); !ok {

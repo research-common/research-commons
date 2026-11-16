@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/research-common/research-commons/internal/btctime"
 	"io"
+	"io/fs"
 	"os"
 	"slices"
 	"strconv"
@@ -930,10 +931,29 @@ func commitUnitFrom(c *Ctx, out *Obj, op string, sts []signed, blobs []store.Dig
 		return nil, 0, prob
 	}
 	for _, b := range blobs {
+		// a held blob is reused only after it re-hashes to its name, and reuse restarts its grace window (storage
+		// note §2 step 5, §6.1.1), so gc cannot remove it before the record below names it. A held copy that no
+		// longer hashes to its name is never reused: the unit's own bytes replace it (InstallBlob quarantines the
+		// corrupt copy), and with no bytes to give the unit is refused, naming both hashes.
+		var corrupt error
 		if c.Store.HasBlob(b) {
-			continue
+			err := c.Store.ReuseBlob(b)
+			if err == nil {
+				continue
+			}
+			var r *refusal.Refusal
+			if !errors.As(err, &r) || r.Reason != store.CorruptBlob {
+				if !errors.Is(err, fs.ErrNotExist) { // removed since HasBlob: install it like a new one
+					return abort(failed(err, "blob "+string(b), false, "nothing was committed; run the command again; if it recurs, run fsck"))
+				}
+			} else {
+				corrupt = err
+			}
 		}
 		f, err := open(b)
+		if err != nil && corrupt != nil {
+			return abort(failed(corrupt, "blob "+string(b), false, "fetch the bytes again (commons fetch "+string(b)+") or give them with --content, then run the command again"))
+		}
 		if err != nil {
 			return abort(failed(err, scope, false, "check the file and run the command again"))
 		}

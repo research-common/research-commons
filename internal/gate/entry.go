@@ -74,8 +74,11 @@ func Commit(s *store.Store, r *Report) (store.Outcome, error) {
 	var digests []store.Digest
 	for _, b := range blobs {
 		if s.HasBlob(store.Digest(b.ID)) {
-			if f, err := s.CheckBlob(store.Digest(b.ID)); err == nil && f == nil {
-				continue // already held intact: nothing to install, and an empty operation is no operation
+			// already held intact: nothing to install, and an empty operation is no operation. The reuse re-hashes
+			// the held copy and restarts its grace window (storage note §2 step 5, §6.1.1); a corrupt held copy is
+			// replaced from the verified package bytes below, never reused.
+			if err := s.ReuseBlob(store.Digest(b.ID)); err == nil {
+				continue
 			}
 		}
 		d, _, err := s.InstallBlob(bytes.NewReader(b.data), store.Digest(b.ID))
