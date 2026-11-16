@@ -448,24 +448,6 @@ var limits = []limit{
 		},
 	},
 	{
-		id:  "L-18",
-		gap: "there is no `repair` command (storage note §3.5 names `repair [<operation-id>|--all]`): an unfinished operation is finished only by a later open of the store once its cause is fixed, and a missing blob is installed again with `fetch` (or by publishing the bytes again)",
-		sources: []limitSource{
-			{file: "CHANGELOG.md", says: "there is still no `repair` command (KNOWN-LIMITS L-18)"},
-			{help: []string{"status"}, says: "There is no repair command yet: an unfinished operation is finished by the next open once its cause is fixed"},
-		},
-		probe:  "no command is named `repair`",
-		closes: "a `repair [<operation-id>|--all]` command",
-		open: func(t *testing.T) (bool, string) {
-			for _, c := range Commands() {
-				if c.Name == "repair" {
-					return false, "commons repair"
-				}
-			}
-			return true, "no repair command"
-		},
-	},
-	{
 		id:  "L-19",
 		gap: "there is no operation history (storage note §3.6, optional): once an operation is finished its journal record is deleted, and nothing on this machine says afterwards which statements arrived together or when",
 		sources: []limitSource{

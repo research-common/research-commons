@@ -71,6 +71,19 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   `hub check` and `push` share now ignores replacement refs (`git replace`), so the bytes judged are the bytes `git
   push` sends. Conformance cases C-core-108, C-core-135, C-core-148 and C-btc-03c are covered. `push` still needs the
   store to be a git checkout of the hub (KNOWN-LIMITS L-17).
+- **`commons repair [<operation>|--all] [--blob <file>]`.** Finishes committed operations the store could not finish on
+  its own (storage note §3.5): a blob a committed operation names is missing, a projection failed, or a replay
+  failed on open (a permission, a full disk). It runs the journal's install steps again for the named operation (all
+  of them with `--all` or no argument), continuing past one that fails, then rebuilds the registered projections and
+  compares each with a cold build. `--blob <file>` installs exact bytes first: they are hashed before the store is
+  opened, must be a blob an unfinished operation names, and are hashed again on install, so a missing blob is
+  repaired without a hold serving it. Exit 0 finished (an operation id no record has prints `nothing to repair`,
+  also 0), 1 drift after the rebuild, 2 malformed id or bytes no operation names (nothing done), 3 an operation could
+  not be finished (the output names the missing blob and the next step). It never signs, rewrites or deletes a
+  statement or blob, never rolls back, and never touches `quarantine/` (it prints the count). The messages of
+  `status`, `fsck`, `publish` and the store that named "the next open" as the only way to finish an operation now
+  name `commons repair <operation>`; `nothing to repair` joins the table of state tokens. KNOWN-LIMITS L-18 is
+  closed. Conformance case C-core-126 is covered.
 
 ### Fixed
 - **`status` after a `gc` that stopped mid-deletion.** A `gc --apply` killed after moving a blob aside and before
@@ -94,8 +107,8 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   operation that is still being installed.
 - **`publish` failure advice.** A failure after the statements were installed is no longer reported as
   `committed, pending install` (new problem type `committed-finish-failed`); the advice says publishing again is
-  safe (idempotent) instead of "do not publish again". Messages that told you to "run repair" now name what works:
-  there is still no `repair` command (KNOWN-LIMITS L-18), and there is no operation history yet (KNOWN-LIMITS L-19).
+  safe (idempotent) instead of "do not publish again", and names `commons repair <operation>` (see Added); there is
+  no operation history yet (KNOWN-LIMITS L-19).
 
 ## [0.5.0-alpha.6] - 2026-11-15
 
