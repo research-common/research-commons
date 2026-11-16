@@ -176,10 +176,11 @@ JSON members carrying tokens: `authorship`, `role`, `state`, `grade`, `step`, `q
 | `reject` | decision | the verdict of a `decide`: the beneficiary rejects the cited submissions; it settles only when the decision counts |
 | `nothing pending` | store | no journal record is waiting: every committed operation is installed and projected |
 | `committed, pending install` | store | the operation reached its commit point and its statements are not all installed yet |
-| `committed, needs repair` | store | the operation is installed and its projections are untrusted; run repair |
+| `committed, needs repair` | store | the operation is committed and not finished: a blob it names is missing, or its projections are untrusted; status and fsck name the cause and the next step |
 | `replayed` | recovery | a pending operation was finished on open |
 | `projected` | recovery | a done operation's projections were rebuilt on open |
 | `needs repair` | recovery | a projection failed on open |
+| `replay failed` | recovery | a committed operation could not be finished on open (the error is printed); its statements are hidden and its signers' writes refused until an open finishes it |
 | `quarantined` | recovery | a journal record failed to decode or verify and was moved aside; nothing from it installed |
 | `replaced statement` | recovery | a corrupt stored copy was quarantined and the verified line installed |
 | `removed temporary` | recovery | a stale temporary file was removed |

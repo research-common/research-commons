@@ -171,6 +171,13 @@ reached step 5 (C-core-125). A statement that is in a `pending/` record but not 
 is **not** visible to any read surface: readers resolve from installed statements only, and recovery runs
 before the first read. There is therefore no window in which a half-published artifact resolves or lists.
 
+That covers a crash. A reader takes no lock, so it may also run *while* another process is between step 2 and
+step 4. Readers therefore skip every statement a `pending/` record names, and every statement of a `done/`
+record of which they saw only part: an operation is read whole or not at all. The residue is a writer that
+installs its remaining statements and finishes steps 4 and 5 (deleting its record) in the instant between a
+reader's walk of `statements/` and its listing of the journal; that reader shows part of the operation once,
+and the next read shows all of it.
+
 ### 3.4 Recovery
 
 Recovery is a **journal replay**, chosen over a full scan because the record carries the signed bytes and
@@ -184,6 +191,17 @@ decided 3). A record duplicates the statements it installed, which by then live 
 every open lists the journal, so keeping records would double statement storage and slow every open. The
 operation id is therefore known while its record exists and, afterwards, only to the optional operation
 history (§3.6), which no answer reads.
+
+Replay of a `done/` record runs step 3 again (it is idempotent): a statement file removed since step 4 is
+installed again from the record, so replay restores what the record holds and nothing else.
+
+**A replay that fails** (an unwritable `statements/`, a full disk) does not make the store unopenable: the
+record stays where it is, the open reports `replay failed` with the operation id and the error, and every
+command still runs (`status` and `fsck` name the record, the error and the next step). While the record is
+unfinished and its statements are not all installed, readers do not show any of them (the operation is not
+read half installed) and a writer refuses a new line by any of its signers, naming the operation, since that
+key's head is not known. Every later open replays the record again; once the cause is fixed, the operation
+completes.
 
 A full scan (`fsck`, §6.3) remains available for the case the journal itself is lost: it reconstructs
 projections from installed statements. It cannot recover a `pending/` operation whose record is gone; that

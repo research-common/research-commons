@@ -52,6 +52,26 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   push` sends. Conformance cases C-core-108, C-core-135, C-core-148 and C-btc-03c are covered. `push` still needs the
   store to be a git checkout of the hub (KNOWN-LIMITS L-17).
 
+### Fixed
+- **Reusing a held blob re-hashes it and restarts its grace window.** `publish` (and `run`, `anchor stamp`,
+  `anchor upgrade`) naming bytes this store already holds, and `pull` of a blob already held, used the held copy
+  as it was: a copy damaged on disk was reused, and an old unreferenced blob kept its old window, so `gc` could
+  remove it between the reuse and the operation's journal record. Now the held copy is re-hashed first (a copy
+  that no longer matches its name is refused, naming both hashes, unless the operation brings the bytes, which
+  then replace it) and its window restarts at the reuse, as the storage note says.
+- **A journal replay that fails no longer makes the store unopenable.** When the open of a store could not finish
+  a committed operation (an unwritable `statements/`, a full disk), every command failed, including `status` and
+  `fsck`, which the error told you to run. Now the open continues: `status` lists the operation with
+  `what: replay failed`, the error and the next step; `fsck` names it; reads work and show none of that
+  operation's statements until it is finished; a write by one of its keys is refused naming the operation. Every
+  later open replays it again. Also: a finished-but-not-cleaned-up journal record now reinstalls a statement file
+  removed since (as `fsck` already promised), and a reader running alongside a writer no longer sees part of an
+  operation that is still being installed.
+- **`publish` failure advice.** A failure after the statements were installed is no longer reported as
+  `committed, pending install` (new problem type `committed-finish-failed`); the advice says publishing again is
+  safe (idempotent) instead of "do not publish again". Messages that told you to "run repair" now name what works:
+  there is still no `repair` command (KNOWN-LIMITS L-18), and there is no operation history yet (KNOWN-LIMITS L-19).
+
 ## [0.5.0-alpha.6] - 2026-11-15
 
 ### Added

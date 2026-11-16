@@ -2,6 +2,7 @@ package cli
 
 import (
 	"go/build"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -444,6 +445,58 @@ var limits = []limit{
 			before := snapshot(t, w.root)
 			r := runIn(w.root, nil, "push", "--json")
 			return r.code == ExitDidNotStart && strings.Contains(r.stdout, "the store is not a git checkout") && snapshot(t, w.root) == before, r.stdout
+		},
+	},
+	{
+		id:  "L-18",
+		gap: "there is no `repair` command (storage note §3.5 names `repair [<operation-id>|--all]`): an unfinished operation is finished only by a later open of the store once its cause is fixed, and a missing blob is installed again with `fetch` (or by publishing the bytes again)",
+		sources: []limitSource{
+			{file: "CHANGELOG.md", says: "there is still no `repair` command (KNOWN-LIMITS L-18)"},
+			{help: []string{"status"}, says: "There is no repair command yet: an unfinished operation is finished by the next open once its cause is fixed"},
+		},
+		probe:  "no command is named `repair`",
+		closes: "a `repair [<operation-id>|--all]` command",
+		open: func(t *testing.T) (bool, string) {
+			for _, c := range Commands() {
+				if c.Name == "repair" {
+					return false, "commons repair"
+				}
+			}
+			return true, "no repair command"
+		},
+	},
+	{
+		id:  "L-19",
+		gap: "there is no operation history (storage note §3.6, optional): once an operation is finished its journal record is deleted, and nothing on this machine says afterwards which statements arrived together or when",
+		sources: []limitSource{
+			{file: "CHANGELOG.md", says: "there is no operation history yet (KNOWN-LIMITS L-19)"},
+			{help: []string{"status"}, says: "There is no operation history: the journal record of an operation is deleted once it is finished"},
+		},
+		probe:  "no command is named `history`, `status` declares `history: off`, and after a publish no file under `journal/` names its operation",
+		closes: "an operation history (`journal/history.jsonl`) and a `history` command",
+		open: func(t *testing.T) (bool, string) {
+			for _, c := range Commands() {
+				if c.Name == "history" {
+					return false, "commons history"
+				}
+			}
+			p := newPubWorld(t)
+			r := p.publish("--kind", "authored", "--content", p.file("c", "history probe"))
+			if r.code != 0 {
+				return false, r.stdout
+			}
+			op := string(outObj(t, r).Members["operation"].(canon.String))
+			named := ""
+			filepath.WalkDir(filepath.Join(p.root, "journal"), func(path string, d fs.DirEntry, err error) error {
+				if err == nil && !d.IsDir() {
+					if b, _ := os.ReadFile(path); strings.Contains(path, op) || strings.Contains(string(b), op) {
+						named = path
+					}
+				}
+				return nil
+			})
+			st := p.run("status", "--json")
+			return named == "" && strings.Contains(st.stdout, `"history":"off"`), named + st.stdout
 		},
 	},
 }
