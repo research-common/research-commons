@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -239,6 +240,74 @@ func TestIdentityCoverageFileMatchesHarness(t *testing.T) {
 	for _, id := range ids {
 		if Profile(id) == "id" && !seen[id] {
 			t.Errorf("%s has no row in the coverage file", id)
+		}
+	}
+}
+
+// A Covers in a test file the default build excludes is never run by `go test ./...`: the scan records it as a
+// partial that says so, and a file the default build compiles still covers. Constraints: a tag nobody sets, a
+// negated host tag, a tag that is satisfied (the host's GOOS), and an expression mixing them.
+func TestScanHonoursBuildConstraints(t *testing.T) {
+	dir := t.TempDir()
+	write := func(sub, name, header, decl string) {
+		t.Helper()
+		d := filepath.Join(dir, sub)
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		src := header + "package p\n\nimport (\n\t\"testing\"\n\n\t\"github.com/research-common/research-commons/internal/conformance\"\n)\n\nfunc " +
+			"TestX(t *testing.T) {\n\t" + decl + "\n}\n"
+		if err := os.WriteFile(filepath.Join(d, name), []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	host := runtime.GOOS
+	write("plain", "a_test.go", "", `conformance.Covers(t, "C-x-1")`)
+	write("tagged", "a_test.go", "//go:build sandbox_oci\n\n", `conformance.Covers(t, "C-x-2")`)
+	write("hostok", "a_test.go", "//go:build "+host+"\n\n", `conformance.Covers(t, "C-x-3")`)
+	write("nothost", "a_test.go", "//go:build !"+host+"\n\n", `conformance.Covers(t, "C-x-4")`)
+	write("mixed", "a_test.go", "//go:build "+host+" && (rc_a || rc_b)\n\n", `conformance.Covers(t, "C-x-5")`)
+	write("partial", "a_test.go", "//go:build sandbox_oci\n\n", `conformance.Partial(t, "C-x-6", "the rest")`)
+	cov, part, problems, err := ScanCoverage(dir)
+	if err != nil || len(problems) != 0 {
+		t.Fatalf("scan: %v %v", err, problems)
+	}
+	for _, id := range []string{"C-x-1", "C-x-3"} {
+		if len(cov[id]) != 1 {
+			t.Errorf("%s: a file the default build compiles must cover; covers %v, partial %v", id, cov[id], part[id])
+		}
+	}
+	for id, want := range map[string]string{
+		"C-x-2": "covered only under build tag sandbox_oci",
+		"C-x-4": "covered only under build constraint !" + host,
+		"C-x-5": "covered only under build tag rc_a, rc_b",
+		"C-x-6": "the default build excludes: build tag sandbox_oci",
+	} {
+		if len(cov[id]) != 0 || len(part[id]) != 1 || !strings.Contains(part[id][0], want) {
+			t.Errorf("%s: want a partial saying %q; covers %v, partial %v", id, want, cov[id], part[id])
+		}
+	}
+}
+
+// The tagged OCI backend tests claim C-exec-10..12; CI runs no tags, so those cases are partial until a test the
+// default build runs covers them (F16 of the stage-3 review).
+func TestTaggedCoverageIsNotCounted(t *testing.T) {
+	root, err := RepoRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cov, part, _, err := ScanCoverage(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"C-exec-10", "C-exec-11", "C-exec-12"} {
+		for _, by := range cov[id] {
+			if strings.Contains(by, "sandbox_oci") || strings.Contains(by, "TestOCI") {
+				t.Errorf("%s is counted as covered by %s, a test in a file only `-tags sandbox_oci` builds", id, by)
+			}
+		}
+		if len(part[id]) == 0 {
+			t.Errorf("%s has no partial: the tagged test's declaration was dropped", id)
 		}
 	}
 }

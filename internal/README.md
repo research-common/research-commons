@@ -130,6 +130,17 @@ restating a case defined elsewhere writes its id in backticks. A test declares w
 Cases nobody declares are skipped as pending. A declaration naming an id no case document defines fails
 the build. The scan is static, so arguments must be string literals.
 
+The scan honours build constraints. CI runs `go test ./...` with no tags, so a test in a file the default build
+excludes (a `//go:build` expression no default tag satisfies, such as `sandbox_oci`, or a GOOS/GOARCH file name
+for another platform) never runs there, and a `Covers` in it cannot pass a case. The scan records such a
+declaration as a partial reading `covered only under build tag <tag>` (`build constraint <expr>` when the
+expression is excluded by a tag the host sets), and the case stays skipped until a test the default build runs
+covers it. The default build is this host's GOOS and GOARCH, `gc`, cgo as the host has it, `unix` on a Unix and the
+toolchain's release tags. Today the OCI backend tests (`internal/run/sandbox_oci_test.go`) are the only such file:
+C-exec-10, C-exec-11 and C-exec-12 read partial for that reason. Run them with
+`RC_TEST_IMAGE=alpine:latest go test -tags sandbox_oci -run OCI -v ./internal/run`; the scan reads them from the
+file whatever tags you pass.
+
 Negative tests show that their mutation reached the boundary under test (CONFORMANCE.md, "How a result is
 recorded"): a time-rule vector is first checked to carry a valid signature, so only the time rule can refuse
 it. Property tests print the seed and a shrunk fixture on failure.
