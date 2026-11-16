@@ -430,10 +430,13 @@ func TestPublishCommittedPendingInstall(t *testing.T) {
 	if r.code != 3 || o.Members["committed"] != canon.Bool(true) || o.Members["type"] != canon.String(ProblemTypeBase+"committed-pending-install") {
 		t.Fatalf("pending install: %d %s", r.code, r.stdout)
 	}
-	for _, want := range []string{"commit point", "journal record", "replays", "commons status", "do not publish again"} {
+	for _, want := range []string{"commit point", "journal record", "replays", "commons status", "publishing again is safe (idempotent)", "if the replay keeps failing, status names it"} {
 		if !strings.Contains(r.stdout, want) {
 			t.Fatalf("message lacks %q: %s", want, r.stdout)
 		}
+	}
+	if strings.Contains(r.stdout, "do not publish again") || strings.Contains(r.stdout, "run repair") {
+		t.Fatalf("advice names a step that is wrong or does not exist: %s", r.stdout)
 	}
 	if strings.Contains(r.stdout, "force") {
 		t.Fatal("suggests --force")

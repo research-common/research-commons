@@ -422,10 +422,11 @@ func (s *Store) recover() error {
 }
 
 // replay finishes one record and reports what it did. A failure (an unwritable statements/ directory, a full
-// disk) does not stop the open (degraded open): the record stays in the journal, the event "replay failed" names
-// it with the error, the statements it names are hidden from every reader (so the operation is not shown half
-// installed) and a writer refuses a line by any of its signers, naming it (Blocked), until a later open or Repair
-// finishes it. Every other command (status, fsck, reads of other statements) keeps working.
+// disk) does not stop the open (degraded open): the record stays in the journal and the event "replay failed"
+// names it with the error (Blocked lists it). If the failure came before every statement was installed, the
+// statements it names are hidden from every reader (so the operation is not shown half installed) and a writer
+// refuses a line by any of its signers, naming it (BlockedFor), until a later open or Repair finishes it. Every
+// other command (status, fsck, reads of other statements) keeps working.
 func (s *Store) replay(h held) []RecoveryEvent {
 	var out Outcome
 	var evs []RecoveryEvent
@@ -435,7 +436,7 @@ func (s *Store) replay(h held) []RecoveryEvent {
 			Detail: id + ": stored copy corrupt, quarantined; verified line installed"})
 	}
 	if err != nil {
-		s.block(h.rec, err)
+		s.block(h.rec, err, out.Installed)
 		return append(evs, RecoveryEvent{Op: h.rec.Op, Kind: h.rec.Kind, What: "replay failed", Detail: err.Error()})
 	}
 	s.unblock(h.rec.Op)
@@ -449,15 +450,18 @@ func (s *Store) replay(h held) []RecoveryEvent {
 	return append(evs, ev)
 }
 
-// blockedOp is a committed record whose replay failed on this open.
+// blockedOp is a committed record whose replay failed on this open. When every statement it holds was installed
+// (installed: the failure was later, at step 4 or 5) nothing is half shown, so nothing is hidden or refused; the
+// failure is still reported.
 type blockedOp struct {
 	op, kind, err string
+	installed     bool
 	ids, signers  map[string]bool
 }
 
-func (s *Store) block(r Record, err error) {
+func (s *Store) block(r Record, err error, installed bool) {
 	s.unblock(r.Op)
-	b := blockedOp{op: r.Op, kind: r.Kind, err: err.Error(), ids: map[string]bool{}, signers: map[string]bool{}}
+	b := blockedOp{op: r.Op, kind: r.Kind, err: err.Error(), installed: installed, ids: map[string]bool{}, signers: map[string]bool{}}
 	for _, l := range r.Lines {
 		if st, rerr := wire.ReadStored(l); rerr == nil {
 			b.ids[st.ID] = true
@@ -488,7 +492,7 @@ const ErrReplayFailed = "replay failed"
 // none does). Commit applies it too; a command calls it first so it refuses before it signs or installs anything.
 func (s *Store) BlockedFor(signer string) error {
 	for _, b := range s.blocked {
-		if b.signers[signer] {
+		if !b.installed && b.signers[signer] {
 			return &refusal.Refusal{Class: refusal.Operational, Reason: ErrReplayFailed,
 				Detail: fmt.Sprintf("operation %s (%s) of key %s is committed and could not be installed when this store was opened (%s); nothing was written", b.op, b.kind, signer, b.err)}
 		}
@@ -565,7 +569,7 @@ func (s *Store) Repair(ops ...string) ([]RecoveryEvent, error) {
 
 func (s *Store) hidden(id string) bool {
 	for _, b := range s.blocked {
-		if b.ids[id] {
+		if !b.installed && b.ids[id] {
 			return true
 		}
 	}

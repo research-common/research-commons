@@ -240,3 +240,38 @@ func TestRepairContinues(t *testing.T) {
 		t.Fatal("Repair touched quarantine/")
 	}
 }
+
+// TestDegradedOpenInstalled: a replay that installs every statement and then fails (journal/done not writable, so
+// step 4 cannot run) is reported "replay failed", but nothing is half shown: the statements stay visible and the
+// key keeps writing.
+func TestDegradedOpenInstalled(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions; the fault cannot be injected")
+	}
+	root := t.TempDir()
+	k := testKey("A")
+	l0, id0 := authored(k, 0, "", []byte("x"))
+	s := open(t, root, Options{NoSync: true, crash: func(p string) error {
+		if p == AfterRecord {
+			return ErrCrash
+		}
+		return nil
+	}})
+	d, _, _ := s.InstallBlob(strings.NewReader("x"), "")
+	if _, err := s.Commit("publish", [][]byte{l0}, []Digest{d}); !errors.Is(err, ErrCrash) {
+		t.Fatal(err)
+	}
+	done := filepath.Join(root, "journal", "done")
+	os.Chmod(done, 0o500)
+	t.Cleanup(func() { os.Chmod(done, 0o755) })
+	s2, err := Open(root, Options{NoSync: true})
+	if err != nil || len(s2.Blocked()) != 1 {
+		t.Fatal(s2, err)
+	}
+	if sts, _ := s2.Statements(); sts[id0] == nil {
+		t.Fatal("an installed statement was hidden")
+	}
+	if s2.BlockedFor(k.Signer()) != nil {
+		t.Fatal("a key whose statements are all installed was refused")
+	}
+}
