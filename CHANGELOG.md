@@ -9,6 +9,15 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ## [Unreleased]
 
+## [0.5.0-alpha.7] - 2026-11-16
+
+**`push` sends, and the store finishes what it starts.** `push` now transports the judged commit with `git push`
+(never forced) once the hub's verdicts and the anchor and withheld-bytes checks are clean. The store re-hashes a held
+blob before reusing it, keeps opening when a journal replay fails, and gains `commons repair` and a local operation
+history (`commons history`) that nothing decides from. Every publish, pull and `gc` commit point is tested with a real
+process crash. The writer's majors are unchanged since alpha.5 (`rc/1`, and `rc/2` from the identity commands and
+`publish --as`). All 190 core conformance cases are covered.
+
 ### Added
 - **An operation history, and `commons history`.** A store now appends one line to `journal/history.jsonl` when an
   operation finishes (its statements installed): the operation id, kind, statement ids, blob digests, this machine's
@@ -119,6 +128,19 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 - **`publish` failure advice.** A failure after the statements were installed is no longer reported as
   `committed, pending install` (new problem type `committed-finish-failed`); the advice says publishing again is
   safe (idempotent) instead of "do not publish again", and names `commons repair <operation>` (see Added).
+
+### Known issues (open at this tag)
+- Every gap in `docs/KNOWN-LIMITS.md` (L-01…L-17). The ones a first user meets:
+  - Block headers come only from a file the operator obtains (`anchor headers sync --from`, L-02); with no header
+    database every rival construction is `contested` and a task contract with a `deadline` never reaches `ready`. (#59)
+  - `publish` does not stamp (L-16): run `anchor stamp` after `publish` and before `push`, and `anchor upgrade` once
+    the calendar has committed to a block (typically hours).
+  - `push` sends only from a git checkout of the hub (L-17).
+  - A response layout reads JSON only, through one pointer to the record array and one to the state (L-14).
+  - No hardware or wallet connector is built (L-07): an identity root on a device signs through the external-signing
+    package, whose format `rc-signing-package/0` is provisional (L-09).
+  - There is no Windows build (L-11), and `--json` output may change between alphas (L-12).
+- The `next-format` issues are requirements for later stages, not defects in this release.
 
 ## [0.5.0-alpha.6] - 2026-11-15
 
@@ -1151,7 +1173,8 @@ contributions, landed on top of that baseline.
 - **#12** — COMMONS.md review request from an external hub: the first outside use of the
   template and rubric.
 
-[Unreleased]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.6...next
+[Unreleased]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.7...next
+[0.5.0-alpha.7]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.6...v0.5.0-alpha.7
 [0.5.0-alpha.6]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.5...v0.5.0-alpha.6
 [0.5.0-alpha.5]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.4...v0.5.0-alpha.5
 [0.5.0-alpha.4]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.3...v0.5.0-alpha.4
