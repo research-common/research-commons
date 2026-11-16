@@ -88,7 +88,7 @@ func TestGoldenAPDUs(t *testing.T) {
 func TestChunkBoundaries(t *testing.T) {
 	p := mustPath(t, "m/44'/60'/7'/0/0") // 21 bytes encoded
 	first := 255 - 21 - 4
-	for _, n := range []int{0, 1, 150, 151, first - 1, first, first + 1, 255, 256, first + 255, first + 256, 1000, 4096, ledger.MaxMessage} {
+	for _, n := range []int{0, 1, 150, 151, first - 1, first, first + 1, 255, 256, first + 255, first + 256, 1000, 4096, 7652, 7653} {
 		msg := make([]byte, n)
 		for i := range msg {
 			msg[i] = byte('a' + i%26)
@@ -189,6 +189,7 @@ func TestStatusWords(t *testing.T) {
 		{"dashboard", func(f *ledgertest.App) { f.Name = "BOLOS" }, ledger.AppClosed, 0x6e01},
 		{"other app", func(f *ledgertest.App) { f.Name = "Bitcoin" }, ledger.AppClosed, 0x6e00},
 		{"heap", func(f *ledgertest.App) { f.MaxMessage = 1000 }, ledger.TooLong, 0x6a84},
+		{"review pending", func(f *ledgertest.App) { f.Pending = true }, ledger.Busy, 0x6901},
 		{"disconnect mid-stream", func(f *ledgertest.App) { f.DisconnectAt = 3 }, ledger.Disconnected, 0},
 	}
 	for _, c := range cases {
@@ -203,20 +204,24 @@ func TestStatusWords(t *testing.T) {
 			t.Fatalf("%s: signed", c.name)
 		}
 	}
-	// 0x6a80 after the last chunk is the app's page limit; on an earlier chunk it is bad data
-	if _, err := ledger.PersonalSign(lastChunk{sw: 0x6a80}, p, long); !ledger.IsSlug(err, ledger.TooLong) {
-		t.Fatalf("page limit: %v", err)
+	// 0x6a84 on the last chunk is the app's heap: too long; 0x6a80 anywhere is a bad request
+	if _, err := ledger.PersonalSign(lastChunk{sw: 0x6a84}, p, long); !ledger.IsSlug(err, ledger.TooLong) {
+		t.Fatalf("heap on the last chunk: %v", err)
 	}
-	if _, err := ledger.PersonalSign(fixed{resp: []byte{0x6a, 0x80}}, p, long); !ledger.IsSlug(err, ledger.BadData) {
-		t.Fatalf("bad data on the first chunk: %v", err)
+	if _, err := ledger.PersonalSign(lastChunk{sw: 0x6a80}, p, long); !ledger.IsSlug(err, ledger.BadRequest) {
+		t.Fatalf("bad data on the last chunk: %v", err)
 	}
 	// a message over the connector's bound is refused before anything is sent
 	f := ledgertest.New("sw")
 	if _, err := ledger.PersonalSign(f, p, make([]byte, ledger.MaxMessage+1)); !ledger.IsSlug(err, ledger.TooLong) || len(f.Received) != 0 {
-		t.Fatalf("over the bound: %v, %d sent", err, len(f.Received))
+		t.Fatalf("over the protocol bound: %v, %d sent", err, len(f.Received))
+	}
+	// no pre-send cap at the emulator's measured heap limit: the app decides (the fake has no heap limit here)
+	if _, err := ledger.PersonalSign(f, p, bytes.Repeat([]byte("a"), 7653)); err != nil || f.Signed != 1 {
+		t.Fatalf("7653 bytes: %v", err)
 	}
 	// other words
-	for sw, slug := range map[uint16]string{0x6980: ledger.Busy, 0x6a80: ledger.BadData, 0x6d00: ledger.AppClosed, 0x6511: ledger.AppClosed, 0x6f00: ledger.DeviceError} {
+	for sw, slug := range map[uint16]string{0x6980: ledger.Busy, 0x6901: ledger.Busy, 0x6a80: ledger.BadRequest, 0x6a84: ledger.TooLong, 0x6d00: ledger.AppClosed, 0x6511: ledger.AppClosed, 0x6f00: ledger.DeviceError} {
 		_, err := ledger.AppAndVersion(fixed{resp: []byte{byte(sw >> 8), byte(sw)}})
 		if !ledger.IsSlug(err, slug) {
 			t.Fatalf("sw %04x: %v", sw, err)

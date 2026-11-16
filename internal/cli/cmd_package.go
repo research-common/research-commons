@@ -53,7 +53,7 @@ func init() {
 		Flags: []Flag{
 			{Name: "package", Value: "file", Help: "the package written by --prepare; checked exactly as package show checks it, and refused, nothing written, when any derived member differs"},
 			{Name: "key", Value: "file", Help: "the key file (else $" + KeyEnv + "); its signer must be the package's signer"},
-			ledgerFlag, ledgerPathFlag, ledgerDeviceFlag,
+			ledgerFlag, ledgerPathFlag, ledgerDeviceFlag, ledgerTimeoutFlag,
 			{Name: "out", Value: "file|-", Help: "the new file to write the signature to (never overwritten); - (the default) writes the signature line to standard output and the summary to standard error"},
 			expectPAEFlag,
 			{Name: "dry-run", Help: "check the package and the key and print what would be signed; sign nothing, write nothing"},
@@ -69,7 +69,7 @@ func init() {
 			" With --ledger the package must be for eip191-secp256k1, the open app must be the Ethereum app (else exit 3, naming the open app), and the device's address at the path must be the package's signer (else exit 2); " +
 			"before the device is asked, standard error shows what it will display: the PAE's length, that it is shown as text starting \"DSSEv1 \", and the EIP-191 message hash the device shows when its \"display hash\" setting is on. " +
 			"You approve on the device; the signature is verified as every reader verifies it before it is written. A refusal on the device is exit 1; a locked device, a closed app, " +
-			"a message too long for the device, a disconnect or a timeout is exit 3. Every one writes nothing. --dry-run with --ledger checks the package, the app and the address and asks for no signature. " +
+			"a review already pending on the device, a message too long for the app, a refused request, a disconnect or a timeout (--ledger-timeout, default 10m) is exit 3. Every one writes nothing. --dry-run with --ledger checks the package, the app and the address and asks for no signature. " +
 			"The Ledger connector is the only hardware or wallet connector; --complete, identity and publish never open a device.",
 		Run: keySignCmd})
 }

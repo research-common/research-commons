@@ -39,11 +39,13 @@ type App struct {
 	Name, Version string
 	// Locked: every APDU answers 0x5515.
 	Locked bool
+	// Pending: a review is on the device's screen; every APDU answers 0x6901 until the user decides.
+	Pending bool
 	// Reject: the user refuses the review (0x6985).
 	Reject bool
 	// Form is the encoding of an approved signature.
 	Form SigForm
-	// MaxMessage: a message longer than this is refused with 0x6a84 on the first chunk (the app's heap); 0 is no limit.
+	// MaxMessage: a message longer than this is refused with 0x6a84 after its last chunk (the app's heap); 0 is no limit.
 	MaxMessage int
 	// DisconnectAt: the exchange with this 1-based index fails as a disconnect, and every one after it; 0 is never.
 	DisconnectAt int
@@ -98,6 +100,9 @@ func (a *App) Exchange(apdu []byte) ([]byte, error) {
 	}
 	if a.Locked {
 		return sw(ledger.SWLocked), nil
+	}
+	if a.Pending {
+		return sw(ledger.SWReviewPending), nil
 	}
 	if len(apdu) < 5 || int(apdu[4]) != len(apdu)-5 {
 		return sw(ledger.SWWrongDataLength), nil
@@ -182,9 +187,6 @@ func (a *App) sign(p1 byte, data []byte) []byte {
 			return sw(ledger.SWIncorrectData)
 		}
 		n := int(rest[0])<<24 | int(rest[1])<<16 | int(rest[2])<<8 | int(rest[3])
-		if a.MaxMessage > 0 && n > a.MaxMessage {
-			return sw(ledger.SWInsufficientMemory)
-		}
 		a.signing, a.path, a.want, a.msg = true, p, n, nil
 		data = rest[4:]
 	case 0x80:
@@ -204,6 +206,9 @@ func (a *App) sign(p1 byte, data []byte) []byte {
 		return sw(ledger.SWOK)
 	}
 	a.signing = false
+	if a.MaxMessage > 0 && a.want > a.MaxMessage {
+		return sw(ledger.SWInsufficientMemory) // as the app: after the last chunk, before any review
+	}
 	if a.Reject {
 		return sw(ledger.SWRejected)
 	}

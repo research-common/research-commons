@@ -1,9 +1,11 @@
 package cli
 
 import (
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"io"
+	"time"
 
 	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/ledger"
@@ -46,18 +48,30 @@ var (
 	ledgerDeviceFlag = Flag{Name: "ledger-device", Value: "device", Check: ledger.CheckSpec,
 		Help: "which device: a hidraw node (/dev/hidrawN, Linux) or an emulator's APDU port (tcp:<host>:<port>, no hardware); else $" + LedgerDeviceEnv + ", else the one Ledger attached by USB"}
 	ledgerConfirmFlag = Flag{Name: "ledger-confirm", Help: "show the address on the device and wait for you to confirm it there (recommended once, before an identity's inception)"}
+	ledgerTimeoutFlag = Flag{Name: "ledger-timeout", Value: "duration", Check: checkLedgerTimeout,
+		Help: "how long to wait for you to approve or reject on the device (a Go duration such as 90s or 10m; 1s to 1h); default 10m. Every other exchange with the device waits 10s"}
 )
+
+func checkLedgerTimeout(v string) error {
+	d, err := time.ParseDuration(v)
+	if err != nil || d < time.Second || d > time.Hour {
+		return errors.New("a duration from 1s to 1h, such as 90s or 10m")
+	}
+	return nil
+}
 
 const ledgerHelp = " With --ledger the key is a Ledger device running the Ethereum app (tested against an in-process fake of the app only: " +
 	"every device model is an untested target), opened over USB on Linux (hidraw) or as an emulator (tcp:<host>:<port>); " +
 	"on other systems the USB connector is not built. --ledger-path names the key (m/44'/60'/<account>'/0/<index>, no default): " +
-	"use an account that never holds funds. --ledger and --key are exclusive."
+	"use an account that never holds funds. Identity PAEs are typically 300 to 800 bytes; the Ethereum app 1.23 accepts about 7.6 KB (less when a byte is not printable). " +
+	"While a review is pending on the device every other request is refused (ledger-busy): finish or reject it first. --ledger and --key are exclusive."
 
 // ledgerOpts is what an invocation says about the device; nil when --ledger is not given.
 type ledgerOpts struct {
 	path    ledger.Path
 	device  string // "" for the one attached
 	confirm bool
+	wait    time.Duration // how long the device may wait for the user
 }
 
 // ledgerOptions reads --ledger and its options. A device option without --ledger, --ledger without a path, or
@@ -67,11 +81,12 @@ func ledgerOptions(c *Ctx) (*ledgerOpts, *Problem) {
 	pathS, hasPath := c.Flag("ledger-path")
 	dev, hasDev := c.Flag("ledger-device")
 	_, confirm := c.Flag("ledger-confirm")
+	waitS, hasWait := c.Flag("ledger-timeout")
 	if !on {
 		for _, f := range []struct {
 			name string
 			has  bool
-		}{{"ledger-path", hasPath}, {"ledger-device", hasDev}, {"ledger-confirm", confirm}} {
+		}{{"ledger-path", hasPath}, {"ledger-device", hasDev}, {"ledger-confirm", confirm}, {"ledger-timeout", hasWait}} {
 			if f.has {
 				return nil, conflicting(f.name, "--"+f.name+" goes with --ledger", "it names the device's key or the device", "add --ledger, or drop --"+f.name)
 			}
@@ -95,7 +110,11 @@ func ledgerOptions(c *Ctx) (*ledgerOpts, *Problem) {
 			}
 		}
 	}
-	return &ledgerOpts{path: p, device: dev, confirm: confirm}, nil
+	wait := ledger.UserTimeout
+	if hasWait {
+		wait, _ = time.ParseDuration(waitS) // checked by the flag
+	}
+	return &ledgerOpts{path: p, device: dev, confirm: confirm, wait: wait}, nil
 }
 
 // ledgerProblem is a device failure as a problem: a refusal on the device is exit 1 (the user checked and said no),
@@ -132,7 +151,9 @@ func ledgerProblem(err error, what string) *Problem {
 	case ledger.BadDeviceSpec:
 		p.Title, p.Next, p.Exit, p.Class = "not a device", "give --ledger-device /dev/hidrawN or tcp:<host>:<port>", ExitDidNotStart, refusal.Intrinsic
 	case ledger.Busy:
-		p.Title, p.Next = "the app is busy", "finish or cancel what the device shows, then run the command again"
+		p.Title, p.Next = "the device is busy", "finish or reject the pending review on the device, then run the command again"
+	case ledger.BadRequest:
+		p.Title, p.Next = "the Ethereum app refused the request", "this is a fault in the connector or an app it does not know: report it with the app version, then sign with a key file or with package show --pae-out"
 	default:
 		p.Title, p.Next = "the device refused the request", "check the device's screen, update the Ethereum app, then run the command again"
 	}
@@ -174,7 +195,7 @@ func openLedger(c *Ctx, o *ledgerOpts, confirm bool, what string) (*ledgerSessio
 			Detail: "the open app is not the Ethereum app (its name is in peer_text); " + what, Next: "close it and open the Ethereum app, then run the command again",
 			Peer: s.app.Name + " " + s.app.Version, Exit: ExitCouldNot}
 	}
-	if s.address, err = ledger.Address(d, o.path, confirm); err != nil {
+	if s.address, err = ledger.AddressWait(d, o.path, confirm, o.wait); err != nil {
 		d.Close()
 		return nil, ledgerProblem(err, what)
 	}
@@ -219,7 +240,8 @@ func keyShowLedger(c *Ctx, o *ledgerOpts) (*Obj, int, error) {
 // eip191Display is what the device shows for the PAE and what to compare it with.
 func eip191Display(st *wire.Statement) *Obj {
 	pae := st.SignedString
-	o := newObj().set("pae_bytes", intV(int64(len(pae))))
+	h := sha256.Sum256(pae)
+	o := newObj().set("pae_bytes", intV(int64(len(pae)))).set("pae_sha256", refV(hex.EncodeToString(h[:])))
 	if ledger.MessageDisplay(pae) == "text" {
 		head := string(pae)
 		if len(head) > 40 {
@@ -230,7 +252,7 @@ func eip191Display(st *wire.Statement) *Obj {
 		o.set("message", textV("shown as hex (0x…): the bytes are not all printable"))
 	}
 	o.set("message_hash", refV("0x"+hex.EncodeToString(sig.EIP191Hash(pae)))).
-		set("message_hash_note", textV("the device shows this hash when its \"display hash\" setting is on: compare it before approving"))
+		set("message_hash_note", textV("the device shows this hash only when the Ethereum app's \"Transaction hash\" setting is enabled (it is off by default): enable it and compare before approving"))
 	return o
 }
 
@@ -245,7 +267,7 @@ func keySignLedger(c *Ctx, o *ledgerOpts, st *wire.Statement, path, out string, 
 	}
 	if len(st.SignedString) > ledger.MaxMessage {
 		return nil, 0, ledgerProblem(&ledger.Error{Slug: ledger.TooLong,
-			Detail: "the PAE is " + itoa(len(st.SignedString)) + " bytes; the connector sends at most " + itoa(ledger.MaxMessage) + " to the device"}, none)
+			Detail: "the PAE is " + itoa(len(st.SignedString)) + " bytes; the Ethereum app's protocol carries at most " + itoa(ledger.MaxMessage)}, none)
 	}
 	s, prob := openLedger(c, o, false, none)
 	if prob != nil {
@@ -278,7 +300,7 @@ func keySignLedger(c *Ctx, o *ledgerOpts, st *wire.Statement, path, out string, 
 		io.WriteString(c.Env.Stderr, human(pre.set("device_shows", show).
 			set("signing", textV("review the message on the device and approve it there; reject it if anything differs"))))
 	}
-	rsv, err := ledger.PersonalSign(s.dev, o.path, st.SignedString)
+	rsv, err := ledger.PersonalSignWait(s.dev, o.path, st.SignedString, o.wait)
 	if err != nil {
 		return nil, 0, ledgerProblem(err, none)
 	}

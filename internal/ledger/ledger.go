@@ -30,8 +30,8 @@ type Timeouter interface {
 
 // Exchange timeouts: an answer the device computes, and one that waits for the user to review and approve.
 var (
-	ShortTimeout = 15 * time.Second
-	UserTimeout  = 5 * time.Minute
+	ShortTimeout = 10 * time.Second
+	UserTimeout  = 10 * time.Minute
 )
 
 // Device is an open device: its transport, what is known of it, and how to release it.
@@ -82,8 +82,8 @@ const (
 	AppClosed      = "ledger-app-closed"       // no app is open (the dashboard answered)
 	WrongApp       = "ledger-wrong-app"        // another app is open (the caller decides, from the app name)
 	TooLong        = "ledger-message-too-long" // the app cannot hold or show a message this long
-	Busy           = "ledger-busy"             // the app is in the middle of another operation
-	BadData        = "ledger-bad-data"         // the app refused the request's data
+	Busy           = "ledger-busy"             // a review is already pending on the device, or the app is mid-request
+	BadRequest     = "ledger-bad-request"      // the app refused the request's data (a connector bug)
 	BadResponse    = "ledger-bad-response"     // the device's answer is malformed
 	DeviceError    = "ledger-device-error"     // any other status word
 	NoDevice       = "ledger-no-device"        // no device was found, or the one named cannot be opened
@@ -101,6 +101,7 @@ const (
 	SWRejected           = 0x6985 // conditions not satisfied: the user refused
 	SWLocked             = 0x5515
 	SWCommandNotAllowed  = 0x6980
+	SWReviewPending      = 0x6901 // a review is on the device's screen: every APDU gets this until the user decides
 	SWIncorrectData      = 0x6a80
 	SWInsufficientMemory = 0x6a84
 	SWWrongDataLength    = 0x6a87
@@ -128,12 +129,13 @@ func swError(sw uint16, what string) *Error {
 	case SWInvalidCLA, SWInvalidCLA01, SWInvalidINS, SWNoApp:
 		e.Slug, e.Detail = AppClosed, "the Ethereum app is not open on the device"
 	case SWInsufficientMemory:
-		e.Slug, e.Detail = TooLong, "the app has not enough memory to "+what
+		e.Slug, e.Detail = TooLong, "the app has not enough memory to "+what+" (the message is too long for it)"
+	case SWReviewPending:
+		e.Slug, e.Detail = Busy, "a review is already pending on the device"
 	case SWCommandNotAllowed:
 		e.Slug, e.Detail = Busy, "the app is busy with another request"
 	case SWIncorrectData:
-		e.Slug, e.Detail = BadData, "the app refused the data of the request to "+what+
-			" (it also answers this for a message needing more review pages than it can show)"
+		e.Slug, e.Detail = BadRequest, "the app refused the data of the request to "+what+" (a fault in this connector: please report it)"
 	default:
 		e.Slug, e.Detail = DeviceError, "the device refused the request to "+what
 	}

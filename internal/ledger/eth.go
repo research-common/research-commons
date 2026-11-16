@@ -3,7 +3,6 @@ package ledger
 import (
 	"bytes"
 	"encoding/hex"
-	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -32,12 +31,12 @@ const (
 // EthereumApp is the name the Ethereum app reports.
 const EthereumApp = "Ethereum"
 
-// MaxMessage is the longest message this connector sends to the Ethereum app. The app keeps the whole message and a
-// display copy of it in a 16 KiB heap (app-ethereum 1.23.0, src/utils/mem_utils.c) and refuses, after the last chunk,
-// a message needing more than 255 review pages; a longer message is refused here before anything is sent. The app
-// answers a message it cannot hold or show with a status word, which is mapped to the same failure, so the bound is
-// a courtesy, not the check.
-const MaxMessage = 7000
+// MaxMessage is the protocol bound on a personal-sign message: the app reads the length as 4 bytes but keeps it in a
+// 16-bit counter. A longer message is refused before anything is sent. What the app actually holds and shows is less
+// and depends on its heap (app-ethereum 1.23.0 on the emulator: about 7.6 KB of printable ASCII, about 5.1 KB with
+// any other byte, which turns the display to hex); the app refuses a longer one after the last chunk with 0x6a84,
+// mapped to TooLong. Identity PAEs are typically 300 to 800 bytes.
+const MaxMessage = 65535
 
 // App is what the device reports about the open app.
 type App struct {
@@ -112,9 +111,14 @@ func AppAndVersion(t Transport) (App, error) {
 // the user (a refusal is a Rejected failure). The address is recomputed from the public key the device returns and
 // compared with the text it sent beside it; it is returned as 0x and 40 lowercase hex.
 func Address(t Transport, path Path, confirm bool) (string, error) {
+	return AddressWait(t, path, confirm, UserTimeout)
+}
+
+// AddressWait is Address with the time the device may wait for the user when confirm.
+func AddressWait(t Transport, path Path, confirm bool, wait time.Duration) (string, error) {
 	p1, to := byte(p1NoConfirm), ShortTimeout
 	if confirm {
-		p1, to = p1Confirm, UserTimeout
+		p1, to = p1Confirm, wait
 	}
 	data, err := exchange(t, to, apdu(claEth, insAddress, p1, 0, path.encode()), "show the address")
 	if err != nil {
@@ -184,24 +188,24 @@ func SignAPDUs(path Path, msg []byte) [][]byte {
 // on the device. It returns the signature in the stored encoding (r ‖ s ‖ v, low s, v 27 or 28): the device
 // answers v ‖ r ‖ s, which is reordered and canonicalised here. It does not verify the signature: the caller does.
 func PersonalSign(t Transport, path Path, msg []byte) ([]byte, error) {
+	return PersonalSignWait(t, path, msg, UserTimeout)
+}
+
+// PersonalSignWait is PersonalSign with the time the last chunk's answer may wait for the user's review (every other
+// exchange is answered at once and gets ShortTimeout).
+func PersonalSignWait(t Transport, path Path, msg []byte, wait time.Duration) ([]byte, error) {
 	if len(msg) > MaxMessage {
-		return nil, &Error{Slug: TooLong, Detail: "the message is " + itoa(len(msg)) + " bytes; this connector sends at most " + itoa(MaxMessage)}
+		return nil, &Error{Slug: TooLong, Detail: "the message is " + itoa(len(msg)) + " bytes; the app's protocol carries at most " + itoa(MaxMessage)}
 	}
 	reqs := SignAPDUs(path, msg)
 	var data []byte
 	for i, a := range reqs {
 		to := ShortTimeout
 		if i == len(reqs)-1 {
-			to = UserTimeout // the last chunk's answer waits for the user's review
+			to = wait // the last chunk's answer waits for the user's review
 		}
 		d, err := exchange(t, to, a, "sign the message")
 		if err != nil {
-			var e *Error
-			if i == len(reqs)-1 && errors.As(err, &e) && e.SW == SWIncorrectData {
-				// after the last chunk the app has the whole message; it refuses one needing more review pages than
-				// it can show (app-ethereum: ui_191_message_fits) with this word
-				return nil, &Error{Slug: TooLong, SW: e.SW, Detail: "the app refused the whole message: it needs more review pages than the app can show"}
-			}
 			return nil, err
 		}
 		if i < len(reqs)-1 && len(d) != 0 {
