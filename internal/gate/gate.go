@@ -963,14 +963,14 @@ func resolverChecks(r *Result, res *resolve.Resolver, pol *Policy) {
 			bounded = "; " + BoundedRefusal
 		}
 		switch {
-		case s.Comparison == "flagged" && s.AsCaptured:
+		case s.Comparison == resolve.SeriesFlagged && s.AsCaptured:
 			// the members' own asserted states put the boundary earlier: refusable on the receiver's evidence
 			r.refuse(&refusal.Refusal{Class: refusal.Policy, Reason: HubRules + ": series.refuse_premature_freeze",
 				Detail: rf.Detail + "; the edition stays a valid statement elsewhere; " + asCaptured(s, AsCapturedRefusal, AsHeldRefusal) + bounded}, "object "+r.Path)
-		case s.Comparison == "flagged":
+		case s.Comparison == resolve.SeriesFlagged:
 			r.refuse(&refusal.Refusal{Class: refusal.Policy, Reason: HubRules + ": series.refuse_premature_freeze",
 				Detail: rf.Detail + "; the edition stays a valid statement elsewhere; " + ReaderRecheck + bounded}, "object "+r.Path)
-		case s.Comparison == "agrees" && s.AsCaptured:
+		case s.Comparison == resolve.SeriesAgrees && s.AsCaptured:
 			r.Verdict, r.Scope = Undecided, "object "+r.Path
 			r.label(LabelSeriesUnknown, asCaptured(s, "could not check (as captured): ", "could not check (as held): ")+s.Line()+"; "+
 				asCaptured(s, AsCapturedUndecided, AsHeldUndecided))

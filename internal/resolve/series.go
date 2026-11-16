@@ -165,9 +165,14 @@ type Series struct {
 	// boundary is shown `as held`; one asserted state makes it the weaker `as captured, not re-checked`.
 	AsHeld      bool
 	Provisional int
-	// Comparison is "agrees", "flagged" (declared later than computed), "not comparable", or "unchecked".
-	Comparison string
-	Segments   []Segment
+	// Comparison is the series boundary comparison, a typed state with its own closed set (claims-model note §8,
+	// §13): SeriesAgrees, SeriesFlagged (declared later than computed), SeriesNotComparable or SeriesUnchecked.
+	// It compares a declaration with the members' computed boundary; it is not a rule evaluation (ok, fail,
+	// unchecked), and a freeze policy, not the comparison, decides what a flag costs. ComparisonWhy is the
+	// reason, in this tool's words (never peer text).
+	Comparison    string
+	ComparisonWhy string
+	Segments      []Segment
 	// Revised lists every authorized edition of the resource that rewrites a segment below its predecessor's
 	// declared boundary, with the segments it dropped or added there.
 	Revised map[string][]string
@@ -368,9 +373,9 @@ func (s *Series) basis() string {
 	return "asserted states at capture"
 }
 
-// mark is the boundary's not-re-checked mark: `as held` when every such state was read from held bytes, else
+// Mark is the boundary's not-re-checked mark: `as held` when every such state was read from held bytes, else
 // `as captured, not re-checked`.
-func (s *Series) mark() string {
+func (s *Series) Mark() string {
 	if s.AsHeld {
 		return BoundaryAsHeld
 	}
@@ -385,21 +390,31 @@ func (s *Series) boundNote() string {
 	}
 	n := "at most " + s.Bound.String() + " (" + word + " " + strings.Join(shortMembers(s.Unplaced), ", ") + " not comparable)"
 	if s.AsCaptured {
-		n += " " + s.mark()
+		n += " " + s.Mark()
 	}
 	return n
 }
 
+// The series boundary comparison's closed set (claims-model note §8, §13). It is its own set, not the rule triple:
+// `flagged` and `agrees` compare a declaration with a computed boundary and are not a rule's `fail` and `ok`;
+// `unchecked` and `not comparable` are the words the table already holds for a comparison that could not run.
+const (
+	SeriesAgrees        = "agrees"
+	SeriesFlagged       = "flagged"
+	SeriesNotComparable = "not comparable"
+	SeriesUnchecked     = "unchecked"
+)
+
 func (s *Series) compare() {
 	switch {
 	case s.Declared.Unit == "":
-		s.Comparison = "unchecked"
+		s.Comparison, s.ComparisonWhy = SeriesUnchecked, "no frozen_before declared"
 		s.Explain = append(s.Explain, "no frozen_before declared")
 	case s.ComputedState != "computed" && s.Bound.Unit != "":
 		// the boundary is unknown but bounded above: only a declaration later than the bound is decided
-		s.Comparison = "unchecked"
+		s.Comparison, s.ComparisonWhy = SeriesUnchecked, "the members' finality could not be checked, so the boundary is only bounded above; the declaration is not later than that bound"
 		if c, ok := s.Declared.compare(s.Bound); ok && c > 0 {
-			s.Comparison = "flagged"
+			s.Comparison, s.ComparisonWhy = SeriesFlagged, "declared later than the bound the members' finality allows, whatever the unplaced segments' states"
 			s.Explain = append(s.Explain, "declared boundary is later than the members' finality boundary can be: "+s.boundNote()+
 				"; whatever the unplaced segments' states, the earliest provisional segment is before the declared boundary")
 			if s.AsCaptured {
@@ -407,24 +422,33 @@ func (s *Series) compare() {
 			}
 		}
 	case s.ComputedState != "computed":
-		s.Comparison = "unchecked"
+		s.Comparison = SeriesUnchecked
+		if s.ComputedState == "no segments" {
+			s.ComparisonWhy = "the edition has no segments to compute a boundary from"
+		} else {
+			s.ComparisonWhy = "the members' finality could not be checked"
+			if s.NoRecheck() {
+				s.ComparisonWhy += ": " + NotRechecked
+			}
+		}
 	case s.Declared.Unit != s.Computed.Unit:
-		s.Comparison = "not comparable"
+		s.Comparison = SeriesNotComparable
+		s.ComparisonWhy = fmt.Sprintf("declared in %s, the members' rules compute a %s: never converted", s.Declared.Unit, s.Computed.Unit)
 		s.Explain = append(s.Explain, fmt.Sprintf("declared in %s, members' rules compute a %s: not converted", s.Declared.Unit, s.Computed.Unit))
 	default:
 		c, ok := s.Declared.compare(s.Computed)
 		switch {
 		case !ok:
-			s.Comparison = "not comparable"
+			s.Comparison, s.ComparisonWhy = SeriesNotComparable, "run labels carry no order this reader knows"
 			s.Explain = append(s.Explain, "run labels carry no order this reader knows")
 		case c > 0:
-			s.Comparison = "flagged"
+			s.Comparison, s.ComparisonWhy = SeriesFlagged, "declared later than the members' finality boundary"
 			s.Explain = append(s.Explain, "declared boundary is later than the members' finality boundary")
 			if s.AsCaptured {
 				s.Explain = append(s.Explain, "the members' boundary is their own "+s.basis()+": the members themselves do not claim the declared boundary")
 			}
 		default:
-			s.Comparison = "agrees"
+			s.Comparison, s.ComparisonWhy = SeriesAgrees, "declared no later than the members' finality boundary"
 			if s.AsCaptured {
 				s.Explain = append(s.Explain, "the members' boundary is their "+s.basis()+", not re-checked at the source: the declaration is not confirmed (I4)")
 			}
@@ -456,7 +480,7 @@ func (s *Series) Line() string {
 	case "computed":
 		comp = "members final to " + s.Computed.String()
 		if s.AsCaptured {
-			comp += " " + s.mark()
+			comp += " " + s.Mark()
 		}
 		if s.Provisional > 0 {
 			comp += " (" + plural(s.Provisional, "segment") + " provisional)"
@@ -471,11 +495,11 @@ func (s *Series) Line() string {
 	}
 	line := decl + " · " + comp
 	switch {
-	case s.Comparison == "flagged" && s.ComputedState != "computed":
+	case s.Comparison == SeriesFlagged && s.ComputedState != "computed":
 		line += " · FLAGGED: declared later than the members' bound"
-	case s.Comparison == "flagged":
+	case s.Comparison == SeriesFlagged:
 		line += " · FLAGGED: declared later than computed"
-	case s.Comparison == "not comparable":
+	case s.Comparison == SeriesNotComparable:
 		line += " · not comparable"
 	}
 	return line
@@ -526,7 +550,7 @@ type RequireDeclaredNotAfterComputed struct{}
 
 // CheckSeries implements FreezePolicy.
 func (RequireDeclaredNotAfterComputed) CheckSeries(s *Series) *refusal.Refusal {
-	if s.Comparison == "agrees" && !s.AsCaptured {
+	if s.Comparison == SeriesAgrees && !s.AsCaptured {
 		return nil
 	}
 	return &refusal.Refusal{Class: refusal.Policy, Reason: PrematureFreeze,

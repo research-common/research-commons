@@ -598,8 +598,8 @@ func TestDepartureCheckIsTyped(t *testing.T) {
 	}
 }
 
-// proseOutcome matches a rule or departure outcome word inside a string.
-var proseOutcome = regexp.MustCompile(`\b(ok|fail|unchecked|conforms|departed)\b`)
+// proseOutcome matches a rule or departure or series boundary outcome word inside a string.
+var proseOutcome = regexp.MustCompile(`\b(ok|fail|unchecked|conforms|departed|agrees|flagged)\b`)
 
 // proseOutcomeAllowed are the members that may carry an outcome word in running prose: a tool-worded reason
 // that sits beside a typed state (the readiness's `why`), a referent re-check's history line (the referent's
@@ -611,7 +611,7 @@ var proseOutcomeAllowed = map[string]bool{".exit_name": true, ".task.readiness[]
 // is not a token member carries a rule or departure outcome word in prose: an evaluation that was printed as a
 // sentence instead of a `state` member shows up here by its path.
 func TestNoProseOutcomes(t *testing.T) {
-	conformance.Partial(t, "C-core-132", "no evaluation outcome is printed only as prose in the task and resource worlds (this test); the case is Covered by TestClosedVocabulary")
+	conformance.Partial(t, "C-core-132", "no evaluation or comparison outcome (rule, departure check, series boundary) is printed only as prose in the task, resource and series worlds (this test); the case is Covered by TestClosedVocabulary")
 	var walk func(v canon.Value, path string, cmd string)
 	walk = func(v canon.Value, path, cmd string) {
 		switch x := v.(type) {
@@ -632,10 +632,19 @@ func TestNoProseOutcomes(t *testing.T) {
 	}
 	w, r := taskWorld(t)
 	w2, refs := resourceWorld(t)
-	for _, wr := range []struct {
+	// the series world: every state of the series boundary comparison (claims-model note §13)
+	worlds := []struct {
 		w    *world
 		refs []string
-	}{{w, r.all()}, {w2, refs}} {
+	}{{w, r.all()}, {w2, refs}}
+	for _, sc := range seriesCases() {
+		sw, g := seriesWorld(t, sc.states, sc.frozen, sc.pin)
+		worlds = append(worlds, struct {
+			w    *world
+			refs []string
+		}{sw, []string{g}})
+	}
+	for _, wr := range worlds {
 		for _, ref := range wr.refs {
 			for _, cmd := range []string{"show", "verify", "explain"} {
 				walk(withoutBodies(jsonOf(t, wr.w.run(cmd, ref, "--json"))), "", cmd+" "+ref[:12])

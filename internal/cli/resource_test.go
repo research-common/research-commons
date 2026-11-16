@@ -388,7 +388,7 @@ func resourceWorld(t *testing.T) (*world, []string) {
 // also on the human surface, one status_scope footer, the same exit in both forms, and every id show cites by
 // `statement`/`statements` among explain's statements (each with its signer) unless it is held by nobody.
 func TestResourceSurfaceSweep(t *testing.T) {
-	conformance.Partial(t, "C-core-132", "the resource surface (show, verify, explain of a resource, an edition, an approval) and the corroboration status print only table tokens; a rule evaluation is one typed state member; the case's whole sweep is TestClosedVocabulary")
+	conformance.Partial(t, "C-core-132", "the resource surface (show, verify, explain of a resource, an edition, an approval) and the corroboration status print only table tokens; a rule evaluation is one typed state member, and a series boundary comparison its own (TestSeriesBoundaryIsTyped); the case's whole sweep is TestClosedVocabulary")
 	w, refs := resourceWorld(t)
 	sweepRefs(t, w, refs)
 }

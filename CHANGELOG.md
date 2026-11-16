@@ -16,6 +16,15 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   build tags CI runs, the scan treats a test file whose build expression those tags satisfy as run, and a test keeps the
   list and `go.yml` in agreement in both directions. C-exec-10, C-exec-11 and C-exec-12 read covered instead of
   partial.
+- **A series boundary comparison is a typed state of its own.** `show` and `explain` of a series print a
+  `series_boundary` member: `state` (`agrees`, `flagged`, `not comparable` or `unchecked`, a closed set of its own:
+  the comparison of a declared `frozen_before` with the boundary the members' finality rules compute, which is not a
+  rule evaluation) beside a `why`, the declared and computed boundaries, and `basis` where the computed boundary rests
+  on states the members asserted at capture. A `pull` or `hub check` row for a series edition carries the same member
+  beside its labels. `agrees` and `flagged` join the table of state tokens; `flagged` changes no authorization (a
+  freeze policy of the reader's decides what it costs). The read commands now judge a series' segments under the
+  source profiles the store-root policy pins, as `pull` does, so a series boundary no longer reads `unchecked` there
+  when a pinned profile can place its segments. `--json` shape change, within the alpha's stated stability.
 - **A departure check is a typed state, and every rule evaluation prints as one.** `explain` of a task prints a
   submission's `departure_check` as an object, `state` (`conforms`, `departed`, `unchecked` or `not comparable`, the
   closed set of the departure check, which is a comparison of a disclosure with a declaration and not a rule) beside

@@ -767,7 +767,8 @@ immutable editions.
   the unit the members' finality rules use (a date, a block height, a settlement run). Where
   segments carry finality rules (§5.3.1), a reader computes the members' finality boundary and shows both:
   "frozen_before 2025-06-01 (declared) · members final to 2025-04-01 (2 segments provisional)". A declared
-  boundary later than the computed one is flagged; `unchecked` when members carry no rule; `not comparable`
+  boundary later than the computed one is `flagged` and one no later is `agrees` (a reader's comparison, a typed
+  state of its own closed set with its reason, §13); `unchecked` when members carry no rule; `not comparable`
   when the declared unit differs from the computed one (never converted). The computed boundary is the
   position of the earliest segment that is not final, every segment before it being final; when every
   segment is final, it is the end of the last segment. It is `unchecked` when any segment carries no finality
@@ -944,7 +945,11 @@ timestamp precedes the line it chains after is flagged incoherent, and its bound
   evaluation (edition rules, pre-pin checks, rubric criteria) is one of `ok`, `fail`, `unchecked`. A departure
   check (§9.4) compares a disclosure with a declaration and is not a rule: it reports its own closed set,
   `conforms`, `departed`, `unchecked` or `not comparable`. `departed` is not a failed rule and moves no grade
-  (I6). Each evaluation is printed as a typed member (a `state` token beside its `why`), never only as prose.
+  (I6). A series boundary comparison (§8) likewise compares a declaration (`frozen_before`) with a computed
+  boundary and is not a rule: it reports its own closed set, `agrees`, `flagged`, `not comparable` or
+  `unchecked`; `flagged` is not a failed rule and changes no authorization (what it costs is a reader's freeze
+  policy, I8). Each evaluation and each comparison is printed as a typed member (a `state` token beside its
+  `why`), never only as prose.
 - **Retraction is display.** A `retracts` statement is shown wherever the artifact is; it does not stop
   anyone serving the bytes. Superseded snapshots are often the evidence for their own erratum. A hub that
   must stop serving something does so under its own admission policy (I9).

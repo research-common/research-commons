@@ -734,7 +734,7 @@ func TestPrematureFreeze(t *testing.T) {
 	res := h.check("main", resolve.WithSegments(f))
 	refusedAs(t, res, ep, refusal.Policy, gate.HubRules+": series.refuse_premature_freeze")
 	r := verdict(t, res, ep)
-	if r.Series == nil || r.Series.Comparison != "flagged" || !strings.Contains(r.Refusal.Detail, "scope series edition") || res.Exit() != 1 {
+	if r.Series == nil || r.Series.Comparison != resolve.SeriesFlagged || r.Series.ComparisonWhy == "" || !strings.Contains(r.Refusal.Detail, "scope series edition") || res.Exit() != 1 {
 		t.Fatalf("%v", r.Refusal)
 	}
 	if !strings.Contains(r.Refusal.Detail, gate.ReaderRecheck) {

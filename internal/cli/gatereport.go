@@ -66,6 +66,13 @@ func gateReport(rep *gate.Report) *Obj {
 			row.setJSON("completeness", co)
 			row.setHuman("completeness_state", co.get("state"))
 		}
+		if x.Series != nil {
+			// the receiver's comparison of the edition's declared boundary with its members' computed one: the same
+			// typed state `show` prints on the series resource, on refused, undecided and labelled rows alike
+			so := seriesBoundaryObj(x.Series, false)
+			row.setJSON("series_boundary", so)
+			row.setHuman("series_boundary_state", so.get("state"))
+		}
 		if x.Actor != nil {
 			// the same member `show` prints for an identity statement; a label only (hub check), never a verdict
 			a := newObj().set("identity", refV(x.Actor.Identity)).set("grant", refV(x.Actor.Grant)).set("state", tokV(tok(x.Actor.State)))

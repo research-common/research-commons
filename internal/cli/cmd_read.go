@@ -52,7 +52,9 @@ func viewOf(c *Ctx) (*view, error) {
 		return nil, err
 	}
 	if profiles != nil {
-		opts = append(opts, resolve.WithFinalityRules(*profiles))
+		// the same pinned profiles judge a series' segments as pull judges them: with none, a segment's state is not
+		// re-checked and a series boundary is unchecked (never read as agreeing)
+		opts = append(opts, resolve.WithFinalityRules(*profiles), resolve.WithSegments(resolve.ProfileSegments{Rules: *profiles}))
 	}
 	tv := timeVerifierFor(c)
 	if tv.View != nil {

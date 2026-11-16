@@ -142,6 +142,41 @@ func (v *view) resourceObj(res *resolve.Resource, full bool) *Obj {
 		if c, ok := v.r.Completeness(res.ID, ""); ok && c.Declared {
 			o.set("completeness", completenessObj(c, full))
 		}
+		if res.Type == "series" {
+			if sr, ok := v.r.Series(res.ID, ""); ok {
+				o.set("series_boundary", seriesBoundaryObj(sr, full))
+			}
+		}
+	}
+	return o
+}
+
+// seriesBoundaryObj is the receiver's comparison of a series edition's declared boundary (`frozen_before`) with
+// the boundary its members' finality rules compute (claims-model note §8; C-core-104, C-core-132). It is a typed
+// `state` of its own closed set, `agrees`, `flagged`, `not comparable` or `unchecked` (a comparison, not a rule
+// evaluation: §13), beside the tool's `why`; the declaration and the computed boundary are carried as values, and a
+// boundary resting on states the members asserted at capture says so (`basis`). It changes no authorization and no
+// exit by itself: a freeze policy of the reader's decides what a flag costs (I6, I8).
+func seriesBoundaryObj(s *resolve.Series, full bool) *Obj {
+	o := newObj().set("state", tokV(tok(s.Comparison))).set("why", textV(s.ComparisonWhy))
+	if s.Declared.Unit != "" {
+		o.set("declared", peerV(s.Declared.String()))
+	}
+	switch {
+	case s.ComputedState == "computed":
+		o.set("members_final_to", peerV(s.Computed.String()))
+		if s.Provisional > 0 {
+			o.set("provisional_segments", intV(int64(s.Provisional)))
+		}
+	case s.Bound.Unit != "":
+		o.set("members_final_at_most", peerV(s.Bound.String()))
+		o.set("unplaced_segments", refs(s.Unplaced...))
+	}
+	if s.AsCaptured {
+		o.set("basis", textV(s.Mark()))
+	}
+	if full && len(s.Explain) > 0 {
+		o.set("reasoning", texts(s.Explain...))
 	}
 	return o
 }

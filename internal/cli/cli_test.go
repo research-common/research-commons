@@ -189,7 +189,8 @@ func TestClosedVocabulary(t *testing.T) {
 	// table, JSON and human agree); the rule evaluations are typed `state` members on every surface that prints one,
 	// each checked where the surface is built: the resource view and membership (TestResourceSurfaceSweep), the task
 	// section's conditions and departure checks (TestTaskSurfaceSweep, TestDepartureCheckIsTyped), the pre-pin check
-	// (TestPublishPrePin) and the gate rows (TestGateRuleOutcomeIsTyped, TestGateCompletenessOutcomeIsTyped,
+	// (TestPublishPrePin), the series boundary comparison (TestSeriesBoundaryIsTyped, swept here over one series per state)
+	// and the gate rows (TestGateSeriesBoundaryIsTyped, TestGateRuleOutcomeIsTyped, TestGateCompletenessOutcomeIsTyped,
 	// TestGateRuleOutcomeResourceNotHeld); TestNoProseOutcomes fails when one is printed as a sentence; and the table
 	// is the docs' source (TestOutputsDoc), so a token not in it fails the build (`tok` panics).
 	conformance.Covers(t, "C-core-132")
@@ -217,6 +218,11 @@ func TestClosedVocabulary(t *testing.T) {
 			}
 		}
 	}
+	// the series boundary comparison's own closed set: one series per state, on every read surface, both forms
+	for _, sc := range seriesCases() {
+		sw, g := seriesWorld(t, sc.states, sc.frozen, sc.pin)
+		sweepRefs(t, sw, []string{g})
+	}
 	var below []string
 	for _, s := range []resolve.AuthorshipState{resolve.NoClaim, resolve.SoleAuthor, resolve.Derived, resolve.Priority, resolve.ContestedAuthorship} {
 		below = append(below, string(s))
@@ -233,7 +239,8 @@ func TestClosedVocabulary(t *testing.T) {
 		resolve.RefUnpinned, resolve.RefNotCanonical, resolve.RefUnavailable, resolve.RefRevised, resolve.RefFinal,
 		resolve.RefFinalCaptured, resolve.RefFinalHeld, resolve.RefProvisional, resolve.RefCanonical, resolve.RefAvailable, resolve.RefUnknown,
 		resolve.RefPinned, resolve.RefNoneYet, resolve.RefRuleUnchecked,
-		resolve.Conforms, resolve.Departed, resolve.DepUnchecked, resolve.DepNotComparable)
+		resolve.Conforms, resolve.Departed, resolve.DepUnchecked, resolve.DepNotComparable,
+		resolve.SeriesAgrees, resolve.SeriesFlagged, resolve.SeriesUnchecked, resolve.SeriesNotComparable)
 	below = append(below, string(resolve.FieldSelectionUnmet), resolve.SelMet, resolve.SelMissing, resolve.SelIneligible, resolve.SelNone,
 		resolve.SelConflict, resolve.SelIdentity, resolve.SelIdentityUnknown)
 	for _, s := range []btctime.State{btctime.StateVerified, btctime.StateVerifiedHistorical, btctime.StatePending, btctime.StateInsufficient,

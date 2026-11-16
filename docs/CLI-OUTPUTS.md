@@ -61,14 +61,16 @@ JSON members carrying tokens: `authorship`, `role`, `state`, `grade`, `step`, `q
 | `not re-derived` | grade | a derivation nobody else re-ran; unchecked until a second run or the reader's re-run |
 | `identical bytes (protocol workflow)` | grade | identical bytes under a protocol workflow: consistent with a re-run and with a copy, evidence of neither |
 | `diverged` | grade | a comparison ran to completion and the outputs disagree |
-| `unchecked` | grade | the check could not run (no comparator, no backend, a limit); never a pass. Also a rule evaluation that could not decide, and a departure check with no structured count (or none for a declared group) to compare |
-| `not comparable` | grade | the comparator could not compare the outputs. Also a departure check whose delivered sampling unit differs from the declared one (never converted) |
+| `unchecked` | grade | the check could not run (no comparator, no backend, a limit); never a pass. Also a rule evaluation that could not decide, a departure check with no structured count (or none for a declared group) to compare, and a series boundary comparison with no declaration, no segments or a boundary the members' finality does not settle (a declaration later than the bound it still allows is `flagged`) |
+| `not comparable` | grade | the comparator could not compare the outputs. Also a departure check whose delivered sampling unit differs from the declared one (never converted), and a series boundary whose declared unit differs from the members' computed one, or whose run labels carry no order (never converted) |
 | `observation (not a tier)` | grade | the blob is an observation; observations carry no tier |
 | `no statement held` | grade | this reader holds no statement about the blob or id |
 | `ok` | rule | a rule evaluation that passed |
 | `fail` | rule | a rule evaluation that failed |
 | `conforms` | departure | a departure check: the delivered sampling meets the declared n (every declared group, where groups are declared) |
 | `departed` | departure | a departure check: the delivered sampling is below the declared n (the group is named); a disclosure beside the result, not a failed rule, and it never moves the grade |
+| `agrees` | series boundary | a series boundary comparison: the declared frozen_before is no later than the boundary the members' finality rules compute; where that boundary rests on states the members asserted at capture it is shown `as captured, not re-checked` (or `as held`), never confirmed (I4) |
+| `flagged` | series boundary | a series boundary comparison: the declared frozen_before is later than the boundary the members' finality rules compute (or later than the bound they still allow); a disclosure beside the edition, which stays valid, and what it costs is the reader's freeze policy |
 | `none` | time | no counting anchor covers the statement |
 | `local` | time | an anchor this reader did not verify; self-declared, orders nothing |
 | `bitcoin` | time | an anchor whose proof this reader verified against block evidence it trusts |
