@@ -991,14 +991,14 @@ func commitUnitFrom(c *Ctx, out *Obj, op string, sts []signed, blobs []store.Dig
 					Scope: "operation " + res.Op, Committed: true,
 					Detail: "the operation reached its commit point (journal record " + res.Op + ", statements " + strings.Join(ids, ", ") +
 						") and its statements are installed; finishing the journal record failed; the next open of this store finishes it; the error is in peer_text",
-					Next: "fix the cause in peer_text, then run commons status (it shows the record until an open finishes it); publishing again is safe (idempotent)",
+					Next: "fix the cause in peer_text, then run commons repair " + res.Op + " (or let the next open finish it; commons status shows the record until then); publishing again is safe (idempotent)",
 					Peer: err.Error(), Exit: ExitCouldNot}
 			}
 			return nil, 0, &Problem{Slug: "committed-pending-install", Title: "committed, pending install", Class: refusal.Operational,
 				Scope: "operation " + res.Op, Committed: true,
 				Detail: "the operation reached its commit point (journal record " + res.Op + ", statements " + strings.Join(ids, ", ") +
 					") and installing its statements failed; the record is kept and the next open of this store replays it; the error is in peer_text",
-				Next: "fix the cause in peer_text, then run commons status (every open of the store replays the record; if the replay keeps failing, status names it and the error); publishing again is safe (idempotent)",
+				Next: "fix the cause in peer_text, then run commons repair " + res.Op + " (every open of the store replays the record too; if the replay keeps failing, status names it and the error); publishing again is safe (idempotent)",
 				Peer: err.Error(), Exit: ExitCouldNot}
 		}
 		return abort(failed(err, "store", false, "nothing was committed; run the command again"))
@@ -1152,8 +1152,9 @@ func (v *view) readinessWith(c *Ctx, sts []signed, task, edition string) (*Obj, 
 	return o, b.State, ""
 }
 
-// replayFailedNext is the next step for a store whose journal replay failed on open: what works today.
-const replayFailedNext = "fix the cause in peer_text (a permission, a full disk), then run commons status: every open of the store replays the operation, and status and fsck name it until it is finished"
+// replayFailedNext is the next step for a committed operation the store could not finish (its replay failed on
+// open, or under repair): fix the cause, then repair.
+const replayFailedNext = "fix the cause in peer_text (a permission, a full disk), then run commons repair; every open of the store replays the operation too, and status and fsck name it until it is finished"
 
 // beforeCommit is a test seam called once every blob of a unit is installed and before its record is written:
 // a test returns an error to abort the unit there. It returns nil in production.

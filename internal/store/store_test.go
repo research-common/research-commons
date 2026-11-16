@@ -302,7 +302,7 @@ func TestProjectionFailure(t *testing.T) {
 	d, _, _ := s.InstallBlob(strings.NewReader("x"), "")
 	out, err := s.Commit("publish", [][]byte{l0}, []Digest{d})
 	if err != nil || out.NeedsRepair == nil || !strings.Contains(out.NeedsRepair.Error(), "committed, needs repair") ||
-		!strings.Contains(out.NeedsRepair.Error(), "the next open of the store re-projects it") || strings.Contains(out.NeedsRepair.Error(), "run repair") {
+		!strings.Contains(out.NeedsRepair.Error(), "commons repair "+out.Op+" re-projects it") || !strings.Contains(out.NeedsRepair.Error(), "so does the next open of the store") {
 		t.Fatal(out, err)
 	}
 	if sts, _ := s.Statements(); sts[id0] == nil {

@@ -179,9 +179,9 @@ func (s *Store) Commit(kind string, lines [][]byte, blobs []Digest) (Outcome, er
 	}
 	if err != nil {
 		if out.Installed {
-			return out, fmt.Errorf("operation %s committed and installed; finishing its journal record failed: %w; the next open of the store finishes it", r.Op, err)
+			return out, fmt.Errorf("operation %s committed and installed; finishing its journal record failed: %w; commons repair %s (or the next open of the store) finishes it", r.Op, err, r.Op)
 		}
-		return out, fmt.Errorf("operation %s committed, pending install: %w; the next open of the store replays it", r.Op, err)
+		return out, fmt.Errorf("operation %s committed, pending install: %w; commons repair %s (or the next open of the store) replays it", r.Op, err, r.Op)
 	}
 	return out, nil
 }
@@ -241,13 +241,13 @@ func (s *Store) finish(r Record, out *Outcome) error {
 	// bytes are installed again and Repair finishes it.
 	for _, b := range r.Blobs {
 		if !s.HasBlob(b) {
-			out.NeedsRepair = fmt.Errorf("operation %s committed, needs repair: blob %s missing; install the bytes again (commons fetch %s from a hold, or publish them again); the next open of the store then finishes it (commons status shows it)", r.Op, b, b)
+			out.NeedsRepair = fmt.Errorf("operation %s committed, needs repair: blob %s missing; install the bytes again (commons repair %s --blob <file>, or commons fetch %s from a hold and then commons repair %s); commons status shows it until then", r.Op, b, r.Op, b, r.Op)
 			return nil
 		}
 	}
 	if s.opt.Project != nil {
 		if err := s.opt.Project(r); err != nil {
-			out.NeedsRepair = fmt.Errorf("operation %s committed, needs repair: projection failed: %w; once the cause is fixed, the next open of the store re-projects it (commons status shows it)", r.Op, err)
+			out.NeedsRepair = fmt.Errorf("operation %s committed, needs repair: projection failed: %w; once the cause is fixed, commons repair %s re-projects it (so does the next open of the store); commons status shows it until then", r.Op, err, r.Op)
 			return nil
 		}
 	}

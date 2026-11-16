@@ -285,13 +285,13 @@ func (s *Store) Fsck(opt FsckOptions) (*FsckReport, error) {
 					r.Findings = slices.DeleteFunc(r.Findings, func(f Finding) bool {
 						return f.Class == FsckMissingBlob && f.Object == string(bl) && !f.Fatal
 					})
-					add(FsckMissingBlob, string(bl), fmt.Sprintf("committed, needs repair: blob %s missing; named by %s journal record %s (%s); re-install the bytes", bl, sub, op, rec.Kind), true)
+					add(FsckMissingBlob, string(bl), fmt.Sprintf("committed, needs repair: blob %s missing; named by %s journal record %s (%s); install the bytes (commons repair %s --blob <file>, or commons fetch %s and then commons repair %s)", bl, sub, op, rec.Kind, op, bl, op), true)
 				}
 			}
 			if b := s.blockedOp(op); b != nil {
 				// degraded open: the replay of this open failed, so "the next open replays it" holds only once the
 				// cause is fixed. Fatal while its statements are hidden (a reader misses a committed answer).
-				add(FsckJournal, op, fmt.Sprintf("%s record %s: replay failed when this store was opened (%s); fix the cause, then run commons status: every open replays it", rec.Kind, sub, b.err), !b.installed)
+				add(FsckJournal, op, fmt.Sprintf("%s record %s: replay failed when this store was opened (%s); fix the cause, then run commons repair %s (every open replays it too)", rec.Kind, sub, b.err, op), !b.installed)
 				continue
 			}
 			if sub == "pending" {
