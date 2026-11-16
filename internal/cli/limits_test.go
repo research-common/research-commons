@@ -174,7 +174,7 @@ var limits = []limit{
 	},
 	{
 		id:  "L-07",
-		gap: "The only hardware connector is a Ledger device running the Ethereum app (`eip191-secp256k1`, through `key sign --ledger`); no other device or wallet is driven, and no run against a physical device or the emulator is recorded",
+		gap: "The only hardware connector is a Ledger device running the Ethereum app (`eip191-secp256k1`, through `key sign --ledger`); no other device or wallet is driven, and no drill on a physical device is recorded",
 		sources: []limitSource{
 			{file: "docs/DESIGN-notes-fixed-root-identity.md", says: "no other hardware or wallet connector is built."},
 			{file: "docs/DESIGN-notes-fixed-root-identity.md", says: "A key file signer is not a hardware or wallet connector."},

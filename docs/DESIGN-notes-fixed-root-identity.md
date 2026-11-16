@@ -749,14 +749,18 @@ the device's key at that path (`--ledger-confirm` also shows it on the device fo
 to confirm, recommended once before an inception). The path is explicit, with no default;
 use an account that never holds funds (wire §4.1). Before the device is asked, the tool
 checks the package as `package show` does, that the open app is the Ethereum app, that the
-device's address at the path is the package's signer, and that the PAE fits what the
-connector sends; it prints what the device will show (the PAE's length, the message as
-text starting `DSSEv1 `, and the EIP-191 message hash the device shows when its "display
-hash" setting is on). The holder approves on the device. The returned signature is put in
+device's address at the path is the package's signer, and that the PAE is within the
+app's protocol bound (65535 bytes); it prints what the device will show (the PAE's length
+and sha256, the message as text starting `DSSEv1 `, and the EIP-191 message hash). The
+device shows that hash only when the Ethereum app's "Transaction hash" setting is enabled,
+which is off by default: enable it and compare the hash before approving. The holder
+approves on the device. The returned signature is put in
 the stored encoding (low `s`, `v` 27/28), verified as every reader verifies the signed line,
 and written exactly as a key-file signature is. A refusal on the device is exit 1; a locked
-device, a closed or other app, a message the device cannot hold or show, a disconnect or a
-timeout is exit 3; each writes nothing. The package flow stays the boundary: `--complete`,
+device, a closed or other app, a review already pending on the device, a message the app
+cannot hold (it answers after the last chunk), a request the app refuses, a disconnect or
+a timeout (`--ledger-timeout`, default 10 minutes for the approval, 10 seconds for every
+other exchange) is exit 3; each writes nothing. The package flow stays the boundary: `--complete`,
 `identity` and `publish` never open a device, so the device never sits on the store's
 machine. Transport: USB HID on Linux (hidraw, Ledger framing); the Speculos emulator's APDU
 port (`--ledger-device tcp:<host>:<port>`, labelled an emulator: no hardware protects its
@@ -764,13 +768,19 @@ key). USB on macOS and Windows is not built.
 
 Tested through the commands with an in-process fake of the Ethereum app (every refusal
 above, each signature encoding the device may return) over the emulator's APDU protocol and
-the HID framing. Those tests check the connector against the app's documented commands, not
-against the app: no run against the Speculos emulator or a physical device is recorded here.
-Nano S Plus, Nano X, Flex and Stax run the same commands and are all **untested targets**;
-so is the original Nano S. A hardware
-signing drill on a physical device is not recorded here. Display readability is limited:
+the HID framing. An opt-in test (`go test -tags ledger_speculos`, not run in CI) drives the
+same flow against the Speculos emulator running the official Ethereum app 1.23.0 for the
+Nano S Plus and Nano X models: an inception rejected on the device writes nothing, an
+approved one completes and the store's reader verifies it. On hardware, Nano S Plus,
+Nano X, Flex and Stax run the same commands and are **untested targets** until a drill on a
+physical device is recorded; the original Nano S (Ethereum app 1.16 and earlier, not
+emulated) is an untested target. Display readability is limited:
 the device shows the PAE as text a screen at a time, so a long statement takes many
-screens; compare the message hash when the device shows it.
+screens, and any byte that is not printable ASCII turns the whole display to hex. Identity
+PAEs are typically 300 to 800 bytes; the Ethereum app 1.23, probed separately on the
+emulator, accepts about 7.6 KB of printable text (about 5.1 KB when the display is hex), a
+limit set by its memory that may differ on a device, so the
+tool leaves the decision to the app rather than refusing at a guessed size.
 
 YubiKey 5 is an **untested family**: exact variant/firmware and interface matter;
 Ed25519 PIV support must be established, not inferred from the family name (5.7+

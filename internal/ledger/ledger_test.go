@@ -565,3 +565,43 @@ func TestFindHID(t *testing.T) {
 		t.Fatal("MessageDisplay")
 	}
 }
+
+// recordingTransport records the timeout set before each exchange.
+type recordingTransport struct {
+	app  *ledgertest.App
+	next time.Duration
+	seen []time.Duration
+}
+
+func (r *recordingTransport) SetTimeout(d time.Duration) { r.next = d }
+func (r *recordingTransport) Exchange(a []byte) ([]byte, error) {
+	r.seen = append(r.seen, r.next)
+	return r.app.Exchange(a)
+}
+
+// TestDeviceTimeouts: through a Device, every exchange is short except the last sign chunk and a confirmed address,
+// which wait for the user as long as asked.
+func TestDeviceTimeouts(t *testing.T) {
+	rt := &recordingTransport{app: ledgertest.New("to")}
+	d := ledger.NewDevice(rt, "", "test", false, nil)
+	p := mustPath(t, "m/44'/60'/7'/0/0")
+	if _, err := ledger.AppAndVersion(d); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.AddressWait(d, p, true, 3*time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.PersonalSignWait(d, p, make([]byte, 600), 7*time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	s, u := ledger.ShortTimeout, 7*time.Minute
+	want := []time.Duration{s, 3 * time.Minute, s, s, u}
+	if len(rt.seen) != len(want) {
+		t.Fatalf("%d exchanges: %v", len(rt.seen), rt.seen)
+	}
+	for i := range want {
+		if rt.seen[i] != want[i] {
+			t.Fatalf("exchange %d waited %v, want %v (all: %v)", i, rt.seen[i], want[i], rt.seen)
+		}
+	}
+}

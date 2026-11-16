@@ -22,7 +22,7 @@ active** (`rc/2` statements are verified and identity actors evaluated from the 
 its **writer**: `commons identity new|grant|cut` administer an identity and `publish --as <identity> --grant <id>`
 acts for one, signed from a key file or through an external-signing package (`--prepare`, then `package show` and
 `key sign` on a machine that holds the key and no store, then `--complete`); `key sign --ledger` signs that package
-with a Ledger device running the Ethereum app (tested against a fake of the app only; USB on Linux).
+with a Ledger device running the Ethereum app (tested against a fake of the app and the emulator, not yet on hardware; USB on Linux).
 `show <key>` prints a delegate key's own key events beside every grant naming it and that grant's state; every
 identity answer is relative to the statements held (`freshness: not_established`: no claim that no cut exists).
 `anchor stamp` and `anchor upgrade` write Bitcoin time evidence for your own log through the calendars you name

@@ -46,6 +46,14 @@ type Device struct {
 	close    func() error
 }
 
+// SetTimeout passes the timeout of the next exchange to the transport when it can time out. Without it a Device would
+// hide its transport's Timeouter, and every exchange, the one waiting for the user included, would keep the short one.
+func (d *Device) SetTimeout(t time.Duration) {
+	if to, ok := d.Transport.(Timeouter); ok {
+		to.SetTimeout(t)
+	}
+}
+
 // Close releases the device.
 func (d *Device) Close() error {
 	if d == nil || d.close == nil {
