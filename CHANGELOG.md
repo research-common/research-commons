@@ -23,7 +23,8 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   that never holds funds. USB works on Linux (hidraw, no cgo); `--ledger-device tcp:<host>:<port>` reaches a Speculos
   emulator (labelled as such). `--complete`, `identity` and `publish` never open a device. Tested through the commands
   against an in-process fake of the app, and (opt-in, `-tags ledger_speculos`, not in CI) against the Speculos emulator for
-  the Nano S Plus and Nano X; no physical device is drilled yet (KNOWN-LIMITS L-07, L-20).
+  the Nano S Plus and Nano X; on a physical Nano X only `key show --ledger` has been run, no signing drill yet
+  (KNOWN-LIMITS L-07, L-20).
 
 ## [0.5.0-alpha.7] - 2026-11-16
 

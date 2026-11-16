@@ -771,10 +771,17 @@ above, each signature encoding the device may return) over the emulator's APDU p
 the HID framing. An opt-in test (`go test -tags ledger_speculos`, not run in CI) drives the
 same flow against the Speculos emulator running the official Ethereum app 1.23.0 for the
 Nano S Plus and Nano X models: an inception rejected on the device writes nothing, an
-approved one completes and the store's reader verifies it. On hardware, Nano S Plus,
-Nano X, Flex and Stax run the same commands and are **untested targets** until a drill on a
-physical device is recorded; the original Nano S (Ethereum app 1.16 and earlier, not
-emulated) is an untested target. Display readability is limited:
+approved one completes and the store's reader verifies it. A manual drill with the built
+command on the same emulators signed through the package an inception on the Nano S Plus
+(321-byte PAE, 6 review screens) and, on the Nano X, an inception, a grant (681 bytes, 13
+screens) and a cut (603 bytes); each completed, a delegate's act under the grant was eligible
+and counted, and `fsck` was clean. A rejection on the device was exit 1 with nothing
+written; a second signing request while a review was pending was `ledger-busy`, exit 3.
+On a physical Nano X (Ethereum app 1.19.3), `key show --ledger` found the device over USB
+and read its address; **no signing drill on a physical device is recorded**. Nano S Plus,
+Nano X, Flex and Stax run the same commands and remain untested for hardware signing; the
+original Nano S is an **untested target** (the Ethereum app dropped it after 1.16, and
+Speculos no longer emulates it). Display readability is limited:
 the device shows the PAE as text a screen at a time, so a long statement takes many
 screens, and any byte that is not printable ASCII turns the whole display to hex. Identity
 PAEs are typically 300 to 800 bytes; the Ethereum app 1.23, probed separately on the
