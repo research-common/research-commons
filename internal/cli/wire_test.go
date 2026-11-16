@@ -368,7 +368,7 @@ func releaseWorld(t *testing.T) (w *world, b, keyFile string) {
 // is committed or deleted. --grace for one run is printed in the plan.
 func TestGCRelease(t *testing.T) {
 	conformance.Covers(t, "C-core-145") // (a), (b), (d) here; (c) crash at every release point: internal/store TestReleaseCrash; (e) below
-	conformance.Partial(t, "C-core-146", "through the command: (c) gc --grace for one run is used and printed in the plan; the policy-window floor, (a), (b) and (d) are the store's (internal/store) or need history and publish")
+	conformance.Partial(t, "C-core-146", "through the command: (c) gc --grace for one run is used and printed in the plan; the policy-window floor and (b) are the store's (internal/store), (a) is TestPublishReuseCrashThenGC, (d) needs the operation history")
 	w, b, keyFile := releaseWorld(t)
 	blobPath := filepath.Join(w.root, "blobs", "sha256", strings.TrimPrefix(b, "sha256:"))
 

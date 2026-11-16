@@ -73,6 +73,11 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   store to be a git checkout of the hub (KNOWN-LIMITS L-17).
 
 ### Fixed
+- **`status` after a `gc` that stopped mid-deletion.** A `gc --apply` killed after moving a blob aside and before
+  deciding left the file for the next open to put back, and that open reported it as `restored blob`, a word missing
+  from the closed vocabulary: `status` (and every command printing the recovery events) then failed with an internal
+  error. `restored blob` is now a recovery token. Publish, pull, `gc --release` and `gc --apply` are tested with a
+  real process crash at every point of their commit (the store is opened with a fault hook only tests can set).
 - **Reusing a held blob re-hashes it and restarts its grace window.** `publish` (and `run`, `anchor stamp`,
   `anchor upgrade`) naming bytes this store already holds, and `pull` of a blob already held, used the held copy
   as it was: a copy damaged on disk was reused, and an old unreferenced blob kept its old window, so `gc` could

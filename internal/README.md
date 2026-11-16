@@ -151,3 +151,18 @@ whatever tags you pass.
 Negative tests show that their mutation reached the boundary under test (CONFORMANCE.md, "How a result is
 recorded"): a time-rule vector is first checked to carry a valid signature, so only the time rule can refuse
 it. Property tests print the seed and a shrunk fixture on failure.
+
+### Crash tests (the fault seam)
+
+`store.Options.Fault func(point string)` is called at every named fault point: the commit points in
+`internal/store/journal.go` and `gc.go`, `AfterBlobTemp` inside `InstallBlob`, and the two a command calls itself
+through `Store.FaultPoint` (`BeforeBlobs`, `AfterCommitBeforeOutput`, in `publish`). It is nil in production. The cli
+opens every store with the package variable `storeOptions`, which only tests set. `TestFaultSeamTestOnly` (an AST
+scan of every non-test file) fails the build if production code assigns `Fault`, `storeOptions` or `beforeCommit`,
+takes `storeOptions`' address, or composes an `Options` literal naming `Fault`.
+
+A crash test re-executes the test binary (`-test.run=^TestPublishCrashHelper$`, the point and the command in
+`RC_TEST_CRASH_HELPER`). In the child, `Fault` writes a marker file at the chosen point and calls `os.Exit(77)`, so
+no deferred function or abort path runs and the kernel releases the writer lock: a process crash, not a returned
+error. The parent checks the marker and the exit code (the point was reached), then reads the store
+(`internal/cli/crash_test.go`). The store package's own tests use an unexported error-returning hook instead.

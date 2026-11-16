@@ -203,8 +203,8 @@ func TestCommit(t *testing.T) {
 // operation (crash at or after it); Status before reopening reports the operation as committed exactly when
 // it is; a statement in a pending record is never visible before replay.
 func TestCrashAtEveryPoint(t *testing.T) {
-	conformance.Partial(t, "C-core-125", "every commit boundary of the store's protocol, and of the release operation (TestReleaseCrash) and gc's move-aside (TestGCCrashMidDeletion), recovery to previous-or-complete, status and fsck reporting of pending, done and missing-blob states: checked on the store; publish's own steps (pre-pin check, anchor) and the resolver's listing need those layers")
-	conformance.Partial(t, "P-10", "crash injection at every reported commit point of the store; process crash model (the declared durability with NoSync)")
+	conformance.Partial(t, "C-core-125", "every commit boundary of the store's protocol, and of the release operation (TestReleaseCrash) and gc's move-aside (TestGCCrashMidDeletion), recovery to previous-or-complete, status and fsck reporting of pending, done and missing-blob states: checked on the store with an injected error; the process crash through publish, with the listing and the views, is internal/cli TestPublishCrashMatrix")
+	conformance.Partial(t, "P-10", "crash injection at every reported commit point of the store, as an injected error (the declared durability with NoSync); the process crash through the commands is internal/cli TestPublishCrashMatrix and TestReleaseAndGCCrash")
 	k := testKey("A")
 	data := []byte("dataset")
 	l0, id0 := authored(k, 0, "", data)

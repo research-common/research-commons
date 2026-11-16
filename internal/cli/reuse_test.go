@@ -35,7 +35,7 @@ func heldUnreferenced(t *testing.T, p *pubWorld, data string, by time.Duration) 
 // (before its record); gc --apply runs with the default window; the blob is kept because the reuse restarted its
 // window, and the retry commits without the content file.
 func TestPublishReuseRestartsWindow(t *testing.T) {
-	conformance.Partial(t, "C-core-146", "(a) end to end through publish: an aged held blob reused by a publish that stops before its record survives gc --apply and the retry commits without the bytes (the stop is the before-commit test seam; the crash seam with a real process exit is a later slice); (b) and the policy floor of (c) are the store's (TestGCRecheckAtDeletion, TestGCGraceFloor); (d) needs the operation history")
+	conformance.Partial(t, "C-core-146", "(a) through publish with a refusal before the record (the before-commit test seam, so the abort path runs): the reuse restarted the window, gc keeps the blob, the retry commits without the bytes; the process crash is TestPublishReuseCrashThenGC; (d) needs the operation history")
 	p := newPubWorld(t)
 	data := "bytes this store released long ago"
 	d, path := heldUnreferenced(t, p, data, 72*time.Hour)

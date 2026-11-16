@@ -160,11 +160,13 @@ does not count. A pending *proof* does: the anchor carries it before transport (
 
 | Crash after | Durable state | On next store open |
 |---|---|---|
+| step 1, partially (a temporary written, not in place) | previous state plus a temporary under `tmp/` | removed once older than the temporary grace (24 h) |
 | step 1 | previous state plus unreferenced blobs | nothing to do; `gc` may remove the blobs after the grace window (§6.1.1) |
 | step 2 | a `pending/` record; no statement installed | replay steps 3–5; the operation is reported as committed |
 | step 3, partially | `pending/` record; some statements installed | replay 3 (idempotent) then 4–5 |
 | step 4 | `done/` record; projections stale | replay 5; until then the record's operation shows `committed, needs repair` |
 | step 5, partially | `done/`, projections inconsistent | `repair` (§3.5); every reader treats projections as untrusted until `repair` completes |
+| step 5, before the command printed its result | the complete operation | nothing to do; the writer printed nothing, and `status` shows nothing pending |
 
 `status` lists every `pending/` record by operation id and kind, and every `done/` record that has not
 reached step 5 (C-core-125). A statement that is in a `pending/` record but not yet installed under its hash
