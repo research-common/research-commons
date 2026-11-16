@@ -5,13 +5,19 @@
 //
 //	RC_TEST_IMAGE=alpine:latest go test -tags sandbox_oci -run OCI -v ./internal/clirun
 //
+// The test's containers carry a label of its own and the leftovers check reads only that, so this package may run
+// at the same time as the run package's OCI tests.
+//
 // The image must already be held by the runtime (it is never pulled) and provide `sh`.
 
 package clirun
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -39,12 +45,27 @@ func ociImage(t *testing.T) run.Image {
 	return run.Image{Reference: ref, Digest: dg}
 }
 
+// containersLabelled lists (every state) the containers carrying label, through the same CLI the runner uses.
+func containersLabelled(t *testing.T, label string) string {
+	t.Helper()
+	out, err := exec.Command("docker", "ps", "-aq", "--filter", "label="+label).Output()
+	if err != nil {
+		t.Fatalf("listing containers: %v", err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
 // TestOCIRunPublish: `run` and `run --publish` on the OCI sandbox through the binary's bridge, with a pinned input
 // and an unpinned one supplied with --input. The step reads both from /in and writes their concatenation; the
 // printed run is completed with a measured record naming the oci boundary; --publish commits an authored (partial
 // provenance, the supplied bytes by digest) and the runner's holds, and the store holds the output bytes.
 func TestOCIRunPublish(t *testing.T) {
 	img := ociImage(t)
+	nonce := make([]byte, 8)
+	if _, err := rand.Read(nonce); err != nil {
+		t.Fatal(err)
+	}
+	label := "research-commons.test=" + hex.EncodeToString(nonce)
 	table := []byte("pinned table\n")
 	script := []byte("cat /in/feed /in/table > \"$OUT_DIR/result.txt\"\n")
 	w := newRunWorldCode(t, script, "", [][]byte{table},
@@ -57,7 +78,7 @@ func TestOCIRunPublish(t *testing.T) {
 	runOCI := func(args ...string) result {
 		var o, e strings.Builder
 		env := &cli.Env{Stdout: &o, Stderr: &e, Getenv: func(string) string { return "" }, Getwd: func() (string, error) { return w.root, nil },
-			Build: cli.Build{Version: "test", Commit: "0000000"}, Exec: Sandbox()}
+			Build: cli.Build{Version: "test", Commit: "0000000"}, Exec: &Bridge{Runner: &run.OCI{Label: label}}}
 		code := cli.Main(append([]string{"run", "--json", w.spec, "--exec-policy", w.policy}, args...), env)
 		return result{code, o.String() + e.String()}
 	}
@@ -77,5 +98,8 @@ func TestOCIRunPublish(t *testing.T) {
 	}
 	if r := w.cmd("show", out, "--json"); r.code != 0 || !strings.Contains(r.stdout, "held here") {
 		t.Fatalf("the output bytes are not held: %d %s", r.code, r.stdout)
+	}
+	if left := containersLabelled(t, label); left != "" {
+		t.Fatalf("containers left: %s", left)
 	}
 }

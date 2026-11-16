@@ -60,6 +60,10 @@ type OCI struct {
 	// Observe, when set, is called with the host PIDs seen in the container's cgroup while the step runs (the
 	// test's process audit for C-exec-10 and C-exec-11).
 	Observe func(pids []int)
+	// Label, when set ("key=value"), is added to every container the runner starts, next to the standing
+	// research-commons.run=1 label. A caller that must find only its own containers (the tests, to check for
+	// leftovers while other runs share the runtime) sets a unique one and filters on it.
+	Label string
 }
 
 func (o *OCI) bin() string {
@@ -243,6 +247,9 @@ func (o *OCI) Run(ctx context.Context, j Job) (Outcome, error) {
 		"--mount", fmt.Sprintf("type=tmpfs,dst=/out,tmpfs-size=%d,tmpfs-mode=1777", disk),
 		"--mount", fmt.Sprintf("type=tmpfs,dst=/tmp,tmpfs-size=%d,tmpfs-mode=1777", scratch),
 		"--label", "research-commons.run=1"}
+	if o.Label != "" {
+		args = append(args, "--label", o.Label)
+	}
 	if m, ok := j.Caps[CapMemory]; ok {
 		args = append(args, "--memory", strconv.FormatInt(m, 10), "--memory-swap", strconv.FormatInt(m, 10))
 	}

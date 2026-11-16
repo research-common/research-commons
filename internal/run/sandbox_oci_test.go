@@ -2,14 +2,19 @@
 
 // The OCI backend against a real container runtime. Not part of `go test ./...`: run with
 //
-//	RC_TEST_IMAGE=alpine:latest go test -p 1 -tags sandbox_oci -run OCI -v ./internal/run ./internal/clirun
+//	RC_TEST_IMAGE=alpine:latest go test -tags sandbox_oci -run OCI -v ./internal/run ./internal/clirun
 //
 // The image must already be held by the runtime (it is never pulled) and provide `sh` and `sleep`.
+//
+// Every test starts its containers with a label of its own (ociRunner) and checks for leftovers by that label
+// only, so these tests and the clirun ones may run at the same time, in one package or across packages.
 
 package run
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"net"
 	"os"
 	"path/filepath"
@@ -89,10 +94,32 @@ func (a *audit) alive(t *testing.T) {
 	}
 }
 
-func leftovers(t *testing.T) {
+// ociRunner is an OCI runner whose containers carry a label unique to this test (next to the standing one), so
+// leftovers(t, o) sees only this test's containers and tests may run in parallel with the other packages'.
+func ociRunner(t *testing.T) *OCI {
 	t.Helper()
-	out, _ := (&OCI{}).cli(context.Background(), "ps", "-aq", "--filter", "label=research-commons.run=1")
-	if strings.TrimSpace(out) != "" {
+	b := make([]byte, 8)
+	if _, err := rand.Read(b); err != nil {
+		t.Fatal(err)
+	}
+	return &OCI{Label: "research-commons.test=" + hex.EncodeToString(b)}
+}
+
+// containersOf lists the containers (every state) that carry o's unique label.
+func containersOf(t *testing.T, o *OCI) string {
+	t.Helper()
+	out, err := o.cli(context.Background(), "ps", "-aq", "--filter", "label="+o.Label)
+	if err != nil {
+		t.Fatalf("listing containers: %v", err)
+	}
+	return strings.TrimSpace(out)
+}
+
+// leftovers fails when a container started by o still exists. TestOCILabelScope shows the filter does see a live
+// container carrying the label, so an empty answer here is a real "none".
+func leftovers(t *testing.T, o *OCI) {
+	t.Helper()
+	if out := containersOf(t, o); out != "" {
 		t.Fatalf("containers left: %s", out)
 	}
 }
@@ -100,8 +127,9 @@ func leftovers(t *testing.T) {
 // TestOCIRoundTrip: a sandbox run produces an output, a record with a measured peak RSS, and the boundary named.
 func TestOCIRoundTrip(t *testing.T) {
 	img := ociImage(t)
+	o := ociRunner(t)
 	s, blobs := ociSpec(t, img, "echo hello > \"$OUT_DIR/result.txt\"\n", object("memory", canon.Int(64<<20), "wall_time", canon.Int(20_000)), nil, nil)
-	res, err := Execute(context.Background(), ociPolicy(), &OCI{}, Invocation{Request: Request{Spec: s, Signer: ownerKey}, Blobs: blobs})
+	res, err := Execute(context.Background(), ociPolicy(), o, Invocation{Request: Request{Spec: s, Signer: ownerKey}, Blobs: blobs})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +142,7 @@ func TestOCIRoundTrip(t *testing.T) {
 	if err := res.Record.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	leftovers(t)
+	leftovers(t, o)
 }
 
 // TestOCICapsDuringExecution: C-exec-10. A step that forks without bound and writes an unbounded stream, caps low
@@ -135,9 +163,11 @@ func TestOCICapsDuringExecution(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			a := &audit{pids: map[int]bool{}}
+			o := ociRunner(t)
+			o.Observe = a.observe
 			s, blobs := ociSpec(t, img, c.script, c.res, nil, nil)
 			start := time.Now()
-			res, err := Execute(context.Background(), ociPolicy(), &OCI{Observe: a.observe}, Invocation{Request: Request{Spec: s, Signer: ownerKey}, Blobs: blobs})
+			res, err := Execute(context.Background(), ociPolicy(), o, Invocation{Request: Request{Spec: s, Signer: ownerKey}, Blobs: blobs})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -151,7 +181,7 @@ func TestOCICapsDuringExecution(t *testing.T) {
 				t.Fatal("published")
 			}
 			a.alive(t)
-			leftovers(t)
+			leftovers(t, o)
 		})
 	}
 }
@@ -163,9 +193,11 @@ func TestOCITimeout(t *testing.T) {
 	conformance.Covers(t, "C-exec-11")
 	img := ociImage(t)
 	a := &audit{pids: map[int]bool{}}
+	o := ociRunner(t)
+	o.Observe = a.observe
 	s, blobs := ociSpec(t, img, "(sleep 1000 &) ; sleep 1000\n", object("wall_time", canon.Int(1500), "memory", canon.Int(64<<20)), nil, nil)
 	staging := t.TempDir()
-	res, err := Execute(context.Background(), ociPolicy(), &OCI{Observe: a.observe}, Invocation{Request: Request{Spec: s, Signer: ownerKey}, Blobs: blobs, StagingRoot: staging})
+	res, err := Execute(context.Background(), ociPolicy(), o, Invocation{Request: Request{Spec: s, Signer: ownerKey}, Blobs: blobs, StagingRoot: staging})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +212,7 @@ func TestOCITimeout(t *testing.T) {
 		t.Fatal("a reproduced was planned")
 	}
 	a.alive(t)
-	leftovers(t)
+	leftovers(t, o)
 }
 
 // TestOCIBoundary: C-exec-12. A step that reads a canary environment variable and a canary file outside its
@@ -190,6 +222,7 @@ func TestOCITimeout(t *testing.T) {
 func TestOCIBoundary(t *testing.T) {
 	conformance.Covers(t, "C-exec-12")
 	img := ociImage(t)
+	o := ociRunner(t)
 	c := newCanary(t)
 	t.Setenv("RC_CANARY_SECRET", "CANARY-ENV-VALUE")
 	ln, err := net.Listen("tcp", "0.0.0.0:0")
@@ -222,7 +255,7 @@ func TestOCIBoundary(t *testing.T) {
 		`(nc -w 2 ` + gw + ` ` + port + ` </dev/null || wget -T 2 -q -O- http://` + gw + `:` + port + `/) >/dev/null 2>&1 || echo noconnect >> "$o"`,
 	}, "\n") + "\n"
 	s, blobs := ociSpec(t, img, script, object("memory", canon.Int(64<<20), "wall_time", canon.Int(20_000)), nil, nil)
-	res, err := Execute(context.Background(), ociPolicy(), &OCI{}, Invocation{Request: Request{Spec: s, Signer: ownerKey}, Blobs: blobs})
+	res, err := Execute(context.Background(), ociPolicy(), o, Invocation{Request: Request{Spec: s, Signer: ownerKey}, Blobs: blobs})
 	if err != nil || !res.Completed() {
 		t.Fatalf("%v %s", err, res.Token)
 	}
@@ -252,7 +285,7 @@ func TestOCIBoundary(t *testing.T) {
 		object("required", strings2array([]string{"tcp://" + gw + ":" + port})))
 	pn := ociPolicy()
 	pn.Network = []string{sn.Digest}
-	resN, err := Execute(context.Background(), pn, &OCI{}, Invocation{Request: Request{Spec: sn, Signer: ownerKey}, Blobs: blobsN})
+	resN, err := Execute(context.Background(), pn, o, Invocation{Request: Request{Spec: sn, Signer: ownerKey}, Blobs: blobsN})
 	if err != nil || !resN.Completed() {
 		t.Fatalf("control: %v %s", err, resN.Token)
 	}
@@ -267,16 +300,17 @@ func TestOCIBoundary(t *testing.T) {
 		t.Skip("control: the probe cannot reach the listener even with a network (host firewall?); the no-connection result proves nothing on this host")
 	}
 	hasNot(t, string(resN.Outputs[0].Bytes), "CANARY") // the env canary still never crosses: no grant names it
-	leftovers(t)
+	leftovers(t, o)
 }
 
 // TestOCIOutputSymlink: C-exec-09 against the real runtime: a symlink the step makes in /out pointing at a host
 // canary is recreated as a symlink (never followed) and refused at read-back; `incomplete output`.
 func TestOCIOutputSymlink(t *testing.T) {
 	img := ociImage(t)
+	o := ociRunner(t)
 	c := newCanary(t)
 	s, blobs := ociSpec(t, img, "ln -s "+c.path+" \"$OUT_DIR/result.txt\"\n", object("memory", canon.Int(64<<20), "wall_time", canon.Int(20_000)), nil, nil)
-	res, err := Execute(context.Background(), ociPolicy(), &OCI{}, Invocation{Request: Request{Spec: s, Signer: ownerKey}, Blobs: blobs})
+	res, err := Execute(context.Background(), ociPolicy(), o, Invocation{Request: Request{Spec: s, Signer: ownerKey}, Blobs: blobs})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -284,6 +318,40 @@ func TestOCIOutputSymlink(t *testing.T) {
 		t.Fatalf("%s %+v", res.Token, res.Unsafe)
 	}
 	c.check(t)
+	leftovers(t, o)
 	_ = filepath.Join
 	_ = slices.Contains[[]string]
+}
+
+// TestOCILabelScope: the unique label is what scopes the leftovers check. A container started by one runner is
+// seen by that runner's filter and not by another's (so a parallel test's live container cannot fail this one),
+// and once removed the filter reads empty (so "none left" is not a filter that could never match).
+func TestOCILabelScope(t *testing.T) {
+	img := ociImage(t)
+	a, b := ociRunner(t), ociRunner(t)
+	if a.Label == b.Label || a.Label == "" {
+		t.Fatalf("labels not unique: %q %q", a.Label, b.Label)
+	}
+	id, err := a.cli(context.Background(), "run", "-d", "--init", "--network", "none", "--label", "research-commons.run=1", "--label", a.Label,
+		img.Reference, "sleep", "60")
+	if err != nil {
+		t.Fatal(err)
+	}
+	removed := false
+	defer func() {
+		if !removed {
+			_, _ = a.cli(context.Background(), "rm", "-f", id)
+		}
+	}()
+	if got := containersOf(t, a); got == "" {
+		t.Fatal("the label filter does not see a live container that carries the label")
+	}
+	if got := containersOf(t, b); got != "" {
+		t.Fatalf("another runner's label sees this container: %s", got)
+	}
+	if _, err := a.cli(context.Background(), "rm", "-f", id); err != nil {
+		t.Fatal(err)
+	}
+	removed = true
+	leftovers(t, a)
 }

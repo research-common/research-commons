@@ -100,8 +100,8 @@ jobs:
     # the conformance scan still counts its tests as run (internal/conformance/ci-tags.txt, kept in step with
     # this job by a test). The image is pinned by digest and pulled here because the tests never pull; a test
     # OCI test that skips (no image, no runtime, no network control) fails the job, since a skip proves nothing.
-    # -p 1: both packages label their containers research-commons.run=1 and check for leftovers by that
-    # label, so they must not run at the same time.
+    # The two packages run at the same time: each test labels its containers with a label of its own and checks for
+    # leftovers by that label only.
     name: test (sandbox_oci)
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -121,7 +121,7 @@ jobs:
       - name: run the tagged tests
         run: |
           set -o pipefail
-          go test -p 1 -count=1 -v -tags sandbox_oci ./internal/run/... ./internal/clirun/... | tee oci-test.log
+          go test -count=1 -v -tags sandbox_oci ./internal/run/... ./internal/clirun/... | tee oci-test.log
           if grep -E '^\s*--- SKIP: TestOCI' oci-test.log; then
             echo "a sandbox_oci test skipped: the job proves nothing for it" >&2
             exit 1

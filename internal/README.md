@@ -17,7 +17,7 @@ go test -run TestConformanceCases -v ./internal/conformance       # progress aga
 go test -run '^$' -fuzz FuzzRead -fuzztime 60s ./internal/wire    # one fuzz target (also FuzzParse, FuzzTime)
 CGO_ENABLED=0 go build ./...                                      # static build
 CGO_ENABLED=0 go build -ldflags "-X main.version=0.5.0-alpha.1 -X main.commit=$(git rev-parse HEAD)" ./cmd/commons
-RC_TEST_IMAGE=alpine:latest go test -p 1 -tags sandbox_oci -run OCI ./internal/run ./internal/clirun   # the OCI sandbox (and `commons run` on it) against a real runtime
+RC_TEST_IMAGE=alpine:latest go test -tags sandbox_oci -run OCI ./internal/run ./internal/clirun   # the OCI sandbox (and `commons run` on it) against a real runtime
 ```
 
 ## Packages
@@ -144,9 +144,9 @@ it, or a job that runs a tag the list lacks), so the list cannot claim a run tha
 listed tag is `sandbox_oci`: the OCI backend tests (`internal/run/sandbox_oci_test.go`) cover C-exec-10, C-exec-11 and
 C-exec-12 through the workflow's `test-sandbox-oci` job, which is deliberately not a required check, so the scan
 counts a case as covered when CI is configured to run its test, not when that job last passed. Run them locally with
-`RC_TEST_IMAGE=alpine:latest go test -p 1 -tags sandbox_oci -run OCI -v ./internal/run ./internal/clirun` (`-p 1`: both
-packages find leftover containers by one shared label, so they must not run at the same time); the scan reads the file
-whatever tags you pass.
+`RC_TEST_IMAGE=alpine:latest go test -tags sandbox_oci -run OCI -v ./internal/run ./internal/clirun` (the two packages
+may run at the same time: each test starts its containers with a label of its own, `run.OCI.Label`, and checks for
+leftovers by that label only); the scan reads the file whatever tags you pass.
 
 Negative tests show that their mutation reached the boundary under test (CONFORMANCE.md, "How a result is
 recorded"): a time-rule vector is first checked to carry a valid signature, so only the time rule can refuse
