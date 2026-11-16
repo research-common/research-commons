@@ -101,6 +101,9 @@ func (s *Store) InstallBlob(src io.Reader, expect Digest) (Digest, BlobResult, e
 	if err := os.Chmod(tmp.Name(), 0o444); err != nil {
 		return "", "", err
 	}
+	if err := s.hook(AfterBlobTemp); err != nil {
+		return "", "", err
+	}
 	dst := s.blobPath(got)
 	res, err := s.placeVerified(tmp.Name(), dst, got)
 	return got, res, err

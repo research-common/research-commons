@@ -87,14 +87,18 @@ func decodeRecord(b []byte, name string) (Record, error) {
 	return r, nil
 }
 
-// Commit points, named for crash injection (C-core-125, P-10).
+// Commit points, named for crash injection (C-core-125, P-10). BeforeBlobs and AfterCommitBeforeOutput are a
+// command's own (it calls Store.FaultPoint there); AfterBlobTemp is inside InstallBlob; the rest are Commit's.
 const (
-	AfterBlobs     = "after step 1 (blobs installed)"
-	AfterRecord    = "after step 2 (record pending)"
-	AfterStatement = "after step 3, one statement installed"
-	AfterInstall   = "after step 3 (all statements installed)"
-	AfterDone      = "after step 4 (record done)"
-	AfterProject   = "after step 5 (projections)"
+	BeforeBlobs             = "before step 1 (lines signed, no blob installed)"
+	AfterBlobTemp           = "step 1, mid-blob (temporary written, not linked into place)"
+	AfterCommitBeforeOutput = "after the commit returned, before the command's output"
+	AfterBlobs              = "after step 1 (blobs installed)"
+	AfterRecord             = "after step 2 (record pending)"
+	AfterStatement          = "after step 3, one statement installed"
+	AfterInstall            = "after step 3 (all statements installed)"
+	AfterDone               = "after step 4 (record done)"
+	AfterProject            = "after step 5 (projections)"
 )
 
 // ErrCrash is what a crash hook returns to abort an operation at a commit point.

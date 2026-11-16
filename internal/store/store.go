@@ -38,7 +38,14 @@ type Options struct {
 	GCGrace time.Duration
 	// LockWait bounds how long a writer waits for the per-key writer lock (§4.3); zero means DefaultLockWait.
 	LockWait time.Duration
-	// crash, when set, is called at each commit point and may abort the operation there (tests only).
+	// Fault, when set, is called at each named fault point: the commit points below (journal.go, gc.go, blob.go)
+	// and the ones a command names through FaultPoint. It is a test seam, nil in every production path (a test
+	// guards that no non-test file sets it). A test's Fault typically records the point and ends the process
+	// there, which is the crash model of the storage note: no deferred cleanup and no abort path runs, and the
+	// kernel releases the writer lock.
+	Fault func(point string)
+	// crash is the error-returning variant for this package's own tests: the operation stops at the point with
+	// the error, as a caller would see it.
 	crash func(point string) error
 }
 
@@ -146,10 +153,19 @@ func (s *Store) dir(parts ...string) string {
 }
 
 func (s *Store) hook(point string) error {
+	s.FaultPoint(point)
 	if s.opt.crash != nil {
 		return s.opt.crash(point)
 	}
 	return nil
+}
+
+// FaultPoint calls Options.Fault with point, if one is set. A command calls it at the fault points that are its
+// own (BeforeBlobs, AfterCommitBeforeOutput); with no Fault it does nothing.
+func (s *Store) FaultPoint(point string) {
+	if s.opt.Fault != nil {
+		s.opt.Fault(point)
+	}
 }
 
 func (s *Store) syncFile(f *os.File) error {

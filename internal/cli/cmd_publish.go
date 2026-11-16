@@ -928,6 +928,7 @@ func commitUnitFrom(c *Ctx, out *Obj, op string, sts []signed, blobs []store.Dig
 			set("note", textV("dry run: the ids above are of signatures that were discarded; nothing was written"))
 		return out, ExitOK, nil
 	}
+	c.Store.FaultPoint(store.BeforeBlobs)
 	stage := c.Store.Stage()
 	// abort undoes step 1 for a failure before the commit point: the blobs this unit installed are removed, so
 	// nothing of the unit stays (all or nothing). A blob already held, or referenced meanwhile, is kept.
@@ -976,6 +977,7 @@ func commitUnitFrom(c *Ctx, out *Obj, op string, sts []signed, blobs []store.Dig
 		return abort(failed(err, "store", false, "nothing was committed; run the command again"))
 	}
 	res, err := c.Store.Commit(op, lines, blobs)
+	c.Store.FaultPoint(store.AfterCommitBeforeOutput)
 	if err != nil {
 		if res.Committed {
 			ids := make([]string, len(sts))
@@ -1156,6 +1158,10 @@ const replayFailedNext = "fix the cause in peer_text (a permission, a full disk)
 // beforeCommit is a test seam called once every blob of a unit is installed and before its record is written:
 // a test returns an error to abort the unit there. It returns nil in production.
 var beforeCommit = func() error { return nil }
+
+// storeOptions are the options every command opens its store with. A test seam: production code never sets it
+// (the zero value is the shipped store); a test sets Fault to crash a command at a named point.
+var storeOptions store.Options
 
 // afterHead is a test seam called once the head is resolved and before the line is signed: tests widen the
 // window the writer lock exists to close. It is nil in production.

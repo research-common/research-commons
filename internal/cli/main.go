@@ -302,7 +302,7 @@ func dispatch(argv []string, env *Env) (*Obj, int, error) {
 			}
 		}
 		// every argument and configuration check has passed: from here on, work starts (journal replay)
-		s, err := store.Open(root, store.Options{})
+		s, err := store.Open(root, storeOptions)
 		if err != nil {
 			return nil, 0, failed(err, "store", false, "run status; if the store is damaged, fsck")
 		}
