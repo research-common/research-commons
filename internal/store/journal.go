@@ -471,6 +471,15 @@ func (s *Store) block(r Record, err error, installed bool) {
 	s.blocked = append(s.blocked, b)
 }
 
+func (s *Store) blockedOp(op string) *blockedOp {
+	for i := range s.blocked {
+		if s.blocked[i].op == op {
+			return &s.blocked[i]
+		}
+	}
+	return nil
+}
+
 func (s *Store) unblock(op string) {
 	s.blocked = slices.DeleteFunc(s.blocked, func(b blockedOp) bool { return b.op == op })
 }
@@ -599,5 +608,72 @@ func (s *Store) Statements() (map[string][]byte, error) {
 		out[st.ID] = b
 		return nil
 	})
+	if err != nil {
+		return out, err
+	}
+	// A concurrent writer between step 2 and step 4 has some of its statements installed and its record still in
+	// pending/: those are skipped, so a reader that takes no lock does not see the operation half installed (§3.3).
+	// The journal is listed after the walk. A record still pending hides every statement it names. A done record
+	// (step 4 reached: every statement installed) whose statements the walk saw only in part, because the walk
+	// passed before the writer's later statements landed, hides the part it saw: an operation is shown whole or
+	// not at all. The residue is a writer that also finished step 5 (record deleted) between the walk and the
+	// listing; the storage note states it.
+	ops, err := s.journalIDs()
+	for _, o := range ops {
+		whole := !o.pending
+		for _, id := range o.ids {
+			if _, ok := out[id]; !ok {
+				whole = false
+			}
+		}
+		if !whole {
+			for _, id := range o.ids {
+				delete(out, id)
+			}
+		}
+	}
 	return out, err
+}
+
+type journalOp struct {
+	pending bool
+	ids     []string
+}
+
+// journalIDs lists the statement ids of each record in journal/pending and journal/done, as readers need them:
+// a record this open replayed in part and could not finish past step 3 counts as pending; one that installed
+// every statement and failed later (step 4) counts as done.
+func (s *Store) journalIDs() ([]journalOp, error) {
+	var out []journalOp
+	for _, sub := range []string{"pending", "done"} {
+		dir := s.dir("journal", sub)
+		ents, err := os.ReadDir(dir)
+		if err != nil {
+			return out, err
+		}
+		for _, e := range ents {
+			b, err := os.ReadFile(filepath.Join(dir, e.Name()))
+			if errors.Is(err, fs.ErrNotExist) {
+				continue // finished since the listing
+			}
+			if err != nil {
+				return out, err
+			}
+			r, err := decodeRecord(b, e.Name())
+			if err != nil {
+				continue // the next open quarantines it; nothing from it is installed
+			}
+			o := journalOp{pending: sub == "pending"}
+			if b := s.blockedOp(r.Op); b != nil && b.installed {
+				o.pending = false // this open installed every statement and only step 4 failed
+			}
+			for _, l := range r.Lines {
+				if st, err := wire.ReadStored(l); err == nil {
+					o.ids = append(o.ids, st.ID)
+				}
+			}
+			out = append(out, o)
+		}
+	}
+	return out, nil
 }

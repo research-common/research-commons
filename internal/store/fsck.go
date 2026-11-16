@@ -288,6 +288,12 @@ func (s *Store) Fsck(opt FsckOptions) (*FsckReport, error) {
 					add(FsckMissingBlob, string(bl), fmt.Sprintf("committed, needs repair: blob %s missing; named by %s journal record %s (%s); re-install the bytes", bl, sub, op, rec.Kind), true)
 				}
 			}
+			if b := s.blockedOp(op); b != nil {
+				// degraded open: the replay of this open failed, so "the next open replays it" holds only once the
+				// cause is fixed. Fatal while its statements are hidden (a reader misses a committed answer).
+				add(FsckJournal, op, fmt.Sprintf("%s record %s: replay failed when this store was opened (%s); fix the cause, then run commons status: every open replays it", rec.Kind, sub, b.err), !b.installed)
+				continue
+			}
 			if sub == "pending" {
 				add(FsckJournal, op, fmt.Sprintf("%s record pending (committed, pending install); the next open replays it", rec.Kind), false)
 				continue

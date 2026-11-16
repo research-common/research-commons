@@ -134,8 +134,9 @@ func TestDegradedOpen(t *testing.T) {
 	if st, _ := s2.Status(); len(st) != 1 || st[0].What != "committed, pending install" {
 		t.Fatal(st)
 	}
-	if r, err := s2.Fsck(FsckOptions{}); err != nil || len(r.Of(FsckJournal)) != 1 {
-		t.Fatal(r, err)
+	if r, err := s2.Fsck(FsckOptions{}); err != nil || len(r.Of(FsckJournal)) != 1 || r.Clean() ||
+		!strings.Contains(r.Of(FsckJournal)[0].Detail, "replay failed when this store was opened") {
+		t.Fatal(r.Render(), err)
 	}
 	// a writer for the blocked key is refused, naming the operation; nothing is written
 	l2, _ := authored(k, 2, id1, data)
@@ -273,5 +274,60 @@ func TestDegradedOpenInstalled(t *testing.T) {
 	}
 	if s2.BlockedFor(k.Signer()) != nil {
 		t.Fatal("a key whose statements are all installed was refused")
+	}
+}
+
+// TestReaderSkipsPendingRecord: a reader that takes no lock, running while another writer is between step 2 and
+// step 4 (some statements installed, its record still in pending/), sees none of that operation: never the
+// authored statement without its holds. The writer here stops after its first statement; the reader is a second
+// handle on the same store that did not replay (it opened before the record existed).
+func TestReaderSkipsPendingRecord(t *testing.T) {
+	root := t.TempDir()
+	k := testKey("A")
+	data := []byte("mid-install")
+	l0, id0 := authored(k, 0, "", data)
+	l1, id1 := authored(k, 1, id0, data)
+	reader := open(t, root, Options{NoSync: true})
+	writer := open(t, root, Options{NoSync: true, crash: func(p string) error {
+		if p == AfterStatement {
+			return ErrCrash
+		}
+		return nil
+	}})
+	d, _, _ := writer.InstallBlob(bytes.NewReader(data), "")
+	if _, err := writer.Commit("publish", [][]byte{l0, l1}, []Digest{d}); !errors.Is(err, ErrCrash) {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "statements", signerDir(k.Signer()), id0)); err != nil {
+		t.Fatal("setup: the first statement should be installed")
+	}
+	sts, err := reader.Statements()
+	if err != nil || sts[id0] != nil || sts[id1] != nil {
+		t.Fatalf("a reader sees a half-installed operation: %d %v", len(sts), err)
+	}
+	// a done record seen in part (one statement file missing, as when the walk passed before it landed): the
+	// reader shows neither, never one line of the operation without the other
+	root2 := t.TempDir()
+	reader2 := open(t, root2, Options{NoSync: true})
+	w2 := open(t, root2, Options{NoSync: true, crash: func(p string) error {
+		if p == AfterDone {
+			return ErrCrash
+		}
+		return nil
+	}})
+	d2, _, _ := w2.InstallBlob(bytes.NewReader(data), "")
+	if _, err := w2.Commit("publish", [][]byte{l0, l1}, []Digest{d2}); !errors.Is(err, ErrCrash) {
+		t.Fatal(err)
+	}
+	os.Remove(filepath.Join(root2, "statements", signerDir(k.Signer()), id1))
+	if sts, _ := reader2.Statements(); sts[id0] != nil || sts[id1] != nil {
+		t.Fatal("a reader sees part of a done record's operation")
+	}
+	// once the writer finishes (here: the next open replays it), both appear together
+	if sts, _ := open(t, root, Options{NoSync: true}).Statements(); sts[id0] == nil || sts[id1] == nil {
+		t.Fatal("not visible after the install finished")
+	}
+	if sts, _ := reader.Statements(); sts[id0] == nil || sts[id1] == nil {
+		t.Fatal("the reader does not see the finished operation")
 	}
 }
