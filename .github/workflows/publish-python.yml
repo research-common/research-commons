@@ -1,0 +1,26 @@
+# Registration stub. GitHub only offers "Run workflow" for a workflow file that exists on the
+# default branch, but the Python package is built and published from the `next` line. This file
+# exists so the workflow is registered; it never builds or publishes anything. Dispatch it with
+# the branch set to `next` (Actions -> publish-python -> Run workflow -> branch: next), which runs
+# the real workflow from that branch. See docs/RELEASING.md on `next`, step 8.
+name: publish-python
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag whose wheels to build and publish (e.g. v0.5.0-alpha.6); choose branch next'
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  refuse:
+    name: refuse (run this workflow from next)
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - run: |
+          echo "publish-python runs from the next branch; dispatch it again with the branch set to next" >&2
+          exit 1
