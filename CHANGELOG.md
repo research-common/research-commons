@@ -11,6 +11,13 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ### Added
 
+- **The two-hub drill is scripted (`scripts/two-hub-drill.sh`).** Two bare git repos as hubs and two stores with distinct
+  keys: A publishes a construction, an observation and a resource edition and pushes; B pulls, publishes a corroborating
+  observation and pushes; A pulls from B; both answer `show`, `explain` and `verify` for the same ids and the script
+  compares the `--json` answers byte for byte; a tampered blob in one hub is refused on pull. Exit 0 only if every
+  comparison agrees (`TWOHUB_MUTATE=1` alters one state in B and must exit non-zero). A Go test behind the `twohub` build
+  tag runs it, in a non-required CI job `two-hub drill`. The anchor stamp is optional (`TWOHUB_CALENDAR`).
+
 - **A Ledger device can sign an external-signing package (`key sign --ledger`).** `key sign --package <file> --ledger
   --ledger-path m/44'/60'/<account>'/0/<index>` asks a Ledger device running the official Ethereum app to sign the
   package's recomputed PAE bytes with EIP-191 `personal_sign` (`eip191-secp256k1`: no new algorithm or preimage). The tool

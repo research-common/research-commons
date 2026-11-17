@@ -127,6 +127,29 @@ jobs:
             exit 1
           fi
 
+  two-hub-drill:
+    # RELEASING criterion 3, scripted: scripts/two-hub-drill.sh (two bare git repos as hubs, two stores,
+    # two keys, no network) run by a Go test that builds the binary. NOT a required check. Also in
+    # internal/conformance/ci-tags.txt, kept in step with this job by a test.
+    name: two-hub drill
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: run the drill
+        run: |
+          set -o pipefail
+          go test -count=1 -v -tags twohub -run TestTwoHubDrill ./cmd/commons/ | tee drill.log
+          if grep -E '^\s*--- SKIP' drill.log; then
+            echo "the drill skipped: the job proves nothing" >&2
+            exit 1
+          fi
+
   python:
     # The thin Python package in python/ (stdlib only) and its wheel builder. Not a required check: it
     # must never gate a Go change. Two legs: the oldest Python the package supports (requires-python

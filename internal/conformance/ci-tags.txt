@@ -5,3 +5,4 @@
 # `go test -tags <tag>` lines in agreement in both directions: add a tag here only together with the job that
 # runs it, and remove it when the job goes.
 sandbox_oci
+twohub

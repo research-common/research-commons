@@ -55,7 +55,9 @@ A plan, not a schedule; the maintainers make the final call and may revise this 
 2. The core conformance cases are all covered (none pending, none untested), with the remaining
    partial cases each naming what is left.
 3. The two-hub drill passes: two independent hubs exchange, verify and resolve the same
-   artifacts, scripted and repeatable.
+   artifacts, scripted and repeatable: `scripts/two-hub-drill.sh` (run in CI by the non-required
+   `two-hub drill` job; `go test -tags twohub ./cmd/commons/`). Its anchor step needs a calendar and is
+   skipped without one.
 4. Windows is decided: supported and tested, or documented as unsupported.
 
 ## Release steps
