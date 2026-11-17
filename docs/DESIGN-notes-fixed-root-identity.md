@@ -721,8 +721,11 @@ accepts the signature only in the statement encoding of the alg (wire note §4),
 it over the recomputed bytes, runs every check of direct signing again, refuses
 `stale-prepare` (exit 1) unless the signer's log is still at `log_head`, and commits
 through the same journal unit. Every refusal appends nothing. Its format tag,
-`rc-signing-package/0`, is this tool's own and **provisional** (like `rc-key/0`); it is
-not the finalized interchange schema this section leaves open. A package carries one
+`rc-signing-package/1`, is this tool's own and **frozen** with `1.0` (like `rc-key/0`, the
+key file); a change to a package's bytes takes a new tag. It is the tool's interchange file,
+not a schema every connector must speak. `rc-signing-package/0`, whose summary carried prose,
+is retired: a `/0` package is refused (`retired-package-format`, exit 2) with the next step
+to prepare it again; a package is short-lived, so no `/0` reader is kept. A package carries one
 statement, so `publish --as --prepare` of `authored` (or of an `observed` with its bytes) needs `--no-holds`.
 
 What the signing device signs is the decoded `pae` bytes, unchanged. For `ed25519` the

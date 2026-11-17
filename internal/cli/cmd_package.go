@@ -38,7 +38,7 @@ func init() {
 			{Name: "pae-out", Value: "file", Help: "write the exact PAE bytes a signature covers (the decoded pae member, no newline) to this new file, for a signer that is not this tool; never overwritten; written only when every check passes"},
 			expectPAEFlag,
 		},
-		Help: "Reads a package written by --prepare (" + SigningPackageFormat + ", provisional) and recomputes, from its envelope alone, " +
+		Help: "Reads a package written by --prepare (" + SigningPackageFormat + ") and recomputes, from its envelope alone, " +
 			"everything the package derives from it: the PAE bytes, the statement id, the alg, the signer, the log head's shape and the summary, exactly as --complete does. " +
 			"Exit 0 when every derived member matches, printing the summary, the signer, the alg, the proposed id, pae_sha256 and pae_bytes; " +
 			"exit 1 naming the first member that differs (and listing every one); exit 2 when the file is unreadable or not a package. " +

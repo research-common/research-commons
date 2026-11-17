@@ -235,17 +235,17 @@ var limits = []limit{
 	},
 	{
 		id:  "L-09",
-		gap: "Key, execution-policy and external-signing package file formats are provisional (version 0) and expected to change before a stable release",
+		gap: "The execution-policy file format is provisional (`rc-exec-policy/0`) and expected to change; the key file (`rc-key/0`) and signing package (`rc-signing-package/1`) formats are frozen",
 		sources: []limitSource{
-			{file: "docs/KEY-FILES.md", says: "**Status: provisional.** The format tag is this tool's own and is versioned (`rc-key/0`)."},
 			{file: "docs/EXEC-POLICY.md", says: "**Status: provisional.**"},
-			{file: "docs/DESIGN-notes-fixed-root-identity.md", says: "Its format tag, `rc-signing-package/0`, is this tool's own and **provisional**"},
+			{file: "docs/KEY-FILES.md", says: "**Status: frozen.** The format tag is this tool's own and is versioned (`rc-key/0`)"},
+			{file: "docs/DESIGN-notes-fixed-root-identity.md", says: "Its format tag, `rc-signing-package/1`, is this tool's own and **frozen**"},
 		},
-		probe:  "the key file tag is `rc-key/0`, the execution policy tag is `rc-exec-policy/0` and the signing package tag is `rc-signing-package/0`",
-		closes: "a stable (`/1`) tag for any of them",
+		probe:  "the execution policy tag is `rc-exec-policy/0` (and the frozen tags are `rc-key/0` and `rc-signing-package/1`)",
+		closes: "a stable execution-policy tag",
 		open: func(t *testing.T) (bool, string) {
-			return KeyFormat == "rc-key/0" && ExecPolicyFormat == "rc-exec-policy/0" && SigningPackageFormat == "rc-signing-package/0",
-				KeyFormat + " " + ExecPolicyFormat + " " + SigningPackageFormat
+			return ExecPolicyFormat == "rc-exec-policy/0" && KeyFormat == "rc-key/0" && SigningPackageFormat == "rc-signing-package/1",
+				ExecPolicyFormat + " " + KeyFormat + " " + SigningPackageFormat
 		},
 	},
 	{

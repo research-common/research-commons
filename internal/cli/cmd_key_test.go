@@ -160,3 +160,34 @@ func TestKeyCustody(t *testing.T) {
 		}
 	}
 }
+
+// TestKeyFileReader: the rc-key/0 reader accepts any strict JSON object with the format's members, not only the
+// canonical form the writer writes (whitespace, member order, string escapes, no trailing newline), and refuses a
+// duplicate member; the secp256k1 scalar is big-endian (scalar 1 is the address of the generator point).
+func TestKeyFileReader(t *testing.T) {
+	dir := t.TempDir()
+	p, signer := newKeyFile(t, dir, wire.AlgEd25519)
+	sec := secretOf(t, p)
+	esc := `\u0065d25519` // "ed25519" with its first letter escaped
+	for i, body := range []string{
+		"{\n  \"seed\": \"" + sec + "\",\n  \"format\": \"rc-key/0\",\n  \"alg\": \"ed25519\"\n}\n",
+		`{"format":"rc-key/0","alg":"` + esc + `","seed":"` + sec + `"}`,
+	} {
+		f := filepath.Join(dir, "lax"+string(rune('a'+i))+".key")
+		os.WriteFile(f, []byte(body), 0o600)
+		r := runIn(dir, nil, "key", "show", f, "--json")
+		if r.code != ExitOK || jsonOf(t, r).Members["signer"] != canon.String(signer) {
+			t.Fatalf("strict non-canonical key file %d: %d %s", i, r.code, r.stdout)
+		}
+	}
+	dup := filepath.Join(dir, "dup.key")
+	os.WriteFile(dup, []byte(`{"alg":"ed25519","format":"rc-key/0","seed":"`+sec+`","seed":"`+sec+`"}`), 0o600)
+	if r := runIn(dir, nil, "key", "show", dup, "--json"); r.code != ExitDidNotStart {
+		t.Fatalf("duplicate member: %d %s", r.code, r.stdout)
+	}
+	one := filepath.Join(dir, "one.key")
+	os.WriteFile(one, []byte(`{"alg":"eip191-secp256k1","format":"rc-key/0","scalar":"`+strings.Repeat("0", 63)+`1"}`), 0o600)
+	if r := runIn(dir, nil, "key", "show", one, "--json"); r.code != ExitOK || jsonOf(t, r).Members["signer"] != canon.String("0x7e5f4552091a69125d5dfcb7b8c2659029395bdf") {
+		t.Fatalf("scalar 1 (big-endian): %d %s", r.code, r.stdout)
+	}
+}

@@ -275,3 +275,53 @@ func TestPackageShowKeySignRefusals(t *testing.T) {
 		})
 	}
 }
+
+// TestRetiredPackageFormat: a package of the retired format rc-signing-package/0 (its summary carried prose) is
+// refused by package show, key sign and --complete, exit 2, naming the retired format and the next step (prepare
+// it again); nothing is signed, written or appended. The same package with the current tag is accepted, so the
+// refusal is the format check's. Both algorithms.
+func TestRetiredPackageFormat(t *testing.T) {
+	for _, alg := range []string{wire.AlgEd25519, wire.AlgEIP191} {
+		t.Run(alg, func(t *testing.T) {
+			root := newExtHome(t, alg)
+			_, pkg := root.prepare("new.pkg", "identity", "new", "--ts", "2026-11-14T00:00:00Z")
+			dev := newSigningMachine(t)
+			old := clonePkg(pkg)
+			old.Members["format"] = canon.String("rc-signing-package/0")
+			sum := old.Members["summary"].(*canon.Object)
+			sum.Members["action"] = canon.String("create a fixed-root identity")
+			sum.Keys = append(sum.Keys, "custody")
+			sum.Members["custody"] = canon.String("this key becomes the identity's only administrator; fixed-root-v1 has no recovery if it is lost or stolen")
+			oldP := filepath.Join(dev.dir, "old.pkg")
+			writePkg(t, oldP, old)
+			refused := func(what string, r result) {
+				t.Helper()
+				if r.code != ExitDidNotStart || !strings.Contains(r.stdout, "retired-package-format") || !strings.Contains(r.stdout, "rc-signing-package/0") ||
+					!strings.Contains(r.stdout, "re-prepare it") {
+					t.Fatalf("%s: %d %s", what, r.code, r.stdout)
+				}
+			}
+			refused("package show", dev.run("package", "show", oldP, "--json"))
+			out := filepath.Join(dev.dir, "old.sig")
+			refused("key sign", dev.run("key", "sign", "--package", oldP, "--key", root.keyF, "--out", out, "--json"))
+			if _, err := os.Stat(out); err == nil {
+				t.Fatal("key sign of a retired package wrote a signature")
+			}
+			before := storeBytes(t, root.store)
+			sig := root.path("old.sig")
+			os.WriteFile(sig, []byte(root.key.Sign(paeOf(t, pkg))), 0o644)
+			refused("--complete", root.complete([]string{"identity", "new"}, oldP, sig))
+			if storeBytes(t, root.store) != before {
+				t.Fatal("--complete of a retired package appended")
+			}
+			// the current tag over the same envelope is read (and its prose summary named as the mismatch)
+			cur := clonePkg(old)
+			cur.Members["format"] = canon.String(SigningPackageFormat)
+			curP := filepath.Join(dev.dir, "cur.pkg")
+			writePkg(t, curP, cur)
+			if r := dev.run("package", "show", curP, "--json"); r.code != ExitWrong || !strings.Contains(r.stdout, `"scope":"package member summary"`) {
+				t.Fatalf("current tag, prose summary: %d %s", r.code, r.stdout)
+			}
+		})
+	}
+}

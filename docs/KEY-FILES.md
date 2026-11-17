@@ -5,10 +5,10 @@ A key file holds one signing key. `commons key new --out <file>` writes it; ever
 signer a file stands for, and nothing else. `commons key sign --package <file> --key <file>` signs an external-signing
 package's bytes with a key file on a machine that holds no store (identity profile §8).
 
-**Status: provisional.** The format tag is this tool's own and is versioned (`rc-key/0`). The wire-format
-note specifies what a signature is and how a signer is derived, not a file encoding. Expect the format to be
-revised before a stable release; a revision gets a new tag, and a file with a tag this tool does not know is
-refused, never guessed at.
+**Status: frozen.** The format tag is this tool's own and is versioned (`rc-key/0`); the format below is
+frozen with the `1.0` release. The wire-format note specifies what a signature is and how a signer is derived,
+not a file encoding: this file is that encoding. A change to it gets a new tag, and a file with a tag this tool
+does not know is refused, never guessed at.
 
 ## Format
 
@@ -22,12 +22,16 @@ three members:
 | `seed` (for `ed25519`) or `scalar` (for `eip191-secp256k1`) | the secret as 64 lowercase hex characters (32 bytes) |
 
 For `ed25519` the secret is the RFC 8032 seed, never the expanded scalar. For `eip191-secp256k1` it is the
-secp256k1 scalar and must be non-zero and below the curve order. A file with any other member, a missing
+secp256k1 scalar, big-endian, and must be non-zero and below the curve order. A file with any other member, a missing
 member, the wrong secret member for its algorithm, uppercase hex, or a secret of another length is refused.
 
 The **signer is never stored in the file.** It is recomputed from the secret every time the file is loaded
 (`ed25519:<public key hex>`, or the `0x` address for secp256k1). A file cannot claim to be a different signer
 than its secret makes it.
+
+The writer writes the canonical form (RFC 8785, as above). The reader accepts any strict JSON object with those
+members (whitespace between tokens, any member order, any valid string escape), under the wire-format note's
+strict rules: no duplicate members, UTF-8 only. A trailing newline is optional.
 
 ## Permissions and custody
 

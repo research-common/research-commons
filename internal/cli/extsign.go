@@ -34,16 +34,22 @@ import (
 //     builds must be the prepared envelope byte for byte. Only then is the line committed, through the same commit
 //     unit as direct signing. Every refusal leaves the store unchanged.
 //
-// The package format is this tool's own and provisional, like the key file format.
+// The package format is this tool's own, versioned and frozen (identity profile §8): a change that alters a
+// package's bytes takes a new tag.
 
 // SigningPackageFormat is the format tag of an external-signing package.
-const SigningPackageFormat = "rc-signing-package/0"
+const SigningPackageFormat = "rc-signing-package/1"
+
+// retiredPackageFormat is the tag of the packages releases before the frozen format wrote, whose summary carried
+// prose. A package is short-lived (it is completed or discarded once its signer's log moves), so no reader is kept:
+// such a package is refused, naming why, and prepared again.
+const retiredPackageFormat = "rc-signing-package/0"
 
 // maxSignatureInput bounds the --signature input: the longest encoding is 132 bytes plus a line ending.
 const maxSignatureInput = 256
 
 var extFlags = []Flag{
-	{Name: "prepare", Value: "file", Help: "do not sign: write an external-signing package (" + SigningPackageFormat + ", provisional) to this new file: the unsigned statement, the exact bytes to sign (PAE, base64), the signer, the proposed id, your log's head and a summary; needs --signer, takes no --key, appends nothing; an existing file is never overwritten"},
+	{Name: "prepare", Value: "file", Help: "do not sign: write an external-signing package (" + SigningPackageFormat + ") to this new file: the unsigned statement, the exact bytes to sign (PAE, base64), the signer, the proposed id, your log's head and a summary; needs --signer, takes no --key, appends nothing; an existing file is never overwritten"},
 	{Name: "signer", Value: "key", Help: "with --prepare: the public form of the key that will sign (ed25519:<64 hex> or 0x<40 hex>); the algorithm follows from the form", Check: func(v string) error {
 		if !reGrantee.MatchString(v) {
 			return errString("not a key (ed25519: + 64 lowercase hex, or 0x + 40 lowercase hex)")
@@ -291,6 +297,11 @@ func (m packageMismatch) problem(all []packageMismatch, path string, exit int) *
 // signer, log_head, summary). It reads no store: whether the log head is still the signer's head is --complete's.
 func inspectPackage(pkg *canon.Object, path, scope string) (*wire.Statement, []packageMismatch, *Problem) {
 	bad := func(title, detail, next string) *Problem { return badPackageAt(scope, title, detail, path, next) }
+	if pkg.Members["format"] == canon.String(retiredPackageFormat) {
+		return nil, nil, usage("retired-package-format", "the package is of the retired format "+retiredPackageFormat,
+			"this release reads "+SigningPackageFormat+" only: a "+retiredPackageFormat+" package's summary carried prose, so the format was replaced; nothing was done",
+			scope, "re-prepare it: run the same command again with --prepare <new file> --signer <key> and sign the new package", path)
+	}
 	if pkg.Members["format"] != canon.String(SigningPackageFormat) {
 		return nil, nil, bad("not an external-signing package", "the format member is not "+SigningPackageFormat, "name a file written by --prepare")
 	}

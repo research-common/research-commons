@@ -55,7 +55,9 @@ A plan, not a schedule; the maintainers make the final call and may revise this 
    object of any major the `1.0` writer signs (`rc/1` and `rc/2`), and the design notes' open
    questions are closed or explicitly deferred. The `rc/2` identity profile is frozen at `1.0` (not
    shipped as experimental), after one more independent review of it; the interchange files users
-   keep, `rc-key/0` key files and `rc-signing-package/0` signing packages, are frozen with it.
+   keep, `rc-key/0` key files and `rc-signing-package/1` signing packages, are frozen with it
+   (`rc-signing-package/0`, whose summary carried prose, is retired: a `/0` package is refused and
+   prepared again). The execution-policy file, `rc-exec-policy/0`, is outside the freeze and stays provisional.
    Each design note's open-questions section ends with a **Status for 1.0** line saying which questions are
    closed and why each deferred one cannot change an existing object's bytes; a question that could
    is a release decision, recorded before the tag.
