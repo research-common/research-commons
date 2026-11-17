@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/research-common/research-commons/internal/canon"
+	"github.com/research-common/research-commons/internal/conformance"
 )
 
 // TestIdentitySetsSorted: every set the profile defines is sorted by canonical encoding and duplicate-free, and the
@@ -12,6 +13,7 @@ import (
 // JCS text of each entry), a target set (digests or ids) and amends. The sorted twin of each case reads valid, so the
 // order is the one thing the negative changes.
 func TestIdentitySetsSorted(t *testing.T) {
+	conformance.Partial(t, "C-id-37", "canonical set order: an unsorted permissions list, target set or amends reads invalid on a verified rc/2 line; tamper and criticality are the signed vectors'")
 	d1, d2 := "sha256:"+strings.Repeat("1a", 32), "sha256:"+strings.Repeat("2b", 32)
 	pAuth := body("kind", "authored", "targets", body("any_content", canon.Bool(true)), "amend", canon.Bool(false))
 	pHolds := body("kind", "holds", "targets", body("contents", arr(s(d1))))

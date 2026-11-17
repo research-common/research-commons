@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/research-common/research-commons/internal/canon"
+	"github.com/research-common/research-commons/internal/conformance"
 	"github.com/research-common/research-commons/internal/refusal"
 )
 
@@ -30,6 +31,7 @@ func futureAlgLine(rc, alg, signer string) []byte {
 // alg is retained, adding one is a minor change). An implemented alg with a signer outside its form stays
 // malformed, and so does a signer that borrows a known scheme prefix in the wrong shape.
 func TestFutureAlgorithmSigner(t *testing.T) {
+	conformance.Partial(t, "C-core-144", "(c) an alg/signer-form mismatch is malformed under every reader and both majors, and an unimplemented alg with its own key form is retained unsupported; (a) and (b) are sig.TestStatementsTwoImplementations")
 	readers := map[string]func([]byte) (*Statement, error){
 		"Read":           Read,
 		"IdentityReader": NewIdentityReader().Read,
@@ -65,6 +67,7 @@ func TestFutureAlgorithmSigner(t *testing.T) {
 // under it, so this one may not definitely deny them. A malformed key (a known scheme in the wrong shape, upper case,
 // no hex) stays invalid, and the rest of the body is still checked: a future key does not excuse a broken grant.
 func TestFutureKeyInGrantAndSubjects(t *testing.T) {
+	conformance.Partial(t, "C-id-19", "wire half: a grant naming a future-algorithm delegate reads unsupported (confined to its grant), a malformed key stays invalid; effective authorization is the evaluator's")
 	fk := "ml-dsa-65:" + strings.Repeat("ab", 40)
 	perm := arr(body("kind", "authored", "targets", body("any_content", canon.Bool(true)), "amend", canon.Bool(true)))
 	grant := func(k string, perms canon.Array) *canon.Object {
@@ -127,6 +130,7 @@ func TestFutureKeyInGrantAndSubjects(t *testing.T) {
 // the line as the worker key's own bare-key claim. With x_actor_v1 beside it, it is still unsupported. An rc/1 line
 // is unchanged (no actor is ever read there).
 func TestOtherActorUnsupported(t *testing.T) {
+	conformance.Partial(t, "C-id-26", "wire half: an actor this reader cannot read (another x_actor_* member, an actor in the body) reads unsupported, never a bare-key claim; slot filling is the resolver's")
 	a := body("identity", tID, "grant", tID2)
 	b := body("content", content("ab", 10), "type", "dataset")
 	k := Ed25519Key{Seed: bytes.Repeat([]byte{61}, 32)}

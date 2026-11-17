@@ -313,7 +313,8 @@
         "internal/identity:TestSliceNegatives",
         "internal/identity:TestReviewUnsupportedGrantAffectsOnlyItself",
         "internal/identity:TestUnknownAmendModeLosesOnlyItsOwnGrant",
-        "internal/wire:TestIdentitySetsSorted"
+        "internal/wire:TestIdentitySetsSorted",
+        "internal/wire:TestFutureKeyInGrantAndSubjects"
       ],
       "conformance": "partial",
       "remaining": "Permission syntax tested; registered field dispatch and effective authorization need model/integration."
@@ -416,7 +417,8 @@
       ],
       "isolated_tests": [
         "internal/identity:TestSliceNegatives",
-        "internal/resolve:TestTypedControllerSlotsNoFallback"
+        "internal/resolve:TestTypedControllerSlotsNoFallback",
+        "internal/wire:TestOtherActorUnsupported"
       ],
       "conformance": "covers",
       "remaining": "Covered by internal/resolve:TestTypedControllerSlotsNoFallback: an identity approval under a grant without `edition`, or under a grant for another resource, fills no slot (not even its signer's listed key slot); a root's raw signature is key(root)'s word and never fills I's slot. Identity half in internal/identity."
@@ -624,7 +626,8 @@
         "internal/wire:TestSignedIdentityNegativeVectors",
         "internal/identity:TestSignedVectorsNegativesNeverReachEligibility",
         "internal/identity:TestCriticalRegistryNeverBetterThanWithholding",
-        "internal/wire:TestIdentityReaderCriticalRegistryDecides"
+        "internal/wire:TestIdentityReaderCriticalRegistryDecides",
+        "internal/wire:TestIdentitySetsSorted"
       ],
       "conformance": "covers",
       "remaining": "Covered by the listed tests. Concrete schema negatives and both algorithms tested; the critical-marker rules (a marker that is not an object or breaks its closed shape, an amendment without an actor, an actor without the marker, an unregistered critical token) run through the production reader's critical-extension registry and are never eligible and never better than withholding, each beside a repaired twin that is eligible."
