@@ -49,8 +49,8 @@ func TestSignedIdentityVectorsTwoImplementations(t *testing.T) {
 	}
 	nPos := len(cases)
 	for _, x := range v.Negative {
-		if x.Alg != "ed25519" {
-			continue
+		if x.Alg != "ed25519" || !strings.HasPrefix(x.Signer, "ed25519:") {
+			continue // a signer outside the Ed25519 key form is refused before any signature check
 		}
 		step := ""
 		if !x.SigVerifies {

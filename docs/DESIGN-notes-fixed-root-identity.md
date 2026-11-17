@@ -996,7 +996,9 @@ Files in this candidate:
   line carrying `x_actor_v1` (valid, actor not read), an `rc/1` line naming `x_identity_v1` in `crit`
   (unsupported), and an `rc/2` `revoke_key` (invalid, never an identity act); and, for Ed25519, three wire-format
   edge cases (`NE1`, `NE7`, `NE11`) and the identity-point forgery delivered as `rc/2` identity lines, each a bad
-  signature at the pinned step. The vectors check **representation** (bytes, domain separation, ids,
+  signature at the pinned step; and, per algorithm, a future algorithm (wire §4): an `rc/1` line and an `rc/2` act
+  re-labelled `alg: ml-dsa-65` with an `ml-dsa-65:<hex>` signer (retained `unsupported` with an id, never verified),
+  and the same signer under the implemented `alg` (malformed: a signer outside its algorithm's key form). The vectors check **representation** (bytes, domain separation, ids,
   signatures, reader outcome), never authority. `internal/wire` regenerates the file from the labels and compares
   it byte for byte, runs every entry through the production `rc/2` reader and the unchanged `rc/1` reader, and
   `internal/sig` verifies every Ed25519 signature under two independent implementations (the pinned verifier and

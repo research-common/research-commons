@@ -300,6 +300,30 @@ func ivNegs(chain string, root, work Key, pos []*ivPos, t testing.TB) []*ivNeg {
 	rv2 := ivDraft("rc/2", "revoke_key", 4, string(rv.env.Members["prev"].(canon.String)), true, ivObj("reason", "key_compromise"), root)
 	readOK("neg-rc2-revoke-key", "rc/2 revoke_key (correctly signed; raw key events stay rc/1 in this profile)", rv, root,
 		rv2, 2, "invalid statement", "raw key events stay rc/1 in this profile", false)
+	// A future algorithm (wire §4): the alg and the signer of a positive are replaced by an algorithm this reader does not
+	// implement and a key in that algorithm's own form; the sig is carried over, opaque. Retained unsupported with an id,
+	// never verified, in both majors. The same signer under an implemented alg stays malformed.
+	future := "ml-dsa-65:" + strings.Repeat("5a", 40)
+	futureRead := func(name, title string, of *ivPos) {
+		env := setField(setField(of.env, "alg", canon.String("ml-dsa-65")), "signer", canon.String(future))
+		major := 2
+		if ivStr(env, "rc") == "rc/1" {
+			major = 1
+		}
+		line := string(canon.Encode(setField(env, "sig", canon.String(of.sig))))
+		out = append(out, &ivNeg{name: chain + "-" + name, chain: chain, title: title, of: of.name, alg: "ml-dsa-65", signer: future,
+			delivered: line, verified: string(PAE(ivPType(ivStr(env, "kind"), major), canon.Encode(env))), sig: of.sig,
+			changed: ivDiff(ivParseLine(t, line), ivParseLine(t, of.line)), result: "read", status: "unsupported", why: "alg ml-dsa-65"})
+	}
+	futureRead("neg-future-alg-rc1", "rc/1 line under a future alg with that algorithm's own key form (retained unsupported, not malformed)", k0)
+	futureRead("neg-future-alg-rc2", "rc/2 identity act under a future alg with that algorithm's own key form (retained unsupported, not malformed)", a1)
+	wrong := setField(a1.env, "signer", canon.String(future))
+	wline := string(canon.Encode(setField(wrong, "sig", canon.String(a1.sig))))
+	out = append(out, &ivNeg{name: chain + "-neg-known-alg-future-signer", chain: chain,
+		title: "an implemented alg with a signer outside its key form (a future algorithm's) stays malformed", of: a1.name, alg: work.Alg(),
+		signer: future, delivered: wline, verified: string(PAE(ivPType("authored", 2), canon.Encode(wrong))), sig: a1.sig,
+		changed: ivDiff(ivParseLine(t, wline), ivParseLine(t, a1.line)), result: "refused", class: string(refusal.Intrinsic),
+		reason: refusal.MalformedStatement, detail: "neither"})
 	return out
 }
 
@@ -418,7 +442,7 @@ func ivBuild(t testing.TB) (string, []*ivPos, []*ivNeg) {
 		if n.sigOver != "" {
 			e = ivSet(e, "sig_over", canon.String(n.sigOver))
 		}
-		if n.alg == AlgEd25519 && !n.verifies {
+		if n.alg == AlgEd25519 && !n.verifies && n.step != "" {
 			e = ivSet(e, "ed25519_step", canon.String(n.step))
 			e = ivSet(e, "stock_ed25519_accepts", canon.Bool(n.stock))
 		}
@@ -481,6 +505,9 @@ func ivUnhex(t *testing.T, s string) []byte {
 // EIP-191 recovery.
 func ivVerify(t *testing.T, alg, signer, msg, sg string) (ok bool, step string) {
 	t.Helper()
+	if alg != AlgEd25519 && alg != AlgEIP191 || checkSigner(alg, signer) != nil {
+		return false, "" // an alg this reader does not implement, or a signer outside its form: nothing to verify
+	}
 	switch alg {
 	case AlgEd25519:
 		step = sig.VerifyEd25519(ivUnhex(t, strings.TrimPrefix(signer, "ed25519:")), []byte(msg), ivUnhex(t, sg))
@@ -717,7 +744,7 @@ func TestSignedIdentityNegativeVectors(t *testing.T) {
 			if ok != x.SigVerifies {
 				t.Fatalf("signature verifies %v over the verified string, entry says %v", ok, x.SigVerifies)
 			}
-			if x.Alg == AlgEd25519 && !ok {
+			if x.Alg == AlgEd25519 && !ok && x.Ed25519Step != "" {
 				if num := strings.TrimPrefix(strings.SplitN(step, " ", 3)[0]+" "+strings.SplitN(step, " ", 3)[1], "step "); num != x.Ed25519Step {
 					t.Fatalf("refused at step %q, entry says %q", num, x.Ed25519Step)
 				}
@@ -746,8 +773,11 @@ func TestSignedIdentityNegativeVectors(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if !ok || !st.Verified || string(st.Status) != x.Status || st.Why != x.Why || (st.Actor != nil) != x.ActorRead {
+				if ok != st.Verified || x.SigVerifies && !st.Verified || string(st.Status) != x.Status || st.Why != x.Why || (st.Actor != nil) != x.ActorRead {
 					t.Fatalf("identity reader: %+v", st)
+				}
+				if !st.Verified && (x.Status != string(Unsupported) || x.Alg == AlgEd25519 || x.Alg == AlgEIP191 || st.ID == "") {
+					t.Fatalf("an unverified read is only a retained unknown-alg line: %+v", st)
 				}
 			}
 			// the unchanged reader never reads an actor and never reads an rc/2 line as valid
@@ -755,12 +785,12 @@ func TestSignedIdentityNegativeVectors(t *testing.T) {
 			if oerr == nil && (old.Actor != nil || ivStr(env, "rc") == "rc/2" && (old.Status != Unsupported || old.Verified)) {
 				t.Fatalf("unchanged reader: %+v", old)
 			}
-			seen[x.Alg+" "+strings.TrimPrefix(x.Name, x.Chain+"-")]++
+			seen[of.Alg+" "+strings.TrimPrefix(x.Name, x.Chain+"-")]++ // the chain's algorithm: a future-alg entry names its own
 		})
 	}
 	for _, alg := range []string{AlgEd25519, AlgEIP191} {
 		for _, n := range []string{"neg-actor-tampered", "neg-v1-preimage", "neg-relabel-rc2-as-rc1", "neg-relabel-rc1-as-rc2",
-			"neg-rc1-with-actor", "neg-rc2-revoke-key"} {
+			"neg-rc1-with-actor", "neg-rc2-revoke-key", "neg-future-alg-rc1", "neg-future-alg-rc2", "neg-known-alg-future-signer"} {
 			if seen[alg+" "+n] != 1 {
 				t.Errorf("no %s for %s", n, alg)
 			}

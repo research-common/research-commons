@@ -584,6 +584,71 @@
    }
   },
   {
+   "name": "ed-neg-future-alg-rc1",
+   "chain": "ed",
+   "title": "rc/1 line under a future alg with that algorithm's own key form (retained unsupported, not malformed)",
+   "of": "ed-worker-genesis",
+   "alg": "ml-dsa-65",
+   "signer": "ml-dsa-65:5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+   "delivered": "{\"alg\":\"ml-dsa-65\",\"body\":{\"content\":{\"digest\":\"sha256:9999999999999999999999999999999999999999999999999999999999999999\",\"size\":4096},\"type\":\"dataset\"},\"kind\":\"authored\",\"prev\":null,\"rc\":\"rc/1\",\"seq\":0,\"sig\":\"d201a29fb79b69c4eaef2fed8631ee11e947e2b38b7a04682a69ad2c9099f22954d201f24eaaa50515f36ea708acaf4b78b77c80926bbe5de120d9f076414d06\",\"signer\":\"ml-dsa-65:5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "changed_members": [
+    "alg",
+    "signer"
+   ],
+   "verified_string": "DSSEv1 49 application/vnd.research-commons.authored.v1+json 332 {\"alg\":\"ml-dsa-65\",\"body\":{\"content\":{\"digest\":\"sha256:9999999999999999999999999999999999999999999999999999999999999999\",\"size\":4096},\"type\":\"dataset\"},\"kind\":\"authored\",\"prev\":null,\"rc\":\"rc/1\",\"seq\":0,\"signer\":\"ml-dsa-65:5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "sig": "d201a29fb79b69c4eaef2fed8631ee11e947e2b38b7a04682a69ad2c9099f22954d201f24eaaa50515f36ea708acaf4b78b77c80926bbe5de120d9f076414d06",
+   "sig_verifies": false,
+   "outcome": {
+    "result": "read",
+    "status": "unsupported",
+    "why": "alg ml-dsa-65",
+    "actor_read": false
+   }
+  },
+  {
+   "name": "ed-neg-future-alg-rc2",
+   "chain": "ed",
+   "title": "rc/2 identity act under a future alg with that algorithm's own key form (retained unsupported, not malformed)",
+   "of": "ed-authored",
+   "alg": "ml-dsa-65",
+   "signer": "ml-dsa-65:5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+   "delivered": "{\"alg\":\"ml-dsa-65\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c\",\"rc\":\"rc/2\",\"seq\":1,\"sig\":\"979fb4aca8779989d6084ac1b3cfd3c4f984c7654161349e8f1282026e1b29cb428cf8c380bfd8c7f5c53f80b4c9d68c1e3ac833c1477b0ce3690b6a39ea7b0f\",\"signer\":\"ml-dsa-65:5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\"}}",
+   "changed_members": [
+    "alg",
+    "signer"
+   ],
+   "verified_string": "DSSEv1 49 application/vnd.research-commons.authored.v2+json 606 {\"alg\":\"ml-dsa-65\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c\",\"rc\":\"rc/2\",\"seq\":1,\"signer\":\"ml-dsa-65:5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\"}}",
+   "sig": "979fb4aca8779989d6084ac1b3cfd3c4f984c7654161349e8f1282026e1b29cb428cf8c380bfd8c7f5c53f80b4c9d68c1e3ac833c1477b0ce3690b6a39ea7b0f",
+   "sig_verifies": false,
+   "outcome": {
+    "result": "read",
+    "status": "unsupported",
+    "why": "alg ml-dsa-65",
+    "actor_read": false
+   }
+  },
+  {
+   "name": "ed-neg-known-alg-future-signer",
+   "chain": "ed",
+   "title": "an implemented alg with a signer outside its key form (a future algorithm's) stays malformed",
+   "of": "ed-authored",
+   "alg": "ed25519",
+   "signer": "ml-dsa-65:5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+   "delivered": "{\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c\",\"rc\":\"rc/2\",\"seq\":1,\"sig\":\"979fb4aca8779989d6084ac1b3cfd3c4f984c7654161349e8f1282026e1b29cb428cf8c380bfd8c7f5c53f80b4c9d68c1e3ac833c1477b0ce3690b6a39ea7b0f\",\"signer\":\"ml-dsa-65:5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\"}}",
+   "changed_members": [
+    "signer"
+   ],
+   "verified_string": "DSSEv1 49 application/vnd.research-commons.authored.v2+json 604 {\"alg\":\"ed25519\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c\",\"rc\":\"rc/2\",\"seq\":1,\"signer\":\"ml-dsa-65:5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"4daa025db26cc33e831df86fd43ede65a56bff17e70aff0732e296b4a6315d05\",\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\"}}",
+   "sig": "979fb4aca8779989d6084ac1b3cfd3c4f984c7654161349e8f1282026e1b29cb428cf8c380bfd8c7f5c53f80b4c9d68c1e3ac833c1477b0ce3690b6a39ea7b0f",
+   "sig_verifies": false,
+   "outcome": {
+    "result": "refused",
+    "class": "intrinsic",
+    "reason": "malformed statement",
+    "detail_has": "neither"
+   }
+  },
+  {
    "name": "ed-neg-ed25519-ne1",
    "chain": "ed",
    "title": "wire-format Ed25519 case NE1 delivered as an rc/2 identity line",
@@ -860,6 +925,71 @@
     "status": "invalid statement",
     "why": "raw key events stay rc/1 in this profile",
     "actor_read": false
+   }
+  },
+  {
+   "name": "eip-neg-future-alg-rc1",
+   "chain": "eip",
+   "title": "rc/1 line under a future alg with that algorithm's own key form (retained unsupported, not malformed)",
+   "of": "eip-worker-genesis",
+   "alg": "ml-dsa-65",
+   "signer": "ml-dsa-65:5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+   "delivered": "{\"alg\":\"ml-dsa-65\",\"body\":{\"content\":{\"digest\":\"sha256:9999999999999999999999999999999999999999999999999999999999999999\",\"size\":4096},\"type\":\"dataset\"},\"kind\":\"authored\",\"prev\":null,\"rc\":\"rc/1\",\"seq\":0,\"sig\":\"0x5281d6af29cee03dfad5813fcc6acf5760d482030b67670b40ce3a218a12cdd97c826c8bff7fbedfcde3775a3a08bbf05bfac59deea5b5513e1d2b054033426a1b\",\"signer\":\"ml-dsa-65:5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "changed_members": [
+    "alg",
+    "signer"
+   ],
+   "verified_string": "DSSEv1 49 application/vnd.research-commons.authored.v1+json 332 {\"alg\":\"ml-dsa-65\",\"body\":{\"content\":{\"digest\":\"sha256:9999999999999999999999999999999999999999999999999999999999999999\",\"size\":4096},\"type\":\"dataset\"},\"kind\":\"authored\",\"prev\":null,\"rc\":\"rc/1\",\"seq\":0,\"signer\":\"ml-dsa-65:5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "sig": "0x5281d6af29cee03dfad5813fcc6acf5760d482030b67670b40ce3a218a12cdd97c826c8bff7fbedfcde3775a3a08bbf05bfac59deea5b5513e1d2b054033426a1b",
+   "sig_verifies": false,
+   "outcome": {
+    "result": "read",
+    "status": "unsupported",
+    "why": "alg ml-dsa-65",
+    "actor_read": false
+   }
+  },
+  {
+   "name": "eip-neg-future-alg-rc2",
+   "chain": "eip",
+   "title": "rc/2 identity act under a future alg with that algorithm's own key form (retained unsupported, not malformed)",
+   "of": "eip-authored",
+   "alg": "ml-dsa-65",
+   "signer": "ml-dsa-65:5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+   "delivered": "{\"alg\":\"ml-dsa-65\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"3844ef7b3ee780bc3e4960eb3917f286be0b5dd954c49b5d13c026924770180e\",\"rc\":\"rc/2\",\"seq\":1,\"sig\":\"0x5e353fe3bc013ddbe1a1de60733536b32b9c5363bd907a61768189b30ee1554f218075a5667c8f39f467280bb705529dbf5ad721f0358c67704c76416acfca701b\",\"signer\":\"ml-dsa-65:5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"86811c45c1bc2d21616a9e594ffc0adae28c72e299ec9b7cc7ed6e85384bc9aa\",\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\"}}",
+   "changed_members": [
+    "alg",
+    "signer"
+   ],
+   "verified_string": "DSSEv1 49 application/vnd.research-commons.authored.v2+json 606 {\"alg\":\"ml-dsa-65\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"3844ef7b3ee780bc3e4960eb3917f286be0b5dd954c49b5d13c026924770180e\",\"rc\":\"rc/2\",\"seq\":1,\"signer\":\"ml-dsa-65:5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"86811c45c1bc2d21616a9e594ffc0adae28c72e299ec9b7cc7ed6e85384bc9aa\",\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\"}}",
+   "sig": "0x5e353fe3bc013ddbe1a1de60733536b32b9c5363bd907a61768189b30ee1554f218075a5667c8f39f467280bb705529dbf5ad721f0358c67704c76416acfca701b",
+   "sig_verifies": false,
+   "outcome": {
+    "result": "read",
+    "status": "unsupported",
+    "why": "alg ml-dsa-65",
+    "actor_read": false
+   }
+  },
+  {
+   "name": "eip-neg-known-alg-future-signer",
+   "chain": "eip",
+   "title": "an implemented alg with a signer outside its key form (a future algorithm's) stays malformed",
+   "of": "eip-authored",
+   "alg": "eip191-secp256k1",
+   "signer": "ml-dsa-65:5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+   "delivered": "{\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"3844ef7b3ee780bc3e4960eb3917f286be0b5dd954c49b5d13c026924770180e\",\"rc\":\"rc/2\",\"seq\":1,\"sig\":\"0x5e353fe3bc013ddbe1a1de60733536b32b9c5363bd907a61768189b30ee1554f218075a5667c8f39f467280bb705529dbf5ad721f0358c67704c76416acfca701b\",\"signer\":\"ml-dsa-65:5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"86811c45c1bc2d21616a9e594ffc0adae28c72e299ec9b7cc7ed6e85384bc9aa\",\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\"}}",
+   "changed_members": [
+    "signer"
+   ],
+   "verified_string": "DSSEv1 49 application/vnd.research-commons.authored.v2+json 613 {\"alg\":\"eip191-secp256k1\",\"body\":{\"content\":{\"digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"size\":4096},\"type\":\"dataset\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"authored\",\"prev\":\"3844ef7b3ee780bc3e4960eb3917f286be0b5dd954c49b5d13c026924770180e\",\"rc\":\"rc/2\",\"seq\":1,\"signer\":\"ml-dsa-65:5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a\",\"ts\":\"2026-11-06T00:00:00Z\",\"x_actor_v1\":{\"grant\":\"86811c45c1bc2d21616a9e594ffc0adae28c72e299ec9b7cc7ed6e85384bc9aa\",\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\"}}",
+   "sig": "0x5e353fe3bc013ddbe1a1de60733536b32b9c5363bd907a61768189b30ee1554f218075a5667c8f39f467280bb705529dbf5ad721f0358c67704c76416acfca701b",
+   "sig_verifies": false,
+   "outcome": {
+    "result": "refused",
+    "class": "intrinsic",
+    "reason": "malformed statement",
+    "detail_has": "neither"
    }
   }
  ]
