@@ -15,7 +15,7 @@ import (
 // its own.
 
 func init() {
-	Register(&Command{Name: "init", Summary: "create a store in a directory (default: the working directory)",
+	Register(&Command{Name: "init", Examples: []string{"commons init store"}, Summary: "create a store in a directory (default: the working directory)",
 		Args:   []Arg{{Name: "dir", Shape: ShapeText, Optional: true}},
 		Before: initBefore,
 		Help:   "Creates the directory if needed and the store layout inside it (marker " + "rc-store" + ", layout " + "rc-store/1" + "). A directory that already holds a store of this layout is left as it is and the command exits 0 saying so; a non-empty directory that is not a store is refused and nothing is written. Creates no key: the next step is commons key new --out <file>.",

@@ -48,7 +48,7 @@ import (
 // record names every override that admitted something.
 
 func init() {
-	Register(&Command{Name: "pull", Summary: "admit a package (a store tree in a directory or a tar archive) into this store under this reader's policy",
+	Register(&Command{Name: "pull", Examples: []string{"commons pull --store store ./package"}, Summary: "admit a package (a store tree in a directory or a tar archive) into this store under this reader's policy",
 		Args: []Arg{{Name: "package", Shape: ShapeText}},
 		Flags: []Flag{
 			{Name: "below-floor", Value: "refuse|label", Help: "a statement whose signer the reader policy's admission trust does not cover: refuse it (class reader policy, reason trust floor) or admit it labelled `below trust floor` (default label)",

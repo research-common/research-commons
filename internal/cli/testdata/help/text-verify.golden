@@ -1,0 +1,27 @@
+Usage:
+  commons verify [--rerun] [--exec-policy <file>] [--policy <file>] <digest|id>
+      [--json]
+
+check a blob or a statement from the statements held; exit per the exit table
+
+Statement-only by default: verify reads the statements this store holds and runs
+nothing. With --rerun (a blob only) and --exec-policy <file>, the reader re-runs
+the derivation under its own execution policy and the re-run's token replaces
+the derivation cause; without a policy the re-run is unchecked and nothing runs.
+
+Exit 0 checked and passed, 1 a completed comparison disagreed, 3 could not
+check, 4 nothing to re-run, 5 environment mismatch.
+
+Options:
+  --rerun               re-run the blob's derivation under --exec-policy and
+                        compare it with the pin (a blob only); never the default
+  --exec-policy <file>  the reader's execution policy file (format
+                        rc-exec-policy/0, provisional); only applies alongside
+                        --rerun
+  --policy <file>       the reader policy (reader-policy-v1) to answer under
+                        (default: $COMMONS_POLICY; none when neither is set;
+                        nothing is read implicitly; format:
+                        docs/READER-POLICY.md)
+
+Examples:
+  commons verify --store store <digest>

@@ -1,0 +1,93 @@
+Usage:
+  commons <command> [options] [--json]
+
+Store:
+  init                 create a store in a directory (default: the working
+                       directory)
+  status               store recovery state, unfinished operations and the
+                       durability declaration
+  fsck                 check the store: blobs re-hashed, statements re-read,
+                       references resolved, journal and cache checked
+  repair               finish committed operations the store could not finish:
+                       reinstall, re-check blobs, rebuild projections
+  gc                   list (default) or delete unreferenced blobs outside the
+                       grace window; release a blob this store serves
+  history              list operations this store finished, newest first (local,
+                       not authoritative)
+
+Read:
+  list                 every blob a statement in this store names, and every
+                       resource, one line of tokens each
+  show                 show a blob (authorship, grade, every disclosure), a
+                       statement, a resource, or a key
+  explain              the statements, policy, evaluator and time context behind
+                       every token shown
+  verify               check a blob or a statement from the statements held;
+                       exit per the exit table
+
+Publish and keys:
+  publish              sign and commit a statement (authored with its bytes,
+                       holds, describes, retracts, or a draft)
+  publish task         create a task (genesis + first edition) or publish a new
+                       edition of one
+  publish grant        sign a task coordinator's grant for one edition
+  key new              generate a signing key into a new file (mode 0600, never
+                       overwritten)
+  key show             print the signer and algorithm of a key file (never the
+                       key), or of a Ledger device's key
+  key sign             sign an external-signing package's PAE bytes with a key
+                       file (reads no store)
+  package show         check an external-signing package and print what its
+                       signature would cover (reads no store)
+  rotate               rotate your signing key: sign a rotate_key naming its
+                       successor
+  revoke               revoke your signing key: sign a revoke_key whose history
+                       keeps what you choose
+
+Identity:
+  identity new         create a fixed-root identity: sign its inception with a
+                       fresh root key
+  identity grant       grant a delegate key the right to act for an identity
+  identity cut         cut a grant: the delegate's acts after --last-good stop
+                       counting for the identity
+
+Exchange:
+  pull                 admit a package (a store tree in a directory or a tar
+                       archive) into this store under this reader's policy
+  push                 judge the commits of this hub checkout as the hub's CI
+                       would, apply the anchor and withheld-bytes preconditions,
+                       and when all is clean git push the judged commit (never
+                       forced; --dry-run sends nothing)
+  fetch                obtain blobs from the locations held `holds` statements
+                       name, verified by full hash; never publishes a holds
+  hub check            check a change to the hub this directory is in, as the
+                       hub's CI does (writes nothing)
+
+Run:
+  run                  run a held workflow under your execution policy;
+                       --publish signs what it emits
+
+Anchors:
+  anchor stamp         timestamp a line of your log: submit its id to
+                       OpenTimestamps calendars and commit the pending proof
+                       with an anchors statement
+  anchor upgrade       complete pending timestamps: ask the calendars for the
+                       Bitcoin path of each pending proof and commit an upgraded
+                       anchors statement
+  anchor status        this reader's chain backend: provider, mode, network,
+                       bootstrap, tip, last sync, freshness, receipt count
+  anchor headers sync  validate Bitcoin block headers from a file and persist
+                       them as this reader's chain view
+
+Global options:
+  --json         print one JSON object on stdout (an RFC 9457 problem-details
+                 object on error)
+  --store <dir>  the store to read (default: $COMMONS_STORE, else the nearest
+                 ancestor directory holding rc-store)
+  --help         print help for the command and exit 0
+  --version      print the version and exit 0
+
+More:
+  commons help <command> — the options of one command
+  commons help outputs — the state tokens a result can carry
+  commons help exits — the exit codes

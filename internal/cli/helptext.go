@@ -370,7 +370,7 @@ func renderOutputsHelp(width int) string {
 		if i > 0 {
 			b.WriteString("\n")
 		}
-		b.WriteString("  " + t.Word + "  (" + t.Kind + ")\n")
+		b.WriteString(wrapText(t.Word+"  ("+t.Kind+")", width, "  ", "    "))
 		b.WriteString(wrapText(t.Meaning, width, "      ", "      "))
 	}
 	return b.String()

@@ -12,7 +12,7 @@ import (
 // and the one way to see which signer a key file is. Neither reads a store; neither prints key material.
 
 func init() {
-	Register(&Command{Name: "key new", Summary: "generate a signing key into a new file (mode 0600, never overwritten)",
+	Register(&Command{Name: "key new", Examples: []string{"commons key new --out me.key"}, Summary: "generate a signing key into a new file (mode 0600, never overwritten)",
 		Flags: []Flag{
 			{Name: "out", Value: "file", Help: "the key file to create; its directory must exist; an existing file is never overwritten"},
 			{Name: "alg", Value: "alg", Help: "ed25519 (default) or eip191-secp256k1", Check: checkAlg},

@@ -34,7 +34,7 @@ const PushSentSideEffects = "no registry change; no fetch; no cache; one git pus
 const WithheldBytes = "withheld bytes"
 
 func init() {
-	Register(&Command{Name: "push", Summary: "judge the commits of this hub checkout as the hub's CI would, apply the anchor and withheld-bytes preconditions, and when all is clean git push the judged commit (never forced; --dry-run sends nothing)",
+	Register(&Command{Name: "push", Examples: []string{"commons push --dry-run"}, Summary: "judge the commits of this hub checkout as the hub's CI would, apply the anchor and withheld-bytes preconditions, and when all is clean git push the judged commit (never forced; --dry-run sends nothing)",
 		Flags: []Flag{
 			{Name: "remote", Value: "name", Help: "the git remote that is the hub (default origin)", Check: func(v string) error {
 				if v == "" || strings.HasPrefix(v, "-") || strings.ContainsAny(v, " \t\n/:\\") {

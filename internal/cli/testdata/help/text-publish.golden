@@ -1,0 +1,121 @@
+Usage:
+  commons publish [options] [--json]
+
+sign and commit a statement (authored with its bytes, holds, describes,
+retracts, or a draft)
+
+Signs with --key (or $COMMONS_KEY) and commits through the store's journal: the
+blob and its statements land together or not at all. A draft is never stored
+unsigned. Your log's next seq and prev come from the statements this store
+holds; a FORK in your log is refused until you name --prev. --intended-for runs
+the named edition's rules first and refuses on fail. With availability withheld
+and content under 64 bytes it warns that short content may be enumerable against
+its hash (a heuristic; include a nonce) and proceeds; the warning is not
+recorded.
+
+A rotate_key draft is signed as written: none of `commons rotate`'s checks run
+(successor, key events already held, merged tips), so the way out after a
+compromise stays open; it warns and proceeds. With --as <identity> --grant <id>
+the statement acts for a fixed-root identity (rc/2, the actor in the signed
+envelope): it is refused, nothing signed, unless the identity evaluator over the
+statements this store holds plus this line reads the act eligible (exit 2 when
+it is denied, naming why; exit 3 when it cannot decide, e.g. the grant or the
+identity is not held).
+
+A holds is written beside an authored or observed whose bytes this store keeps
+(--no-holds withholds it); it stays your key's own (rc/1): your key holds the
+bytes.
+
+External signing (identity profile §8): --prepare <file> --signer <key> writes
+an external-signing package and appends nothing; sign its PAE bytes with the key
+elsewhere, then --complete <file> --signature <file|-> verifies the signature
+over the recomputed bytes, runs every check again, and commits only when your
+log has not moved since (else stale-prepare, exit 1). Only an act (--as) is
+prepared; an authored act needs --no-holds, and its eligibility is read at
+--complete.
+
+Signing options:
+  --key <file>              the signing key file (else $COMMONS_KEY); there is
+                            no default
+  --prev <id>               the line of your log to extend; needed when your log
+                            has a FORK, and makes a fork when it is not a tip
+  --ts <time>               the signer-declared time (RFC 3339 UTC); default
+                            now; more than 300 s ahead is refused
+  --dry-run                 print what would be signed and committed, sign
+                            nothing, write nothing
+
+Statement options:
+  --draft <file>            a JSON draft {"kind":…,"body":{…}}; the tool fills
+                            signer, seq, prev, ts and sig
+  --kind <kind>             authored, holds, describes or retracts (without
+                            --draft)
+  --content <file>          the bytes the statement is about; installed in the
+                            store with the statements
+  --media-type <type>       content.media_type
+  --type <type>             authored type (default dataset)
+  --provenance <json>       authored provenance object {workflow, inputs[,
+                            environment]}
+  --no-holds                authored or observed only: keep the bytes in the
+                            store but write no holds (a withheld artifact)
+
+Describes and retracts options:
+  --about <digest|id>       describes: the blob or statement described
+  --note <text>             describes: the note
+  --of <id>                 retracts: the statement retracted
+  --reason <text>           retracts: the reason
+
+Acting-for-identity options:
+  --as <identity>           act for a fixed-root identity (its inception id):
+                            the statement is written rc/2 with x_actor_v1
+                            {identity, grant}; needs --grant
+  --grant <id>              with --as: the grant (its statement id) your key
+                            acts under
+  --amends <id[,id…]>       with --as, authored or observed only: the identity's
+                            earlier claims this one amends (identity profile §5)
+
+Authored disclosure options:
+  --attribution <text>      authored disclosure attribution
+  --availability <json>     authored disclosure availability
+  --comparator <digest>     authored disclosure comparator
+  --description <text>      authored disclosure description
+  --extends <digest>        authored disclosure extends
+  --fulfills <json>         authored disclosure fulfills
+  --intended-for <resource/edition>
+                            run the edition's rules on the bytes before they are
+                            pinned (your own policy, chosen by naming the
+                            edition); fail refuses, ok or unchecked is recorded
+  --licence <text>          authored disclosure licence
+  --licence-texts <json>    authored disclosure licence_texts
+  --pre-registration <text>
+                            authored disclosure pre_registration
+  --replication <text>      authored disclosure replication
+  --sampling <json>         authored disclosure sampling
+  --shelf-life-days <integer>
+                            authored disclosure shelf_life_days
+  --supersedes <digest>     authored disclosure supersedes
+
+External signing options:
+  --prepare <file>          do not sign: write an external-signing package
+                            (rc-signing-package/1) to this new file: the
+                            unsigned statement, the exact bytes to sign (PAE,
+                            base64), the signer, the proposed id, your log's
+                            head and a summary; needs --signer, takes no --key,
+                            appends nothing; an existing file is never
+                            overwritten
+  --signer <key>            with --prepare: the public form of the key that will
+                            sign (ed25519:<64 hex> or 0x<40 hex>); the algorithm
+                            follows from the form
+  --complete <file>         commit a package written by --prepare, with
+                            --signature: the bytes signed are recomputed from
+                            the package, the signature verified, every check of
+                            direct signing run again; refused, nothing appended,
+                            when your log moved since the package was prepared
+                            (stale-prepare)
+  --signature <file|->      with --complete: the signature over the package's
+                            PAE bytes in the statement encoding (ed25519: 128
+                            lowercase hex; eip191-secp256k1: 0x + 130 lowercase
+                            hex); - reads standard input
+
+Examples:
+  commons publish --store store --key me.key --kind authored --content data.csv
+      --media-type text/csv
