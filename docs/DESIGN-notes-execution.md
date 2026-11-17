@@ -458,6 +458,11 @@ the new image digest; derivations under the old pin stay valid under the old pin
 
 **Decided (2026-10-16).** All five.
 
+**Status for 1.0.** All five are closed; none is deferred. The code holds each answer: native records under a
+reader policy (`internal/run/policy.go`), observed-only acquisition (C-exec-14), the below-profile token
+(`internal/run/token.go`), the two-token `environment_match`, and peak RSS required under `sandbox`
+(C-exec-16).
+
 1. **Native records across readers.** Admitted into derivation groups, displayed `(native)`; a stranger's
    `verify` names the profile mismatch and exits 5 unless its policy accepts native records (§2.4).
 2. **Acquisition workflows.** `network: required` workflows emit `observed` only (§1 rule 3). The capture /
