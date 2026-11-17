@@ -12,6 +12,14 @@ methods tells you something: it approximates independent replication.
 **New here? Read [`docs/WHY.md`](docs/WHY.md)**: the motivation and the epistemics, in
 five minutes, with no CLI.
 
+> [!IMPORTANT]
+> **This branch is the old 0.4 alpha. Use 1.0 instead: [`v1.0.0-rc.1`](https://github.com/research-common/research-commons/releases/tag/v1.0.0-rc.1)
+> on the [`next`](https://github.com/research-common/research-commons/tree/next) branch** is the first release candidate
+> of 1.0, with the format frozen. Please install it and test it: `go install github.com/research-common/research-commons/cmd/commons@v1.0.0-rc.1`
+> or `pip install research-commons`. Read the [`next` README](https://github.com/research-common/research-commons/blob/next/README.md)
+> to get started, and report anything you find as an issue. The alpha below gets security fixes only, has no importer
+> into the new format, and will be archived when `next` replaces `main`.
+
 > **Maintenance mode (since 2026-10-11).** This alpha gets **security fixes only**. The next
 > format is a clean break, proposed for comment in
 > [#69](https://github.com/research-common/research-commons/issues/69)
