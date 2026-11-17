@@ -1,6 +1,6 @@
 # Design note: wire format
 
-**Status:** proposed · **Companion to:** the claims-model note (§15, "wire format") · **Covers:** canonical
+**Status:** implemented by the reference reader and writer, frozen for 1.0 except the one question its "Status for 1.0" line defers · **Companion to:** the claims-model note (§15, "wire format") · **Covers:** canonical
 encoding, the statement envelope, statement identity, the signature scheme, the kind vocabulary's field
 names, extensions, per-key logs, content hashing, and test vectors. Serves conformance cases C-core-02a,
 C-core-03, C-core-04, C-core-08 to C-core-14, C-core-32a, C-core-32d, C-core-77, C-core-83, C-core-105,
