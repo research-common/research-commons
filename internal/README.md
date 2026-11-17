@@ -2,7 +2,7 @@
 
 This tree is the new implementation of the format specified in `docs/DESIGN-notes-claims-model.md`,
 `docs/DESIGN-notes-wire-format.md` and the other design notes, built test-first against
-`docs/CONFORMANCE.md`. It lives on the `next` branch and will ship as `0.5.0-alpha.1`. The command is
+`docs/CONFORMANCE.md`. It lives on the `next` branch and ships as the `1.0.0` release candidates (`1.0.0-rc.N`). The command is
 `cmd/commons` (package `cli` below). The Python alpha is not in this tree: it lives on `main` and at the tag `v0.4.0-alpha.1`.
 
 ## Build and test
@@ -16,7 +16,7 @@ go test ./...                                                     # everything
 go test -run TestConformanceCases -v ./internal/conformance       # progress against CONFORMANCE.md
 go test -run '^$' -fuzz FuzzRead -fuzztime 60s ./internal/wire    # one fuzz target (also FuzzParse, FuzzTime)
 CGO_ENABLED=0 go build ./...                                      # static build
-CGO_ENABLED=0 go build -ldflags "-X main.version=0.5.0-alpha.1 -X main.commit=$(git rev-parse HEAD)" ./cmd/commons
+CGO_ENABLED=0 go build -ldflags "-X main.version=1.0.0-rc.1 -X main.commit=$(git rev-parse HEAD)" ./cmd/commons
 RC_TEST_IMAGE=alpine:latest go test -tags sandbox_oci -run OCI ./internal/run ./internal/clirun   # the OCI sandbox (and `commons run` on it) against a real runtime
 ```
 
@@ -84,7 +84,7 @@ registration; existing views and legacy snapshots keep their current behavior.
 
 ### Identity admission (reader and writer active)
 
-`wire.NewIdentityReader()` reads rc/1 exactly as `wire.Read` accepts it, plus the candidate rc/2 of
+`wire.NewIdentityReader()` reads rc/1 exactly as `wire.Read` accepts it, plus rc/2, the fixed-root identity profile of
 `docs/DESIGN-notes-fixed-root-identity.md`. It verifies the signature before interpreting signer-chosen
 fields, so an authentic but malformed line is kept as `Invalid` (attributable, never authority) instead of
 being refused. `wire.ReadStored` (the dual reader: rc/1 as `wire.Read`, rc/2 as the identity reader) is the
@@ -118,7 +118,7 @@ pull gate's trust floor over the store plus the package; `Resolver.Counted` is t
 ## How tests map to CONFORMANCE.md
 
 Every case id in `docs/CONFORMANCE.md`, and in the profile notes listed in `conformance.ProfileNotes` (today the
-bitcoin-time note's §14 and the candidate fixed-root identity note's §10), is a subtest of `TestConformanceCases`.
+bitcoin-time note's §14 and the fixed-root identity note's §10), is a subtest of `TestConformanceCases`.
 The report counts each profile on its own line; the `id` line belongs to a profile whose reader is active and whose
 writer is not, so quote it separately from the totals of the other profiles. Each id is defined in exactly one table; a note
 restating a case defined elsewhere writes its id in backticks. A test declares what it checks:

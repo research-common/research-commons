@@ -18,7 +18,7 @@ import (
 	"github.com/research-common/research-commons/internal/store"
 )
 
-// Optional link-time stamps: go build -ldflags "-X main.version=0.5.0-alpha.1 -X main.commit=$(git rev-parse HEAD)".
+// Optional link-time stamps: go build -ldflags "-X main.version=1.0.0-rc.1 -X main.commit=$(git rev-parse HEAD)".
 // An unstamped build reports the embedded VERSION file and the toolchain's vcs.revision.
 var version, commit string
 
