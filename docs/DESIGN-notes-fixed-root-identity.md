@@ -138,6 +138,7 @@ claim that the remaining positive grant is complete (§5).
 | `rc/2`, understood marker and one actor I/G | Exactly I/G, subject to authority checks; never a key fallback. |
 | Actor without body marker or without critical declaration | Invalid candidate even if correctly signed. |
 | Marker present but unknown critical feature/profile | Unsupported/non-passing, not bare-key interpretation. |
+| An envelope member in the actor name space other than `x_actor_v1` (`x_actor_v2`, …), with or without `x_actor_v1`, or any `x_actor_*` member inside the body | Unsupported/non-passing (`actor <member>`), never a key fallback. `crit` names body members, so it cannot guard the envelope's actor: this rule does. |
 | Marker object has a field inappropriate to this kind | Invalid candidate; do not ignore it. |
 
 Marker fields are kind-specific: `authored`/`observed` may contain `amends`;
@@ -1002,7 +1003,9 @@ Files in this candidate:
   edge cases (`NE1`, `NE7`, `NE11`) and the identity-point forgery delivered as `rc/2` identity lines, each a bad
   signature at the pinned step; and, per algorithm, a future algorithm (wire §4): an `rc/1` line and an `rc/2` act
   re-labelled `alg: ml-dsa-65` with an `ml-dsa-65:<hex>` signer (retained `unsupported` with an id, never verified),
-  and the same signer under the implemented `alg` (malformed: a signer outside its algorithm's key form). The vectors check **representation** (bytes, domain separation, ids,
+  and the same signer under the implemented `alg` (malformed: a signer outside its algorithm's key form); a grant
+  naming a delegate in that future key form (unsupported); an act whose actor is renamed `x_actor_v2`, and one whose
+  actor is moved into the body (both unsupported, never a bare-key claim). The vectors check **representation** (bytes, domain separation, ids,
   signatures, reader outcome), never authority. `internal/wire` regenerates the file from the labels and compares
   it byte for byte, runs every entry through the production `rc/2` reader and the unchanged `rc/1` reader, and
   `internal/sig` verifies every Ed25519 signature under two independent implementations (the pinned verifier and

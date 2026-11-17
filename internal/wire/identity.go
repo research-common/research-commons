@@ -347,7 +347,34 @@ func (r *IdentityReader) interpretCandidate(s *Statement, env *canon.Object) (St
 		// Profile syntax cap, rc/2 only (rc/1 and the default readers are unchanged).
 		return Invalid, "merges has more than " + strconv.Itoa(maxSetEntries) + " entries"
 	}
+	if why := otherActor(env, s.Body); why != "" {
+		return Unsupported, why
+	}
 	return r.candidateBody(s, env)
+}
+
+// actorPrefix is the name space of envelope actor members. x_actor_v1 is the only one this profile reads.
+const actorPrefix = "x_actor_"
+
+// otherActor reports an actor this reader cannot read: an envelope member in the actor name space other than
+// x_actor_v1 (a later actor form), or any actor-named member inside the body (where no actor is ever read). Either
+// reads unsupported, never valid: a line with an actor this reader cannot see must not count as the signer key's
+// own bare-key claim (§2.3: "never a key fallback"). crit names body members, so it cannot guard the envelope's
+// actor; this rule does.
+func otherActor(env, body *canon.Object) string {
+	for _, k := range env.Keys {
+		if strings.HasPrefix(k, actorPrefix) && k != ActorField {
+			return "actor " + k
+		}
+	}
+	if body != nil {
+		for _, k := range body.Keys {
+			if strings.HasPrefix(k, actorPrefix) {
+				return "actor body." + k
+			}
+		}
+	}
+	return ""
 }
 
 // candidateActor reads x_actor_v1 when present. A non-empty result is the reason the statement is Invalid; s.Actor

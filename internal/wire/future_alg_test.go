@@ -1,6 +1,7 @@
 package wire
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
@@ -118,5 +119,57 @@ func TestFutureKeyInGrantAndSubjects(t *testing.T) {
 				t.Fatalf("read %s (%q), want %s containing %q", st.Status, st.Why, c.want, c.why)
 			}
 		})
+	}
+}
+
+// TestOtherActorUnsupported: an rc/2 line carrying an envelope actor member other than x_actor_v1 (a later actor
+// form), or an actor-named member inside the body, reads unsupported, never valid with no actor: that would count
+// the line as the worker key's own bare-key claim. With x_actor_v1 beside it, it is still unsupported. An rc/1 line
+// is unchanged (no actor is ever read there).
+func TestOtherActorUnsupported(t *testing.T) {
+	a := body("identity", tID, "grant", tID2)
+	b := body("content", content("ab", 10), "type", "dataset")
+	k := Ed25519Key{Seed: bytes.Repeat([]byte{61}, 32)}
+	read := func(rc string, env *canon.Object) *Statement {
+		t.Helper()
+		major := 2
+		if rc == "rc/1" {
+			major = 1
+		}
+		line := canon.Encode(setField(env, "sig", canon.String(k.Sign(PAE(PayloadType("authored", major), canon.Encode(env))))))
+		st, err := NewIdentityReader().Read(line)
+		if err != nil || !st.Verified {
+			t.Fatalf("refused: %v", err)
+		}
+		return st
+	}
+	rc2 := func(bd *canon.Object) *canon.Object {
+		return Draft{RC: "rc/2", Kind: "authored", Seq: 3, Prev: tID, TS: "2026-10-15T00:00:00Z", Crit: []string{IdentityCrit},
+			Body: setField(bd, IdentityCrit, body())}.Envelope(k)
+	}
+	for _, c := range []struct {
+		name string
+		env  *canon.Object
+		want Status
+		why  string
+	}{
+		{"baseline: no actor", rc2(b), Valid, ""},
+		{"baseline: x_actor_v1", setField(rc2(b), ActorField, a), Valid, ""},
+		{"x_actor_v2 alone", setField(rc2(b), "x_actor_v2", a), Unsupported, "actor x_actor_v2"},
+		{"x_actor_v2 beside x_actor_v1", setField(setField(rc2(b), ActorField, a), "x_actor_v2", a), Unsupported, "actor x_actor_v2"},
+		{"x_actor_v1 in the body", rc2(setField(b, ActorField, a)), Unsupported, "actor body.x_actor_v1"},
+		{"x_actor_v9 in the body", rc2(setField(b, "x_actor_v9", a)), Unsupported, "actor body.x_actor_v9"},
+		{"other x_ member is not an actor", setField(rc2(b), "x_actorish", a), Valid, ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			st := read("rc/2", c.env)
+			if st.Status != c.want || !strings.Contains(st.Why, c.why) {
+				t.Fatalf("read %s (%q), want %s containing %q", st.Status, st.Why, c.want, c.why)
+			}
+		})
+	}
+	rc1 := setField(Draft{Kind: "authored", Seq: 3, Prev: tID, TS: "2026-10-15T00:00:00Z", Body: b}.Envelope(k), "x_actor_v2", a)
+	if st := read("rc/1", rc1); st.Status != Valid || st.Actor != nil {
+		t.Fatalf("rc/1 with x_actor_v2: %+v", st)
 	}
 }

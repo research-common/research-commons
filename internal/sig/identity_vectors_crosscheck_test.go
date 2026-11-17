@@ -61,8 +61,8 @@ func TestSignedIdentityVectorsTwoImplementations(t *testing.T) {
 		}
 		cases = append(cases, c{x.Name, x.Signer, x.VerifiedString, x.Sig, step})
 	}
-	if nPos != 8 || len(cases) != 8+13 {
-		t.Fatalf("%d positives / %d cases of Ed25519, want 8 / 21", nPos, len(cases))
+	if nPos != 8 || len(cases) != 8+15 {
+		t.Fatalf("%d positives / %d cases of Ed25519, want 8 / 23", nPos, len(cases))
 	}
 	accepted, stockOnly := 0, 0
 	for i, x := range cases {
@@ -99,9 +99,9 @@ func TestSignedIdentityVectorsTwoImplementations(t *testing.T) {
 		}
 	}
 	// the positives, plus the three negatives whose signature is genuine and whose line the reader retains
-	// (rc/1 with an actor, rc/1 naming the identity crit, rc/2 revoke_key, a grant naming a future-algorithm delegate)
-	if accepted != nPos+4 {
-		t.Fatalf("%d cases verified, want %d (the positives and 4 genuinely signed negatives); the harness may not reach the pre-checks", accepted, nPos+4)
+	// (rc/1 with an actor, rc/1 naming the identity crit, rc/2 revoke_key, a grant naming a future-algorithm delegate, an actor renamed, an actor in the body)
+	if accepted != nPos+6 {
+		t.Fatalf("%d cases verified, want %d (the positives and 6 genuinely signed negatives); the harness may not reach the pre-checks", accepted, nPos+6)
 	}
 	// negatives built from valid signatures fail only at step 4 (the signed bytes changed); the three wire-set edge
 	// cases fail before it; the identity point is accepted by the stock verifier over this message too

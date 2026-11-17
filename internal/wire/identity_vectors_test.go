@@ -300,6 +300,12 @@ func ivNegs(chain string, root, work Key, pos []*ivPos, t testing.TB) []*ivNeg {
 	rv2 := ivDraft("rc/2", "revoke_key", 4, string(rv.env.Members["prev"].(canon.String)), true, ivObj("reason", "key_compromise"), root)
 	readOK("neg-rc2-revoke-key", "rc/2 revoke_key (correctly signed; raw key events stay rc/1 in this profile)", rv, root,
 		rv2, 2, "invalid statement", "raw key events stay rc/1 in this profile", false)
+	// A differently spelled or misplaced actor (§2.3, never a key fallback): unsupported, never a valid bare-key act.
+	actor := a1.env.Members[ActorField]
+	readOK("neg-actor-v2", "x_actor_v1 renamed x_actor_v2 and re-signed (an actor form this reader does not know: unsupported, never a bare-key claim)", a1, work,
+		setField(dropField(a1.env, ActorField), "x_actor_v2", actor), 2, "unsupported", "actor x_actor_v2", false)
+	readOK("neg-actor-in-body", "x_actor_v1 moved into the body and re-signed (no actor is read there: unsupported, never a bare-key claim)", a1, work,
+		setField(dropField(a1.env, ActorField), "body", setField(a1.env.Members["body"].(*canon.Object), ActorField, actor)), 2, "unsupported", "actor body."+ActorField, false)
 	gr := by["grant"]
 	gb := gr.env.Members["body"].(*canon.Object)
 	fd := setField(gb, "delegate", setField(gb.Members["delegate"].(*canon.Object), "key", canon.String("ml-dsa-65:"+strings.Repeat("5a", 40))))
@@ -795,7 +801,7 @@ func TestSignedIdentityNegativeVectors(t *testing.T) {
 	}
 	for _, alg := range []string{AlgEd25519, AlgEIP191} {
 		for _, n := range []string{"neg-actor-tampered", "neg-v1-preimage", "neg-relabel-rc2-as-rc1", "neg-relabel-rc1-as-rc2",
-			"neg-rc1-with-actor", "neg-rc2-revoke-key", "neg-future-alg-rc1", "neg-future-alg-rc2", "neg-known-alg-future-signer", "neg-grant-future-delegate"} {
+			"neg-rc1-with-actor", "neg-rc2-revoke-key", "neg-future-alg-rc1", "neg-future-alg-rc2", "neg-known-alg-future-signer", "neg-grant-future-delegate", "neg-actor-v2", "neg-actor-in-body"} {
 			if seen[alg+" "+n] != 1 {
 				t.Errorf("no %s for %s", n, alg)
 			}
