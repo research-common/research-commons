@@ -43,6 +43,9 @@ type Obj struct {
 	// surface marks a member printed on one surface only ('j' JSON, 'h' human): the JSON shape of a value may
 	// change in the alpha (CLI-OUTPUTS "Stability") while the human line it was printed as stays the same.
 	surface map[string]byte
+	// text, when set, renders the object on the human surface at the given terminal width instead of the
+	// generic member listing (help pages: helptext.go). It never affects the JSON form.
+	text func(width int) string
 }
 
 func (tokV) isValue()  {}

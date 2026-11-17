@@ -126,6 +126,8 @@ func Main(argv []string, env *Env) (code int) {
 	if obj != nil {
 		if jsonOut {
 			env.Stdout.Write(encodeJSON(obj))
+		} else if obj.text != nil {
+			io.WriteString(env.Stdout, obj.text(termWidth(env)))
 		} else {
 			io.WriteString(env.Stdout, human(obj))
 		}
@@ -540,7 +542,8 @@ func helpObj(c *Command) *Obj {
 			gl = append(gl, newObj().set("option", textV("--"+f.Name)).set("summary", textV(f.Help)))
 		}
 		o.set("global_options", gl)
-		o.set("more", textV("commons help <command> · commons help outputs (state tokens) · commons help exits (exit codes)"))
+		o.set("more", textV(helpMore))
+		o.text = func(w int) string { return renderTopHelp(w) }
 		return o
 	}
 	o := newObj().set("usage", textV(synopsis(c))).set("summary", textV(c.Summary))
@@ -554,6 +557,7 @@ func helpObj(c *Command) *Obj {
 	if len(fl) > 0 {
 		o.set("options", fl)
 	}
+	o.text = func(w int) string { return renderCommandHelp(c, w) }
 	return o
 }
 
@@ -564,12 +568,14 @@ func outputsObj(which string) *Obj {
 		for _, r := range ExitRows() {
 			l = append(l, newObj().set("exit", textV(r[0])).set("name", textV(r[1])).set("meaning", textV(r[2])))
 		}
+		o.text = renderExitsHelp
 		return o.set("exit_codes", l)
 	}
 	var l listV
 	for _, t := range vocabulary {
 		l = append(l, newObj().set("token", textV(t.Word)).set("kind", textV(t.Kind)).set("meaning", textV(t.Meaning)))
 	}
+	o.text = renderOutputsHelp
 	return o.set("state_tokens", l)
 }
 

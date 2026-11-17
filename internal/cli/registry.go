@@ -79,6 +79,9 @@ type Command struct {
 	Prepare func(*Ctx) *Problem
 	// Help is extra text after the synopsis.
 	Help string
+	// Examples are command lines shown under "Examples" on the text help page (not in --json help). Each one is
+	// run, or at least parsed, by a test.
+	Examples []string
 	// Before validates the invocation beyond argument shapes (a directory exists, options do not conflict)
 	// after the store and policies are checked and before the store is opened: a problem it returns is exit 2
 	// with nothing done. It must not write.
