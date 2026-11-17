@@ -1000,7 +1000,7 @@ Files in this candidate:
   (`…<kind>.v2+json`), the JCS payload, the exact PAE signed string, its byte count, the statement id, the
   signature and the delivered line, plus the outcome the candidate reader must give (and the actor it must
   read). Negative entries are delivered lines derived from a positive by exactly the members named in
-  `changed_members`: the actor changed or stripped after signing; a signature over the `.v1+json` preimage of an
+  `changed_members`: the actor's `grant` or `identity` changed, or the actor stripped, after signing; a signature over the `.v1+json` preimage of an
   `rc/2` envelope; `rc/2`→`rc/1` and `rc/1`→`rc/2` relabels; (valid signatures, retained as given) an `rc/1`
   line carrying `x_actor_v1` (valid, actor not read), an `rc/1` line naming `x_identity_v1` in `crit`
   (unsupported), and an `rc/2` `revoke_key` (invalid, never an identity act); and, for Ed25519, three wire-format
@@ -1009,7 +1009,10 @@ Files in this candidate:
   re-labelled `alg: ml-dsa-65` with an `ml-dsa-65:<hex>` signer (retained `unsupported` with an id, never verified),
   and the same signer under the implemented `alg` (malformed: a signer outside its algorithm's key form); a grant
   naming a delegate in that future key form (unsupported); an act whose actor is renamed `x_actor_v2`, and one whose
-  actor is moved into the body (both unsupported, never a bare-key claim). The vectors check **representation** (bytes, domain separation, ids,
+  actor is moved into the body (both unsupported, never a bare-key claim); and the actor's `identity` changed
+  after signing (a bad signature, like the `grant` tamper). `edition_ids` pins the `rc/2` edition id of one
+  edition body (§2.2: SHA-256 of the PAE under `…edition-body.v2+json`) beside the different id the same bytes
+  have under the `rc/1` domain. The vectors check **representation** (bytes, domain separation, ids,
   signatures, reader outcome), never authority. `internal/wire` regenerates the file from the labels and compares
   it byte for byte, runs every entry through the production `rc/2` reader and the unchanged `rc/1` reader, and
   `internal/sig` verifies every Ed25519 signature under two independent implementations (the pinned verifier and

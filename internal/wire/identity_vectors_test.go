@@ -278,6 +278,8 @@ func ivNegs(chain string, root, work Key, pos []*ivPos, t testing.TB) []*ivNeg {
 	k0 := by["worker-genesis"]
 	refusedBad("neg-actor-tampered", "x_actor_v1.grant changed after signing", a1, work,
 		setField(a1.env, ActorField, ivObj("identity", a1.actorI, "grant", a1.actorI)), a1.sig, a1.ss)
+	refusedBad("neg-actor-identity-tampered", "x_actor_v1.identity changed after signing", a1, work,
+		setField(a1.env, ActorField, ivObj("identity", a1.actorG, "grant", a1.actorG)), a1.sig, a1.ss)
 	refusedBad("neg-actor-stripped", "x_actor_v1 removed after signing (an act for an identity cannot be turned into a bare-key act)", a1, work,
 		dropField(a1.env, ActorField), a1.sig, a1.ss)
 	v1 := work.Sign(PAE(ivPType("authored", 1), canon.Encode(a1.env)))
@@ -467,7 +469,26 @@ func ivBuild(t testing.TB) (string, []*ivPos, []*ivNeg) {
 		na = append(na, e)
 	}
 	top = ivSet(ivSet(top, "positive", pa), "negative", na)
+	top = ivSet(top, "edition_ids", ivEditionIDs())
 	return ivPretty(top, "") + "\n", pos, neg
+}
+
+// ivEditionIDs pins the rc/2 edition id (§2.2): one edition body hashed under the v2 edition-body domain, and the same
+// bytes under the v1 domain, which is a different edition. Like the wire-format vectors' edition_ids: signed_string is
+// PAE(edition-body type, JCS(body)), edition_id its sha256.
+func ivEditionIDs() canon.Value {
+	res := ivDigest(0x7e)[len("sha256:"):]
+	body := ivObj("resource", res, "predecessors", []string{res}, "contents",
+		ivObj("controllers", canon.Array{ivObj("key", "ed25519:"+strings.Repeat("3c", 32))}, "rule", ivObj("any_one", true),
+			"members", canon.Array{ivObj("content", ivDigest(0x7a), "role", "segment")}))
+	jcs := string(canon.Encode(body))
+	a := canon.Array{}
+	for _, major := range []int{2, 1} {
+		ss := string(PAE(EditionBodyType(major), []byte(jcs)))
+		a = append(a, ivObj("rc", "rc/"+strconv.Itoa(major), "payload_type", EditionBodyType(major), "body_jcs", jcs,
+			"signed_string", ss, "bytes", len(ss), "edition_id", ID([]byte(ss))))
+	}
+	return a
 }
 
 func ivObj2(ss []string) canon.Value { return ivObj("x", ss).Members["x"] }
@@ -801,7 +822,7 @@ func TestSignedIdentityNegativeVectors(t *testing.T) {
 	}
 	for _, alg := range []string{AlgEd25519, AlgEIP191} {
 		for _, n := range []string{"neg-actor-tampered", "neg-v1-preimage", "neg-relabel-rc2-as-rc1", "neg-relabel-rc1-as-rc2",
-			"neg-rc1-with-actor", "neg-rc2-revoke-key", "neg-future-alg-rc1", "neg-future-alg-rc2", "neg-known-alg-future-signer", "neg-grant-future-delegate", "neg-actor-v2", "neg-actor-in-body"} {
+			"neg-rc1-with-actor", "neg-rc2-revoke-key", "neg-future-alg-rc1", "neg-future-alg-rc2", "neg-known-alg-future-signer", "neg-grant-future-delegate", "neg-actor-v2", "neg-actor-in-body", "neg-actor-identity-tampered"} {
 			if seen[alg+" "+n] != 1 {
 				t.Errorf("no %s for %s", n, alg)
 			}
@@ -809,5 +830,43 @@ func TestSignedIdentityNegativeVectors(t *testing.T) {
 	}
 	if seen[AlgEd25519+" neg-ed25519-ne1"] != 1 || seen[AlgEd25519+" neg-ed25519-ne7"] != 1 || seen[AlgEd25519+" neg-ed25519-ne11"] != 1 {
 		t.Error("the Ed25519 edge cases are not all delivered as rc/2 lines")
+	}
+}
+
+// TestSignedIdentityEditionIDs: the file's rc/2 edition id follows from the note's formula (§2.2), computed here
+// character by character, and is not the rc/1 domain's id: the same body bytes under the rc/1 domain are
+// a different edition.
+func TestSignedIdentityEditionIDs(t *testing.T) {
+	b, err := os.ReadFile(ivPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	top, err := canon.Parse(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	eds, _ := top.(*canon.Object).Members["edition_ids"].(canon.Array)
+	if len(eds) != 2 {
+		t.Fatalf("edition_ids: %d entries, want 2 (rc/2 and its rc/1 twin)", len(eds))
+	}
+	seen := map[string]string{}
+	for _, e := range eds {
+		o := e.(*canon.Object)
+		rc, jcs := ivStr(o, "rc"), ivStr(o, "body_jcs")
+		pt := "application/vnd.research-commons.edition-body.v" + strings.TrimPrefix(rc, "rc/") + "+json"
+		ss := "DSSEv1 " + strconv.Itoa(len(pt)) + " " + pt + " " + strconv.Itoa(len(jcs)) + " " + jcs
+		h := sha256.Sum256([]byte(ss))
+		if ivStr(o, "payload_type") != pt || ivStr(o, "signed_string") != ss || int64(o.Members["bytes"].(canon.Int)) != int64(len(ss)) ||
+			ivStr(o, "edition_id") != hex.EncodeToString(h[:]) {
+			t.Fatalf("%s: edition id entry differs from the formula", rc)
+		}
+		body, err := canon.Parse([]byte(jcs))
+		if err != nil || string(canon.Encode(body)) != jcs {
+			t.Fatalf("%s: body_jcs is not canonical", rc)
+		}
+		seen[rc] = ivStr(o, "edition_id")
+	}
+	if seen["rc/2"] == "" || seen["rc/1"] == "" || seen["rc/2"] == seen["rc/1"] {
+		t.Fatalf("rc/2 and rc/1 edition ids of one body: %v", seen)
 	}
 }
