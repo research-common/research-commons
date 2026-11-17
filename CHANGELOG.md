@@ -9,6 +9,13 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ## [Unreleased]
 
+### Changed
+
+- Documentation: the README, security policy, contributing guide and design-note status lines now describe the release
+  candidate (frozen format, install from PyPI or a release archive and how to verify it, a "Testing the release candidate"
+  section) instead of the alpha; `--json` stability wording and limits L-08 and L-12 say what holds at 1.0. No byte,
+  identifier or behaviour change.
+
 ## [1.0.0-rc.1] - 2026-11-17
 
 **The first release candidate of 1.0: the format is frozen.** The wire majors `rc/1` and `rc/2` (the fixed-root identity
