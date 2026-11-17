@@ -65,7 +65,8 @@ const ledgerHelp = " With --ledger the key is a Ledger device running the Ethere
 	"on other systems the USB connector is not built. --ledger-path names the key (m/44'/60'/<account>'/0/<index>, no default): " +
 	"use an account that never holds funds. Identity PAEs are typically 300 to 800 bytes; the Ethereum app 1.23 accepts about 7.6 KB (less when a byte is not printable). " +
 	"Finish or reject a review on the device before running another command: the emulator refuses other requests while one is pending (ledger-busy), " +
-	"but a physical device may answer them and leave the review unresponsive until it is restarted. After an interrupted key sign, check the device's screen first. " +
+	"but a physical device may answer them and leave the review unresponsive until it is restarted. Interrupting the command (Ctrl-C) while the device waits for you " +
+	"closes the device and exits 3 (ledger-interrupted) without dismissing the review: reject it on the device before signing again. " +
 	"--ledger and --key are exclusive."
 
 // ledgerOpts is what an invocation says about the device; nil when --ledger is not given.

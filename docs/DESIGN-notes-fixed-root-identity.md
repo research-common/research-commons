@@ -790,6 +790,23 @@ answered further requests instead of refusing them as busy, the pending review s
 responding to the buttons, and the device switched itself off. Finish or reject a review
 on the device before running another command, and after an interrupted `key sign`, check
 the device's screen first; a device that stops responding recovers by being restarted.
+`key sign --ledger` prints, as its last line before the device is asked, that the review is
+now on the device. An interrupt (SIGINT or SIGTERM) while the device waits for the holder,
+in `key sign --ledger` or `key show --ledger --ledger-confirm`, prints "a review may still
+be open on the device: reject it there before signing again", closes the connection to the
+device and exits 3 (`ledger-interrupted`) with nothing written; outside that wait the
+signals act as the system's. Closing the connection does not dismiss the review: only the
+holder can, on the device. **No read-only request reveals a pending review.** Checked on the
+emulated Ethereum app 1.23.0 (Nano X): the app-and-version request (`B0 01`), the app
+configuration (`E0 06`), an address without confirmation (`E0 02`), the challenge (`E0 20`)
+and an unknown instruction all answer 0x6901 while any review is pending and normally
+otherwise, and none carries a flag that names a pending review. The 0x6901 refusal is the
+device SDK's (it rejects a request while another awaits its reply; SDK 27.1, 2026), not
+the app's, so a device whose Ethereum app was built before it (the drilled 1.19.3) answers
+instead, as recorded above. The emulated app also delivers the answer of an orphaned review,
+once the holder decides it, to whatever request arrives next: the tool names a refusal or a
+signature received for its first request as an earlier review's answer (exit 3), never as a
+refusal of its own request.
 Nano S Plus, Flex and Stax run the same commands and remain untested on hardware; the
 original Nano S is an **untested target** (the Ethereum app dropped it after 1.16, and
 Speculos no longer emulates it). Display readability is limited:
