@@ -375,3 +375,64 @@ func renderOutputsHelp(width int) string {
 	}
 	return b.String()
 }
+
+// --- error hints ----------------------------------------------------------------------------------------------
+
+func unknownOptionHint(c *Command) string {
+	return "run commons help " + c.Name + " to list its options"
+}
+
+// unknownCommandHint names the registered command nearest the words given: within edit distance 2 of the first
+// one, two or three words, or the one command whose name starts with them (so "hub" finds "hub check").
+func unknownCommandHint(words []string) string {
+	const generic = "run commons help to list the commands"
+	if s := suggestCommand(words); s != "" {
+		return "did you mean `commons " + s + "`? " + generic
+	}
+	return generic
+}
+
+func suggestCommand(words []string) string {
+	best, bestD := "", 3
+	for k := 1; k <= min(3, len(words)); k++ {
+		given := strings.Join(words[:k], " ")
+		var prefixed []string
+		for _, c := range registry {
+			if strings.HasPrefix(c.Name, given+" ") {
+				prefixed = append(prefixed, c.Name)
+			}
+			if len(strings.Fields(c.Name)) != k {
+				continue
+			}
+			if d := editDistance(given, c.Name); d <= 2 && d < runeLen(given) && d < bestD {
+				best, bestD = c.Name, d
+			}
+		}
+		if len(prefixed) == 1 {
+			return prefixed[0]
+		}
+	}
+	return best
+}
+
+// editDistance is the Levenshtein distance between a and b in runes.
+func editDistance(a, b string) int {
+	x, y := []rune(a), []rune(b)
+	prev := make([]int, len(y)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i := 1; i <= len(x); i++ {
+		cur := make([]int, len(y)+1)
+		cur[0] = i
+		for j := 1; j <= len(y); j++ {
+			cost := 1
+			if x[i-1] == y[j-1] {
+				cost = 0
+			}
+			cur[j] = min(prev[j]+1, cur[j-1]+1, prev[j-1]+cost)
+		}
+		prev = cur
+	}
+	return prev[len(y)]
+}

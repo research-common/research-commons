@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/research-common/research-commons/internal/canon"
 )
 
 func helpText(t *testing.T, cols string, args ...string) string {
@@ -219,4 +221,44 @@ func TestHelpExamplesRun(t *testing.T) {
 func helpJSON(t *testing.T, name string) []byte {
 	t.Helper()
 	return []byte(runIn(t.TempDir(), nil, "help", name, "--json").stdout)
+}
+
+func nextOf(t *testing.T, args ...string) string {
+	t.Helper()
+	r := runIn(t.TempDir(), nil, append(args, "--json")...)
+	if r.code != ExitDidNotStart {
+		t.Fatalf("%v: exit %d", args, r.code)
+	}
+	o := jsonOf(t, r)
+	return string(o.Members["next"].(canon.String))
+}
+
+func TestErrorHints(t *testing.T) {
+	const list = "run commons help to list the commands"
+	for _, c := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"publish", "--bogus"}, "run commons help publish to list its options"},
+		{[]string{"hub", "check", "--bogus"}, "run commons help hub check to list its options"},
+		{[]string{"--key", "k", "show", "--bogus"}, "run commons help show to list its options"},
+		{[]string{"--bogus"}, "run commons help to list the options"},
+		{[]string{"publis"}, "did you mean `commons publish`? " + list},
+		{[]string{"hub"}, "did you mean `commons hub check`? " + list},
+		{[]string{"hub", "chek"}, "did you mean `commons hub check`? " + list},
+		{[]string{"help", "shw"}, "did you mean `commons show`? " + list},
+		{[]string{"xyzzy"}, list},
+		{[]string{"key"}, list}, // two commands start with it: no single suggestion
+	} {
+		if got := nextOf(t, c.args...); got != c.want {
+			t.Errorf("%v: next %q, want %q", c.args, got, c.want)
+		}
+	}
+	// the problem object keeps every other field
+	o := jsonOf(t, runIn(t.TempDir(), nil, "publish", "--bogus", "--json"))
+	for _, k := range []string{"type", "title", "detail", "class", "scope", "committed", "next", "exit", "peer_text"} {
+		if _, ok := o.Members[k]; !ok {
+			t.Errorf("problem lacks %q", k)
+		}
+	}
 }

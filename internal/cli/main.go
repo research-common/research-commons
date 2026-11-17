@@ -233,6 +233,26 @@ func dispatch(argv []string, env *Env) (*Obj, int, error) {
 	}
 	pre, prob := split(argv, anyFlag)
 	if prob != nil {
+		// the command is not known yet: name it in the hint when the words given (an option's value may
+		// precede it) spell one
+		if prob.Slug == "unknown-option" {
+			var words []string
+			for _, a := range argv {
+				if a == "--" {
+					break
+				}
+				if !strings.HasPrefix(a, "-") || a == "-" {
+					words = append(words, a)
+				}
+			}
+			for len(words) > 0 {
+				if c, _ := lookup(words); c != nil {
+					prob.Next = unknownOptionHint(c)
+					break
+				}
+				words = words[1:]
+			}
+		}
 		return nil, 0, prob
 	}
 	if _, ok := pre.flags["version"]; ok && len(pre.words) == 0 {
@@ -253,14 +273,14 @@ func dispatch(argv []string, env *Env) (*Obj, int, error) {
 				return outputsObj(topic[0]), ExitOK, nil
 			}
 			return nil, 0, usage("unknown-command", "unknown command", "there is no such command; nothing was done",
-				"invocation", "run commons help to list the commands", strings.Join(topic, " "))
+				"invocation", unknownCommandHint(topic), strings.Join(topic, " "))
 		}
 		return helpObj(c), ExitOK, nil
 	}
 	cmd, n := lookup(pre.words)
 	if cmd == nil {
 		return nil, 0, usage("unknown-command", "unknown command", "there is no such command; nothing was done",
-			"invocation", "run commons help to list the commands", pre.words[0])
+			"invocation", unknownCommandHint(pre.words), pre.words[0])
 	}
 	// second pass: only this command's flags and the global ones
 	own := func(n string) (Flag, bool) {
@@ -273,6 +293,9 @@ func dispatch(argv []string, env *Env) (*Obj, int, error) {
 	}
 	p, prob := split(argv, own)
 	if prob != nil {
+		if prob.Slug == "unknown-option" {
+			prob.Next = unknownOptionHint(cmd)
+		}
 		return nil, 0, prob
 	}
 	if _, ok := p.flags["help"]; ok {
