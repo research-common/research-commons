@@ -80,7 +80,7 @@ if [ -n "${TWOHUB_CALENDAR:-}" ]; then
 	need "anchor stamp" $COMMONS anchor stamp --calendar "$TWOHUB_CALENDAR" --allow-private --json
 	ANCHOR_POLICY=required
 else
-	echo "SKIPPED: no TWOHUB_CALENDAR; the anchor stamp needs a calendar and a calendar needs a network (the Go test serves one locally)"
+	echo "SKIPPED: no TWOHUB_CALENDAR; the anchor stamp needs a calendar and a calendar needs a network; set TWOHUB_CALENDAR to include it"
 	ANCHOR_POLICY=none
 fi
 
