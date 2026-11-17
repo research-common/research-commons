@@ -216,6 +216,9 @@ func TestLedgerKeySignAborts(t *testing.T) {
 		{"path without --ledger", nil, true, []string{"key", "sign", "--package", pp, "--key", root.keyF, "--ledger-path", ledgerTestPath}, ExitDidNotStart, "", false},
 		{"--key and --ledger", nil, true, append(cloneArgs(base), "--key", root.keyF), ExitDidNotStart, "", false},
 		{"bad device", nil, true, append(cloneArgs(base), "--ledger-device", "/dev/sda"), ExitDidNotStart, "", false},
+		// a review left open by a command that went away, decided since: its answer reaches the next request
+		{"stray refusal", func(f *ledgertest.App) { f.Stray = []byte{0x69, 0x85} }, true, base, ExitCouldNot, ledger.DeviceError, false},
+		{"stray signature", func(f *ledgertest.App) { f.Stray = append(append([]byte{28}, make([]byte, 64)...), 0x90, 0x00) }, true, base, ExitCouldNot, ledger.BadResponse, false},
 	}
 	for _, c := range cases {
 		n++

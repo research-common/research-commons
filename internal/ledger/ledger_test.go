@@ -605,3 +605,25 @@ func TestDeviceTimeouts(t *testing.T) {
 		}
 	}
 }
+
+// TestStrayReviewAnswer: a review left open by a command that went away and decided later delivers its answer to the
+// next request (the emulated Ethereum app 1.23.0 does). AppAndVersion, the first request of every command, names
+// either answer as an earlier review's, never as this device's app or as a refusal of this request; the request after
+// it is answered normally.
+func TestStrayReviewAnswer(t *testing.T) {
+	for name, stray := range map[string][]byte{
+		"refusal":   {0x69, 0x85},
+		"signature": append(append([]byte{27}, bytes.Repeat([]byte{1}, 64)...), 0x90, 0x00),
+	} {
+		f := ledgertest.New("stray")
+		f.Stray = stray
+		_, err := ledger.AppAndVersion(f)
+		var e *ledger.Error
+		if !errors.As(err, &e) || e.Slug == ledger.Rejected || !strings.Contains(e.Detail, "an earlier review") {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if app, err := ledger.AppAndVersion(f); err != nil || app.Name != ledger.EthereumApp {
+			t.Fatalf("%s: the next request: %v %v", name, app, err)
+		}
+	}
+}

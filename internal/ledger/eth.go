@@ -71,8 +71,16 @@ func apdu(cla, ins, p1, p2 byte, data []byte) []byte {
 // tells "no app" from "another app" from "the Ethereum app".
 func AppAndVersion(t Transport) (App, error) {
 	data, err := exchange(t, ShortTimeout, apdu(claApp, insAppVer, 0, 0, nil), "read the open app")
+	if IsSlug(err, Rejected) {
+		// this request asks the holder nothing: a refusal is the answer to an earlier review, left open by a command
+		// that went away and decided since, delivered to whatever request was waiting (the emulated app does this)
+		return App{}, &Error{Slug: DeviceError, SW: SWRejected, Detail: "the device answered the request for its open app with a refusal it never asks for: the answer of an earlier review, decided after the command that asked for it went away"}
+	}
 	if err != nil {
 		return App{}, err
+	}
+	if len(data) == 65 && (data[0] == 27 || data[0] == 28) {
+		return App{}, &Error{Slug: BadResponse, Detail: "the device answered the request for its open app with a signature: the answer of an earlier review, decided after the command that asked for it went away"}
 	}
 	bad := func(d string) (App, error) {
 		return App{}, &Error{Slug: BadResponse, Detail: "the app-and-version answer is malformed: " + d}

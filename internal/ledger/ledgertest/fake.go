@@ -61,6 +61,10 @@ type App struct {
 	// every other APDU answers 0x6901, as the Ethereum app built with a current SDK does; after the transport is
 	// closed the review stays open (Pending) until Decide.
 	Hold bool
+	// Stray, when set, is the answer the next exchange receives instead of its own (then cleared): a review left
+	// open by a process that went away and decided later delivers its answer (a signature, or 0x6985) to whatever
+	// request is waiting then, as the emulated app does.
+	Stray []byte
 	// BeforeSign, when set, is called as the first chunk of a signing request arrives (before it is answered).
 	BeforeSign func()
 
@@ -186,6 +190,11 @@ func (a *App) exchange(apdu []byte, closed <-chan struct{}) ([]byte, error) {
 	if a.DisconnectAt > 0 && len(a.Received) >= a.DisconnectAt {
 		a.signing = false
 		return nil, &ledger.Error{Slug: ledger.Disconnected, Detail: "the fake device was unplugged"}
+	}
+	if a.Stray != nil {
+		r := a.Stray
+		a.Stray = nil
+		return r, nil
 	}
 	if a.Locked {
 		return sw(ledger.SWLocked), nil
