@@ -1061,7 +1061,7 @@ backtracking step, so C-core-94's limit binds whatever the dialect computes);
 response-layout dialects beyond the JSON-pointer dialect of §5.3.1a (CSV, XML, a compressed or archived response;
 a state spread over several fields or derived from them);
 attestation verifiers (receipts, TEEs); receiver-local Bitcoin verification (#59); size policy (#9); hub
-conventions (discovery #66; the hub-template and `COMMONS.md` rubric, which still use alpha vocabulary);
+conventions (discovery #66);
 task-contract profiles (§9.1).
 
 ## 16. Decisions on the questions this note first left open

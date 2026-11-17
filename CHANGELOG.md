@@ -15,6 +15,10 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   candidate (frozen format, install from PyPI or a release archive and how to verify it, a "Testing the release candidate"
   section) instead of the alpha; `--json` stability wording and limits L-08 and L-12 say what holds at 1.0. No byte,
   identifier or behaviour change.
+- `docs/COMMONS-TEMPLATE.md` is rewritten for 1.0: a project's `COMMONS.md` now records each dataset's statement kind,
+  observation class, referent, capture evidence, finality, provenance, replication, sampling, shelf life, licence,
+  availability, growth and size, and who signs (a key or an identity and grant); the review rubric checks those against
+  the claims model, with a table mapping the alpha template's fields. Docs only.
 
 ## [1.0.0-rc.1] - 2026-11-17
 
