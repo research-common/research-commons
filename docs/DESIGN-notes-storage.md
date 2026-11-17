@@ -1,6 +1,6 @@
 # Design note: storage and transactions
 
-**Status:** proposed
+**Status:** implemented by the reference store; its open questions are all closed (see "Status for 1.0")
 **Companion to:** the claims-model note (§15, "storage engine and transaction design")
 **Covers:** the storage bullets of claims-model note §12 (exact bytes, atomic commits, concurrent writers,
 caches, bounded scans) and §11 (external holds, package scope). Serves conformance cases C-core-123 through
