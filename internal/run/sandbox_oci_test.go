@@ -355,3 +355,80 @@ func TestOCILabelScope(t *testing.T) {
 	removed = true
 	leftovers(t, a)
 }
+
+// TestOCIComparisonNeverConnects: C-exec-14's sandbox half, against a real runtime. A comparison workflow (a
+// `network: none` spec: the byte comparison of two captures) whose step tries to open a connection to a listener
+// the test controls: the step's connect fails inside the sandbox (its own exit status says so), the run is
+// `failed: exit 7` and never `match`, nothing is published for it, the record names network none, and the
+// listener saw no connection. The control runs the same step with the network granted: it connects, so the
+// refusal above was the boundary and not a probe that could never reach the listener.
+func TestOCIComparisonNeverConnects(t *testing.T) {
+	conformance.Partial(t, "C-exec-14", "the real refused connection from a sandboxed comparison (this test); what is left is the `corroborates` emission, named at TestAcquisitionEmitsObserved")
+	img := ociImage(t)
+	o := ociRunner(t)
+	ln, err := net.Listen("tcp", "0.0.0.0:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	var conns int
+	var mu sync.Mutex
+	go func() {
+		for {
+			cn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			conns++
+			mu.Unlock()
+			cn.Close()
+		}
+	}()
+	seen := func() int {
+		time.Sleep(200 * time.Millisecond)
+		mu.Lock()
+		defer mu.Unlock()
+		return conns
+	}
+	port := strings.TrimPrefix(ln.Addr().String()[strings.LastIndex(ln.Addr().String(), ":"):], ":")
+	gw := "172.17.0.1"
+	// the step compares nothing: it only tries to reach out, and exits 7 when it cannot
+	script := `echo compared > "$OUT_DIR/result.txt"
+(nc -w 2 ` + gw + ` ` + port + ` </dev/null || wget -T 2 -q -O- http://` + gw + `:` + port + `/) >/dev/null 2>&1 || exit 7
+`
+	s, blobs := ociSpec(t, img, script, object("memory", canon.Int(64<<20), "wall_time", canon.Int(20_000)), nil, nil)
+	res, err := Execute(context.Background(), ociPolicy(), o, Invocation{Request: Request{Spec: s, Signer: ownerKey}, Blobs: blobs})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Token.Kind != FailedExit || res.Token.ExitStatus != 7 || res.Token.Kind == Match {
+		t.Fatalf("a comparison that could not connect: %s", res.Token)
+	}
+	if _, err := PlanPublish(PublishInput{Spec: s, Result: res, Own: []HeldAuthored{{strings.Repeat("ab", 32), Digest([]byte("x"))}}, Mode: "bytes"}); err == nil {
+		t.Fatal("a failed comparison was planned for publication")
+	}
+	if got := string(canon.Encode(res.Record.Object().Members["network"])); got != `"none"` {
+		t.Fatalf("network %s", got)
+	}
+	if n := seen(); n != 0 {
+		t.Fatalf("listener saw %d connections from a network-none step", n)
+	}
+
+	// control: the same step with a granted network connects and exits 0
+	sn, blobsN := ociSpec(t, img, script, object("memory", canon.Int(64<<20), "wall_time", canon.Int(20_000)), nil,
+		object("required", strings2array([]string{"tcp://" + gw + ":" + port})))
+	pn := ociPolicy()
+	pn.Network = []string{sn.Digest}
+	resN, err := Execute(context.Background(), pn, o, Invocation{Request: Request{Spec: sn, Signer: ownerKey}, Blobs: blobsN})
+	if err != nil {
+		t.Fatalf("control: %v", err)
+	}
+	if seen() == 0 {
+		t.Skip("control: the probe cannot reach the listener even with a network (host firewall?); the refusal above proves nothing on this host")
+	}
+	if !resN.Completed() {
+		t.Fatalf("control: the granted run did not complete: %s", resN.Token)
+	}
+	leftovers(t, o)
+}

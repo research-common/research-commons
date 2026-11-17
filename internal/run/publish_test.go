@@ -295,7 +295,7 @@ func TestAcquisitionRequestLogDialect(t *testing.T) {
 }
 
 func TestAcquisitionEmitsObserved(t *testing.T) {
-	conformance.Partial(t, "C-exec-14", "the corroborates emission and a real refused connection: the corroboration slice and the OCI backend (network none)")
+	conformance.Partial(t, "C-exec-14", "one thing is left: `run --publish` emits no `corroborates` for a finished comparison (the emission table, execution note §5.1, has no row for one, and the statement needs a model, a cohort and a verdict no spec field supplies); the acquisition emitting `observed` and the comparison given no network are checked here, and a real refused connection from a sandboxed comparison by TestOCIComparisonNeverConnects (sandbox_oci)")
 	specBytes := specB("acq", nil, "network", object("required", strings2array([]string{"https://api.example/v1/settlements"})),
 		"outputs", object("data", canon.String("data.json"), "log", canon.String("requests.jsonl")))
 	s := mustSpec(t, specBytes)

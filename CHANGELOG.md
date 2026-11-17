@@ -28,6 +28,15 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   `key sign` can leave a physical device unresponsive until it is restarted: check its screen before the next command
   (KNOWN-LIMITS L-07, L-20).
 
+### Changed
+
+- **The `sandbox_oci` tests run in parallel, and the gate reports are swept for prose outcomes.** Each OCI test starts
+  its containers with a label of its own and checks for leftovers by that label only, so the two tagged packages no
+  longer need `-p 1` (CI and the README drop it). A new OCI test shows a sandboxed comparison cannot connect to a
+  listener it could reach with a network grant. The "no outcome as prose" sweep now also reads every row of the
+  `pull` and `hub check` reports (intended_for, completeness, series boundary, trust floor, actor), and the two
+  conformance partials that remained for execution (C-exec-14) and exchange (C-exch-10) each name the one thing left.
+
 ## [0.5.0-alpha.7] - 2026-11-16
 
 **`push` sends, and the store finishes what it starts.** `push` now transports the judged commit with `git push`

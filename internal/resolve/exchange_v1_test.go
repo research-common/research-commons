@@ -191,7 +191,7 @@ func TestV1IndependenceNotInferred(t *testing.T) {
 // TestV1ReceiptMismatch: the C-exch-10 reading under task-contract-v1. A receipt the verifier finds bound to
 // another run, or issued by an ineligible key, fills no slot; the verifier was invoked; the mismatch is named.
 func TestV1ReceiptMismatch(t *testing.T) {
-	conformance.Partial(t, "C-exch-10", "no receipt format and no receipt verifier ship: the outcome is shown through a test IndependenceVerifier only (task-contract-v1 reads quorum.independence: required)")
+	conformance.Partial(t, "C-exch-10", "one thing is left: a receipt verifier that ships. No receipt format is defined and the default IndependenceVerifier establishes nothing, so a real bound-proof check (subject, eligible issuer) is not exercised; the outcome (invoked, no slot filled, mismatch named) is shown through a test IndependenceVerifier under quorum.independence: required")
 	for _, why := range []string{"subject mismatch: receipt bound to run sha256:aaaa, not this result", "issuer outside the task's eligible issuers"} {
 		w := newWorld(t)
 		g := w.task("G", "R")
