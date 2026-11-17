@@ -1043,6 +1043,11 @@ as an optional field (a minor change, §6) modelled on RFC 9581 §3.5.4 and FITS
 - **Empty system value** (2026-11, #112). A `referent.system` member whose value is `""` counts as absent where
   system keys are compared, not as a pinned key; it is not a schema refusal (§5; C-core-32b).
 
+**Status for 1.0.** Every question above is closed. The one open question below is deferred past 1.0: it
+cannot change the bytes of an existing `rc/1` object, because a post-quantum `alg` is a minor change that
+older readers retain as `unsupported` (§4, §6), a cutoff is reader policy over anchors that already exist, and a
+two-signature transition would be a new statement shape, never a new encoding of an old one.
+
 **Open.**
 
 1. **The quantum horizon (open for discussion).** The project does not yet take a position on a cutoff for
