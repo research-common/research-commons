@@ -27,6 +27,8 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   observation class, referent, capture evidence, finality, provenance, replication, sampling, shelf life, licence,
   availability, growth and size, and who signs (a key or an identity and grant); the review rubric checks those against
   the claims model, with a table mapping the alpha template's fields. Docs only.
+- Documentation: installing from source is `go install ./cmd/commons` from a clone (no branch switch, since `next` is the
+  default branch); `go build` stays as the in-place alternative. No byte, identifier or behaviour change.
 
 ## [1.0.0-rc.1] - 2026-11-17
 

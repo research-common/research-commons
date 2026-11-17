@@ -67,9 +67,12 @@ From source:
 
 ```bash
 git clone https://github.com/research-common/research-commons.git
-cd research-commons && git switch next
-go build -o commons ./cmd/commons
+cd research-commons
+go install ./cmd/commons    # installs into $(go env GOPATH)/bin; make sure that is on your PATH
+commons --version
 ```
+
+`go build -o commons ./cmd/commons` builds the binary in place instead. Go 1.26+; Windows is not supported.
 
 Pre-built binaries are attached to every GitHub release: four archives (`commons-<version>-<os>-<arch>.tar.gz`
 for linux and darwin on amd64 and arm64), a `SHA256SUMS` file, and build provenance attestations. To verify a download:

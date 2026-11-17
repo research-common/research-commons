@@ -15,7 +15,8 @@ commons --version
 commons help                    # every command; `commons help <command>` for its options
 ```
 
-Or build from a clone of the `next` branch: `go build -o commons ./cmd/commons`. Go 1.26+; Windows is not supported.
+Or from a clone of the repository (the default branch, `next`): `go install ./cmd/commons`, which installs into
+`$(go env GOPATH)/bin`. Go 1.26+; Windows is not supported.
 
 ## 2. Make a store and a key
 
