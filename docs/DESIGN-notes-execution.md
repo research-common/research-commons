@@ -1,6 +1,6 @@
 # Design note: execution profiles
 
-**Status:** proposed · **Companion to:** the claims-model note (§15, "execution profiles: runtimes,
+**Status:** implemented by the reference tool; its open questions are all closed (see "Status for 1.0"). The execution-policy file format stays provisional · **Companion to:** the claims-model note (§15, "execution profiles: runtimes,
 confinement mechanism, limits") · **Covers:** that §15 item; claims-model note §4 (`reproduced`), §5.2
 (derivation groups, the environment record), §11 ("admission is not execution"), §12 (the sandbox bullets), §13 (exits 3
 and 5, `timeout`); conformance cases C-exec-01 through C-exec-16 (incl. C-exec-13a, C-exec-13b), plus C-core-32 (the environment record as a method
