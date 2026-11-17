@@ -37,7 +37,7 @@ Read it before you rely on an answer.
 
 ## Install
 
-Requires Go 1.26 or newer. Developed and tested on Linux; **Windows is not supported** (the sandbox and store use Unix file semantics, and the tool does not build there).
+Requires Go 1.26 or newer. Developed and tested on Linux (the Python wheels also carry macOS builds); **Windows is not supported in 1.0** (the sandbox and store use Unix file semantics, and the tool does not build there: `docs/KNOWN-LIMITS.md` L-11).
 
 ```bash
 go install github.com/research-common/research-commons/cmd/commons@v0.5.0-alpha.7

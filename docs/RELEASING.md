@@ -59,6 +59,8 @@ A plan, not a schedule; the maintainers make the final call and may revise this 
    `two-hub drill` job; `go test -tags twohub ./cmd/commons/`). Its anchor step needs a calendar and is
    skipped without one.
 4. Windows is decided: supported and tested, or documented as unsupported.
+   **Decided: unsupported for 1.0.** The tool builds and is tested on Linux and macOS only; the
+   reason is in `docs/KNOWN-LIMITS.md` L-11, and the README's platform line says so.
 
 ## Release steps
 
