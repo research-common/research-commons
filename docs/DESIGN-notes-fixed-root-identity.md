@@ -688,12 +688,34 @@ connector or a finalized external-package interchange schema.
 
 **The tool's external-signing package.** `identity new`, `identity grant`, `identity cut`
 and `publish --as` take `--prepare <file> --signer <key>`: the references are resolved as
-for direct signing and one package file is written, nothing appended. It is canonical
-JSON with `format`, the unsigned `envelope`, `pae` (the exact signed string, standard
-padded base64), `alg`, `signer`, the proposed `statement` id, `log_head` (the signer's
-line the envelope extends, `{seq, statement}`, or `genesis`) and a human `summary`
-(identity, delegate key and inception, permissions, or the cut's grant, last-good and
-"cannot be undone"). `--complete <file> --signature <file|->` recomputes the PAE and id
+for direct signing and one package file is written, nothing appended. It is one JSON
+object, written canonical (JCS) and newline-terminated, with exactly these members:
+
+| member | type | value |
+|---|---|---|
+| `format` | string | the format tag (below) |
+| `envelope` | object | the unsigned statement: an `rc/2` envelope with every member but `sig`; the only source of every member below |
+| `pae` | string | the exact signed string (§2 PAE of the envelope), RFC 4648 standard base64 with padding |
+| `alg` | string | the envelope's `alg` |
+| `signer` | string | the envelope's `signer` |
+| `statement` | string | the proposed statement id, 64 lowercase hex: sha256 of the PAE |
+| `log_head` | string or object | `"genesis"` when the envelope's `prev` is null (`seq` 0); else `{"seq": envelope.seq - 1, "statement": envelope.prev}`, the signer's line the envelope extends |
+| `summary` | object | what a human reviews, as tokens and envelope values only (below) |
+
+`summary.action` is a token, and the other members are copied from the envelope (a member
+the envelope lacks is `null`):
+
+| `action` | other members |
+|---|---|
+| `inception` | `identity` (the statement's own id), `root` (its signer), `profile` |
+| `grant` | `identity`, `delegate` (`delegate.key`), `delegate_inception` (`delegate.inception`), `permissions` |
+| `cut` | `identity`, `grant`, `last_good` (`null` when none), `reason` |
+| `act` | `kind` (the envelope's), `identity`, `grant` (from `x_actor_v1`), and `amends` when the marker carries it |
+
+The summary holds no prose. The words a human reads beside it (the custody warning of an
+inception, "a cut cannot be undone") are rendered at display time by `--prepare`, `package
+show` and `key sign`, so a package reads the same under every release that reads its format.
+`--complete <file> --signature <file|->` recomputes the PAE and id
 from the envelope and refuses, naming the member, when any derived member differs; it
 accepts the signature only in the statement encoding of the alg (wire note §4), verifies
 it over the recomputed bytes, runs every check of direct signing again, refuses

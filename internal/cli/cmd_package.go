@@ -157,13 +157,14 @@ func futureSkewAdvisory(st *wire.Statement) string {
 // packageObj is what a checked package says: the statement a signature would cover, and what was not checked.
 func packageObj(out *Obj, path string, st *wire.Statement) *Obj {
 	sum := sha256.Sum256(st.SignedString)
+	sum2 := summaryOf(st)
 	out.set("package", peerV(path)).set("format", textV(SigningPackageFormat)).
 		set("checked", textV("every derived member (pae, statement, alg, signer, log_head shape, summary) is what the envelope gives")).
 		set("log_head_check", textV(logHeadUnchecked)).
 		set("statement", refV(st.ID)).set("kind", peerV(st.Kind)).set("signer", refV(st.Signer)).set("alg", textV(st.Alg)).
 		set("seq", intV(st.Seq)).set("ts_signer_declared", refV(st.TS.Text)).set("log_head", rawV{logHead(head{seq: st.Seq, prev: st.Prev})}).
 		set("pae_sha256", refV(hex.EncodeToString(sum[:]))).set("pae_bytes", intV(int64(len(st.SignedString)))).
-		set("summary", rawV{summaryOf(st)})
+		set("summary", rawV{sum2}).set("review", reviewOf(sum2))
 	if adv := futureSkewAdvisory(st); adv != "" {
 		out.set("advisories", texts(adv))
 	}

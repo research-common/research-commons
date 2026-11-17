@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -63,6 +64,41 @@ func (h *extHome) prepare(name string, cmd ...string) (string, *canon.Object) {
 		h.t.Fatalf("%v --prepare: %d\n%s%s", cmd, r.code, r.stdout, r.stderr)
 	}
 	return p, readPkg(h.t, p)
+}
+
+// structuredSummary checks a package's summary is the action token and exactly the named members, and carries no
+// prose: no string in it holds a space (every value is a token, an id, a key or an envelope value). The words a
+// human reads are rendered at display time, so a package reads the same under every release (identity profile §8).
+func structuredSummary(t *testing.T, pkg *canon.Object, action string, members ...string) {
+	t.Helper()
+	sum, ok := pkg.Members["summary"].(*canon.Object)
+	if !ok || sum.Members["action"] != canon.String(action) {
+		t.Fatalf("summary action is not %s: %s", action, canon.Encode(pkg.Members["summary"]))
+	}
+	got := canon.SortedKeys(sum)
+	want := append([]string{"action"}, members...)
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		t.Fatalf("summary members %v, want %v", got, want)
+	}
+	var walk func(v canon.Value)
+	walk = func(v canon.Value) {
+		switch x := v.(type) {
+		case canon.String:
+			if strings.ContainsAny(string(x), " \n") {
+				t.Fatalf("summary carries prose %q: %s", x, canon.Encode(sum))
+			}
+		case canon.Array:
+			for _, e := range x {
+				walk(e)
+			}
+		case *canon.Object:
+			for _, e := range x.Members {
+				walk(e)
+			}
+		}
+	}
+	walk(sum)
 }
 
 func readPkg(t *testing.T, p string) *canon.Object {
@@ -127,6 +163,7 @@ func TestExternalSigningEndToEnd(t *testing.T) {
 			before := storeBytes(t, root.store)
 			newCmd := append([]string{"identity", "new"}, ts...)
 			pp, pkg := root.prepare("new.pkg", newCmd...)
+			structuredSummary(t, pkg, "inception", "identity", "root", "profile")
 			if storeBytes(t, root.store) != before {
 				t.Fatal("--prepare wrote to the store")
 			}
@@ -164,6 +201,7 @@ func TestExternalSigningEndToEnd(t *testing.T) {
 			// grant
 			grantCmd := append([]string{"identity", "grant", "--identity", ident, "--delegate", worker.signer, "--delegate-inception", d, "--permissions", anyContentPerm}, ts...)
 			gp, gpkg := root.prepare("grant.pkg", grantCmd...)
+			structuredSummary(t, gpkg, "grant", "identity", "delegate", "delegate_inception", "permissions")
 			lh, _ := gpkg.Members["log_head"].(*canon.Object)
 			if lh == nil || lh.Members["statement"] != canon.String(ident) || lh.Members["seq"] != canon.Int(0) {
 				t.Fatalf("grant log_head: %s", canon.Encode(gpkg.Members["log_head"]))
@@ -191,6 +229,7 @@ func TestExternalSigningEndToEnd(t *testing.T) {
 			c1 := worker.file("c1", "an act for the identity, signed on a device")
 			actCmd := append([]string{"publish", "--kind", "authored", "--content", c1, "--licence", "CC0-1.0", "--as", ident, "--grant", grant, "--no-holds"}, ts...)
 			ap, apkg := wext.prepare("act.pkg", actCmd...)
+			structuredSummary(t, apkg, "act", "kind", "identity", "grant")
 			r = wext.run("publish", "--complete", ap, "--signature", wext.sign("act.sig", apkg), "--content", c1)
 			if r.code != ExitOK {
 				t.Fatalf("act complete: %d %s", r.code, r.stdout)
@@ -204,8 +243,13 @@ func TestExternalSigningEndToEnd(t *testing.T) {
 			root.pullFrom(worker.store)
 			cutCmd := append([]string{"identity", "cut", "--identity", ident, "--grant", grant, "--last-good", act, "--reason", "superseded"}, ts...)
 			cp, cpkg := root.prepare("cut.pkg", cutCmd...)
-			if !strings.Contains(string(canon.Encode(cpkg.Members["summary"])), "cannot be undone") {
-				t.Fatal("cut summary does not say it cannot be undone")
+			structuredSummary(t, cpkg, "cut", "identity", "grant", "last_good", "reason")
+			want := objOf("action", canon.String("cut"), "identity", canon.String(ident), "grant", canon.String(grant), "last_good", canon.String(act), "reason", canon.String("superseded"))
+			if !bytes.Equal(canon.Encode(cpkg.Members["summary"]), canon.Encode(want)) {
+				t.Fatalf("cut summary is not its tokens and envelope values: %s", canon.Encode(cpkg.Members["summary"]))
+			}
+			if again := root.run(append(cutCmd[:len(cutCmd):len(cutCmd)], "--prepare", root.path("cut-again.pkg"), "--signer", root.signer)...); !strings.Contains(again.stdout, "cannot be undone") {
+				t.Fatalf("--prepare of a cut does not say it cannot be undone: %s", again.stdout)
 			}
 			r = root.runStdin(root.key.Sign(paeOf(t, cpkg)), "identity", "cut", "--complete", cp, "--signature", "-")
 			if r.code != ExitOK || !strings.Contains(r.stdout, "keeps counting") {
