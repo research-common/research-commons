@@ -1,7 +1,7 @@
 # Design note: task contracts (`task-contract-v1`)
 
 **Date:** 2026-10-27, revised 2026-10-28 (revision 2) and 2026-11-08 (revision 3); accepted 2026-11-10 ·
-**Status:** accepted. The profile is decided; the reference implementation is in progress.
+**Status:** accepted. The profile is decided and implemented by the reference reader (`task-contract-v1`); see "Status for 1.0" for what is left for later.
 **Tracking issue:** #109
 **Builds on:** the claims-model note §8 (resources, editions) and §9 (research exchange), #69; the wire-format
 note §1.1, §5, §6; the bitcoin-time note §7, §8, §11; #3 (pre-registration), #65 (stochastic replication)
