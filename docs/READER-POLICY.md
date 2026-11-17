@@ -6,7 +6,7 @@ trusts for what (**trust**). The file is named by `--policy <file>`, else by `$C
 implicitly: no file in the home directory and none in the store. Without one, every answer is the no-policy
 answer described below.
 
-**Status: provisional.** The claims-model note says what a reader policy decides (trust, admission and reference
+**Status: provisional, outside the 1.0 format freeze.** The claims-model note says what a reader policy decides (trust, admission and reference
 choices are local, I9); it does not fix a file encoding. This format is the tool's own and versioned
 (`reader-policy-v1`). It will change, with a new version. A document with another `version` is refused. The
 JSON Schema for the shapes is `docs/fixed-root-identity-policy.schema.json`; the rules below that a schema cannot

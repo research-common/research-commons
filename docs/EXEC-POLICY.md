@@ -10,7 +10,7 @@ statement on it) under the same policy; without `--exec-policy` it exits 2 and n
 by its default author (`exec_signers`) or its hash (`exec_workflows`); a workflow that requires the network also
 needs its hash in `network`. Without `--publish` the run is printed and nothing is written.
 
-**Status: provisional.** The execution design note says what an execution policy decides, not how it is
+**Status: provisional, outside the 1.0 format freeze.** The execution design note says what an execution policy decides, not how it is
 written down; this file format is the tool's own and versioned (`rc-exec-policy/0`). It will change, with a new
 tag. A file with a different `format` is refused.
 
