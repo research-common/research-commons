@@ -15,24 +15,28 @@ small package or statement that reproduces it. A report without a polished proof
 - `pull`/`fetch` handling hostile input: path traversal, symlinks and special files, archive members, size and scan
   limits, memory or disk exhaustion, requests to unintended hosts.
 - The execution sandbox (`verify --rerun`): escapes, or reading and writing outside what the policy grants.
+- The fixed-root identity profile (`rc/2`), which is active and frozen: acceptance of an identity grant or cut that
+  should be refused, or an identity actor evaluated wrongly from the statements held.
 - Key handling: key files created with the wrong mode, keys written to output or logs.
 - The release process: release artifacts that don't match their checksums or provenance attestation, or an
   unpinned action in this repository's workflows.
 
 Out of scope: gaps already listed in [`docs/KNOWN-LIMITS.md`](docs/KNOWN-LIMITS.md); an attacker who already holds your
 key file or can write to your store directory; denial of service by a user running the tool on their own huge input
-without the documented limits; the fixed-root identity profile, which is a candidate and not enabled; findings that
+without the documented limits; findings that
 need a modified build.
 
 ## Supported versions
 
 | version | status |
 |---|---|
-| 0.5.x (alpha, branch `next`) | best effort: fixes land on `next` and ship in the next alpha |
-| 0.4.x (Python alpha, branch `main`) | security fixes only |
+| 1.0.0-rc.x (branch `next`) | supported: fixes land on `next` and ship in the next candidate |
+| 0.5.0-alpha.x | superseded by the release candidate: upgrade |
+| 0.4.x (Python alpha, branch `main`) | security fixes only, until the cutover |
 | older | unsupported |
 
-The format is alpha and may change between releases: a fix may change what the tool accepts.
+The format is frozen for 1.0. Between release candidates only fixes and wording change; a security fix that would
+change the bytes of a frozen format means a new candidate, and the advisory will say so.
 
 ## What to expect
 
