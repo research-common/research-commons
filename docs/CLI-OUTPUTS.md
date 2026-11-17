@@ -9,7 +9,7 @@ Errors are RFC 9457 problem-details objects (`type`, `title`, `detail`, `class`,
 
 Platforms: Linux and macOS. Windows is not supported: the tool does not build for it.
 
-Stability: the `--json` output may change between alpha releases. It carries no `schema` member yet.
+Stability: the `--json` output is not part of the format freeze. It carries no `schema` member yet, and may change when one is added.
 
 ## Exit codes
 
