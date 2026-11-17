@@ -59,7 +59,10 @@ The production reader (dual-major) implements both, and the writer writes both:
   on bare-key history. This candidate does not accept these events as `rc/2`.
 * **`rc/2`:** all statements of this candidate require
   `crit:["x_identity_v1"]` and an object `body.x_identity_v1`. The currently recognized
-  critical registry contains only that token. This includes administrative statements,
+  critical registry contains only that token. The schema states the one value this profile
+  writes; a reader reads a `crit` that names `x_identity_v1` **and** a token it has not
+  registered as unsupported (the extension point of wire §6), and one that lacks
+  `x_identity_v1` as invalid. This includes administrative statements,
   typed resource bodies and identity-aware task lifecycle statements. `x_actor_v1` is
   optional, but when present is a **signed envelope** object, not part of the body.
 

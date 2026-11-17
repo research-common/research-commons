@@ -2007,6 +2007,7 @@
           "$ref": "#/$defs/time"
         },
         "crit": {
+          "description": "The one value fixed-root-v1 writes. A reader reads a crit that also names a token it has not registered as unsupported (a later extension), not as a schema failure; a crit without x_identity_v1 is invalid.",
           "const": [
             "x_identity_v1"
           ]
