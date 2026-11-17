@@ -22,6 +22,17 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   states that the secp256k1 scalar is big-endian and that the reader accepts any strict JSON. The execution-policy file
   (`rc-exec-policy/0`) stays provisional (L-09).
 
+- **`rc/2` forward room, from the freeze review (#233).** A line under an `alg` the reader does not implement, signed by
+  that algorithm's own key form (`ml-dsa-65:<hex>`), reads `unsupported` and is retained and placed in both majors,
+  instead of being refused as malformed, so adding an algorithm stays a minor change; a known `alg` with a signer
+  outside its form is still malformed. An identity grant or typed subject naming such a key reads `unsupported`, not
+  invalid. An `rc/2` actor this reader cannot read (any `x_actor_*` member but `x_actor_v1`, or one inside the body)
+  reads `unsupported`, never a bare-key claim. The schema states that every set is sorted by canonical encoding and
+  that `crit` may carry an extra token a reader reads as unsupported. The identity note adds that administrative bodies
+  stay open with restrictions behind `crit`, why an unreadable cut makes an identity's acts unknown, that the classical
+  root's way out is a new inception profile, and that a statement can carry two valid signatures. New signed vectors
+  pin each case, a tampered actor `identity` and an `rc/2` edition id; new unsigned reject vectors pin set order.
+
 ## [0.5.0-alpha.8] - 2026-11-16
 
 **A Ledger device can sign an identity, and the 1.0 criteria are in place.** `key sign --ledger` signs an
