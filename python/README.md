@@ -4,7 +4,7 @@ A thin Python wrapper around the [Research Commons](https://github.com/research-
 command-line tool, `commons`. It runs the binary with `--json` and returns what it printed. It never
 reimplements any logic of the tool: every answer, token and exit code is the binary's own.
 
-Alpha: the tool's `--json` output may change between alpha releases, and so may this package's surface.
+Release candidate (`1.0.0rc1`): the tool's wire formats are frozen. The `--json` output carries no `schema` member yet, so it, and this package's surface, may still gain one before 1.0.
 Python 3.9 or newer, standard library only. Linux and macOS (the tool does not build for Windows).
 
 ## Install
