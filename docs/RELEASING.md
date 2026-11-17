@@ -1,13 +1,13 @@
 # Releasing
 
-This tool is `<1.0.0`. SemVer 2.0.0 §4 licenses `0.y.z` ("initial development") to change
-anything at any release with no MAJOR bump; this project layers a few conventions on top so that
-PATCH vs. MINOR is predictable.
+The tool is at a `1.0.0` release candidate. Until `1.0.0` is tagged, SemVer 2.0.0 §4 still licenses
+`0.y.z`-style change, but the format is frozen (criteria below) and only fixes and wording land between
+candidates. From `1.0.0` on, the rules in "Bump rules from `1.0.0`" apply.
 
 ## Branches and tags
 
-- **`next`** holds the Go tool. Every `0.5.x` tag is cut from `next`, and stays there until the
-  format cutover (when `next` replaces `main`).
+- **`next`** holds the Go tool. Every `0.5.x` and `1.0.0-rc.N` tag is cut from `next`, and so is `1.0.0`;
+  tags stay on `next` until the cutover (when `next` replaces `main`).
 - **`main`** holds the Python alpha, in maintenance mode. A security fix to it ships as `0.4.x`,
   tagged from `main`. The last alpha release is `v0.4.0-alpha.1`.
 
@@ -15,7 +15,7 @@ PATCH vs. MINOR is predictable.
 
 There is **one** tool version, and one separate format identifier.
 
-- **Tool version**: the `VERSION` file at the repository root, one line, e.g. `0.5.0-alpha.1`.
+- **Tool version**: the `VERSION` file at the repository root, one line, e.g. `1.0.0-rc.1`.
   The binary embeds it, and `commons --version` prints it. This is what a hub maintainer pins.
 - **Wire major** (`rc/1`): the format tag that appears in the bytes the tool writes and reads.
   It is the constant `Major` in `internal/wire/wire.go`. It is not printed by `--version` or by
@@ -27,9 +27,19 @@ There is **one** tool version, and one separate format identifier.
 Keep the two independent. Tying the wire major to the tool's SemVer would make every bug-fix
 release imply a format change it doesn't need.
 
-## Bump rules while `<1.0.0`
+## Bump rules from `1.0.0`
 
-The next format is released as **`0.5.0-alpha.1`**, a MINOR bump from `0.4.x`. `1.0.0` is kept to
+- **PATCH** (`1.0.0` → `1.0.1`): bug fixes with no command, flag, exit-code or frozen-format change.
+- **MINOR** (`1.0.x` → `1.1.0`): new commands or flags, additive output, a new optional or `crit`-guarded
+  extension, a new `alg` (readers retain unknown ones as `unsupported`), anything a 1.0 reader reads without
+  changing an existing object's bytes, id or meaning.
+- **MAJOR** (`2.0.0`): any change to the bytes, ids or meaning of an existing frozen object (a new wire major, a new
+  key-file or signing-package tag that replaces a frozen one), or a change to `hub check`'s pass/fail semantics that
+  can fail a hub that passed before.
+
+## Bump rules before `1.0.0` (history)
+
+The next format was released as **`0.5.0-alpha.1`**, a MINOR bump from `0.4.x`. `1.0.0` was kept to
 mean the format is frozen; the clean break is signalled by the format tag, the changelog and the
 README, not by the major number.
 
@@ -47,8 +57,7 @@ README, not by the major number.
   bytes of a frozen format means a new candidate, never a silent change. `1.0.0` is tagged from a candidate
   that has gone through a quiet window with no such finding.
 
-Use the dotted prerelease form (`0.5.0-alpha.1`, not `0.5.0-alpha-1`) so `alpha.2` sorts before
-`alpha.10` under SemVer precedence.
+Use the dotted prerelease form (`1.0.0-rc.1`, not `1.0.0-rc1`) so `rc.2` sorts before `rc.10` under SemVer precedence.
 
 ### Criteria for `1.0.0` (current plan)
 
@@ -85,7 +94,7 @@ A plan, not a schedule; the maintainers make the final call and may revise this 
    `version.go`), so an unstamped `go build ./cmd/commons` reports it; release builds may still
    override it with `-ldflags "-X main.version=…"`.
    In the same PR, update the version named in prose: the README status line and its `go install …@<tag>`,
-   `GETTING-STARTED.md`'s `go install` line and `docs/WHY.md`'s status sentence (`grep -rn '0\.5\.0-alpha' *.md docs/`).
+   `GETTING-STARTED.md`'s `go install` line and `docs/WHY.md`'s status sentence (`grep -rn '<previous version>' *.md docs/ python/`).
 3. **PR.** Open a PR into `next` and get it merged. It is squash-merged; the PR title and
    description become the commit message.
 4. **Check the unstamped build.** Module-proxy tags are permanent: once a tag has been fetched
@@ -98,23 +107,23 @@ A plan, not a schedule; the maintainers make the final call and may revise this 
    The output must show the `VERSION` file's value, not `devel` or an empty string.
 5. **Tag.** Tag the squash commit on `next` with a signed annotated tag and push it:
    ```bash
-   git tag -s -a v0.5.0-alpha.1 <squash-sha> -m "v0.5.0-alpha.1"
-   git push origin v0.5.0-alpha.1
+   git tag -s -a v1.0.0-rc.1 <squash-sha> -m "v1.0.0-rc.1"
+   git push origin v1.0.0-rc.1
    ```
-   Tags are `v`-prefixed; CHANGELOG headers are not (`## [0.5.0-alpha.1]`).
-6. **GitHub release.** Cut it from the tag as a prerelease (`--prerelease` is GitHub's own
-   signal for an `-alpha`/`-beta`/`-rc` tag):
+   Tags are `v`-prefixed; CHANGELOG headers are not (`## [1.0.0-rc.1]`).
+6. **GitHub release.** Cut it from the tag; a prerelease (`-alpha`/`-beta`/`-rc`) gets `--prerelease` (GitHub's own
+   signal), and `1.0.0` and later final releases get `--latest` instead, so the repository page shows them:
    ```bash
-   gh release create v0.5.0-alpha.1 --repo research-common/research-commons \
-     --title "v0.5.0-alpha.1" --prerelease \
-     --notes-file <(awk '/^## \[0.5.0-alpha.1\]/{on=1; print; next} on && /^(## \[|\[[^]]+\]: )/{exit} on' CHANGELOG.md)
+   gh release create v1.0.0-rc.1 --repo research-common/research-commons \
+     --title "v1.0.0-rc.1" --prerelease \
+     --notes-file <(awk '/^## \[1.0.0-rc.1\]/{on=1; print; next} on && /^(## \[|\[[^]]+\]: )/{exit} on' CHANGELOG.md)
    ```
 7. **Binaries.** Publishing the release runs `.github/workflows/release.yml`, which builds
    linux/darwin × amd64/arm64 archives, writes `SHA256SUMS`, attests build provenance, and uploads
    them to the release. The workflow refuses a tag that differs from `VERSION`. When it finishes,
    check the assets before announcing:
    ```bash
-   gh release download v0.5.0-alpha.1 --repo research-common/research-commons \
+   gh release download v1.0.0-rc.1 --repo research-common/research-commons \
      --pattern 'SHA256SUMS' --pattern '*.tar.gz'
    sha256sum -c SHA256SUMS
    gh attestation verify <archive> --repo research-common/research-commons
@@ -123,7 +132,7 @@ A plan, not a schedule; the maintainers make the final call and may revise this 
    uploading.
 8. **Python wheels** (built and published by CI; the manual path below is the pre-release check). The Python package in `python/` carries the
    binary in one platform wheel per release archive. Its version must already equal `VERSION` mapped to
-   PEP 440 (`0.5.0-alpha.3` → `0.5.0a3`): set `version` in `python/pyproject.toml` and `__version__` in
+   PEP 440 (`1.0.0-rc.1` → `1.0.0rc1`, `1.0.0` → `1.0.0`): set `version` in `python/pyproject.toml` and `__version__` in
    `python/src/research_commons/__init__.py` in the step-2 version PR, or the build refuses. After step 7,
    with the checks passed:
    ```bash
@@ -151,7 +160,7 @@ A plan, not a schedule; the maintainers make the final call and may revise this 
    (`gh-action-pypi-publish` under trusted publishing), so published wheels carry provenance too.
 9. **Hub template pin.** In `research-commons-hub-template`, on its `next` branch, set
    `TOOL_REF` to the tag's **full 40-character commit SHA** (immutable), with the tag as a
-   trailing comment (`# v0.5.0-alpha.1`).
+   trailing comment (`# v1.0.0-rc.1`).
 10. **A release that changes the set of majors the writer signs** (for example the first release that writes
     `rc/2`). Do all of the above, and also: (a) the release notes and the changelog entry say, in a sentence of
     their own, which statements this release writes in the new major and that a reader from an earlier release
