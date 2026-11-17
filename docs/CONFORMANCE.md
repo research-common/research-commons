@@ -1,6 +1,6 @@
 # Conformance cases for the claims model
 
-**Status:** proposed, open for review alongside the design note. Companion to `DESIGN-notes-claims-model.md`.
+**Status:** the test plan the reference implementation is built against; every case is run by `TestConformanceCases` and its result recorded as described below. Companion to `DESIGN-notes-claims-model.md`.
 
 This document turns the design note *Invariants and the claims model* (#69) into observable, testable
 obligations. It is the test plan for the implementation of that note and the artifact a second implementation
