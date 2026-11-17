@@ -468,7 +468,12 @@ func grantBody(s *Statement) (Status, string) {
 		return Invalid, why
 	}
 	kv, ok := d.Get("key")
-	if !ok || key()(kv, "body.delegate.key", &schemaCtx{}) != nil {
+	future := ""
+	if ks, isStr := kv.(canon.String); isStr && futureKey(string(ks)) {
+		// A delegate in a future algorithm's key form: a later reader's to judge. The grant reads unsupported
+		// (its acts unknown), never invalid (its acts definitely denied), once the rest of its body is well formed.
+		future = "key form " + keyScheme(string(ks))
+	} else if !ok || key()(kv, "body.delegate.key", &schemaCtx{}) != nil {
 		return Invalid, "body.delegate.key is not a key"
 	}
 	if string(kv.(canon.String)) == s.Signer {
@@ -495,6 +500,9 @@ func grantBody(s *Statement) (Status, string) {
 		if i > 0 && canon.CompareKeys(string(canon.Encode(ps[i-1])), string(canon.Encode(p))) >= 0 {
 			return Invalid, "body.permissions is not sorted and duplicate-free"
 		}
+	}
+	if future != "" {
+		return Unsupported, future
 	}
 	if unknown != "" {
 		return Unsupported, unknown

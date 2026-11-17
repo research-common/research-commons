@@ -2,6 +2,7 @@ package wire
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/research-common/research-commons/internal/canon"
 )
@@ -22,6 +23,14 @@ func subject() rule {
 		}
 		switch k := o.Keys[0]; k {
 		case "key":
+			// A key in a future algorithm's form (a scheme prefix this reader does not know, and hex) is a later
+			// reader's to judge: recorded, and the statement reads unsupported (resourceBody), never invalid.
+			if ks, ok := o.Members[k].(canon.String); ok && futureKey(string(ks)) {
+				if ctx.futureKey == "" {
+					ctx.futureKey = string(ks)
+				}
+				return nil
+			}
 			return key()(o.Members[k], p+".key", ctx)
 		case "identity":
 			return id()(o.Members[k], p+".identity", ctx)
@@ -151,6 +160,22 @@ func resourceBody(s *Statement) (Status, string) {
 			}
 		}
 	}
+	if tr, ok := marker.Get("task_roles"); ok {
+		if err := taskRoles()(tr, mp+".task_roles", ctx); err != nil { // accepted by the validator: collects future keys
+			return Invalid, err.Error()
+		}
+	}
 	s.Unpinned, s.refs = ctx.unpinned, sortedRefs(ctx.refs)
+	if ctx.futureKey != "" {
+		return Unsupported, "key form " + keyScheme(ctx.futureKey)
+	}
 	return Valid, ""
+}
+
+// keyScheme is the scheme prefix of a key in the other-key form ("ml-dsa-65" for "ml-dsa-65:<hex>").
+func keyScheme(k string) string {
+	if i := strings.IndexByte(k, ':'); i > 0 {
+		return k[:i]
+	}
+	return k
 }

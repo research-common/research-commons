@@ -177,12 +177,18 @@ func checkSigner(alg, signer string) error {
 			return refusal.Malformed("alg %s with signer %s", alg, signer)
 		}
 	default:
-		knownScheme := strings.HasPrefix(signer, "0x") || strings.HasPrefix(signer, "ed25519:")
-		if !isAddr && !isEd && (knownScheme || !reOtherKey.MatchString(signer)) {
+		if !isAddr && !isEd && !futureKey(signer) {
 			return refusal.Malformed("signer %q is neither 0x + 40 lowercase hex, ed25519: + 64 lowercase hex, nor a scheme prefix and lowercase hex", signer)
 		}
 	}
 	return nil
+}
+
+// futureKey reports whether k is a key in a form this reader does not implement: a scheme prefix and lowercase hex
+// (reOtherKey) whose prefix is not one of the two this reader knows. A string that starts with 0x or ed25519: is
+// that scheme's key or nothing: never a future key.
+func futureKey(k string) bool {
+	return reOtherKey.MatchString(k) && !strings.HasPrefix(k, "0x") && !strings.HasPrefix(k, "ed25519:")
 }
 
 // MaxLine bounds a received line before it is parsed (I15: a hostile line is refused before the parser walks

@@ -40,6 +40,9 @@ type rule func(v canon.Value, path string, ctx *schemaCtx) error
 type schemaCtx struct {
 	unpinned []string
 	refs     []string
+	// futureKey is the first key in a form this reader does not implement that a typed subject named (an rc/2
+	// `{key: K}`): the statement then reads unsupported, never invalid. Only subject() sets it.
+	futureKey string
 }
 
 type field struct {

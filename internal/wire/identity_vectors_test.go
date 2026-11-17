@@ -300,6 +300,11 @@ func ivNegs(chain string, root, work Key, pos []*ivPos, t testing.TB) []*ivNeg {
 	rv2 := ivDraft("rc/2", "revoke_key", 4, string(rv.env.Members["prev"].(canon.String)), true, ivObj("reason", "key_compromise"), root)
 	readOK("neg-rc2-revoke-key", "rc/2 revoke_key (correctly signed; raw key events stay rc/1 in this profile)", rv, root,
 		rv2, 2, "invalid statement", "raw key events stay rc/1 in this profile", false)
+	gr := by["grant"]
+	gb := gr.env.Members["body"].(*canon.Object)
+	fd := setField(gb, "delegate", setField(gb.Members["delegate"].(*canon.Object), "key", canon.String("ml-dsa-65:"+strings.Repeat("5a", 40))))
+	readOK("neg-grant-future-delegate", "identity_grant naming a delegate key in a future algorithm's form (correctly signed; unsupported, not invalid: a later reader may accept its acts)", gr, root,
+		setField(gr.env, "body", fd), 2, "unsupported", "key form ml-dsa-65", false)
 	// A future algorithm (wire §4): the alg and the signer of a positive are replaced by an algorithm this reader does not
 	// implement and a key in that algorithm's own form; the sig is carried over, opaque. Retained unsupported with an id,
 	// never verified, in both majors. The same signer under an implemented alg stays malformed.
@@ -790,7 +795,7 @@ func TestSignedIdentityNegativeVectors(t *testing.T) {
 	}
 	for _, alg := range []string{AlgEd25519, AlgEIP191} {
 		for _, n := range []string{"neg-actor-tampered", "neg-v1-preimage", "neg-relabel-rc2-as-rc1", "neg-relabel-rc1-as-rc2",
-			"neg-rc1-with-actor", "neg-rc2-revoke-key", "neg-future-alg-rc1", "neg-future-alg-rc2", "neg-known-alg-future-signer"} {
+			"neg-rc1-with-actor", "neg-rc2-revoke-key", "neg-future-alg-rc1", "neg-future-alg-rc2", "neg-known-alg-future-signer", "neg-grant-future-delegate"} {
 			if seen[alg+" "+n] != 1 {
 				t.Errorf("no %s for %s", n, alg)
 			}

@@ -272,7 +272,11 @@ missing `amend` (absence is not a mode), a value that is neither a boolean nor a
 two target modes, a known mode on the wrong kind, and `any_resource` / `any_task`, which
 this profile excludes for good. The schema describes `fixed-root-v1` itself (including
 `amend:"own"`) and rejects all three extensions; the reader's unsupported reading is what lets a later version add
-one without older readers denying acts they cannot judge. That uncertainty is confined to the one grant: grants only
+one without older readers denying acts they cannot judge. A key is a fourth such point: a grant whose `delegate.key`,
+or a statement whose typed subject `{key: K}` (a controller, a task-role beneficiary or issuer), names a key in a form
+this reader does not implement (a scheme prefix it does not know and lowercase hex, the other-key form of wire §6, as
+a future `alg` would write it) reads unsupported (`key form <scheme>`), never invalid, provided the rest of its body is
+well formed; a string under a known scheme (`0x`, `ed25519:`) in the wrong shape stays invalid. That uncertainty is confined to the one grant: grants only
 accumulate and never restrict each other, and every permission kind in `fixed-root-v1`
 is a leaf operation, so no grant can carry a power over another grant, a cut, or the
 root. Acts under the unsupported grant read unknown; sibling grants are evaluated

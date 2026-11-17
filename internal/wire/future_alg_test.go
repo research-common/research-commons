@@ -58,3 +58,65 @@ func TestFutureAlgorithmSigner(t *testing.T) {
 		}
 	}
 }
+
+// TestFutureKeyInGrantAndSubjects: a grant whose delegate.key, or a typed subject {key: K}, is a key in a form this
+// reader does not implement (a future algorithm's) reads unsupported, never invalid: a later reader may accept acts
+// under it, so this one may not definitely deny them. A malformed key (a known scheme in the wrong shape, upper case,
+// no hex) stays invalid, and the rest of the body is still checked: a future key does not excuse a broken grant.
+func TestFutureKeyInGrantAndSubjects(t *testing.T) {
+	fk := "ml-dsa-65:" + strings.Repeat("ab", 40)
+	perm := arr(body("kind", "authored", "targets", body("any_content", canon.Bool(true)), "amend", canon.Bool(true)))
+	grant := func(k string, perms canon.Array) *canon.Object {
+		return body("identity", tID, "delegate", body("key", k, "inception", tID2), "permissions", perms)
+	}
+	for _, c := range []struct {
+		name string
+		b    *canon.Object
+		want Status
+		why  string
+	}{
+		{"future delegate", grant(fk, perm), Unsupported, "key form ml-dsa-65"},
+		{"future delegate, broken permissions", grant(fk, arr()), Invalid, "body.permissions"},
+		{"ed25519 prefix, wrong length", grant("ed25519:"+strings.Repeat("ab", 20), perm), Invalid, "not a key"},
+		{"0x prefix, wrong length", grant("0x"+strings.Repeat("ab", 10), perm), Invalid, "not a key"},
+		{"upper-case scheme", grant("ML-DSA-65:"+strings.Repeat("ab", 40), perm), Invalid, "not a key"},
+		{"scheme without hex", grant("ml-dsa-65:", perm), Invalid, "not a key"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			st := rc2Read(t, "identity_grant", c.b, body(), nil)
+			if st.Status != c.want || !strings.Contains(st.Why, c.why) {
+				t.Fatalf("read %s (%q), want %s containing %q", st.Status, st.Why, c.want, c.why)
+			}
+		})
+	}
+	idS := body("identity", tID)
+	gen := func(ctrl canon.Array) *canon.Object {
+		return body("type", "collection", "name", "n", "controllers", ctrl, "rule", body("any_one", canon.Bool(true)))
+	}
+	ed := func(contents *canon.Object) *canon.Object {
+		return body("resource", tID, "predecessors", arr(s(tID)), "contents", contents)
+	}
+	roles := func(ben *canon.Object) *canon.Object {
+		return body("task_roles", body("beneficiary", ben, "any_issuer", canon.Bool(true), "counting_unit", "identity"))
+	}
+	contract := body("profile", "task-contract-v1")
+	for _, c := range []struct {
+		name, kind string
+		b, marker  *canon.Object
+		want       Status
+		why        string
+	}{
+		{"genesis future controller", "genesis", gen(arr(idS, body("key", fk))), body(), Unsupported, "key form ml-dsa-65"},
+		{"edition future controller", "edition", ed(body("controllers", arr(body("key", fk)), "rule", body("any_one", canon.Bool(true)))), body(), Unsupported, "key form ml-dsa-65"},
+		{"edition future beneficiary", "edition", ed(body("contract", contract)), roles(body("key", fk)), Unsupported, "key form ml-dsa-65"},
+		{"genesis future controller, unsorted", "genesis", gen(arr(body("key", fk), idS)), body(), Invalid, "not sorted"},
+		{"genesis malformed ed25519 controller", "genesis", gen(arr(body("key", "ed25519:"+strings.Repeat("ab", 8)))), body(), Invalid, "a key"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			st := rc2Read(t, c.kind, c.b, c.marker, nil)
+			if st.Status != c.want || !strings.Contains(st.Why, c.why) {
+				t.Fatalf("read %s (%q), want %s containing %q", st.Status, st.Why, c.want, c.why)
+			}
+		})
+	}
+}

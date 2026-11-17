@@ -584,6 +584,28 @@
    }
   },
   {
+   "name": "ed-neg-grant-future-delegate",
+   "chain": "ed",
+   "title": "identity_grant naming a delegate key in a future algorithm's form (correctly signed; unsupported, not invalid: a later reader may accept its acts)",
+   "of": "ed-grant",
+   "alg": "ed25519",
+   "signer": "ed25519:7803013dc64b2a56e43038545e7bcda9a3b7e51659bd3ed3a14061b499c96e11",
+   "delivered": "{\"alg\":\"ed25519\",\"body\":{\"delegate\":{\"inception\":\"64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c\",\"key\":\"ml-dsa-65:5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a\"},\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\",\"permissions\":[{\"amend\":true,\"kind\":\"authored\",\"targets\":{\"any_content\":true}}],\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"identity_grant\",\"prev\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\",\"rc\":\"rc/2\",\"seq\":1,\"sig\":\"e243a627cc828d5ff16826dbb17b3c6ad711b587396e735c98f0240b51d337f75edef5ceb10faed13f1e6fa5941775517c128e09f65c5dfd57e1b283b82a9801\",\"signer\":\"ed25519:7803013dc64b2a56e43038545e7bcda9a3b7e51659bd3ed3a14061b499c96e11\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "changed_members": [
+    "body",
+    "sig"
+   ],
+   "verified_string": "DSSEv1 55 application/vnd.research-commons.identity_grant.v2+json 649 {\"alg\":\"ed25519\",\"body\":{\"delegate\":{\"inception\":\"64f0f922b572f99f9ab0ee98654b0ef5c6a7e080e9eabb2fec5e20fe858cd12c\",\"key\":\"ml-dsa-65:5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a\"},\"identity\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\",\"permissions\":[{\"amend\":true,\"kind\":\"authored\",\"targets\":{\"any_content\":true}}],\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"identity_grant\",\"prev\":\"6f24bd92cf27318bbc6bd6f881f130b611705e54dbdd11a83cd7de3a8ab351e2\",\"rc\":\"rc/2\",\"seq\":1,\"signer\":\"ed25519:7803013dc64b2a56e43038545e7bcda9a3b7e51659bd3ed3a14061b499c96e11\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "sig": "e243a627cc828d5ff16826dbb17b3c6ad711b587396e735c98f0240b51d337f75edef5ceb10faed13f1e6fa5941775517c128e09f65c5dfd57e1b283b82a9801",
+   "sig_verifies": true,
+   "outcome": {
+    "result": "read",
+    "status": "unsupported",
+    "why": "key form ml-dsa-65",
+    "actor_read": false
+   }
+  },
+  {
    "name": "ed-neg-future-alg-rc1",
    "chain": "ed",
    "title": "rc/1 line under a future alg with that algorithm's own key form (retained unsupported, not malformed)",
@@ -924,6 +946,28 @@
     "result": "read",
     "status": "invalid statement",
     "why": "raw key events stay rc/1 in this profile",
+    "actor_read": false
+   }
+  },
+  {
+   "name": "eip-neg-grant-future-delegate",
+   "chain": "eip",
+   "title": "identity_grant naming a delegate key in a future algorithm's form (correctly signed; unsupported, not invalid: a later reader may accept its acts)",
+   "of": "eip-grant",
+   "alg": "eip191-secp256k1",
+   "signer": "0x4586abc8188dc0503f69a905d26cbd4abeacb838",
+   "delivered": "{\"alg\":\"eip191-secp256k1\",\"body\":{\"delegate\":{\"inception\":\"3844ef7b3ee780bc3e4960eb3917f286be0b5dd954c49b5d13c026924770180e\",\"key\":\"ml-dsa-65:5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a\"},\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\",\"permissions\":[{\"amend\":true,\"kind\":\"authored\",\"targets\":{\"any_content\":true}}],\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"identity_grant\",\"prev\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\",\"rc\":\"rc/2\",\"seq\":1,\"sig\":\"0xf1137321daa2153531ae8cd63028644d907b606d5e0b811cf686ec17cd43ab4d158ed232c48e6b563c2711796c460025a23c72dfbd67e1d1c137b1f590dba7a71c\",\"signer\":\"0x4586abc8188dc0503f69a905d26cbd4abeacb838\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "changed_members": [
+    "body",
+    "sig"
+   ],
+   "verified_string": "DSSEv1 55 application/vnd.research-commons.identity_grant.v2+json 628 {\"alg\":\"eip191-secp256k1\",\"body\":{\"delegate\":{\"inception\":\"3844ef7b3ee780bc3e4960eb3917f286be0b5dd954c49b5d13c026924770180e\",\"key\":\"ml-dsa-65:5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a\"},\"identity\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\",\"permissions\":[{\"amend\":true,\"kind\":\"authored\",\"targets\":{\"any_content\":true}}],\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"identity_grant\",\"prev\":\"f8907295c8ed40f2a95f895e94c571f1c0277393950fdbe5a025f4e50097af10\",\"rc\":\"rc/2\",\"seq\":1,\"signer\":\"0x4586abc8188dc0503f69a905d26cbd4abeacb838\",\"ts\":\"2026-11-06T00:00:00Z\"}",
+   "sig": "0xf1137321daa2153531ae8cd63028644d907b606d5e0b811cf686ec17cd43ab4d158ed232c48e6b563c2711796c460025a23c72dfbd67e1d1c137b1f590dba7a71c",
+   "sig_verifies": true,
+   "outcome": {
+    "result": "read",
+    "status": "unsupported",
+    "why": "key form ml-dsa-65",
     "actor_read": false
    }
   },
