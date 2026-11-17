@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"os"
 	"path/filepath"
@@ -392,4 +393,69 @@ func TestLedgerInterruptedReview(t *testing.T) {
 		t.Fatalf("key show interrupted: %d closed %d\n%s%s", r.code, f.Closed, r.stdout, r.stderr)
 	}
 	f.Decide()
+}
+
+// TestLedgerCompromisedStoreHost: the connector's half of a compromised operational host (the store's machine). A
+// host that alters the package it hands to the signing machine (the PAE, the signer, the summary the holder reads,
+// or the envelope under them) gets nothing from the device: key sign --ledger refuses before the device is asked to
+// sign (exit 1, naming the member), writes nothing, and the device saw no sign request. A host that prepares a
+// different statement honestly (a valid package for other bytes) is caught by the separate-channel digest
+// (--expect-pae-sha256) before the device is asked.
+func TestLedgerCompromisedStoreHost(t *testing.T) {
+	conformance.Partial(t, "C-id-40", "the connector's half of a compromised store host: a package altered after --prepare (PAE, signer, summary, envelope) or a valid package for other bytes caught by --expect-pae-sha256 is refused by key sign --ledger before the device is asked to sign, nothing written; the custody drill of a compromised host is not recorded")
+	dev := ledgertest.New("host")
+	root := newLedgerHome(t, dev)
+	machine := newSigningMachine(t)
+	pp, pkg := root.prepare("new.pkg", "identity", "new", "--ts", "2026-11-16T00:00:00Z")
+	good := sha256.Sum256(paeOf(t, pkg))
+	other := newExtHome(t, wire.AlgEIP191)
+	mutated := func(name string, f func(p *canon.Object)) string {
+		p := clonePkg(pkg)
+		f(p)
+		path := filepath.Join(machine.dir, name)
+		writePkg(t, path, p)
+		return path
+	}
+	// an honest-looking package for other bytes: the host prepared a different inception (another ts)
+	otherPP, _ := root.prepare("other.pkg", "identity", "new", "--ts", "2026-11-16T00:00:01Z")
+	cases := []struct {
+		name, pkg string
+		extra     []string
+		member    string
+	}{
+		{"pae", mutated("h-pae.pkg", func(p *canon.Object) {
+			p.Members["pae"] = canon.String(base64.StdEncoding.EncodeToString(append(paeOf(t, pkg), ' ')))
+		}), nil, "pae"},
+		{"signer", mutated("h-signer.pkg", func(p *canon.Object) { p.Members["signer"] = canon.String(other.signer) }), nil, "signer"},
+		{"summary", mutated("h-sum.pkg", func(p *canon.Object) {
+			p.Members["summary"].(*canon.Object).Members["root"] = canon.String(other.signer)
+		}), nil, "summary"},
+		{"envelope", mutated("h-env.pkg", func(p *canon.Object) {
+			p.Members["envelope"].(*canon.Object).Members["ts"] = canon.String("2026-11-16T00:00:02Z")
+		}), nil, "pae"},
+		{"other bytes", otherPP, []string{"--expect-pae-sha256", hex.EncodeToString(good[:])}, ""},
+	}
+	for _, c := range cases {
+		f := ledgertest.New("host")
+		out := filepath.Join(machine.dir, "h-"+strings.ReplaceAll(c.name, " ", "-")+".sig")
+		args := append([]string{"key", "sign", "--package", c.pkg, "--ledger", "--ledger-path", ledgerTestPath, "--out", out, "--json"}, c.extra...)
+		r := runLedger(machine.dir, f.Opener(nil), machine.env, args...)
+		if r.code != ExitWrong || (c.member != "" && !strings.Contains(r.stdout, `"scope":"package member `+c.member+`"`)) {
+			t.Fatalf("%s: %d %s", c.name, r.code, r.stdout)
+		}
+		if _, err := os.Stat(out); err == nil {
+			t.Fatalf("%s: a signature was written", c.name)
+		}
+		for _, a := range f.Received {
+			if a[0] == 0xe0 && a[1] == 0x08 {
+				t.Fatalf("%s: the device was asked to sign", c.name)
+			}
+		}
+	}
+	// control: the untampered package with the matching digest signs
+	f := ledgertest.New("host")
+	if r := runLedger(machine.dir, f.Opener(nil), machine.env, "key", "sign", "--package", pp, "--ledger", "--ledger-path", ledgerTestPath,
+		"--expect-pae-sha256", hex.EncodeToString(good[:]), "--out", "-"); r.code != ExitOK || f.Signed != 1 {
+		t.Fatalf("control: %d %s", r.code, r.stderr)
+	}
 }

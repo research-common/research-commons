@@ -893,8 +893,13 @@ member changed, the wrong key, or an existing output file is refused with nothin
 Not drilled: a compromised operational host. Signing on a physical device is the manual
 drill recorded above (a Nano X), not an automated test.
 `TestLedgerKeySignEndToEnd` and `TestLedgerKeySignAborts` run the Ledger connector against an
-in-process fake of the Ethereum app. C-id-40 is therefore partial: its simple-path, package
-and connector halves are the tests above; the hardware half is the manual drill above; the host-compromise half stays open.
+in-process fake of the Ethereum app; `TestLedgerInterruptedReview` interrupts a held review.
+`TestLedgerCompromisedStoreHost` is the connector's side of a compromised store host: a package
+altered after `--prepare` (PAE, signer, summary, envelope), or a valid package for other bytes
+that `--expect-pae-sha256` catches, is refused before the device is asked to sign. C-id-40 is
+therefore partial: its simple-path, package and connector halves are the tests above; the
+hardware half is the manual drill above; the custody drill of a compromised operational host
+(what the holder does once the store's machine is lost to an attacker) is not recorded.
 
 ## 9. Schemas, vectors and reproducible checks
 
