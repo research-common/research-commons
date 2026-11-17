@@ -27,7 +27,7 @@ from .errors import (
     UnparseableOutput,
 )
 
-__version__ = "0.5.0a7"
+__version__ = "0.5.0a8"
 
 __all__ = [
     "run",

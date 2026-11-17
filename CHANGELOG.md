@@ -9,16 +9,15 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ## [Unreleased]
 
-### Changed
+## [0.5.0-alpha.8] - 2026-11-16
 
-- **Design notes: open questions swept for 1.0.** Every design note's open-questions section now has a "Status for
-  1.0" line: each question is closed (with the code or conformance case that shows it) or deferred past 1.0 with why
-  it cannot change the bytes of an existing `rc/1` object. The quantum horizon (wire-format note) stays open for
-  discussion and deferred; the 0.4-alpha notes are marked superseded by the next format. The bitcoin-time note no
-  longer says the `push` anchor gate is unbuilt, and the claims-model note's header no longer says nothing in it is
-  decided. RELEASING criterion 1 names the status lines.
-- **Windows is unsupported for 1.0.** RELEASING criterion 4 records the decision, and the README's platform line
-  cites KNOWN-LIMITS L-11.
+**A Ledger device can sign an identity, and the 1.0 criteria are in place.** `key sign --ledger` signs an
+external-signing package with a Ledger device running the Ethereum app (drilled on a physical Nano X), and an
+interrupted device review is reported. The two-hub drill is scripted and runs in CI; every design note's open questions
+are closed or deferred past 1.0; Windows is unsupported for 1.0; and a compromised operational host is drilled through
+the commands. The writer's majors are unchanged since alpha.5 (`rc/1`, and `rc/2` from the identity commands and
+`publish --as`). The Python wheels are published to PyPI from CI from this release on (`pip install research-commons`).
+All 190 core conformance cases are covered.
 
 ### Added
 
@@ -61,12 +60,44 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ### Changed
 
+- **Design notes: open questions swept for 1.0.** Every design note's open-questions section now has a "Status for
+  1.0" line: each question is closed (with the code or conformance case that shows it) or deferred past 1.0 with why
+  it cannot change the bytes of an existing `rc/1` object. The quantum horizon (wire-format note) stays open for
+  discussion and deferred; the 0.4-alpha notes are marked superseded by the next format. The bitcoin-time note no
+  longer says the `push` anchor gate is unbuilt, and the claims-model note's header no longer says nothing in it is
+  decided. RELEASING criterion 1 names the status lines.
+- **Windows is unsupported for 1.0.** RELEASING criterion 4 records the decision, and the README's platform line
+  cites KNOWN-LIMITS L-11.
 - **The `sandbox_oci` tests run in parallel, and the gate reports are swept for prose outcomes.** Each OCI test starts
   its containers with a label of its own and checks for leftovers by that label only, so the two tagged packages no
   longer need `-p 1` (CI and the README drop it). A new OCI test shows a sandboxed comparison cannot connect to a
   listener it could reach with a network grant. The "no outcome as prose" sweep now also reads every row of the
   `pull` and `hub check` reports (intended_for, completeness, series boundary, trust floor, actor), and the two
   conformance partials that remained for execution (C-exec-14) and exchange (C-exch-10) each name the one thing left.
+
+- **Python wheels publish to PyPI from CI.** A `publish-python` workflow runs when a release is published (or by
+  hand for any existing tag): it builds the four platform wheels from that release's checksum-verified archives,
+  smoke-tests one wheel in a clean virtualenv, and uploads them by OIDC trusted publishing (environment `pypi`;
+  no API token exists anywhere; published wheels carry PEP 740 attestations by default). The build verifies
+  every archive against the release workflow's build attestations before opening it, and a manual dispatch
+  checks out and builds the tag's own commit, so an existing release can be (re)published exactly as it was
+  cut. The maintainer actions are the one-time PyPI trusted-publisher entry and, before the first run, a
+  protected `pypi` environment (deployment refs `next` and `v*`, a required reviewer); `docs/RELEASING.md`
+  step 8 describes the new path.
+
+### Known issues (open at this tag)
+- Every gap in `docs/KNOWN-LIMITS.md` (L-01…L-17, L-20). The ones a first user meets:
+  - Block headers come only from a file the operator obtains (`anchor headers sync --from`, L-02); with no header
+    database every rival construction is `contested` and a task contract with a `deadline` never reaches `ready`. (#59)
+  - `publish` does not stamp (L-16): run `anchor stamp` after `publish` and before `push`, and `anchor upgrade` once
+    the calendar has committed to a block (typically hours).
+  - `push` sends only from a git checkout of the hub (L-17).
+  - A response layout reads JSON only, through one pointer to the record array and one to the state (L-14).
+  - The only hardware connector is a Ledger device running the Ethereum app (L-07), over USB on Linux only (L-20).
+    Key, execution-policy and signing-package file formats are still version 0 (L-09).
+  - There is no Windows build, and none is planned for 1.0 (L-11); `--json` output may change between alphas (L-12).
+- `rc/2` and its interchange files are frozen at 1.0 only after the review requested in #233.
+- The `next-format` issues are requirements for later stages, not defects in this release.
 
 ## [0.5.0-alpha.7] - 2026-11-16
 
@@ -90,16 +121,6 @@ process crash. The writer's majors are unchanged since alpha.5 (`rc/1`, and `rc/
   matching). Nothing else reads the file (a test guards it): `status`, `explain`, `fsck`, `repair` and every answer
   are byte-identical with the file deleted or edited. `status` declares `history: on (8 MiB × 2, rotate)` instead
   of `off`. Closes KNOWN-LIMITS L-19.
-
-- **Python wheels publish to PyPI from CI.** A `publish-python` workflow runs when a release is published (or by
-  hand for any existing tag): it builds the four platform wheels from that release's checksum-verified archives,
-  smoke-tests one wheel in a clean virtualenv, and uploads them by OIDC trusted publishing (environment `pypi`;
-  no API token exists anywhere; published wheels carry PEP 740 attestations by default). The build verifies
-  every archive against the release workflow's build attestations before opening it, and a manual dispatch
-  checks out and builds the tag's own commit, so an existing release can be (re)published exactly as it was
-  cut. The maintainer actions are the one-time PyPI trusted-publisher entry and, before the first run, a
-  protected `pypi` environment (deployment refs `next` and `v*`, a required reviewer); `docs/RELEASING.md`
-  step 8 describes the new path.
 
 - **CI runs the OCI sandbox tests, and the conformance scan counts them.** A new `test-sandbox-oci` job runs
   `go test -tags sandbox_oci` on `internal/run` and `internal/clirun` against the runner's docker with an image pinned by
@@ -1244,7 +1265,8 @@ contributions, landed on top of that baseline.
 - **#12** — COMMONS.md review request from an external hub: the first outside use of the
   template and rubric.
 
-[Unreleased]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.7...next
+[Unreleased]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.8...next
+[0.5.0-alpha.8]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.7...v0.5.0-alpha.8
 [0.5.0-alpha.7]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.6...v0.5.0-alpha.7
 [0.5.0-alpha.6]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.5...v0.5.0-alpha.6
 [0.5.0-alpha.5]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.4...v0.5.0-alpha.5

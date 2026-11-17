@@ -14,7 +14,7 @@ New here? Read [`docs/WHY.md`](docs/WHY.md): the motivation and the epistemics, 
 
 ## Status
 
-**0.5.0-alpha.7: the seventh alpha of the next format.** The next format is a clean break from the 0.4 alpha: a
+**0.5.0-alpha.8: the eighth alpha of the next format.** The next format is a clean break from the 0.4 alpha: a
 signed, append-only statement log per key, a store directory (`rc-store/1`), and a Go command-line tool. It is
 alpha: **the format may still change between alpha releases**, and so may `--json` output, key files and execution
 policy files (all marked provisional). The fixed-root identity profile is a candidate under review: its **reader is
@@ -40,7 +40,7 @@ Read it before you rely on an answer.
 Requires Go 1.26 or newer. Developed and tested on Linux (the Python wheels also carry macOS builds); **Windows is not supported in 1.0** (the sandbox and store use Unix file semantics, and the tool does not build there: `docs/KNOWN-LIMITS.md` L-11).
 
 ```bash
-go install github.com/research-common/research-commons/cmd/commons@v0.5.0-alpha.7
+go install github.com/research-common/research-commons/cmd/commons@v0.5.0-alpha.8
 commons --version
 ```
 
