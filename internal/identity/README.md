@@ -1,17 +1,17 @@
-# internal/identity: the admission contract (candidate wire, reader active)
+# internal/identity: the admission contract (frozen wire, reader and writer active)
 
-**Status: reader active, no writer.** This package binds the candidate fixed-root identity profile
+**Status: reader and writer active; the wire is frozen for 1.0.** This package binds the fixed-root identity profile
 (`docs/DESIGN-notes-fixed-root-identity.md`, "the profile") to the isolated reference model in
 `internal/identitymodel` through one adapter, `Admit`. Every production reader builds its actor evaluator here
-(`Evaluator`, `reader.go`) from the lines it holds; no writer signs rc/2 and `wire.Major` (the writer's major)
-stays 1. Nothing here is frozen wire. The profile's §7 states the evaluation
-contract a future resolver must meet; this file states what the adapter does today, section by section, so
+(`Evaluator`, `reader.go`) from the lines it holds. The writer signs rc/2 for identity kinds (`wire.IdentityDraft`), while `wire.Major`
+(the default writer's major) stays 1 for everything else. The profile's §7 states the evaluation
+contract the resolver must meet; this file states what the adapter does today, section by section, so
 a reviewer can check the code against it.
 
 ## 0. Shape
 
 ```
-raw lines ──► wire.NewIdentityReader().Read   verify-first; rc/1 and candidate rc/2; keeps authenticated-invalid lines
+raw lines ──► wire.NewIdentityReader().Read   verify-first; rc/1 and rc/2; keeps authenticated-invalid lines
           ──► identity.Admit                  dedupe, caps, receipt, Fact translation (the only Fact constructor)
           ──► identitymodel.Snapshot.Evaluate the reference semantics, unchanged
 ```
@@ -24,7 +24,7 @@ a whole.
 
 ## 1. Two majors
 
-- The identity reader verifies rc/1 exactly as the default reader does, and rc/2 under the candidate profile
+- The identity reader verifies rc/1 exactly as the default reader does, and rc/2 under the identity profile
   (payload type `.v2+json`). Any other major takes the existing linkage path: unverified, an `Unproven` fact.
 - rc/1 bytes, ids and meaning are unchanged. An rc/1 envelope carrying `x_actor_v1` is **not** upgraded: it is
   a bare-key statement for identity purposes, so identity evaluation answers `no_identity_actor`.
