@@ -9,6 +9,17 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ## [Unreleased]
 
+### Changed
+
+- **Design notes: open questions swept for 1.0.** Every design note's open-questions section now has a "Status for
+  1.0" line: each question is closed (with the code or conformance case that shows it) or deferred past 1.0 with why
+  it cannot change the bytes of an existing `rc/1` object. The quantum horizon (wire-format note) stays open for
+  discussion and deferred; the 0.4-alpha notes are marked superseded by the next format. The bitcoin-time note no
+  longer says the `push` anchor gate is unbuilt, and the claims-model note's header no longer says nothing in it is
+  decided. RELEASING criterion 1 names the status lines.
+- **Windows is unsupported for 1.0.** RELEASING criterion 4 records the decision, and the README's platform line
+  cites KNOWN-LIMITS L-11.
+
 ### Added
 
 - **The two-hub drill is scripted (`scripts/two-hub-drill.sh`).** Two bare git repos as hubs and two stores with distinct
