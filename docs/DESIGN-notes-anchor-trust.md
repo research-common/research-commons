@@ -68,6 +68,11 @@ unsigned metadata to confer signed derivation priority.
 
 ## Followups requiring a block-time design
 
+**Status for 1.0.** This note describes the 0.4 alpha, which is not `rc/1`; nothing below can change the bytes
+of an `rc/1` object. The follow-ups are closed for the next format by the Bitcoin-time note: a receiver-side
+verifier over a headers-only chain view, an explicit local policy for confirmations and reorgs (its §7), and
+`nTime` never used as an ordering key.
+
 A real Bitcoin-quality bound needs a receiver-side verifier that checks the proof's
 commitment to the exact root-file bytes, verifies the attestation against a trusted
 Bitcoin chain, and uses that block's time. Proof inspection or a successful command
