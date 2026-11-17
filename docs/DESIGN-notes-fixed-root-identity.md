@@ -1100,6 +1100,14 @@ caches and replay; independent review of the major transition; detached signing
 packages/connectors and custody/hardware usability drills. No release, deployment, live
 keys or devices are implied by these artifacts.
 
+**What freezing `fixed-root-v1` does not freeze.** The root is one classical key (`ed25519` or
+`eip191-secp256k1`) and has no rotation in this profile: losing or retiring it ends the identity's
+ability to issue or cut grants. The way out is a **new inception profile** (a new `profile` token on
+`identity_inception`), which a 1.0 reader reads unsupported for that whole identity, never as
+`fixed-root-v1`; a post-quantum or rotating root needs no change to `rc/2` itself. Statement and
+edition ids are bare SHA-256 over the PAE string: a change of hash function is a new format (a new
+major), not a profile change.
+
 ## 10. Conformance cases
 
 The 45 scenario handles of §9 are registered conformance cases, one to one: handle `ID-NN` is case `C-id-NN`.
