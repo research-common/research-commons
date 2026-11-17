@@ -206,13 +206,8 @@ func linkageEnvelope(s *Statement, env *canon.Object) error {
 	if s.Alg, err = str(env, "alg"); err != nil {
 		return err
 	}
-	isAddr, isEd := reAddr.MatchString(s.Signer), reEdKey.MatchString(s.Signer)
-	if !isAddr && !isEd {
-		return refusal.Malformed("signer %q is neither 0x + 40 lowercase hex nor ed25519: + 64 lowercase hex", s.Signer)
-	}
-	switch {
-	case s.Alg == AlgEIP191 && !isAddr, s.Alg == AlgEd25519 && !isEd:
-		return refusal.Malformed("alg %s with signer %s", s.Alg, s.Signer)
+	if err := checkSigner(s.Alg, s.Signer); err != nil {
+		return err
 	}
 	seqV, ok := env.Get("seq")
 	if !ok {

@@ -161,6 +161,30 @@ var (
 	envFields  = []string{"rc", "kind", "signer", "alg", "seq", "prev", "ts", "body"}
 )
 
+// checkSigner holds signer to the shape alg gives it (§4). Under an algorithm this reader implements the signer
+// is that algorithm's key form, and nothing else. Under an algorithm it does not implement the signer may also
+// take the other-key shape (a scheme prefix and hex), so that a future algorithm's own key form reads as an
+// unsupported line, retained and placed per §4, rather than as malformed; a signer that starts with a scheme
+// prefix this reader knows (0x, ed25519:) must still be that scheme's exact form.
+func checkSigner(alg, signer string) error {
+	isAddr, isEd := reAddr.MatchString(signer), reEdKey.MatchString(signer)
+	switch alg {
+	case AlgEIP191, AlgEd25519:
+		if !isAddr && !isEd {
+			return refusal.Malformed("signer %q is neither 0x + 40 lowercase hex nor ed25519: + 64 lowercase hex", signer)
+		}
+		if alg == AlgEIP191 && !isAddr || alg == AlgEd25519 && !isEd {
+			return refusal.Malformed("alg %s with signer %s", alg, signer)
+		}
+	default:
+		knownScheme := strings.HasPrefix(signer, "0x") || strings.HasPrefix(signer, "ed25519:")
+		if !isAddr && !isEd && (knownScheme || !reOtherKey.MatchString(signer)) {
+			return refusal.Malformed("signer %q is neither 0x + 40 lowercase hex, ed25519: + 64 lowercase hex, nor a scheme prefix and lowercase hex", signer)
+		}
+	}
+	return nil
+}
+
 // MaxLine bounds a received line before it is parsed (I15: a hostile line is refused before the parser walks
 // it). The canonical envelope can exceed its input only through the escapes JCS writes for control characters
 // (one byte becomes six), plus the PAE prefix, so any line that could yield a signed string within
@@ -244,13 +268,8 @@ func (r *Reader) fromEnvelope(full *canon.Object) (*Statement, error) {
 	if s.Alg, err = str(env, "alg"); err != nil {
 		return nil, err
 	}
-	isAddr, isEd := reAddr.MatchString(s.Signer), reEdKey.MatchString(s.Signer)
-	if !isAddr && !isEd {
-		return nil, refusal.Malformed("signer %q is neither 0x + 40 lowercase hex nor ed25519: + 64 lowercase hex", s.Signer)
-	}
-	switch {
-	case s.Alg == AlgEIP191 && !isAddr, s.Alg == AlgEd25519 && !isEd:
-		return nil, refusal.Malformed("alg %s with signer %s", s.Alg, s.Signer)
+	if err := checkSigner(s.Alg, s.Signer); err != nil {
+		return nil, err
 	}
 	seq, ok := env.Members["seq"].(canon.Int)
 	if !ok || seq < 0 {
