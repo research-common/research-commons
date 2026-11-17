@@ -11,6 +11,14 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ### Changed
 
+- Help text layout: `commons help`, `help <command>`, `help exits` and `help outputs` print a dedicated page instead of
+  the generic key/value listing: the commands grouped by purpose, a short usage line (`commons publish [options]`) for a
+  command with many options, options in aligned columns with their value placeholders (`--key <file>`), the options of
+  `publish`, `run` and the identity commands under group headings, descriptions split into paragraphs at sentence ends,
+  an `Examples` section on `init`, `key new`, `publish`, `show`, `verify`, `explain`, `pull` and `push`, and everything
+  wrapped to `$COLUMNS` (80 when unset, between 60 and 120). An unknown option now names its command in the `next`
+  hint (`run commons help publish to list its options`) and an unknown command suggests the nearest one. `--json`
+  help output is byte-identical; no byte, identifier or exit-code change.
 - Documentation: the README, security policy, contributing guide and design-note status lines now describe the release
   candidate (frozen format, install from PyPI or a release archive and how to verify it, a "Testing the release candidate"
   section) instead of the alpha; `--json` stability wording and limits L-08 and L-12 say what holds at 1.0. No byte,
