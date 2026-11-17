@@ -305,12 +305,15 @@
         "missing-targets-not-unlimited",
         "two-target-modes",
         "resource-wildcard-not-allowed",
-        "duplicate-permission"
+        "duplicate-permission",
+        "permissions-not-sorted",
+        "target-contents-not-sorted"
       ],
       "isolated_tests": [
         "internal/identity:TestSliceNegatives",
         "internal/identity:TestReviewUnsupportedGrantAffectsOnlyItself",
-        "internal/identity:TestUnknownAmendModeLosesOnlyItsOwnGrant"
+        "internal/identity:TestUnknownAmendModeLosesOnlyItsOwnGrant",
+        "internal/wire:TestIdentitySetsSorted"
       ],
       "conformance": "partial",
       "remaining": "Permission syntax tested; registered field dispatch and effective authorization need model/integration."
@@ -335,14 +338,16 @@
       "scenario": "Explicit cross-key concurrent amendments",
       "schema_vectors": [
         "claim-explicit-amendment-shape",
-        "amendment-with-no-identity-actor"
+        "amendment-with-no-identity-actor",
+        "amends-not-sorted"
       ],
       "isolated_tests": [
         "internal/wire:TestFixedRootCandidateVectors",
         "internal/resolve:TestIdentityClaimsGroupByExplicitAmendment",
         "internal/resolve:TestIdentityAuthorshipUnits",
         "internal/resolve:TestIdentityAuthorshipSignedRC2",
-        "internal/cli:TestIdentityReaderAmendmentsThroughCommands"
+        "internal/cli:TestIdentityReaderAmendmentsThroughCommands",
+        "internal/wire:TestIdentitySetsSorted"
       ],
       "conformance": "covers",
       "remaining": "Covered through the commands: two delegates of I with amend:true sign concurrent cross-key amendments of one claim (signed rc/2, pulled): `verify` reads the licence contested (exit 3) and an amendment naming both reconciles it (exit 0). Also behind the actor hook in internal/resolve."

@@ -1915,6 +1915,127 @@
       }
     },
     {
+      "name": "permissions-not-sorted",
+      "mode": "draft",
+      "accept": false,
+      "scenarios": [
+        "ID-19"
+      ],
+      "value": {
+        "rc": "rc/2",
+        "kind": "identity_grant",
+        "signer": "ed25519:204bd6d468d5522c44f8d2431294b176cce83db66607ebeba27747f3e9fb8c98",
+        "alg": "ed25519",
+        "seq": 1,
+        "prev": "03d1cec1b8f41f46052c921b744e99a59ba5199734d5b13ecdffcdf0daff5220",
+        "ts": "2026-10-21T00:00:00Z",
+        "crit": [
+          "x_identity_v1"
+        ],
+        "body": {
+          "identity": "d0dce07f9b81da1cf542693be01fed5e6867bd7542e23efc27a34cc5c99557f1",
+          "delegate": {
+            "key": "ed25519:49c7dbf3ef744f79422f9318bf14c7a760928d0f4950e5c8f84e1e608f77afa0",
+            "inception": "03d1cec1b8f41f46052c921b744e99a59ba5199734d5b13ecdffcdf0daff5220"
+          },
+          "permissions": [
+            {
+              "kind": "holds",
+              "targets": {
+                "contents": [
+                  "sha256:830db866738b1d64adc3b10a8d7e15565f3f19d15a4dadae42ba0622b445190c"
+                ]
+              }
+            },
+            {
+              "kind": "authored",
+              "targets": {
+                "any_content": true
+              },
+              "amend": false
+            }
+          ],
+          "x_identity_v1": {}
+        }
+      }
+    },
+    {
+      "name": "target-contents-not-sorted",
+      "mode": "draft",
+      "accept": false,
+      "scenarios": [
+        "ID-19"
+      ],
+      "value": {
+        "rc": "rc/2",
+        "kind": "identity_grant",
+        "signer": "ed25519:204bd6d468d5522c44f8d2431294b176cce83db66607ebeba27747f3e9fb8c98",
+        "alg": "ed25519",
+        "seq": 1,
+        "prev": "03d1cec1b8f41f46052c921b744e99a59ba5199734d5b13ecdffcdf0daff5220",
+        "ts": "2026-10-21T00:00:00Z",
+        "crit": [
+          "x_identity_v1"
+        ],
+        "body": {
+          "identity": "d0dce07f9b81da1cf542693be01fed5e6867bd7542e23efc27a34cc5c99557f1",
+          "delegate": {
+            "key": "ed25519:49c7dbf3ef744f79422f9318bf14c7a760928d0f4950e5c8f84e1e608f77afa0",
+            "inception": "03d1cec1b8f41f46052c921b744e99a59ba5199734d5b13ecdffcdf0daff5220"
+          },
+          "permissions": [
+            {
+              "kind": "holds",
+              "targets": {
+                "contents": [
+                  "sha256:830db866738b1d64adc3b10a8d7e15565f3f19d15a4dadae42ba0622b445190c",
+                  "sha256:1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f"
+                ]
+              }
+            }
+          ],
+          "x_identity_v1": {}
+        }
+      }
+    },
+    {
+      "name": "amends-not-sorted",
+      "mode": "draft",
+      "accept": false,
+      "scenarios": [
+        "ID-21"
+      ],
+      "value": {
+        "rc": "rc/2",
+        "kind": "authored",
+        "signer": "ed25519:204bd6d468d5522c44f8d2431294b176cce83db66607ebeba27747f3e9fb8c98",
+        "alg": "ed25519",
+        "seq": 1,
+        "prev": "03d1cec1b8f41f46052c921b744e99a59ba5199734d5b13ecdffcdf0daff5220",
+        "ts": "2026-10-21T00:00:00Z",
+        "crit": [
+          "x_identity_v1"
+        ],
+        "body": {
+          "content": {
+            "digest": "sha256:830db866738b1d64adc3b10a8d7e15565f3f19d15a4dadae42ba0622b445190c",
+            "size": 0
+          },
+          "type": "dataset",
+          "x_identity_v1": {
+            "amends": [
+              "99f806b0f9bc3e39de9cafde9dc50481c097ec7e678d6998cddf9578d90cc21d",
+              "40f38eb688dad3e4fbb00a8d444f07dcd7d5fbe7cc12f87e0bed0379bdfc231a"
+            ]
+          }
+        },
+        "x_actor_v1": {
+          "identity": "d0dce07f9b81da1cf542693be01fed5e6867bd7542e23efc27a34cc5c99557f1",
+          "grant": "ef3a4732fad0580c15df67874244f6157a1acd24e0a5032807a66fa1cfac4434"
+        }
+      }
+    },
+    {
       "name": "cut-last-good-required",
       "mode": "draft",
       "accept": false,

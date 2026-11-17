@@ -245,8 +245,9 @@ complete key-local linkage rules; an arbitrary valid signature or nonzero head i
 an inception. Root freshness/dedication is a writer requirement, not proof that no
 other log exists. Validators enforce K != R within this identity.
 
-Permissions form a nonempty, sorted, duplicate-free set (at most 64 entries). Sorting
-for structured sets is by UTF-16 ordering of each entry's JCS text; string sets use
+Permissions form a nonempty, sorted, duplicate-free set (at most 64 entries). Every set
+in this profile (permissions, target sets, `amends`, typed subjects, `predecessors`, `merges`)
+is **sorted by canonical encoding**: for structured sets by UTF-16 ordering of each entry's JCS text; string sets use
 the ordinary UTF-16 string order. Target arrays are nonempty sorted sets of at most
 256 entries. Each entry has exactly the fields in the table; no missing/empty target
 means unlimited. Multiple entries may cover different targets for the same kind;
@@ -976,10 +977,13 @@ Files in this candidate:
   typed subjects, permissions and role/actor extensions. Root schema requires `sig`;
   `#/$defs/draft` is explicitly unsigned. The schema is standalone, with only local
   references. Sorting, cross-field thresholds, canonical time and crypto are additional
-  specified checks, not capabilities attributed to ordinary JSON Schema validators.
+  specified checks, not capabilities attributed to ordinary JSON Schema validators. Every
+  `uniqueItems` list is a set whose `description` says so: sorted by canonical encoding and
+  duplicate-free (§3), and a reader refuses an unsorted one; reject vectors pin the order for
+  controllers, `permissions`, a target set and `amends`.
 * `fixed-root-identity-policy.schema.json`: standalone local policy syntax; same-subject
   selection conflicts and set sorting require the additional checks.
-* `fixed-root-identity.vectors.json`: **82 unsigned schema vectors** (the signed counterpart is below), including all
+* `fixed-root-identity.vectors.json`: **86 unsigned schema vectors** (the signed counterpart is below), including all
   candidate kinds, forbidden `rc/2` key events, actor/marker combinations, typed mixed
   controllers, scope modes, tasks, policy and negatives. Example ids are SHA-256 of
   labels, not actual referents; example signer strings are not proven public keys.
