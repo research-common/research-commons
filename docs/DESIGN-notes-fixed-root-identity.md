@@ -962,9 +962,10 @@ correctly re-signed malformed body is rejected despite the recognized marker.
 
 **Status for 1.0.** The items still required below are deferred past 1.0 for `rc/1`: this profile writes only
 `rc/2`, raw `rotate_key` and `revoke_key` stay `rc/1` with their bytes, ids and meaning unchanged (§2.1), and a
-bare-key corpus reads identically with and without the dual-major reader (C-id-01). Whether the `rc/2` profile
-itself is frozen at 1.0 is a release decision, not settled by this note: until it is, the header's "nothing here
-is frozen" stands for `rc/2`.
+bare-key corpus reads identically with and without the dual-major reader (C-id-01). The release decision for
+`rc/2` itself: it is **frozen at 1.0**, not shipped as experimental, because 1.0 writes it (`docs/RELEASING.md`
+criterion 1). Before that tag, the "independent review of the major transition" item below is done and the header's
+"nothing here is frozen" is removed; until then it stands.
 
 Done: the dual-major reader is the production reader (pull, the gates, `hub check`,
 the store and every view, §2.4); the actor evaluator is built from held statements and

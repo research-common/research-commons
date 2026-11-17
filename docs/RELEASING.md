@@ -20,8 +20,9 @@ There is **one** tool version, and one separate format identifier.
 - **Wire major** (`rc/1`): the format tag that appears in the bytes the tool writes and reads.
   It is the constant `Major` in `internal/wire/wire.go`. It is not printed by `--version` or by
   anything else, and it does not move with the tool version: tool `0.5.0` → `0.5.1` → `0.6.0`
-  all keep `rc/1` until a change to the format itself forces `rc/2`. The candidate `rc/2` identity
-  profile's reader is active, but no command writes `rc/2`, so the writer's major stays `rc/1`.
+  all keep `rc/1` until a change to the format itself forces `rc/2`. Since `0.5.0-alpha.5` the
+  identity commands (`identity new`/`grant`/`cut`, `publish --as`) write `rc/2` (the fixed-root
+  identity profile); every other statement is still written as `rc/1`.
 
 Keep the two independent. Tying the wire major to the tool's SemVer would make every bug-fix
 release imply a format change it doesn't need.
@@ -50,10 +51,13 @@ Use the dotted prerelease form (`0.5.0-alpha.1`, not `0.5.0-alpha-1`) so `alpha.
 A plan, not a schedule; the maintainers make the final call and may revise this list.
 `1.0.0` means **the format is frozen**:
 
-1. The wire major is stable: no open design question can still change the bytes of an existing
-   `rc/1` object, and the design notes' open questions are closed or explicitly deferred.
+1. The wire majors are stable: no open design question can still change the bytes of an existing
+   object of any major the `1.0` writer signs (`rc/1` and `rc/2`), and the design notes' open
+   questions are closed or explicitly deferred. The `rc/2` identity profile is frozen at `1.0` (not
+   shipped as experimental), after one more independent review of it; the interchange files users
+   keep, `rc-key/0` key files and `rc-signing-package/0` signing packages, are frozen with it.
    Each design note's open-questions section ends with a **Status for 1.0** line saying which questions are
-   closed and why each deferred one cannot change an existing `rc/1` object's bytes; a question that could
+   closed and why each deferred one cannot change an existing object's bytes; a question that could
    is a release decision, recorded before the tag.
 2. The core conformance cases are all covered (none pending, none untested), with the remaining
    partial cases each naming what is left.
