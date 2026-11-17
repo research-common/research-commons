@@ -245,6 +245,15 @@ complete key-local linkage rules; an arbitrary valid signature or nonzero head i
 an inception. Root freshness/dedication is a writer requirement, not proof that no
 other log exists. Validators enforce K != R within this identity.
 
+**Administrative bodies are open; restrictions go behind `crit`.** The grant, inception and
+cut bodies accept unknown members (§2.2: signed, part of the id, semantically inert), as every
+`rc/1` body does. So a new member a reader must honour to evaluate authority (an expiry, a
+budget, any restriction) is **never** introduced as a plain optional field: a reader that
+predates it would read the statement valid and the authority unrestricted, which is the unsafe
+direction. It is introduced only behind a new `crit` token, which a reader that lacks it reads
+unsupported (§2.1) and never as a broader grant. A plain optional member may only add
+information that never changes an authority decision.
+
 Permissions form a nonempty, sorted, duplicate-free set (at most 64 entries). Every set
 in this profile (permissions, target sets, `amends`, typed subjects, `predecessors`, `merges`)
 is **sorted by canonical encoding**: for structured sets by UTF-16 ordering of each entry's JCS text; string sets use
