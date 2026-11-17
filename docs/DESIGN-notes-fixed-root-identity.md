@@ -960,6 +960,12 @@ correctly re-signed malformed body is rejected despite the recognized marker.
 
 ### Completion boundary
 
+**Status for 1.0.** The items still required below are deferred past 1.0 for `rc/1`: this profile writes only
+`rc/2`, raw `rotate_key` and `revoke_key` stay `rc/1` with their bytes, ids and meaning unchanged (§2.1), and a
+bare-key corpus reads identically with and without the dual-major reader (C-id-01). Whether the `rc/2` profile
+itself is frozen at 1.0 is a release decision, not settled by this note: until it is, the header's "nothing here
+is frozen" stands for `rc/2`.
+
 Done: the dual-major reader is the production reader (pull, the gates, `hub check`,
 the store and every view, §2.4); the actor evaluator is built from held statements and
 asked by every resolver and the pull trust floor; `show`/`explain` print an identity
