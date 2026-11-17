@@ -194,6 +194,10 @@ after acceptance is `task-contract-v2`. A profile never changes meaning under a 
 
 ### 3.2 Role fields in `rc/1` and `rc/2`
 
+> **At 1.0:** the fixed-root identity profile below was since accepted and is frozen at 1.0 (`rc/2`,
+> `DESIGN-notes-fixed-root-identity.md`). The text of this section is kept as written when the contract was proposed;
+> "candidate" and "if accepted" now read as "the profile" and "under `rc/2`".
+
 The fixed-root identity candidate profile, proposed in a separate change and not accepted, would move the
 task roles into a typed extension object in a new major, `rc/2`:
 `body.x_identity_v1.task_roles` carries `beneficiary`, exactly one of `eligible_issuers` and `any_issuer`, and
