@@ -26,7 +26,8 @@ import (
 //   - key sign runs the same check, refuses unless the key file is the package's signer, signs the recomputed PAE
 //     with the writer's own signing code (wire.Key.Sign: RFC 8032 Ed25519, or EIP-191 personal_sign), verifies the
 //     signature as every reader does, and writes it in the statement encoding --complete --signature reads. It
-//     signs only the PAE of an envelope the tool would prepare, never bytes given to it.
+//     signs only the PAE of an envelope the tool would prepare, never bytes given to it: the package check refuses
+//     an envelope carrying a member --prepare never writes (unpreparedMember).
 //
 // Neither reads a store; both are store-less by construction (Command.Store is false, so --store is refused and
 // $COMMONS_STORE is not read).

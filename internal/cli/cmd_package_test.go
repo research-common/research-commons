@@ -325,3 +325,58 @@ func TestRetiredPackageFormat(t *testing.T) {
 		})
 	}
 }
+
+// TestKeySignRefusesUnpreparedMembers: an envelope carrying a member --prepare never writes (an unknown member a
+// reader ignores, or a merges list), with every derived member re-derived so the package is otherwise consistent,
+// is refused by package show, key sign and --complete alike, exit 2 naming the member: key sign signs only the
+// PAE of an envelope the tool would prepare (identity profile §8). Nothing is signed, written or appended. Both
+// algorithms.
+func TestKeySignRefusesUnpreparedMembers(t *testing.T) {
+	for _, alg := range []string{wire.AlgEd25519, wire.AlgEIP191} {
+		t.Run(alg, func(t *testing.T) {
+			root := newExtHome(t, alg)
+			_, pkg := root.prepare("new.pkg", "identity", "new", "--ts", "2026-11-14T00:00:00Z")
+			dev := newSigningMachine(t)
+			for _, c := range []struct {
+				member string
+				value  canon.Value
+			}{
+				{"x_note", canon.String("inert to every reader")},
+				{"zz", canon.Null{}},
+			} {
+				p := clonePkg(pkg)
+				env := p.Members["envelope"].(*canon.Object)
+				env.Keys = append(env.Keys, c.member)
+				env.Members[c.member] = c.value
+				st, err := wire.CheckUnsigned(env)
+				if err != nil || st.Status != wire.Valid {
+					t.Fatalf("%s: the reader no longer holds the envelope valid (%v), so this case tests nothing", c.member, err)
+				}
+				p.Members["pae"] = canon.String(base64.StdEncoding.EncodeToString(st.SignedString))
+				p.Members["statement"] = canon.String(st.ID)
+				p.Members["summary"] = summaryOf(st)
+				path := filepath.Join(dev.dir, c.member+".pkg")
+				writePkg(t, path, p)
+				refused := func(what string, r result) {
+					t.Helper()
+					if r.code != ExitDidNotStart || !strings.Contains(r.stdout, "malformed-package") || !strings.Contains(r.stdout, "envelope member "+c.member) {
+						t.Fatalf("%s %s: %d %s", what, c.member, r.code, r.stdout)
+					}
+				}
+				refused("package show", dev.run("package", "show", path, "--json"))
+				out := filepath.Join(dev.dir, c.member+".sig")
+				refused("key sign", dev.run("key", "sign", "--package", path, "--key", root.keyF, "--out", out, "--json"))
+				if _, err := os.Stat(out); err == nil {
+					t.Fatalf("key sign of %s wrote a signature", c.member)
+				}
+				before := storeBytes(t, root.store)
+				sig := filepath.Join(dev.dir, c.member+"-direct.sig")
+				os.WriteFile(sig, []byte(root.key.Sign(st.SignedString)), 0o644)
+				refused("--complete", root.complete([]string{"identity", "new"}, path, sig))
+				if storeBytes(t, root.store) != before {
+					t.Fatalf("--complete of %s appended", c.member)
+				}
+			}
+		})
+	}
+}

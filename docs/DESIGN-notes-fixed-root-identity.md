@@ -716,7 +716,9 @@ The summary holds no prose. The words a human reads beside it (the custody warni
 inception, "a cut cannot be undone") are rendered at display time by `--prepare`, `package
 show` and `key sign`, so a package reads the same under every release that reads its format.
 `--complete <file> --signature <file|->` recomputes the PAE and id
-from the envelope and refuses, naming the member, when any derived member differs; it
+from the envelope and refuses, naming the member, when any derived member differs, and
+refuses an envelope carrying a member `--prepare` never writes (an envelope member a reader
+would ignore, or `merges`), even when every derived member agrees with it; it
 accepts the signature only in the statement encoding of the alg (wire note §4), verifies
 it over the recomputed bytes, runs every check of direct signing again, refuses
 `stale-prepare` (exit 1) unless the signer's log is still at `log_head`, and commits
@@ -751,7 +753,8 @@ first, refuses unless the key file's signer is the package's signer, signs the r
 PAE with the code the writer signs with, verifies the signature as a reader does, and
 writes it in the encoding above, newline-terminated, to a new file (never overwritten) or
 standard output. Every refusal writes nothing; `--dry-run` prints what would be signed.
-It signs only the PAE of an envelope the tool would prepare, never bytes it is handed.
+It signs only the PAE of an envelope the tool would prepare, never bytes it is handed: an
+envelope with a member `--prepare` never writes is refused by the same package check.
 `package show --pae-out <file>` writes those PAE bytes (the decoded `pae`, no newline) to a new
 file, only once every check has passed, for a signer that is not this tool.
 `--expect-pae-sha256 <hex>` (on `package show` and `key sign`) compares the sha256 of the

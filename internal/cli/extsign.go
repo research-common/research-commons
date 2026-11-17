@@ -321,6 +321,10 @@ func inspectPackage(pkg *canon.Object, path, scope string) (*wire.Statement, []p
 	if st.Status != wire.Valid {
 		return nil, nil, bad("the package's envelope would not be valid once signed", "it reads "+string(st.Status)+": "+st.Why, "prepare the statement again")
 	}
+	if m := unpreparedMember(env, st); m != "" {
+		return nil, nil, bad("the package's envelope carries what --prepare never writes", "envelope member "+m+" is not the one --prepare writes for this statement",
+			"prepare the statement again; do not edit a package")
+	}
 	var mm []packageMismatch
 	add := func(member, detail string) { mm = append(mm, packageMismatch{member, detail}) }
 	paeS, _ := pkg.Members["pae"].(canon.String)
@@ -347,6 +351,34 @@ func inspectPackage(pkg *canon.Object, path, scope string) (*wire.Statement, []p
 		add("summary", "a summary is a display of the envelope, never the signed payload")
 	}
 	return st, mm, nil
+}
+
+// unpreparedMember is the first envelope member that is not what --prepare writes for the statement the envelope
+// reads as: the envelope is built again from its read fields, exactly as --prepare builds one (wire.Draft.Envelope:
+// no merges, the actor and crit the reader read), and compared member by member. A member a reader ignores (an
+// unknown envelope member is inert) would still be signed, and --complete, which rebuilds the statement from the
+// command's inputs, never commits it; so the one package check refuses it, and key sign signs only the PAE of an
+// envelope the tool would prepare. "" when the envelope is exactly a prepared one.
+func unpreparedMember(env *canon.Object, st *wire.Statement) string {
+	d := wire.Draft{RC: st.RC, Kind: st.Kind, Seq: st.Seq, Prev: st.Prev, TS: st.TS.Text, Crit: st.Crit, Body: st.Body}
+	if st.Actor != nil {
+		a := *st.Actor
+		d.Actor = &a
+	}
+	want := d.Envelope(&externalKey{signer: st.Signer, alg: st.Alg})
+	keys := canon.SortedKeys(env)
+	for _, k := range canon.SortedKeys(want) {
+		if !slices.Contains(keys, k) {
+			return k
+		}
+	}
+	for _, k := range keys {
+		w, ok := want.Members[k]
+		if !ok || !bytes.Equal(canon.Encode(w), canon.Encode(env.Members[k])) {
+			return k
+		}
+	}
+	return ""
 }
 
 // verifyOver checks sig over the envelope as every reader reads the signed line: verified under the envelope's own
