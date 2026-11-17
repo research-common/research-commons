@@ -204,9 +204,9 @@ var limits = []limit{
 	},
 	{
 		id:  "L-08",
-		gap: "The only critical extension registered is the candidate identity profile's `x_identity_v1` (`rc/2` only): a statement marking any other extension critical, or an `rc/1` statement marking that one, is kept, verified and `unsupported`",
+		gap: "The only critical extension registered is the fixed-root identity profile's `x_identity_v1` (`rc/2` only): a statement marking any other extension critical, or an `rc/1` statement marking that one, is kept, verified and `unsupported`",
 		sources: []limitSource{
-			{file: "docs/READER-EXTENSIONS.md", says: "**The only registration is the candidate identity profile's `x_identity_v1`"},
+			{file: "docs/READER-EXTENSIONS.md", says: "**The only registration is the fixed-root identity profile's `x_identity_v1`"},
 		},
 		probe:  "through the production reader, a signed rc/1 statement with `crit: [x_ext]`, an rc/1 statement with `crit: [x_identity_v1]`, and an rc/2 statement with `crit: [x_ext, x_identity_v1]` each read verified and `unsupported`, naming the extensions",
 		closes: "a registered extension other than `x_identity_v1` in the production reader, or `rc/1` registering one",
@@ -300,9 +300,9 @@ var limits = []limit{
 	},
 	{
 		id:  "L-12",
-		gap: "`--json` output may change between alpha releases: it carries no `schema` member yet",
+		gap: "`--json` output is not part of the format freeze: it carries no `schema` member yet, and may change when one is added",
 		sources: []limitSource{
-			{file: "docs/CLI-OUTPUTS.md", says: "the `--json` output may change between alpha releases. It carries no `schema` member yet."},
+			{file: "docs/CLI-OUTPUTS.md", says: "the `--json` output is not part of the format freeze. It carries no `schema` member yet, and may change when one is added."},
 		},
 		probe:  "`list --json` is an object with no `schema` member",
 		closes: "a `schema` member on every `--json` object, and a stated compatibility rule",

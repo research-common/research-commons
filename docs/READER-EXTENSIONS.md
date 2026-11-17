@@ -1,9 +1,9 @@
 # Opt-in critical-extension validation
 
 This is an implementation design note for the next-format Go reader in `internal/wire`,
-not an extension specification. **The only registration is the candidate identity profile's
+not an extension specification. **The only registration is the fixed-root identity profile's
 `x_identity_v1`, in the production identity reader for `rc/2` (see "The production identity
-reader" below); the profile's reader is active, and `rc/2` is written only by the identity commands and
+reader" below); the profile's reader and writer are active and frozen, and `rc/2` is written only by the identity commands and
 `publish --as`.** The
 registry API itself defines no extension body layout, authorization rule, new signature
 algorithm, or resolver behavior. The existing wire-format extension rules are unchanged.
@@ -61,7 +61,7 @@ The registry never supplies cryptography or adds a base kind.
 
 ## The production identity reader
 
-The reader that reads `rc/2` (the candidate fixed-root identity profile) holds one
+The reader that reads `rc/2` (the fixed-root identity profile) holds one
 registry per major it interprets, each built once from the same `Reader` type:
 
 - `rc/2` registers exactly `x_identity_v1`. Its validator checks the marker object and its
