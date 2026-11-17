@@ -383,6 +383,13 @@ other evidence are fixed; it is not a global theorem about adding arbitrary evid
 A cut applies wherever it sits on I's root lineage; it need not descend from the grant
 it names (this is what lets a cut clear a root fork).
 
+**An unreadable cut makes the identity's acts unknown, by design.** A cut this reader cannot
+read (an extension it lacks, a cut with no readable `grant`) could restrict any of I's grants,
+so every act of I reads unknown until it can be read: fail safe, never a pass that ignores a
+possible restriction. An unreadable grant affects only itself (§3): grants only add authority,
+so not reading one can deny nothing else. Extending the cut is therefore costly for older
+readers, and a later profile version should prefer extensions on the grant.
+
 ### 4.1 Deliberate worker self-revocation exception
 
 For opted-in I/G statements, R controls grant-history authority. K's raw rotate/revoke
