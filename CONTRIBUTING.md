@@ -35,20 +35,15 @@ contribution necessarily reads on, and only patents you can license.
 
 ## What we're accepting right now
 
-The current alpha is in **maintenance mode: security fixes only** (since 2026-10-11). The next
-format is being designed in the open in #69. Until it settles:
+The tool is at **1.0.0-rc.1**, a release candidate. The format is frozen, and the work happens on the **`next` branch**.
 
-- **Security fixes** to the alpha are welcome. They are made against `main`, where the alpha's
-  own suite (`tests/run-all.sh`) lives; everything below describes `next`.
-- **Design feedback** on #69 and line comments on its design note are the most useful
-  contribution.
-- **Features and non-security bug fixes** for the alpha won't be merged. If you hit one, open an
-  issue anyway: it gets the `next-format` label and becomes a requirement or test case for the
-  new format.
-
-The new format's implementation is built on the **`next` branch**, test-first against
-`docs/CONFORMANCE.md`, and will be released as `0.5.0-alpha.1`. `main` keeps the alpha and the
-merged design notes until `next` replaces it.
+- **Between candidates, only fixes and wording** land on `next` (the release candidate rule in
+  `docs/RELEASING.md`). A finding that would change the bytes of a frozen format is the most valuable report: it
+  means a new candidate, never a silent change.
+- **Bug reports, unclear documentation and test reports** from using the candidate are welcome as issues.
+- **New features** wait for after 1.0.0; open an issue to discuss them first.
+- **The 0.4 alpha on `main`** is superseded and takes **security fixes only**, made against `main`, where the
+  alpha's own suite (`tests/run-all.sh`) lives. Everything below describes `next`.
 
 ## What a change must pass
 
