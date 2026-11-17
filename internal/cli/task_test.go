@@ -651,4 +651,15 @@ func TestNoProseOutcomes(t *testing.T) {
 			}
 		}
 	}
+	// the gates: every report row of pull and hub check over the worlds that carry an evaluation
+	rows := 0
+	for _, g := range gateReportWorlds(t) {
+		for _, f := range gateProseFindings(g.rep) {
+			t.Errorf("%s: %s", g.name, f)
+		}
+		rows += len(g.rep.Members["objects"].(canon.Array))
+	}
+	if rows == 0 {
+		t.Fatal("the gate worlds printed no rows: the sweep read nothing")
+	}
 }
