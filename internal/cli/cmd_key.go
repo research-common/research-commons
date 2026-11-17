@@ -21,7 +21,7 @@ func init() {
 		Run:  keyNewCmd})
 	Register(&Command{Name: "key show", Summary: "print the signer and algorithm of a key file (never the key), or of a Ledger device's key",
 		Args:  []Arg{{Name: "file", Shape: ShapeText, Optional: true}},
-		Flags: []Flag{ledgerFlag, ledgerPathFlag, ledgerDeviceFlag, ledgerTimeoutFlag, ledgerConfirmFlag, ledgerTimeoutFlag},
+		Flags: []Flag{ledgerFlag, ledgerPathFlag, ledgerDeviceFlag, ledgerTimeoutFlag, ledgerConfirmFlag},
 		Help: "With a key file: its signer and algorithm. With --ledger --ledger-path <path> (no file): the address of a Ledger device's key at that path, " +
 			"read from the Ethereum app, with the app's name and version, the path and the device; --ledger-confirm also shows the address on the device " +
 			"and waits for you to confirm it there (a refusal on the device is exit 1, and no signer is printed)." + ledgerHelp,
