@@ -577,6 +577,11 @@ semantics stated in §1 and §5.2.
 
 ## 12. Open questions
 
+**Status for 1.0.** All five are closed; none is deferred. Question 4's answer was re-scoped by §5.3: this
+implementation keeps no persistent verification cache, only an in-memory one per command, so "the cache stays
+for daily use" applies to an implementation that keeps one; C-core-129a checks that a planted cache entry
+changes no answer.
+
 1. ~~**Fork clearing.**~~ **Decided:** the clearing statement names every other tip in `merges`, an
    optional signed envelope field beside the single `prev` (wire-format note §7). "Cleared" then means
    every tip is an ancestor of one statement, the same rule as a merge edition (claims-model note §8), and a
