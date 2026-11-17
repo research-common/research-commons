@@ -20,7 +20,8 @@ This is a release candidate: the format is frozen, and we want you to use it and
   follow [`GETTING-STARTED.md`](GETTING-STARTED.md).
 - **Most wanted:** anything that would change frozen bytes (the wire majors `rc/1` and `rc/2`, statement and edition ids,
   `rc-key/0`, `rc-signing-package/1`). Also wanted: bugs, wrong or unclear documentation, and any output that surprised you.
-- **Report** on [GitHub issues](https://github.com/research-common/research-commons/issues). A vulnerability goes to the
+- **Report** in the [release-candidate feedback issue](https://github.com/research-common/research-commons/issues/241), or open a
+  [new issue](https://github.com/research-common/research-commons/issues) for anything substantial. A vulnerability goes to the
   private channel in [`SECURITY.md`](SECURITY.md), not an issue.
 - **What happens next:** between candidates only fixes and wording change. `1.0.0` is tagged from a candidate after a quiet
   window with no format-affecting findings ([`docs/RELEASING.md`](docs/RELEASING.md)).
