@@ -185,6 +185,12 @@ most informative output it produces.
 
 ## Open questions for design review
 
+**Status for 1.0.** This note describes the 0.4 alpha, which is not `rc/1`; none of the questions below can
+change the bytes of an `rc/1` object. They are closed for the alpha as superseded by the next format, where
+credit is a reader's projection over counted statements (task-contracts note §6 Q5), rubric criteria are prose
+with ids (task-contracts note §6 Q11), environment attestation is out of scope (execution note §10), and a
+`refutes` may bind to a task edition (task-contracts note §4.2).
+
 - **Does pre-resolution publication create a reputation-farming surface?** A participant
   could publish a task, answer it twice, disagree with itself, and harvest task, result,
   report, and follow-up artifacts. The independent-derivation rules stop copy inflation,
