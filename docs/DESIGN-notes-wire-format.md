@@ -291,7 +291,10 @@ Rules:
   format change; a reader implementing it later re-evaluates retained lines (I5). Such a line is **placed**
   in the log (so later lines can chain through it) when a verified line of the same key names it in `prev`
   or `merges`, directly or through other placed lines: the naming is the key's signed word, and the line's
-  id pins its own links. A line nobody of its key vouches for is retained but never placed.
+  id pins its own links. A line nobody of its key vouches for is retained but never placed. Under an unknown
+  `alg` the `signer` may be that algorithm's own key form, a scheme prefix and lowercase hex (`ml-dsa-65:<hex>`;
+  `0x` and `ed25519:` keep their exact forms), and the line still reads `unsupported`, not malformed; the signed
+  identity vectors pin this in both majors.
 - **The key is a commons identity, not a payment wallet.** EIP-191 prefixing guarantees a statement can never
   be a valid transaction; the reverse discipline (never reuse a wallet key as a commons key) is the signer's,
   and §4.1 gives the reasons. An identity that wants to be linked to its payment account says so explicitly.
