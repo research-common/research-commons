@@ -9,6 +9,19 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ## [Unreleased]
 
+### Changed
+
+- **The external-signing package is `rc-signing-package/1`, frozen; the key file `rc-key/0` is frozen as is.** A
+  package's `summary` is now tokens and values copied from its envelope only (`action` is `inception`, `grant`, `cut` or
+  `act`, beside the identity, root or delegate, permissions, grant, `last_good`, reason, kind and amends); the words a
+  human reads (the custody warning, "a cut cannot be undone") are printed as `review` by `--prepare`, `package show` and
+  `key sign`, never stored, so a package reads the same under every release that reads its format. The identity note §8
+  gives every member's type and encoding. A `rc-signing-package/0` package is refused (`retired-package-format`, exit 2):
+  prepare it again. The package check (`--complete`, `package show`, `key sign`) also refuses an envelope carrying a
+  member `--prepare` never writes, so `key sign` signs only an envelope the tool would prepare. `docs/KEY-FILES.md` now
+  states that the secp256k1 scalar is big-endian and that the reader accepts any strict JSON. The execution-policy file
+  (`rc-exec-policy/0`) stays provisional (L-09).
+
 ## [0.5.0-alpha.8] - 2026-11-16
 
 **A Ledger device can sign an identity, and the 1.0 criteria are in place.** `key sign --ledger` signs an

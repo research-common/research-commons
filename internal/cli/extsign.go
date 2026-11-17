@@ -535,7 +535,7 @@ func reviewOf(sum *canon.Object) listV {
 		}
 		return append(l, textV("a cut cannot be undone: the delegate's acts under this grant after last_good count toward nothing for the identity, for every reader that holds the cut"))
 	case actionAct:
-		l := texts("act for the identity as a " + str("kind") + " statement, under the grant " + str("grant"))
+		l := texts("act for the identity under the grant " + str("grant") + ": a statement of kind " + str("kind"))
 		if _, ok := sum.Members["amends"]; ok {
 			l = append(l, textV("it amends the statement named in amends"))
 		}
