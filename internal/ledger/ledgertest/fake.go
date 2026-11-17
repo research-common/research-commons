@@ -5,12 +5,15 @@
 package ledgertest
 
 import (
+	"bufio"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"io"
 	"net"
+	"os"
 	"sync"
+	"time"
 
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 	"github.com/research-common/research-commons/internal/ledger"
@@ -53,10 +56,24 @@ type App struct {
 	// the one it signs with: a fault no real device has, to reach the connector's address check).
 	AddressSeed string
 
+	// Hold: a review (a signing request's last chunk, or an address to confirm) stays on the screen until Decide is
+	// called (Reject says how the holder decides) or the transport carrying it is closed. While it is on the screen
+	// every other APDU answers 0x6901, as the Ethereum app built with a current SDK does; after the transport is
+	// closed the review stays open (Pending) until Decide.
+	Hold bool
+	// BeforeSign, when set, is called as the first chunk of a signing request arrives (before it is answered).
+	BeforeSign func()
+
 	// Received is every APDU the fake was sent, in order.
 	Received [][]byte
 	// Signed counts the approved signatures; Shown counts the address confirmations shown.
 	Signed, Shown int
+
+	// Closed counts the transports closed while a held review waited for their answer.
+	Closed int
+
+	// a held review: reviewing is closed when one is on the screen, decided when the holder decides it
+	reviewing, decided chan struct{}
 
 	// signing state, as the app keeps it
 	signing bool
@@ -89,8 +106,66 @@ func keyAt(seed string, path ledger.Path) []byte {
 
 func sw(code uint16, data ...byte) []byte { return append(data, byte(code>>8), byte(code)) }
 
-// Exchange answers one APDU.
-func (a *App) Exchange(apdu []byte) ([]byte, error) {
+// Reviewing returns a channel closed once a held review is on the screen.
+func (a *App) Reviewing() <-chan struct{} {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.reviewing == nil {
+		a.reviewing = make(chan struct{})
+	}
+	return a.reviewing
+}
+
+// Decide is the holder deciding the review on the screen (approve, or reject when Reject is set). A held exchange
+// still waiting answers; a review left open by a closed transport is dismissed.
+func (a *App) Decide() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.Pending = false
+	if a.decided != nil {
+		close(a.decided)
+		a.decided = nil
+	}
+}
+
+// Exchange answers one APDU (a transport that is never closed).
+func (a *App) Exchange(apdu []byte) ([]byte, error) { return a.exchange(apdu, nil) }
+
+// Transport is this fake as a transport whose closing (closed) ends a held review's wait.
+func (a *App) Transport(closed <-chan struct{}) ledger.Transport {
+	return transportFunc(func(apdu []byte) ([]byte, error) { return a.exchange(apdu, closed) })
+}
+
+type transportFunc func([]byte) ([]byte, error)
+
+func (f transportFunc) Exchange(apdu []byte) ([]byte, error) { return f(apdu) }
+
+// hold puts a review on the screen and waits, unlocked, until the holder decides or the transport is closed. It
+// reports whether the holder decided (false: closed, the review stays open).
+func (a *App) hold(closed <-chan struct{}) bool {
+	a.Pending = true
+	dec := make(chan struct{})
+	a.decided = dec
+	if a.reviewing == nil {
+		a.reviewing = make(chan struct{})
+	}
+	close(a.reviewing)
+	a.mu.Unlock()
+	ok := true
+	select {
+	case <-dec:
+	case <-closed:
+		ok = false
+	}
+	a.mu.Lock()
+	a.reviewing = nil
+	if !ok {
+		a.Closed++
+	}
+	return ok
+}
+
+func (a *App) exchange(apdu []byte, closed <-chan struct{}) ([]byte, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.Received = append(a.Received, append([]byte{}, apdu...))
@@ -127,9 +202,18 @@ func (a *App) Exchange(apdu []byte) ([]byte, error) {
 	}
 	switch ins {
 	case 0x02:
-		return a.address(p1, data), nil
+		if r := a.address(p1, data, closed); r != nil {
+			return r, nil
+		}
+		return nil, &ledger.Error{Slug: ledger.Disconnected, Detail: "the transport was closed during the review"}
 	case 0x08:
-		return a.sign(p1, data), nil
+		if p1 == 0 && a.BeforeSign != nil {
+			a.BeforeSign()
+		}
+		if r := a.sign(p1, data, closed); r != nil {
+			return r, nil
+		}
+		return nil, &ledger.Error{Slug: ledger.Disconnected, Detail: "the transport was closed during the review"}
 	}
 	return sw(ledger.SWInvalidINS), nil
 }
@@ -147,7 +231,7 @@ func parsePath(data []byte) (ledger.Path, []byte, bool) {
 	return p, data[1+4*n:], true
 }
 
-func (a *App) address(p1 byte, data []byte) []byte {
+func (a *App) address(p1 byte, data []byte, closed <-chan struct{}) []byte {
 	if a.signing {
 		return sw(ledger.SWCommandNotAllowed)
 	}
@@ -165,6 +249,9 @@ func (a *App) address(p1 byte, data []byte) []byte {
 	priv := secp256k1.PrivKeyFromBytes(keyAt(seed, p))
 	if p1 == 1 {
 		a.Shown++
+		if a.Hold && !a.hold(closed) {
+			return nil
+		}
 		if a.Reject {
 			return sw(ledger.SWRejected)
 		}
@@ -176,7 +263,7 @@ func (a *App) address(p1 byte, data []byte) []byte {
 	return sw(ledger.SWOK, out...)
 }
 
-func (a *App) sign(p1 byte, data []byte) []byte {
+func (a *App) sign(p1 byte, data []byte, closed <-chan struct{}) []byte {
 	switch p1 {
 	case 0x00:
 		if a.signing {
@@ -208,6 +295,9 @@ func (a *App) sign(p1 byte, data []byte) []byte {
 	a.signing = false
 	if a.MaxMessage > 0 && a.want > a.MaxMessage {
 		return sw(ledger.SWInsufficientMemory) // as the app: after the last chunk, before any review
+	}
+	if a.Hold && !a.hold(closed) {
+		return nil
 	}
 	if a.Reject {
 		return sw(ledger.SWRejected)
@@ -245,41 +335,60 @@ func (a *App) Opener(specs *[]string) func(string) (*ledger.Device, error) {
 		if specs != nil {
 			*specs = append(*specs, spec)
 		}
-		return ledger.NewDevice(a, "Nano S Plus", "fake device", false, nil), nil
+		closed := make(chan struct{})
+		var once sync.Once
+		return ledger.NewDevice(a.Transport(closed), "Nano S Plus", "fake device", false, func() error {
+			once.Do(func() { close(closed) })
+			return nil
+		}), nil
 	}
 }
 
 // ServeTCP answers the Speculos APDU protocol on l with this fake until l is closed: a request is a 4-byte
 // big-endian length and the APDU; an answer is the 4-byte big-endian length of the data, the data and the status
-// word.
+// word. A client closing its connection while a held review waits ends that wait (the review stays open).
 func (a *App) ServeTCP(l net.Listener) {
 	for {
 		c, err := l.Accept()
 		if err != nil {
 			return
 		}
-		go func(c net.Conn) {
-			defer c.Close()
-			for {
-				var h [4]byte
-				if _, err := io.ReadFull(c, h[:]); err != nil {
-					return
-				}
-				n := int(h[0])<<24 | int(h[1])<<16 | int(h[2])<<8 | int(h[3])
-				req := make([]byte, n)
-				if _, err := io.ReadFull(c, req); err != nil {
-					return
-				}
-				resp, err := a.Exchange(req)
-				var le *ledger.Error
-				if errors.As(err, &le) {
-					return // a disconnect: close the connection
-				}
-				d := len(resp) - 2
-				if _, err := c.Write(append([]byte{byte(d >> 24), byte(d >> 16), byte(d >> 8), byte(d)}, resp...)); err != nil {
-					return
-				}
+		go a.serve(c)
+	}
+}
+
+func (a *App) serve(c net.Conn) {
+	defer c.Close()
+	br := bufio.NewReader(c)
+	for {
+		var h [4]byte
+		if _, err := io.ReadFull(br, h[:]); err != nil {
+			return
+		}
+		n := int(h[0])<<24 | int(h[1])<<16 | int(h[2])<<8 | int(h[3])
+		req := make([]byte, n)
+		if _, err := io.ReadFull(br, req); err != nil {
+			return
+		}
+		// while the request is answered, watch for the client going away (a client sends nothing while it waits)
+		closed, watched := make(chan struct{}), make(chan struct{})
+		go func() {
+			defer close(watched)
+			if _, err := br.Peek(1); err != nil && !errors.Is(err, os.ErrDeadlineExceeded) {
+				close(closed)
 			}
-		}(c)
+		}()
+		resp, err := a.exchange(req, closed)
+		c.SetReadDeadline(time.Now())
+		<-watched
+		c.SetReadDeadline(time.Time{})
+		var le *ledger.Error
+		if errors.As(err, &le) {
+			return // a disconnect: close the connection
+		}
+		d := len(resp) - 2
+		if _, err := c.Write(append([]byte{byte(d >> 24), byte(d >> 16), byte(d >> 8), byte(d)}, resp...)); err != nil {
+			return
+		}
 	}
 }

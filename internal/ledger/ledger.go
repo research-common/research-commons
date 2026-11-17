@@ -101,6 +101,7 @@ const (
 	BadDeviceSpec  = "ledger-bad-device"       // the device spec is not one this package understands
 	Unusable       = "ledger-device-unusable"  // the device node exists but cannot be opened (permissions)
 	MultipleDevice = "ledger-several-devices"  // more than one device and none named
+	Interrupted    = "ledger-interrupted"      // the user interrupted the command while a review waited on the device
 )
 
 // Status words the Ethereum app and the device's dashboard send.

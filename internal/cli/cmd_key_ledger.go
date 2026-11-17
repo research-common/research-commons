@@ -154,6 +154,8 @@ func ledgerProblem(err error, what string) *Problem {
 		p.Title, p.Next, p.Exit, p.Class = "not a device", "give --ledger-device /dev/hidrawN or tcp:<host>:<port>", ExitDidNotStart, refusal.Intrinsic
 	case ledger.Busy:
 		p.Title, p.Next = "the device is busy", "finish or reject the pending review on the device, then run the command again"
+	case ledger.Interrupted:
+		p.Title, p.Next = "interrupted while the device waited for you", "reject the review on the device (restart the device if it no longer responds), then run the command again"
 	case ledger.BadRequest:
 		p.Title, p.Next = "the Ethereum app refused the request", "this is a fault in the connector or an app it does not know: report it with the app version, then sign with a key file or with package show --pae-out"
 	default:
@@ -167,9 +169,51 @@ type ledgerSession struct {
 	dev     *ledger.Device
 	app     ledger.App
 	address string
+	closed  bool
 }
 
-func (s *ledgerSession) close() { s.dev.Close() }
+func (s *ledgerSession) close() {
+	if !s.closed {
+		s.closed = true
+		s.dev.Close()
+	}
+}
+
+// ReviewMayBeOpen is what an interrupted wait for the holder prints on standard error, at once.
+const ReviewMayBeOpen = "a review may still be open on the device: reject it there before signing again"
+
+// interruptCloseWait bounds how long an interrupted command waits for the exchange to end once the transport is
+// closed (closing a hidraw node or a socket ends a pending read at once).
+var interruptCloseWait = 2 * time.Second
+
+// awaitHolder runs exchange, one request that waits for the holder's decision on the device (a review), so that an
+// interrupt (Env.Interrupt) ends it cleanly: it prints ReviewMayBeOpen on standard error, closes the transport, waits
+// for the exchange to end, and returns an Interrupted failure (exit 3). Neither the device nor any other APDU can
+// dismiss the review: only the holder can, on the device. A second interrupt ends the process as the system does.
+func awaitHolder(c *Ctx, s *ledgerSession, exchange func() error) error {
+	if c.Env.Interrupt == nil {
+		return exchange()
+	}
+	signals, stop := c.Env.Interrupt()
+	defer stop()
+	done := make(chan error, 1)
+	go func() { done <- exchange() }()
+	select {
+	case err := <-done:
+		return err
+	case name := <-signals:
+		stop()
+		if c.Env.Stderr != nil {
+			io.WriteString(c.Env.Stderr, "commons: interrupted: "+ReviewMayBeOpen+"\n")
+		}
+		s.close()
+		select {
+		case <-done:
+		case <-time.After(interruptCloseWait):
+		}
+		return &ledger.Error{Slug: ledger.Interrupted, Detail: "the command was interrupted (" + name + ") while the device waited for you, and closed its connection to the device"}
+	}
+}
 
 // openLedger opens the device, checks that the Ethereum app is open, and reads the address at the path (on the
 // device's screen too when confirm). what is the clause appended to failures ("nothing was signed or written").
@@ -197,8 +241,18 @@ func openLedger(c *Ctx, o *ledgerOpts, confirm bool, what string) (*ledgerSessio
 			Detail: "the open app is not the Ethereum app (its name is in peer_text); " + what, Next: "close it and open the Ethereum app, then run the command again",
 			Peer: s.app.Name + " " + s.app.Version, Exit: ExitCouldNot}
 	}
-	if s.address, err = ledger.AddressWait(d, o.path, confirm, o.wait); err != nil {
-		d.Close()
+	read := func() error {
+		var err error
+		s.address, err = ledger.AddressWait(d, o.path, confirm, o.wait)
+		return err
+	}
+	if confirm {
+		err = awaitHolder(c, s, read)
+	} else {
+		err = read()
+	}
+	if err != nil {
+		s.close()
 		return nil, ledgerProblem(err, what)
 	}
 	return s, nil
@@ -299,10 +353,16 @@ func keySignLedger(c *Ctx, o *ledgerOpts, st *wire.Statement, path, out string, 
 		if !c.JSON {
 			pre = packageObj(pre, path, st).set("device", deviceObj(o, s))
 		}
-		io.WriteString(c.Env.Stderr, human(pre.set("device_shows", show).
-			set("signing", textV("review the message on the device and approve it there; reject it if anything differs"))))
+		io.WriteString(c.Env.Stderr, human(pre.set("device_shows", show)))
+		// the last line before the device is asked: the review is about to be on its screen
+		io.WriteString(c.Env.Stderr, "commons: review the message on the device now and approve it there; reject it if anything differs (waiting up to "+o.wait.String()+")\n")
 	}
-	rsv, err := ledger.PersonalSignWait(s.dev, o.path, st.SignedString, o.wait)
+	var rsv []byte
+	err := awaitHolder(c, s, func() error {
+		var err error
+		rsv, err = ledger.PersonalSignWait(s.dev, o.path, st.SignedString, o.wait)
+		return err
+	})
 	if err != nil {
 		return nil, 0, ledgerProblem(err, none)
 	}

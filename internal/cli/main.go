@@ -52,7 +52,15 @@ type Env struct {
 	// one attached by USB, a hidraw node, or tcp:<host>:<port> for an emulator); nil in a build without the
 	// connector (both then answer "the Ledger connector is not available in this build", exit 3).
 	Ledger LedgerOpener
+	// Interrupt starts watching for the user's interrupt (SIGINT, SIGTERM) around an exchange that waits for the
+	// holder on a device (a review): it returns a channel that delivers the signal's name and a stop function
+	// (idempotent) that restores the default handling. nil: nothing is watched and an interrupt ends the process
+	// as the system does. This package installs no signal handler itself.
+	Interrupt InterruptWatcher
 }
+
+// InterruptWatcher starts watching for an interrupt; see Env.Interrupt.
+type InterruptWatcher func() (signals <-chan string, stop func())
 
 // Ctx is one invocation as a command's Run sees it: arguments and flags already validated, the store (when
 // the command reads one) discovered, checked and open.

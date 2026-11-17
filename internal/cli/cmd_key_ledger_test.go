@@ -273,3 +273,120 @@ func TestLedgerKeySignAborts(t *testing.T) {
 }
 
 func cloneArgs(s []string) []string { return append([]string{}, s...) }
+
+// interruptOn is an Env.Interrupt that delivers one interrupt once fire is closed, recording that it was started and
+// stopped.
+type interruptOn struct {
+	fire             chan struct{}
+	started, stopped int
+}
+
+func (w *interruptOn) watch() (<-chan string, func()) {
+	w.started++
+	out := make(chan string, 1)
+	quit := make(chan struct{})
+	go func() {
+		select {
+		case <-w.fire:
+			out <- "SIGINT"
+		case <-quit:
+		}
+	}()
+	once := false
+	return out, func() {
+		if !once {
+			once = true
+			w.stopped++
+			close(quit)
+		}
+	}
+}
+
+func runLedgerInterrupt(wd string, open LedgerOpener, intr InterruptWatcher, env map[string]string, args ...string) result {
+	var o, e bytes.Buffer
+	code := Main(args, &Env{Stdout: &o, Stderr: &e, Getenv: func(k string) string { return env[k] },
+		Getwd: func() (string, error) { return wd, nil }, Build: Build{Version: "test", Commit: "0000000"}, Ledger: open, Interrupt: intr})
+	return result{code, o.String(), e.String()}
+}
+
+// TestLedgerInterruptedReview: an interrupt while the device waits for the holder's review (key sign --ledger, and
+// key show --ledger --ledger-confirm) prints that a review may still be open on the device, closes the transport,
+// writes no signature and exits 3 (ledger-interrupted). The review stays open on the device: the next request is
+// refused busy until the holder decides it there. Without an interrupt the same held review, once approved, signs.
+// The line asking for the review is the last thing printed before the device is asked to sign.
+func TestLedgerInterruptedReview(t *testing.T) {
+	dev := ledgertest.New("intr")
+	root := newLedgerHome(t, dev)
+	machine := newSigningMachine(t)
+	pp, _ := root.prepare("new.pkg", "identity", "new", "--ts", "2026-11-16T00:00:00Z")
+	base := []string{"key", "sign", "--package", pp, "--ledger", "--ledger-path", ledgerTestPath}
+	for _, human := range []bool{false, true} {
+		f := ledgertest.New("intr")
+		f.Hold = true
+		w := &interruptOn{fire: make(chan struct{})}
+		go func() { <-f.Reviewing(); close(w.fire) }()
+		out := filepath.Join(machine.dir, "intr.sig")
+		args := append(cloneArgs(base), "--out", out)
+		if !human {
+			args = append(args, "--json")
+		}
+		r := runLedgerInterrupt(machine.dir, f.Opener(nil), w.watch, machine.env, args...)
+		if r.code != ExitCouldNot || !strings.Contains(r.stderr, ReviewMayBeOpen) {
+			t.Fatalf("interrupted (human %v): %d\n%s%s", human, r.code, r.stdout, r.stderr)
+		}
+		if human && !strings.Contains(r.stderr, "interrupted while the device waited for you") {
+			t.Fatalf("human problem: %s", r.stderr)
+		}
+		if !human && !strings.Contains(r.stdout, ProblemTypeBase+ledger.Interrupted) {
+			t.Fatalf("json problem: %s", r.stdout)
+		}
+		if _, err := os.Stat(out); err == nil {
+			t.Fatal("a signature was written")
+		}
+		if f.Closed != 1 || w.started != 1 || w.stopped != 1 {
+			t.Fatalf("transport closed %d, watch started %d stopped %d", f.Closed, w.started, w.stopped)
+		}
+		// the review is still open on the device: another request is busy until the holder decides
+		if r := runLedger(machine.dir, f.Opener(nil), machine.env, append(cloneArgs(base), "--out", out, "--json")...); r.code != ExitCouldNot || !strings.Contains(r.stdout, ledger.Busy) {
+			t.Fatalf("after the interrupt: %d %s", r.code, r.stdout)
+		}
+		f.Decide()
+	}
+	// the watch is started only around the review: a refusal before the device is asked starts none
+	w := &interruptOn{fire: make(chan struct{})}
+	locked := ledgertest.New("intr")
+	locked.Locked = true
+	if r := runLedgerInterrupt(machine.dir, locked.Opener(nil), w.watch, machine.env, append(cloneArgs(base), "--out", filepath.Join(machine.dir, "locked.sig"), "--json")...); r.code != ExitCouldNot || w.started != 0 {
+		t.Fatalf("locked: %d started %d", r.code, w.started)
+	}
+	// a held review approved by the holder signs, and the watch is stopped
+	f := ledgertest.New("intr")
+	f.Hold = true
+	var atSign string
+	var errBuf *bytes.Buffer
+	go func() { <-f.Reviewing(); f.Decide() }()
+	var o, e bytes.Buffer
+	errBuf = &e
+	f.BeforeSign = func() { atSign = errBuf.String() }
+	w = &interruptOn{fire: make(chan struct{})}
+	code := Main(append(cloneArgs(base), "--out", "-"), &Env{Stdout: &o, Stderr: &e, Getenv: func(k string) string { return machine.env[k] },
+		Getwd: func() (string, error) { return machine.dir, nil }, Build: Build{Version: "test", Commit: "0000000"}, Ledger: f.Opener(nil), Interrupt: w.watch})
+	if code != ExitOK || f.Signed != 1 || !strings.HasPrefix(o.String(), "0x") || w.started != 1 || w.stopped != 1 || f.Closed != 0 {
+		t.Fatalf("approved: %d signed %d started %d stopped %d closed %d\n%s%s", code, f.Signed, w.started, w.stopped, f.Closed, o.String(), e.String())
+	}
+	// the review line is the last thing standard error said before the device was asked to sign
+	lines := strings.Split(strings.TrimSuffix(atSign, "\n"), "\n")
+	if last := lines[len(lines)-1]; !strings.HasPrefix(last, "commons: review the message on the device now") {
+		t.Fatalf("last line before the sign request: %q", last)
+	}
+	// key show --ledger-confirm: an interrupt while the address is on the device's screen
+	f = ledgertest.New("intr")
+	f.Hold = true
+	w = &interruptOn{fire: make(chan struct{})}
+	go func() { <-f.Reviewing(); close(w.fire) }()
+	r := runLedgerInterrupt(machine.dir, f.Opener(nil), w.watch, nil, "key", "show", "--ledger", "--ledger-path", ledgerTestPath, "--ledger-confirm", "--json")
+	if r.code != ExitCouldNot || !strings.Contains(r.stderr, ReviewMayBeOpen) || !strings.Contains(r.stdout, ledger.Interrupted) || f.Closed != 1 {
+		t.Fatalf("key show interrupted: %d closed %d\n%s%s", r.code, f.Closed, r.stdout, r.stderr)
+	}
+	f.Decide()
+}

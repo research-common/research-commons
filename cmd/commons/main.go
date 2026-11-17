@@ -6,6 +6,8 @@ package main
 
 import (
 	"os"
+	"os/signal"
+	"syscall"
 
 	research "github.com/research-common/research-commons"
 	"github.com/research-common/research-commons/internal/btctime"
@@ -36,6 +38,9 @@ func main() {
 	// The Ledger connector is opened only by `key show --ledger` and `key sign --ledger`, the signer's explicit
 	// requests.
 	env.Ledger = ledger.Open
+	// SIGINT and SIGTERM are caught only while a device waits for the holder's review, so the command can close
+	// the device cleanly and say that a review may still be open on it; anywhere else they act as the system's.
+	env.Interrupt = interrupts
 	os.Exit(cli.Main(os.Args[1:], env))
 }
 
@@ -45,4 +50,31 @@ func transport(c cli.FetchConfig) store.Transport {
 
 func calendar(url string, c cli.CalendarConfig) (btctime.Calendar, error) {
 	return otscal.New(url, otscal.Config{AllowPrivate: c.AllowPrivate, Timeout: c.Timeout})
+}
+
+// interrupts relays SIGINT and SIGTERM by name until stop, which restores the default handling.
+func interrupts() (<-chan string, func()) {
+	sig := make(chan os.Signal, 1)
+	out := make(chan string, 1)
+	quit := make(chan struct{})
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		select {
+		case s := <-sig:
+			name := "SIGTERM"
+			if s == os.Interrupt {
+				name = "SIGINT"
+			}
+			out <- name
+		case <-quit:
+		}
+	}()
+	stopped := false
+	return out, func() {
+		if !stopped {
+			stopped = true
+			signal.Stop(sig)
+			close(quit)
+		}
+	}
 }
