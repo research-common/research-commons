@@ -469,8 +469,9 @@ appends nothing and reports the head's standing under the §2 default.
 `anchor upgrade` with no argument upgrades every anchors line of the author's log that is the newest for its
 head and whose proof has no Bitcoin attestation yet, one new anchors line per upgraded head, all in one journal
 record. Still pending everywhere appends nothing and is not a failure; every calendar asked failing appends
-nothing and is. The push gate that would make "stamp before transport" a command-level guarantee is not built
-yet, and neither is a stamping `publish`.
+nothing and is. `push` refuses to send a statement whose standing requires an anchor unless an anchors line
+covers it (C-btc-03c), so "stamp before transport" holds for transport through the tool; a stamping `publish`
+is not built, and a transport outside the tool does not check (known limit L-16).
 
 **Exit codes** follow the claims-model note §13 for `verify`:
 
@@ -635,6 +636,10 @@ roots and bind nothing in the new format.
 ## 17. Decisions and open questions
 
 **Decided (2026-10-16).** All five.
+
+**Status for 1.0.** All five are closed; none is deferred. The defaults are in the verifier's policy (settled
+depth 144, priority margin 0, no shipped checkpoint), the standing-based default in `anchor stamp` and the
+`push` anchor gate (C-btc-03c).
 
 1. **Pending anchors in the log.** Kept: the pending proof is appended before transport and the upgraded
    proof in a second `anchors` statement (§2). Holding the pending proof locally would leave nothing
