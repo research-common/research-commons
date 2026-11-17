@@ -1,6 +1,6 @@
 # Design note: invariants and the claims model
 
-**Date:** 2026-10-11 · **Status:** request for comments. Nothing here is decided or implemented.
+**Date:** 2026-10-11 · **Status:** accepted; the questions it first left open are decided (§16), and the reference reader implements it, with the gaps listed in `docs/KNOWN-LIMITS.md`.
 **Tracking issue:** #69
 **Builds on:** #43 (field classes and statement identity), #57 (anchor trust), #59 / #60 (receiver-local
 Bitcoin verification, which priority between rival authors depends on)
@@ -1068,6 +1068,13 @@ task-contract profiles (§9.1).
 
 The first revision of this note asked six questions. Review against three hubs in production or standing up
 answered each the way the note leaned, and they are now decided:
+
+**Status for 1.0.** All six are closed. Of the notes §15 lists as out of scope, the wire-format, storage,
+execution, Bitcoin-time and task-contract notes are written and their questions closed or deferred there. The
+rest (rule and schema dialects, further response layouts, attestation verifiers, size policy, hub discovery) are
+deferred past 1.0 and cannot change the bytes of an existing `rc/1` object: a dialect, layout or verifier a
+reader lacks leaves its result `unchecked`, and size and discovery are local policy over statements whose
+encoding is already fixed.
 
 1. **Resource authority depth.** Controllers, k-of-n and editions are the core. A lost controller key ends the
    resource and a successor declares `forked-from` (§8). Delegation and key succession are reader projections.
