@@ -156,8 +156,8 @@ Release candidate (`1.0.0-rc.1`), the first candidate of 1.0, with the format fr
 append-only statement log per key, a content-addressed store, and a single Go command-line tool (`commons init`,
 `publish`, `pull`, `verify`, `fsck`, and more: see the README). It runs the loop this essay argues for: publish bytes
 with a signed claim of authorship and licence, carry them to another store, and have that store reach the same
-answer from the statements it holds. The format may still change between alpha releases, and the fixed-root identity
-profile is a candidate whose reader and writer are both active. The earlier Python alpha (`0.4.0-alpha.1`, on the `main` branch) gets
+answer from the statements it holds. The wire formats are frozen for 1.0, and the fixed-root identity
+profile is part of that freeze, with its reader and writer both active. The earlier Python alpha (`0.4.0-alpha.1`, on the `main` branch) gets
 security fixes only, and there is no importer.
 
 What we're honest about: today it runs at trusted-circle scale, with peers and remotes
