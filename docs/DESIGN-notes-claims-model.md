@@ -1,6 +1,6 @@
 # Design note: invariants and the claims model
 
-**Date:** 2026-10-11 · **Status:** accepted; the questions it first left open are decided (§16), and the reference reader implements it, with the gaps listed in `docs/KNOWN-LIMITS.md`.
+**Date:** 2026-10-11 · **Status:** the questions it first left open are decided (§16), and the reference reader implements it, with the gaps listed in `docs/KNOWN-LIMITS.md`.
 **Tracking issue:** #69
 **Builds on:** #43 (field classes and statement identity), #57 (anchor trust), #59 / #60 (receiver-local
 Bitcoin verification, which priority between rival authors depends on)
