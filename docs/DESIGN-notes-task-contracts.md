@@ -517,6 +517,12 @@ Each question lists the options considered and the decision. The decisions are t
 adopted unchanged at acceptance (2026-11-10). *Review: agreed* marks one an outside review on #109 agreed with
 before acceptance.
 
+**Status for 1.0.** All twelve are decided for `task-contract-v1`. What each leaves for later (a
+`min_capture_evidence` term, pin ranges, grant withdrawal, an identity coordinator, rubric expressions, a
+referent counting unit) is deferred past 1.0 and cannot change the bytes of an existing `rc/1` object: a new
+contract term is a new profile name (§3.3), which a v1 reader leaves unread, and the statements v1 reads keep
+their fields and meaning.
+
 1. **Deduplication.** §9.3 asks the predicate to state it. What happens when one counting unit submits several
    results to one edition?
    (a) the unit counts once in each group it appears in (the provisional reading; a unit that hedges across
