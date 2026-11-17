@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Candidate fixed-root-v1 rc/2 statement syntax (not authority)",
-  "description": "Candidate only. Apply strict Commons JSON, sorted-set/time constraints, cryptographic verification and evidence-relative authority evaluation as specified in DESIGN-notes-fixed-root-identity.md. Drafts contain no signature and confer no authority. No production reader support.",
+  "description": "The fixed-root-v1 identity profile on rc/2, read and written by the production reader and writer (DESIGN-notes-fixed-root-identity.md). Apply strict Commons JSON, sorted-set/time constraints, cryptographic verification and evidence-relative authority evaluation as specified there: a schema-valid statement is syntax only, never authority. Drafts contain no signature and confer no authority.",
   "allOf": [
     {
       "$ref": "#/$defs/signed"

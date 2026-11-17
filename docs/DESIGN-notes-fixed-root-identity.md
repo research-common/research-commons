@@ -51,7 +51,7 @@ An offline bundle can omit a cut; all positive results are relative to held evid
 
 ### 2.1 Selected proposal
 
-A future dual-major reader would implement both:
+The production reader (dual-major) implements both, and the writer writes both:
 
 * **`rc/1`:** existing bare-key statements retain their signed bytes, ids and semantics.
   All raw `rotate_key` and `revoke_key` events **remain `rc/1`, without identity actor or
@@ -1025,8 +1025,9 @@ Files in this candidate:
   restricted local JSON Schema interpreter and real synthetic Ed25519/EIP-191 tests.
   It reuses the existing JCS, PAE, signature verifier, time and base-schema functions.
   New typed controller shapes are checked explicitly; unchanged base fields are checked
-  independently, so critical-marker recognition cannot bypass them. No production
-  registry, reader, writer or global major is changed.
+  independently, so critical-marker recognition cannot bypass them. It checks the
+  schema and vectors on their own; the production reader is bound to the same vectors by
+  `internal/wire` tests (an accepted draft must read valid or unsupported, a rejected one never valid).
 * `internal/keylog/fixed_root_identity_profile_test.go`: actual old-reader mixed-log
   behavior, without claiming whole-resolver mixed-resource safety.
 * `internal/identity` (with `internal/identitymodel`): the candidate admission adapter
