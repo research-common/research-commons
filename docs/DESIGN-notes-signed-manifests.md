@@ -799,6 +799,12 @@ anyway.
 
 ## 15. Residual risks and open questions
 
+**Status for 1.0.** This note describes the 0.4 alpha, which is not `rc/1`; none of the questions below can
+change the bytes of an `rc/1` object. They are closed for the alpha as superseded by the next format: TEE
+claims are out of scope (execution note), lost keys end in a new identity (fixed-root-identity note), statement
+ids hash the whole signed body and forks are explicit through `prev` and `merges` (wire-format note §3, §7),
+corroboration is one statement per key (claims-model note), and canonical JSON is RFC 8785 (wire-format note §1).
+
 - **Attribution is not truth.** A signed `generation.attestation: tee` is the publisher's
   signed claim that a TEE was involved, not proof of it. Diversity quorums still count it.
   Receipt- or TEE-backed family claims need their own separately signed statement, analogous
