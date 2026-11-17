@@ -12,6 +12,19 @@ from the same data and methods tells you something: it approximates independent 
 
 New here? Read [`docs/WHY.md`](docs/WHY.md): the motivation and the epistemics, in five minutes, with no CLI.
 
+## Testing the release candidate
+
+This is a release candidate: the format is frozen, and we want you to use it and try to break it.
+
+- **Install** with `go install`, `pip install research-commons`, or a release archive (see [Install](#install)), then
+  follow [`GETTING-STARTED.md`](GETTING-STARTED.md).
+- **Most wanted:** anything that would change frozen bytes (the wire majors `rc/1` and `rc/2`, statement and edition ids,
+  `rc-key/0`, `rc-signing-package/1`). Also wanted: bugs, wrong or unclear documentation, and any output that surprised you.
+- **Report** on [GitHub issues](https://github.com/research-common/research-commons/issues). A vulnerability goes to the
+  private channel in [`SECURITY.md`](SECURITY.md), not an issue.
+- **What happens next:** between candidates only fixes and wording change. `1.0.0` is tagged from a candidate after a quiet
+  window with no format-affecting findings ([`docs/RELEASING.md`](docs/RELEASING.md)).
+
 ## Status
 
 **1.0.0-rc.1: the first release candidate of 1.0.** The next format is a clean break from the 0.4 alpha: a
@@ -47,7 +60,7 @@ commons --version
 ```
 
 From Python (a thin wrapper that bundles the binary in platform wheels and gives you the `commons` command; see
-[`python/README.md`](python/README.md)): `pip install research-commons`. Not on PyPI until the maintainers publish a release's wheels.
+[`python/README.md`](python/README.md)): `pip install research-commons` (on PyPI as `1.0.0rc1`; platform wheels for Linux x86_64 and aarch64 and macOS arm64 and x86_64).
 
 From source:
 
@@ -57,8 +70,15 @@ cd research-commons && git switch next
 go build -o commons ./cmd/commons
 ```
 
-Pre-built binaries will be attached to the GitHub release once release builds are published; until then, build from
-source. The module has three direct runtime dependencies (`golang.org/x/sys` comes in indirectly through `golang.org/x/crypto`).
+Pre-built binaries are attached to every GitHub release: four archives (`commons-<version>-<os>-<arch>.tar.gz`
+for linux and darwin on amd64 and arm64), a `SHA256SUMS` file, and build provenance attestations. To verify a download:
+
+```bash
+sha256sum -c SHA256SUMS --ignore-missing
+gh attestation verify commons-1.0.0-rc.1-linux-amd64.tar.gz --repo research-common/research-commons
+```
+
+The module has three direct runtime dependencies (`golang.org/x/sys` comes in indirectly through `golang.org/x/crypto`).
 
 ## The quick loop
 
@@ -144,14 +164,14 @@ data commits onto it, and push again. Pushing straight to the hub's default bran
 | [`docs/DESIGN-notes-storage.md`](docs/DESIGN-notes-storage.md) | the store layout, journal, recovery, locking |
 | [`docs/DESIGN-notes-execution.md`](docs/DESIGN-notes-execution.md) | sandboxed re-execution |
 | [`docs/DESIGN-notes-bitcoin-time.md`](docs/DESIGN-notes-bitcoin-time.md) | time evidence from Bitcoin |
-| [`docs/DESIGN-notes-fixed-root-identity.md`](docs/DESIGN-notes-fixed-root-identity.md) | the candidate identity profile (reader and writer active) |
+| [`docs/DESIGN-notes-fixed-root-identity.md`](docs/DESIGN-notes-fixed-root-identity.md) | the fixed-root identity profile (`rc/2`; reader and writer active, frozen) |
 | [`docs/CONFORMANCE.md`](docs/CONFORMANCE.md) | the test plan: every required outcome and what covers it |
 | [`docs/CLI-OUTPUTS.md`](docs/CLI-OUTPUTS.md) | exit codes, state tokens, error shape |
 | [`docs/KNOWN-LIMITS.md`](docs/KNOWN-LIMITS.md) | open gaps, each with a test |
 | [`docs/READER-POLICY.md`](docs/READER-POLICY.md) | the reader policy file (`pull --policy`, `verify --policy`) |
 | [`docs/EXEC-POLICY.md`](docs/EXEC-POLICY.md) | the execution policy file (`verify --rerun`, `run`) |
 | [`docs/KEY-FILES.md`](docs/KEY-FILES.md) | the key file format and how to keep keys |
-| [`docs/READER-EXTENSIONS.md`](docs/READER-EXTENSIONS.md) | critical extensions (only the candidate identity profile's `x_identity_v1` is registered) |
+| [`docs/READER-EXTENSIONS.md`](docs/READER-EXTENSIONS.md) | critical extensions (only the fixed-root identity profile's `x_identity_v1` is registered) |
 | [`internal/README.md`](internal/README.md) | package map, build and test commands |
 
 Documents describing the 0.4 alpha say so in their first line and are kept for reference.
