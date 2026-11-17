@@ -1,4 +1,4 @@
-> **Describes the 0.4 alpha (the `main` branch); the next format replaces it. See the [README](../README.md) and the design notes under `docs/` for the current format.**
+> **Describes the 0.4 alpha (the `main` branch); superseded by 1.0.0-rc.1 on the `next` branch, whose format replaces it. See the [README](../README.md) and the design notes under `docs/` for the current format.**
 
 # Design note: Divergence reports as first-class artifacts
 
