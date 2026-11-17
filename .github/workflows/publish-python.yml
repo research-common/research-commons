@@ -29,7 +29,7 @@ jobs:
   build:
     name: build wheels
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 50
     steps:
       # On workflow_dispatch, GITHUB_SHA is the dispatching branch's head. Resolve the tag
       # first and check out THAT commit, so the build always uses the release's own tree
@@ -63,6 +63,26 @@ jobs:
         run: |
           set -euo pipefail
           mkdir rel
+          # On a release event this workflow starts together with release.yml, which builds and
+          # uploads the archives a minute or two later: wait (up to 30 minutes) until SHA256SUMS and
+          # every archive it lists are release assets. A dispatch for an existing tag finds them at once.
+          for i in $(seq 1 60); do
+            gh release view "$REF" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' > rel/assets
+            if grep -qx 'SHA256SUMS' rel/assets; then
+              gh release download "$REF" --repo "$GITHUB_REPOSITORY" --pattern 'SHA256SUMS' --dir rel --clobber
+              missing=0
+              for name in $(awk '{print $2}' rel/SHA256SUMS); do
+                grep -qxF "$name" rel/assets || missing=1
+              done
+              [ "$missing" = 0 ] && break
+            fi
+            if [ "$i" = 60 ]; then
+              echo "release $REF: SHA256SUMS and its archives not all uploaded after 30 minutes" >&2
+              exit 1
+            fi
+            sleep 30
+          done
+          rm rel/assets
           gh release download "$REF" --repo "$GITHUB_REPOSITORY" \
             --pattern 'SHA256SUMS' --pattern '*.tar.gz' --dir rel --clobber
       # Checksums alone cannot catch substitution: an archive and its SHA256SUMS line can be
