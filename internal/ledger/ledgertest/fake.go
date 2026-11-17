@@ -106,6 +106,20 @@ func keyAt(seed string, path ledger.Path) []byte {
 
 func sw(code uint16, data ...byte) []byte { return append(data, byte(code>>8), byte(code)) }
 
+// ClosedCount is Closed, read under the fake's lock.
+func (a *App) ClosedCount() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.Closed
+}
+
+// IsPending is Pending, read under the fake's lock.
+func (a *App) IsPending() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.Pending
+}
+
 // Reviewing returns a channel closed once a held review is on the screen.
 func (a *App) Reviewing() <-chan struct{} {
 	a.mu.Lock()
