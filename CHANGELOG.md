@@ -49,7 +49,7 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   you (`key sign --ledger`, `key show --ledger --ledger-confirm`) prints "a review may still be open on the device: reject it
   there before signing again", closes the device and exits 3 (`ledger-interrupted`), writing nothing. `key sign --ledger`
   prints, as its last line before asking the device, that the review is now on it. An earlier review's answer reaching the
-  next command (a refusal or a signature the device sends once an orphaned review is decided) is named as such (exit 3),
+  command connected when an orphaned review is decided (a refusal or a signature) is named as such (exit 3),
   not read as a refusal of that command. No read-only request to the Ethereum app reveals a pending review (identity note §8).
 
 ### Changed

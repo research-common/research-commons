@@ -11,6 +11,7 @@ package cli
 // It prepares an identity inception for the emulator's address at ledgerTestPath, rejects one key sign --ledger on
 // the emulated device (exit 1, nothing written), approves the next (a goroutine walks the review to "Sign message"),
 // and completes it: --complete runs the reader's verification, and the committed line carries the device's signature.
+// Then it interrupts a review on the emulated screen (exit 3, review left open: ledger-busy) and rejects it there.
 
 import (
 	"bytes"
@@ -120,5 +121,34 @@ func TestLedgerSpeculos(t *testing.T) {
 	id := firstID(t, jsonOf(t, r))
 	if line := lineOf(t, store, id); line == "" || !bytes.Contains([]byte(line), bytes.TrimSpace(sb)) {
 		t.Fatalf("the committed line does not carry the device's signature")
+	}
+
+	// an interrupt while the review is on the emulated screen: the command closes the connection, says a review may
+	// still be open and exits 3; the review stays open (the next command is ledger-busy) until the holder rejects it
+	fire := make(chan struct{})
+	intr := func() (<-chan string, func()) {
+		out := make(chan string, 1)
+		go func() { <-fire; out <- "SIGINT" }()
+		return out, func() {}
+	}
+	go func() {
+		for i := 0; i < 200 && !strings.Contains(sp.screen(t), "review message"); i++ {
+			time.Sleep(50 * time.Millisecond)
+		}
+		close(fire)
+	}()
+	ir := runLedgerInterrupt(machine.dir, ledger.Open, intr, machine.env, "key", "sign", "--package", pp, "--ledger", "--ledger-path", ledgerTestPath,
+		"--ledger-device", spec, "--out", filepath.Join(machine.dir, "intr.sig"), "--json")
+	if ir.code != ExitCouldNot || !strings.Contains(ir.stderr, ReviewMayBeOpen) || !strings.Contains(ir.stdout, ledger.Interrupted) {
+		t.Fatalf("interrupted: %d %s%s", ir.code, ir.stdout, ir.stderr)
+	}
+	if r := run("key", "show", "--ledger", "--ledger-path", ledgerTestPath, "--ledger-device", spec, "--json"); r.code != ExitCouldNot || !strings.Contains(r.stdout, ledger.Busy) {
+		t.Fatalf("after the interrupt: %d %s", r.code, r.stdout)
+	}
+	// rejected on the device with no command connected: its answer goes nowhere, and the next command is answered
+	sp.walk(t, "reject message", make(chan struct{}))
+	time.Sleep(500 * time.Millisecond)
+	if r := run("key", "show", "--ledger", "--ledger-path", ledgerTestPath, "--ledger-device", spec, "--json"); r.code != ExitOK {
+		t.Fatalf("after the orphaned answer: %d %s", r.code, r.stdout)
 	}
 }

@@ -803,10 +803,10 @@ and an unknown instruction all answer 0x6901 while any review is pending and nor
 otherwise, and none carries a flag that names a pending review. The 0x6901 refusal is the
 device SDK's (it rejects a request while another awaits its reply; SDK 27.1, 2026), not
 the app's, so a device whose Ethereum app was built before it (the drilled 1.19.3) answers
-instead, as recorded above. The emulated app also delivers the answer of an orphaned review,
-once the holder decides it, to whatever request arrives next: the tool names a refusal or a
-signature received for its first request as an earlier review's answer (exit 3), never as a
-refusal of its own request.
+instead, as recorded above. When the holder decides an orphaned review while
+another command is connected to the emulator, its answer (a refusal or a signature) is
+delivered to that command's request: the tool names either, received for its first request,
+as an earlier review's answer (exit 3), never as a refusal of its own request.
 Nano S Plus, Flex and Stax run the same commands and remain untested on hardware; the
 original Nano S is an **untested target** (the Ethereum app dropped it after 1.16, and
 Speculos no longer emulates it). Display readability is limited:
