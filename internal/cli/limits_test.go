@@ -237,7 +237,7 @@ var limits = []limit{
 		id:  "L-09",
 		gap: "The execution-policy file format is provisional (`rc-exec-policy/0`) and expected to change; the key file (`rc-key/0`) and signing package (`rc-signing-package/1`) formats are frozen",
 		sources: []limitSource{
-			{file: "docs/EXEC-POLICY.md", says: "**Status: provisional.**"},
+			{file: "docs/EXEC-POLICY.md", says: "**Status: provisional, outside the 1.0 format freeze.**"},
 			{file: "docs/KEY-FILES.md", says: "**Status: frozen.** The format tag is this tool's own and is versioned (`rc-key/0`)"},
 			{file: "docs/DESIGN-notes-fixed-root-identity.md", says: "Its format tag, `rc-signing-package/1`, is this tool's own and **frozen**"},
 		},
