@@ -124,6 +124,14 @@ Reuse the existing wire rules, not a new JSON or cryptographic profile:
   bytes (including its EIP-191 length prefix); existing address/recovery and canonical
   signature rules. Unknown algorithms grant nothing. No EIP-712, WebAuthn, OpenPGP,
   or smart-contract-wallet proof is accepted as a substitute.
+* **One statement can carry two valid signatures** (inherited from `rc/1`). Nobody but the
+  signer can make a second one: the pinned Ed25519 rule refuses a non-canonical `S` (wire §4,
+  step 1), and the other valid EIP-191 encodings of a signature are canonicalised to the one
+  stored form. But the signer can: a signature made with a different nonce (an Ed25519 signer
+  that does not derive it as RFC 8032 does, or a second ECDSA signing) is a different `sig` that
+  verifies over the same PAE, and a reader cannot tell which is "the" signature. Ids exclude
+  `sig`, so the statement id is the same and nothing that counts changes; but two holders'
+  stored bytes, and receipts over those bytes, can differ. Compare statements by id.
 
 Existing unknown noncritical fields remain signed, retained and semantically inert.
 New actor, subject, permission, target and critical-marker objects are closed in the
