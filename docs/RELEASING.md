@@ -42,6 +42,10 @@ README, not by the major number.
 - **Prerelease label** (`-alpha.N`): increments (`alpha.1` → `alpha.2` → …) while the current
   MINOR is still being shaken out. Drop the label once a prerelease has survived a hub-check
   cycle or two without a revert.
+- **`1.0.0` goes through release candidates** (`1.0.0-rc.1`, `-rc.2`, …): a candidate is cut once the
+  criteria below are met. Only bug fixes and wording land between candidates; a finding that would change the
+  bytes of a frozen format means a new candidate, never a silent change. `1.0.0` is tagged from a candidate
+  that has gone through a quiet window with no such finding.
 
 Use the dotted prerelease form (`0.5.0-alpha.1`, not `0.5.0-alpha-1`) so `alpha.2` sorts before
 `alpha.10` under SemVer precedence.
@@ -54,7 +58,8 @@ A plan, not a schedule; the maintainers make the final call and may revise this 
 1. The wire majors are stable: no open design question can still change the bytes of an existing
    object of any major the `1.0` writer signs (`rc/1` and `rc/2`), and the design notes' open
    questions are closed or explicitly deferred. The `rc/2` identity profile is frozen at `1.0` (not
-   shipped as experimental), after one more independent review of it; the interchange files users
+   shipped as experimental), after one more independent review of it (**done**: the freeze review's findings are
+   folded before `1.0.0-rc.1`); the interchange files users
    keep, `rc-key/0` key files and `rc-signing-package/1` signing packages, are frozen with it
    (`rc-signing-package/0`, whose summary carried prose, is retired: a `/0` package is refused and
    prepared again). The execution-policy file, `rc-exec-policy/0`, is outside the freeze and stays provisional.

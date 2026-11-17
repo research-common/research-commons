@@ -9,6 +9,17 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ## [Unreleased]
 
+## [1.0.0-rc.1] - 2026-11-17
+
+**The first release candidate of 1.0: the format is frozen.** The wire majors `rc/1` and `rc/2` (the fixed-root identity
+profile), key files (`rc-key/0`) and external-signing packages (`rc-signing-package/1`) are frozen, after an independent
+freeze read of `rc/2` and its interchange files (#233) whose findings are all folded here: a future algorithm's lines and
+keys read `unsupported` instead of malformed, an unreadable actor never falls back to the key, sets are pinned sorted,
+and the signing package's summary carries no prose, so a package prepared by one 1.x release reads under every other.
+`1.0.0` follows from a candidate that goes through a quiet window with no finding that would change these bytes; such a
+finding means a new candidate (`docs/RELEASING.md`). Still provisional: `--json` output (L-12) and execution policy
+files (`rc-exec-policy/0`, L-09). The writer's majors are unchanged since alpha.5.
+
 ### Changed
 
 - **The external-signing package is `rc-signing-package/1`, frozen; the key file `rc-key/0` is frozen as is.** A
@@ -32,6 +43,20 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   stay open with restrictions behind `crit`, why an unreadable cut makes an identity's acts unknown, that the classical
   root's way out is a new inception profile, and that a statement can carry two valid signatures. New signed vectors
   pin each case, a tampered actor `identity` and an `rc/2` edition id; new unsigned reject vectors pin set order.
+
+### Known issues (open at this tag)
+- Every gap in `docs/KNOWN-LIMITS.md` (L-01…L-17, L-20). The ones a first user meets:
+  - Block headers come only from a file the operator obtains (`anchor headers sync --from`, L-02); with no header
+    database every rival construction is `contested` and a task contract with a `deadline` never reaches `ready`. (#59)
+  - `publish` does not stamp (L-16): run `anchor stamp` after `publish` and before `push`, and `anchor upgrade` once
+    the calendar has committed to a block (typically hours).
+  - `push` sends only from a git checkout of the hub (L-17).
+  - A response layout reads JSON only, through one pointer to the record array and one to the state (L-14).
+  - The only hardware connector is a Ledger device running the Ethereum app (L-07), over USB on Linux only (L-20).
+    The execution-policy file format is still version 0 (L-09).
+  - There is no Windows build, and none is planned for 1.0 (L-11); `--json` output may change before it carries a
+    `schema` member (L-12).
+- The `next-format` issues are requirements for later stages, not defects in this release.
 
 ## [0.5.0-alpha.8] - 2026-11-16
 
@@ -1289,7 +1314,8 @@ contributions, landed on top of that baseline.
 - **#12** — COMMONS.md review request from an external hub: the first outside use of the
   template and rubric.
 
-[Unreleased]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.8...next
+[Unreleased]: https://github.com/research-common/research-commons/compare/v1.0.0-rc.1...next
+[1.0.0-rc.1]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.8...v1.0.0-rc.1
 [0.5.0-alpha.8]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.7...v0.5.0-alpha.8
 [0.5.0-alpha.7]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.6...v0.5.0-alpha.7
 [0.5.0-alpha.6]: https://github.com/research-common/research-commons/compare/v0.5.0-alpha.5...v0.5.0-alpha.6

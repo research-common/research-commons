@@ -1,4 +1,4 @@
-# Fixed-root identity profile (candidate wire, reader active)
+# Fixed-root identity profile (`fixed-root-v1` on `rc/2`, frozen at 1.0)
 
 **Status: reader and writer active** (`rc/1` + `rc/2` read and written). The production reader verifies and
 interprets `rc/2` under this profile and evaluates identity actors from the statements it holds. The writer
@@ -7,7 +7,9 @@ for an identity (`publish --as <I> --grant <G>`); every other statement, raw `ro
 included, is still written `rc/1` (§2.1). Each of those commands can stop at an external-signing package and
 commit a signature made elsewhere (§8). The one hardware connector is a Ledger device running the Ethereum app
 (`eip191-secp256k1`, §8); no other hardware or wallet connector is built.
-The wire format is still a candidate: nothing here is frozen.
+The `rc/2` bytes, ids and domain separation this profile defines, and the interchange files `rc-key/0` and
+`rc-signing-package/1` (§8), are **frozen at 1.0** after an independent freeze review (§9, Completion boundary).
+Where the text below says "candidate", it names the profile as first proposed; the bytes are the frozen ones.
 This document selects one wire proposal, `fixed-root-v1` on **`rc/2`**, rather than
 changing `rc/1` fields through a critical-extension handler. It does not change
 `wire.Major`, the current release version, old design notes, or any existing conformance
@@ -1092,8 +1094,10 @@ correctly re-signed malformed body is rejected despite the recognized marker.
 `rc/2`, raw `rotate_key` and `revoke_key` stay `rc/1` with their bytes, ids and meaning unchanged (§2.1), and a
 bare-key corpus reads identically with and without the dual-major reader (C-id-01). The release decision for
 `rc/2` itself: it is **frozen at 1.0**, not shipped as experimental, because 1.0 writes it (`docs/RELEASING.md`
-criterion 1). Before that tag, the "independent review of the major transition" item below is done and the header's
-"nothing here is frozen" is removed; until then it stands.
+criterion 1). The independent review of the major transition is done: a freeze read of the `rc/2` bytes, ids,
+domain separation, forward room and the two interchange files, whose findings were all folded before `1.0.0-rc.1`
+(future-algorithm signers and key shapes read `unsupported`; other actor spellings read `unsupported`; sets sorted by
+canonical encoding; authority-bearing members only behind `crit`; the signing package's summary carries no prose).
 
 Done: the dual-major reader is the production reader (pull, the gates, `hub check`,
 the store and every view, §2.4); the actor evaluator is built from held statements and
@@ -1104,8 +1108,7 @@ reads `unknown` (exit 3). Signed end-to-end tests run the published vectors and 
 amendment scenarios through the commands. The writer is the simple-path commands: `identity new`, `identity grant`, `identity cut` and `publish --as --grant`
 sign `rc/2` with a key file, through a detached-signing package, or with a Ledger device through that package. A physical-device signing drill is recorded (§8, a Nano X). Still required: any connector beyond the Ledger Ethereum app; the critical registry; a
 concrete identity task-contract profile; the production evidence-snapshot serialization,
-caches and replay; independent review of the major transition; detached signing
-packages/connectors and custody/hardware usability drills. No release, deployment, live
+caches and replay; connectors beyond the Ledger Ethereum app. No release, deployment, live
 keys or devices are implied by these artifacts.
 
 **What freezing `fixed-root-v1` does not freeze.** The root is one classical key (`ed25519` or

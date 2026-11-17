@@ -14,15 +14,17 @@ New here? Read [`docs/WHY.md`](docs/WHY.md): the motivation and the epistemics, 
 
 ## Status
 
-**0.5.0-alpha.8: the eighth alpha of the next format.** The next format is a clean break from the 0.4 alpha: a
-signed, append-only statement log per key, a store directory (`rc-store/1`), and a Go command-line tool. It is
-alpha: **the format may still change between alpha releases**, and so may `--json` output, key files and execution
-policy files (all marked provisional). The fixed-root identity profile is a candidate under review: its **reader is
+**1.0.0-rc.1: the first release candidate of 1.0.** The next format is a clean break from the 0.4 alpha: a
+signed, append-only statement log per key, a store directory (`rc-store/1`), and a Go command-line tool. **The
+format is frozen for 1.0**: the wire majors `rc/1` and `rc/2` (the fixed-root identity profile), key files
+(`rc-key/0`) and external-signing packages (`rc-signing-package/1`). A finding that would change those bytes means a
+new release candidate, not a silent change. Still provisional: `--json` output (L-12) and execution policy files
+(`rc-exec-policy/0`). The fixed-root identity profile's **reader is
 active** (`rc/2` statements are verified and identity actors evaluated from the statements you hold), and so is
 its **writer**: `commons identity new|grant|cut` administer an identity and `publish --as <identity> --grant <id>`
 acts for one, signed from a key file or through an external-signing package (`--prepare`, then `package show` and
 `key sign` on a machine that holds the key and no store, then `--complete`); `key sign --ledger` signs that package
-with a Ledger device running the Ethereum app (tested against a fake of the app and the emulator, not yet on hardware; USB on Linux).
+with a Ledger device running the Ethereum app (tested against a fake of the app and the emulator, and drilled on a physical Nano X; USB on Linux).
 `show <key>` prints a delegate key's own key events beside every grant naming it and that grant's state; every
 identity answer is relative to the statements held (`freshness: not_established`: no claim that no cut exists).
 `anchor stamp` and `anchor upgrade` write Bitcoin time evidence for your own log through the calendars you name
@@ -40,7 +42,7 @@ Read it before you rely on an answer.
 Requires Go 1.26 or newer. Developed and tested on Linux (the Python wheels also carry macOS builds); **Windows is not supported in 1.0** (the sandbox and store use Unix file semantics, and the tool does not build there: `docs/KNOWN-LIMITS.md` L-11).
 
 ```bash
-go install github.com/research-common/research-commons/cmd/commons@v0.5.0-alpha.8
+go install github.com/research-common/research-commons/cmd/commons@v1.0.0-rc.1
 commons --version
 ```
 
