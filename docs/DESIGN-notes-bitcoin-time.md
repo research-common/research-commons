@@ -1,6 +1,6 @@
 # Design note: receiver-local Bitcoin time verification
 
-**Status:** proposed · **Companion to:** the claims-model note (§15, "receiver-local Bitcoin verification")
+**Status:** implemented by the reference verifier; its open questions are all closed (see "Status for 1.0") · **Companion to:** the claims-model note (§15, "receiver-local Bitcoin verification")
 **Covers:** the §15 item for #59; conformance cases C-btc-01 – C-btc-06, and the parts of C-core-19,
 C-core-20, C-core-53, C-core-70, C-core-107, C-exch-16 and P-06 that depend on what `bitcoin` quality means
 **Tracks:** #59 · **Re-bases:** the proposal in #60 onto the statement model. The verifier core of #60
