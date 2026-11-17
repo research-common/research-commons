@@ -131,7 +131,7 @@ func TestPackageShowKeySignEndToEnd(t *testing.T) {
 			if g := twin.ok(grantCmd...); g.Members["grant"] != canon.String(grant) || lineOf(t, root.store, grant) != lineOf(t, twin.store, grant) {
 				t.Fatal("the grant signed by key sign is not the directly signed one")
 			}
-			conformance.Partial(t, "C-id-40", "the signing side of the external-signing package runs store-less: package show recomputes every derived member and key sign signs the recomputed PAE with a key file on a machine with no store, each committed line equal to direct signing; a compromised operational host and hardware or connector signing are not drilled")
+			conformance.Partial(t, "C-id-40", "the signing side of the external-signing package runs store-less: package show recomputes every derived member and key sign signs the recomputed PAE with a key file on a machine with no store, each committed line equal to direct signing; the compromised-host drill is TestIdentityCompromisedHostDrill, hardware signing the Ledger tests and the manual drill (§8)")
 		})
 	}
 }

@@ -890,16 +890,50 @@ the same way, and each committed line equals what direct signing writes at the s
 signature completed on the store and equal to direct signing; a package with any derived
 member changed, the wrong key, or an existing output file is refused with nothing written.
 
-Not drilled: a compromised operational host. Signing on a physical device is the manual
-drill recorded above (a Nano X), not an automated test.
-`TestLedgerKeySignEndToEnd` and `TestLedgerKeySignAborts` run the Ledger connector against an
-in-process fake of the Ethereum app; `TestLedgerInterruptedReview` interrupts a held review.
-`TestLedgerCompromisedStoreHost` is the connector's side of a compromised store host: a package
-altered after `--prepare` (PAE, signer, summary, envelope), or a valid package for other bytes
-that `--expect-pae-sha256` catches, is refused before the device is asked to sign. C-id-40 is
-therefore partial: its simple-path, package and connector halves are the tests above; the
-hardware half is the manual drill above; the custody drill of a compromised operational host
-(what the holder does once the store's machine is lost to an attacker) is not recorded.
+Signing on a physical device is the manual drill recorded above (a Nano X), not an
+automated test. `TestLedgerKeySignEndToEnd` and `TestLedgerKeySignAborts` run the Ledger
+connector against an in-process fake of the Ethereum app; `TestLedgerInterruptedReview`
+interrupts a held review. `TestLedgerCompromisedStoreHost` is the connector's side of a
+compromised store host: a package altered after `--prepare` (PAE, signer, summary,
+envelope), or a valid package for other bytes that `--expect-pae-sha256` catches, is
+refused before the device is asked to sign.
+
+**Compromised-host drill, recorded** (`internal/cli:TestIdentityCompromisedHostDrill`,
+through the command line only, both algorithms). The root key R never touches the
+operational host: every root act is prepared there with `--prepare`, checked and signed
+with `key sign --expect-pae-sha256` on a machine with no store, and completed with
+`--complete`. The operational host holds the store, the worker key K and the hub checkout.
+
+1. Setup: inception I and grant G of I to K go through the package; K writes two acts
+   for I under G, a1 and a2; the hub takes them.
+2. Compromise: the attacker copies the whole host, store and K's key file. R's file is
+   nowhere in the copy (the drill checks).
+3. The attacker publishes two acts for I under G with K, forking K's log after a2. Until
+   a cut is held they read `eligible`: that is the damage.
+4. The attacker prepares a grant of I to its own key and presents the package as a
+   routine grant to K. The holder prepared that routine grant on a clean store pulled
+   from the hub and took the sha256 of its PAE; `key sign --expect-pae-sha256` with that
+   digest refuses the attacker's package and writes no signature. `package show` names
+   the attacker's key as the delegate. Every store is byte-identical afterwards.
+5. The attacker cannot sign as the root: a grant or a cut signed with any key it holds is
+   refused, nothing written.
+6. Recovery on a clean machine with a fresh store pulled from the hub, never from the
+   compromised store (the drill checks that none of the attacker's lines are in it):
+   `identity cut` G with `--last-good` a2, the last act the holder can attest, reason
+   `key_compromise`, prepared there, signed off-host after the digest check, completed.
+   The cut's PAE is the same when prepared on a store that also holds the attacker's
+   acts: the cut does not depend on them.
+7. A new worker key K2 on the clean machine, a grant G2 of I to K2 through the package,
+   and an act under G2.
+8. A reader pulls everything, the attacker's store included: a1 and a2 count; the
+   attacker's acts are `denied` (`cut_excluded`) and count toward nothing; the act under
+   G2 is `eligible` and counted; the forged grant was committed nowhere.
+
+What it does not cover: exclusion by origin inside the vouched prefix (an attacker act
+that is an ancestor of `--last-good` keeps counting, as above, so a holder who cannot
+attest a2 must pick an earlier `--last-good`), and a compromised root key, which is a new
+identity, not a recovery. With the simple-path, package and connector tests and the manual
+hardware drill, C-id-40 is covered.
 
 ## 9. Schemas, vectors and reproducible checks
 
@@ -1055,7 +1089,7 @@ a scenario.
 | C-id-37 | §2.2, §2.3 (handle ID-37) | Tamper / marker / criticality / canonicalization | Any byte tamper, actor/marker without the other, unknown critical token, or non-canonical signed form: never `eligible`; never better than withholding the line. |
 | C-id-38 | §7 (handle ID-38) | Cache / replay / permutation invariance | Duplicate, reordered or re-serialised delivery of the same evidence gives identical results, evidence digest and receipt; a cache/replay gives the same answer as a cold read. |
 | C-id-39 | §7 (handle ID-39) | Deterministic resource caps | Every evaluation cap reached returns `unknown`/non-passing naming the cap (exit 3), never a partial grant or prefix. |
-| C-id-40 | §8 (handle ID-40) | Root backup / compromised operational host | Root backup restore and a compromised operational host: a recorded drill (custody, not protocol). The simple-path drill, root restore included, and a hardware-signing drill on a physical Ledger Nano X are recorded (§8); a compromised operational host is not. |
+| C-id-40 | §8 (handle ID-40) | Root backup / compromised operational host | Root backup restore and a compromised operational host: a recorded drill (custody, not protocol). The simple-path drill (root restore included), a hardware-signing drill on a physical Ledger Nano X, and a compromised-operational-host drill (`TestIdentityCompromisedHostDrill`: forked worker acts cut at an attested `last_good`, a forged grant package refused by `--expect-pae-sha256`, recovery from a clean store pulled from the hub, a new grant) are recorded (§8). |
 | C-id-41 | §2.3 (handle ID-41) | Marker without actor / actor without marker | An actor without the body marker, or a marker without the critical declaration, is invalid even when correctly signed; never read as bare-key. |
 | C-id-42 | §5.3 (handle ID-42) | Decide grant is not beneficiary role | A `decide` grant does not make K the beneficiary: `decide` by an actor that is not the pinned edition's beneficiary is `denied`. |
 | C-id-43 | §5.3 (handle ID-43) | Cross-key exact-intent continuity | `progress`/`withdraw` by K2 for I continues K1-for-I's exact intent; a bare-key K1 intent is not continued; a withdrawn attempt cannot be reopened. |

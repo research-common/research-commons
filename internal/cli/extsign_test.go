@@ -403,7 +403,7 @@ func TestExternalSigningAborts(t *testing.T) {
 			if storeBytes(t, root.store) != before {
 				t.Fatal("a stale completion changed the store")
 			}
-			conformance.Partial(t, "C-id-40", "the external-signing package (profile §8, prepare/complete) is exercised through the commands: a root key kept off the store signs the inception, a grant and a cut and a delegate key signs an act over the exact PAE bytes, each committed line equal to direct signing; every abort (bad signature, wrong key, moved head, mutated envelope, mismatched derived member, malformed package or signature, lost eligibility) appends nothing; a compromised operational host and hardware or connector signing are not drilled")
+			conformance.Partial(t, "C-id-40", "the external-signing package (profile §8, prepare/complete) is exercised through the commands: a root key kept off the store signs the inception, a grant and a cut and a delegate key signs an act over the exact PAE bytes, each committed line equal to direct signing; every abort (bad signature, wrong key, moved head, mutated envelope, mismatched derived member, malformed package or signature, lost eligibility) appends nothing; the compromised-host drill is TestIdentityCompromisedHostDrill, hardware signing the Ledger tests and the manual drill (§8)")
 		})
 	}
 }

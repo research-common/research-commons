@@ -22,6 +22,13 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ### Added
 
+- **A compromised operational host is drilled (identity note §8, C-id-40 covered).** With the root key kept off the
+  host and every root act signed through the package, a test plays an attacker holding a full copy of the host (store
+  and worker key): its forked acts under the grant are cut at the last act the holder can attest, its grant package to
+  its own key presented as a routine one is refused by `key sign --expect-pae-sha256` with the digest the holder
+  computed on a clean store, and it cannot sign as the root. The holder recovers on a clean machine from a fresh store
+  pulled from the hub, grants a new worker key and acts under it; a reader holding everything, the attacker's store
+  included, counts the legitimate acts and the new one and counts the attacker's acts toward nothing.
 - **The two-hub drill is scripted (`scripts/two-hub-drill.sh`).** Two bare git repos as hubs and two stores with distinct
   keys: A publishes a construction, an observation and a resource edition and pushes; B pulls, publishes a corroborating
   observation and pushes; A pulls from B; both answer `show`, `explain` and `verify` for the same ids and the script

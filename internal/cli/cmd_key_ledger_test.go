@@ -402,7 +402,7 @@ func TestLedgerInterruptedReview(t *testing.T) {
 // different statement honestly (a valid package for other bytes) is caught by the separate-channel digest
 // (--expect-pae-sha256) before the device is asked.
 func TestLedgerCompromisedStoreHost(t *testing.T) {
-	conformance.Partial(t, "C-id-40", "the connector's half of a compromised store host: a package altered after --prepare (PAE, signer, summary, envelope) or a valid package for other bytes caught by --expect-pae-sha256 is refused by key sign --ledger before the device is asked to sign, nothing written; the custody drill of a compromised host is not recorded")
+	conformance.Partial(t, "C-id-40", "the connector's half of a compromised store host: a package altered after --prepare (PAE, signer, summary, envelope) or a valid package for other bytes caught by --expect-pae-sha256 is refused by key sign --ledger before the device is asked to sign, nothing written; the custody drill of the compromised host is TestIdentityCompromisedHostDrill")
 	dev := ledgertest.New("host")
 	root := newLedgerHome(t, dev)
 	machine := newSigningMachine(t)
