@@ -340,3 +340,38 @@ func TestPropertyExchangeDuplicatesAndEncodings(t *testing.T) {
 		t.Fatalf("a new submission changed no exchange answer: the snapshot does not see the counts\n%s", firstDiff(before, after))
 	}
 }
+
+// TestPropertyExchangeOrderInvariance: P-01 over the exchange view. A generated task world delivered in the
+// file order and in sampled delivery orders (every order up to six lines): every answer of the task view
+// (bindings, attempts, grants, submissions with their state and verdict, decisions and supersession,
+// refutations, readiness with n, k and groups, verify exit) and every credit projection is identical. The
+// control: a decision that settles differently (a reject in place of an accept) changes the snapshot, so it
+// sees the derived answers it compares.
+func TestPropertyExchangeOrderInvariance(t *testing.T) {
+	// with TestPropertyOrderInvariance (the six resolver views), TestPropertyOrderInvarianceMixedMajors and
+	// internal/gate.TestPropertyGateOrderInvariance (every gate, object order and transport order), every
+	// derived answer the case names is checked; orders are every permutation up to six lines, else seeded samples
+	conformance.Covers(t, "P-01")
+	fixture.Check(t, taskPropBase, taskPropSeeds, taskFixtureOpts, func(f fixture.Fixture) string {
+		tw := concretizeTask(t, f)
+		pw := tw.asProp()
+		first := tw.answers(t, tw.lines)
+		for _, o := range taskOrders(len(tw.lines), f.Seed, propOrders) {
+			if got := tw.answers(t, pw.deliver(o)); got != first {
+				return "order " + sprintOrder(o) + " changed an exchange answer: " + firstDiff(first, got)
+			}
+		}
+		return ""
+	})
+	// control: the same world with one more submission and the beneficiary's accept, against the same with a
+	// reject: the snapshots differ in the verdict and in the credit
+	mk := func(verdict string) string {
+		tw := concretizeTask(t, fixture.Gen(taskPropBase, taskFixtureOpts))
+		s := tw.submit("ctl", "C", tw.g, tw.eds[0], "rCTL")
+		tw.decide("ctlD", "R", tw.g, tw.eds[0], verdict, []string{s})
+		return tw.answers(t, tw.lines)
+	}
+	if a, r := mk("accept"), mk("reject"); a == r || !strings.Contains(a, "verdict=accept") {
+		t.Fatal("an accept and a reject give one snapshot: the harness does not reach the decisions")
+	}
+}

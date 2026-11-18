@@ -22,7 +22,7 @@ const (
 // view (statements, key logs, artifacts, observations and corroboration, the resource, membership, series,
 // reputation) is identical in the file order and in each sampled delivery order.
 func TestPropertyOrderInvariance(t *testing.T) {
-	conformance.Partial(t, "P-01", "all six views here (key logs, resources, artifacts, edition rules/membership/series, observations/corroboration, reputation) over a sample of delivery orders; the exchange view and the gates are built elsewhere; orders are sampled (propOrders per fixture), not exhaustive")
+	conformance.Partial(t, "P-01", "all six views here (key logs, resources, artifacts, edition rules/membership/series, observations/corroboration, reputation) over a sample of delivery orders (propOrders per fixture); the exchange view is TestPropertyExchangeOrderInvariance, which covers the case, and the gates internal/gate.TestPropertyGateOrderInvariance")
 	fixture.Check(t, propBaseSeed, propSeeds, fixture.Extended, func(f fixture.Fixture) string {
 		pw := concretize(t, f)
 		first := pw.answers(t, pw.deliver(nil), propOpts()...)
