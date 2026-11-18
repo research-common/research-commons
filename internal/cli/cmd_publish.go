@@ -765,6 +765,14 @@ func publishCmd(c *Ctx) (*Obj, int, error) {
 			return nil, 0, writeRefused(err)
 		}
 		drafts[0] = d
+	} else if p.kind == "genesis" && typedControllers(body) {
+		// a genesis naming an identity (or any typed {key|identity} subject) as controller is written rc/2 with the
+		// body marker {} and no actor (identity profile §2.1, §2.3: a raw-key statement); key-only controllers stay rc/1
+		d, err := wire.TypedGenesisDraft(drafts[0])
+		if err != nil {
+			return nil, 0, writeRefused(err)
+		}
+		drafts[0] = d
 	}
 	// the holds beside the claim: only for bytes this unit installs or this store already keeps (an observed whose
 	// bytes this store does not keep has nothing to serve)
@@ -798,6 +806,23 @@ func publishCmd(c *Ctx) (*Obj, int, error) {
 	}
 	// the pre-pin state was resolved from the statements this store holds: the output carries the view's scope
 	return v.scopedResult(commitUnit(c, out, "publish", sts, blobs, p.content, h))
+}
+
+// typedControllers reports whether a genesis body's controllers carry a typed subject (an object member, {key: K} or
+// {identity: I}) rather than only key strings. It decides only the major the writer signs in; the rc/2 reader then
+// judges the whole body, so a malformed typed list is refused with nothing signed.
+func typedControllers(body *canon.Object) bool {
+	v, ok := body.Get("controllers")
+	a, _ := v.(canon.Array)
+	if !ok {
+		return false
+	}
+	for _, e := range a {
+		if _, typed := e.(*canon.Object); typed {
+			return true
+		}
+	}
+	return false
 }
 
 // draftRotateWarning is printed when a rotate_key is signed from a draft. A draft is signed as written: none of
