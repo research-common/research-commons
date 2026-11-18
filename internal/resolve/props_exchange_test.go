@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/research-common/research-commons/internal/canon"
+	"github.com/research-common/research-commons/internal/conformance"
 	"github.com/research-common/research-commons/internal/conformance/fixture"
 	"github.com/research-common/research-commons/internal/keylog"
 )
@@ -286,3 +287,56 @@ const (
 	taskPropBase  = 9100
 	taskPropSeeds = 40
 )
+
+// TestPropertyExchangeDuplicatesAndEncodings: P-02 over the exchange view. Every line of a generated task world
+// delivered twice, and once more in every equivalent signature encoding its writer could have produced (v as
+// 0/1, high s, for the secp256k1 keys), in the file order and in sampled orders: the resolver holds one
+// statement per body, and every answer of the task view (submission, decision, attempt and grant counts,
+// readiness n and k, verify exit) and of every credit projection (each count's n and denominator) is the one of
+// the single delivery. The control: one genuinely new submission (a new body) does change the counts, so the
+// snapshot sees a count when there is one.
+func TestPropertyExchangeDuplicatesAndEncodings(t *testing.T) {
+	// with TestPropertyDuplicatesAndEncodings (corroborations, members and every other view over the same
+	// deliveries) and the wire layer's one id per body (internal/wire), every count the case names is checked
+	conformance.Covers(t, "P-02")
+	reencoded := 0
+	fixture.Check(t, taskPropBase+1000, taskPropSeeds, taskFixtureOpts, func(f fixture.Fixture) string {
+		tw := concretizeTask(t, f)
+		pw := tw.asProp()
+		once := tw.answers(t, tw.lines)
+		held := len(New(storeOf(t, tw.lines), taskOpts()...).byID)
+		var many [][]byte
+		forms := pw.reencodings(t)
+		reencoded += len(forms) - len(tw.lines)
+		for _, ln := range forms {
+			many = append(many, ln, ln)
+		}
+		for _, o := range append([][]int{nil}, sampleOrders(len(many), f.Seed, 2)...) {
+			lines := many
+			if o != nil {
+				lines = make([][]byte, len(o))
+				for i, j := range o {
+					lines[i] = many[j]
+				}
+			}
+			r := New(storeOf(t, lines), taskOpts()...)
+			if len(r.byID) != held {
+				return fmt.Sprintf("duplicates or re-encodings changed the number of statements held: %d, want %d", len(r.byID), held)
+			}
+			if got := tw.taskSnapshot(r); got != once {
+				return "duplicates or re-encodings changed an exchange answer: " + firstDiff(once, got)
+			}
+		}
+		return ""
+	})
+	if reencoded == 0 {
+		t.Fatal("no line was re-encoded: the secp256k1 keys signed nothing, so the encoding half is vacuous")
+	}
+	// control: a new submission body is a new statement and moves the counts
+	tw := concretizeTask(t, fixture.Gen(taskPropBase+1000, taskFixtureOpts))
+	before := tw.answers(t, tw.lines)
+	tw.submit("ctl", "C", tw.g, tw.eds[0], "rCTL")
+	if after := tw.answers(t, tw.lines); after == before || !strings.Contains(firstDiff(before, after), "submission") {
+		t.Fatalf("a new submission changed no exchange answer: the snapshot does not see the counts\n%s", firstDiff(before, after))
+	}
+}

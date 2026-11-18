@@ -39,7 +39,7 @@ func TestPropertyOrderInvariance(t *testing.T) {
 // equivalent signature encoding the writer could have produced (v as 0/1, high s), in a sampled order: every
 // answer is the one of the single delivery, the resolver holds one statement per body.
 func TestPropertyDuplicatesAndEncodings(t *testing.T) {
-	conformance.Partial(t, "P-02", "all six views here, duplicate delivery and equivalent EIP-191 encodings; counts of submissions and credit are the exchange view's, not built; the Ed25519 encoding is unique (step 1) so only secp256k1 re-encodes")
+	conformance.Partial(t, "P-02", "all six views here (corroborations, members and every other count), duplicate delivery and equivalent EIP-191 encodings; the Ed25519 encoding is unique (step 1) so only secp256k1 re-encodes; submissions and credit are TestPropertyExchangeDuplicatesAndEncodings, which covers the case")
 	fixture.Check(t, propBaseSeed+1000, propSeeds, fixture.Extended, func(f fixture.Fixture) string {
 		pw := concretize(t, f)
 		once := pw.answers(t, pw.deliver(nil), propOpts()...)
