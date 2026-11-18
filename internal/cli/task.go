@@ -150,9 +150,12 @@ func termsObj(b resolve.Binding, full bool) *Obj {
 	return o
 }
 
+// contractProfile is the contract_profile text of a read contract: the profile name, and for the provisional reading
+// a note that the contract is read under it and not under task-contract-v1 (the only profile frozen for 1.0). The
+// name is the prefix, unchanged. Both `show` and `publish task` render it through here.
 func contractProfile(tm *resolve.Terms) string {
 	if tm.Provisional {
-		return tm.Profile + " (provisional: the contract grammar is pending)"
+		return tm.Profile + " (provisional: read under this profile, not " + resolve.TaskContractV1Profile + ")"
 	}
 	return tm.Profile
 }

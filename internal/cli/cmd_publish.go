@@ -1142,11 +1142,8 @@ func (v *view) readinessWith(c *Ctx, sts []signed, task, edition string) (*Obj, 
 				o.set("explain", texts(rd.Why...))
 			}
 		}
-		switch {
-		case b.Terms != nil && b.Terms.Provisional:
-			o.set("contract_profile", textV(b.Terms.Profile+" (provisional: the contract grammar is pending)"))
-		case b.Terms != nil:
-			o.set("contract_profile", textV(b.Terms.Profile))
+		if b.Terms != nil {
+			o.set("contract_profile", textV(contractProfile(b.Terms)))
 		}
 	}
 	return o, b.State, ""
