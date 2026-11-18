@@ -69,7 +69,7 @@ func derivedWorld(t *testing.T, mode, comparator string, opts ...Option) (*Artif
 }
 
 func TestPropertyUnverifiedEvidenceNeverPasses(t *testing.T) {
-	conformance.Partial(t, "P-09", "every delegated check the resolver has (time verifier, comparator, replication declaration, attestation verifier, referent checker, finality rules, cohort rules, edition-rule dialect and domain, segment re-check, content reader) substituted by a missing, unsupported, failing or lying variant; the checks of later views (hub CI, pull, push, pre-pin as a gate, execution exit codes, the exchange's verifiers) are those views' and are not built here")
+	conformance.Partial(t, "P-09", "every delegated check the resolver has (time verifier, comparator, replication declaration, attestation verifier, referent checker, finality rules, cohort rules, edition-rule dialect and domain, segment re-check, content reader) substituted by a missing, unsupported, failing or lying variant; the exchange's verifiers (rubric, independence, grant, deadline) are TestPropertyExchangeVerifiersNeverPass, with two counterexamples (PROPS-F7, PROPS-F8); execution exit codes are internal/clirun.TestRerunExits (timeout/failed 3, environment mismatch 5); left: a per-check substitution sweep over the gates' delegated checks (hub CI, pull, push, pre-pin; today only the series freeze re-check and refuse_incomplete are shown could-not-check, internal/hubcheck)")
 
 	t.Run("time verifier: priority needs a verified bound", func(t *testing.T) {
 		good := priorityWorld(t, WithTimeVerifier(newFakeBitcoin(100, 101)))
