@@ -51,8 +51,9 @@ var SingleParty = []string{"attribution", "availability", "comparator", "descrip
 	"supersedes", "type"}
 
 // Disclosures are the single-party fields shown beside the grade on every surface, declared or not (claims
-// §7, I6, C-core-66). The observation, hub and task disclosures (capture evidence, corroboration, selection,
-// referent status, finality) belong to views not built yet.
+// §7, I6, C-core-66). A blob with no counted `authored` claim shows the disclosures its counted `observed`
+// statements declare (observedFields, disclosure.go). The observation, hub and task disclosures (capture
+// evidence, corroboration, selection, referent status, finality) are shown by their own views.
 var Disclosures = []string{"availability", "licence", "pre_registration", "replication", "sampling", "shelf_life_days"}
 
 // absentToken is what a missing field displays: a missing licence is `unknown`, never open (C-core-67);
@@ -194,6 +195,9 @@ type Field struct {
 	Rivals []Source
 	// Why says why the state is FieldUnknown; "" otherwise.
 	Why string
+	// Observed is true when the values come from the blob's counted `observed` statements because no counted
+	// `authored` claim exists (observedField, disclosure.go). Such a field is displayed, never a cause of `verify`.
+	Observed bool
 }
 
 // Default returns the field's default value (canonical JSON) and whether it has one.
@@ -333,6 +337,7 @@ func (r *Resolver) authorship(d string) *Artifact {
 	}
 	a.Fields = r.fields(a)
 	r.selectDefaults(a) // the reader's authorship-declaration selection, if any (policy.go)
+	r.observedFields(a) // no counted authored claim: the disclosures its counted observations declare (disclosure.go)
 	a.PreReg = r.artifactPreReg(a)
 	a.Explain = append(a.Explain, forked(a)...)
 	a.Explain = append(a.Explain, r.successorHints(a)...)
@@ -648,7 +653,7 @@ func (a *Artifact) VerifyExit() (int, []string) {
 		why = append(why, "authorship: "+string(a.State))
 	}
 	for _, f := range a.Fields {
-		if f.State == FieldContested {
+		if f.State == FieldContested && !f.Observed { // an observation's disagreeing disclosures are shown, not a cause (I6)
 			why = append(why, "field "+f.Name+": contested")
 		}
 	}

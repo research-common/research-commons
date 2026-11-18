@@ -2,6 +2,7 @@ package resolve
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -241,27 +242,77 @@ type InputSummary struct {
 
 var replRank = map[string]int{"bytes": 3, "protocol": 2, "none": 1}
 
+// ObservedDisclosures are the single-party fields an `observed` statement may carry beside its class (wire §5,
+// "disclosures (on `authored`, `observed`)" and `licence_texts`), in SingleParty order: what a blob with no counted
+// `authored` claim displays from its counted observations. `fulfills` is in because the pre-registration display
+// reads it; lineage and the `authored`-only fields are not.
+var ObservedDisclosures = []string{"attribution", "availability", "description", "fulfills", "licence", "licence_texts",
+	"pre_registration", "replication", "sampling", "shelf_life_days"}
+
+// observedField is the default of single-party field name for a blob that has no counted `authored` claim: the value
+// its counted observations (ps, the ones the reader's observation selection reads, observedFor) agree on. unmet is
+// the reason the selection is unmet ("" when met or absent). One rule for the input summary (inputValue) and for the
+// blob display (observedFields), so the two can never disagree (claims §5.1: the default display comes from one
+// key's `authored` or `observed` statement):
+//   - the selection is unmet: FieldUnknown, Why = unmet;
+//   - every observation that sets the field carries one value: FieldDefault, From = those statements;
+//   - they set different values: FieldContested, every value listed with its signer;
+//   - none sets it: FieldAbsent.
+//
+// v is the last value read (nil unless some observation sets the field).
+func observedField(ps []*Placed, unmet, name string) (f Field, v canon.Value) {
+	f = Field{Name: name, Observed: true}
+	if unmet != "" {
+		f.State, f.Why = FieldUnknown, unmet
+		return f, nil
+	}
+	for _, p := range ps {
+		x, has := p.St.Body.Get(name)
+		if !has {
+			continue
+		}
+		f.From = append(f.From, Source{Value: string(canon.Encode(x)), Signer: p.St.Signer, Statement: p.St.ID})
+		v = x
+	}
+	sortSources(f.From)
+	switch {
+	case len(f.From) == 0:
+		f.State = FieldAbsent
+	case distinctValues(f.From) > 1:
+		f.State = FieldContested
+	default:
+		f.State = FieldDefault
+	}
+	return f, v
+}
+
+// observedFields gives a blob that has no counted `authored` claim, and is observed, the disclosures its counted
+// observations declare (observedField). A blob with counted `authored` claims keeps the authored rules unchanged.
+func (r *Resolver) observedFields(a *Artifact) {
+	if a.State != NoClaim || !r.isObservation(a.Digest) {
+		return
+	}
+	ps, unmet := r.observedFor(a.Digest)
+	for i, f := range a.Fields {
+		if slices.Contains(ObservedDisclosures, f.Name) {
+			a.Fields[i], _ = observedField(ps, unmet, f.Name)
+		}
+	}
+}
+
 // inputValue is input d's value of a disclosure: an authored input's default; an observation input's value its
-// counted observations agree on. ok is false when undeclared or disagreed (why names which).
+// counted observations agree on (observedField). ok is false when undeclared or disagreed (why names which).
 func (r *Resolver) inputValue(d, name string) (v canon.Value, ok bool, why string) {
 	if r.isObservation(d) {
 		ps, unmet := r.observedFor(d)
-		if unmet != "" {
-			return nil, false, unmet
+		f, x := observedField(ps, unmet, name)
+		switch f.State {
+		case FieldUnknown:
+			return nil, false, f.Why
+		case FieldContested:
+			return nil, false, "its observations disagree"
 		}
-		var seen string
-		for _, p := range ps {
-			x, has := p.St.Body.Get(name)
-			if !has {
-				continue
-			}
-			e := string(canon.Encode(x))
-			if seen != "" && e != seen {
-				return nil, false, "its observations disagree"
-			}
-			seen, v = e, x
-		}
-		return v, v != nil, ""
+		return x, x != nil, ""
 	}
 	a := r.authorship(d)
 	f := a.Field(name)
