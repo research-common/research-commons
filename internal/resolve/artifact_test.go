@@ -897,7 +897,7 @@ func TestDuplicatesProperty(t *testing.T) {
 // with no authority over blob X (holds, describes, a rival authored on another blob), result_X(S+L) equals
 // result_X(S), explanation included.
 func TestNonInterferenceProperty(t *testing.T) {
-	conformance.Partial(t, "P-03", "authorship, defaults and grades of blobs; resources and tasks as they land")
+	conformance.Partial(t, "P-03", "authorship, defaults and grades of blobs; resources, membership and observations are props_noninterference_test.go, and tasks with credit TestPropertyExchangeNonInterference, which covers the case")
 	opts := []Option{WithTimeVerifier(newFakeBitcoin(100, 101, 102))}
 	for seed := uint64(1); seed <= 30; seed++ {
 		for _, add := range []func(w *world){

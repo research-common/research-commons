@@ -147,7 +147,7 @@ func sameDecision(before, after *Resource) string {
 }
 
 func TestPropertyNonInterferenceResources(t *testing.T) {
-	conformance.Partial(t, "P-03", "resources, membership and observations here (and authorship in TestNonInterferenceProperty); the gates (pull, hub CI, push, pre-pin) are P-04's and are not built; tasks and the exchange view are built elsewhere")
+	conformance.Partial(t, "P-03", "resources, membership and observations here (and authorship in TestNonInterferenceProperty); the gates (pull, hub CI, push, pre-pin) are P-04's (internal/gate.TestPropertyNoThirdPartyVeto); tasks and credit are TestPropertyExchangeNonInterference, which covers the case")
 	for _, a := range outsideAdditions() {
 		t.Run(a.name, func(t *testing.T) {
 			fixture.Check(t, propBaseSeed+3000, 12, fixture.Extended, func(f fixture.Fixture) string {

@@ -441,6 +441,9 @@ func taskOutsideAdditions() []addition {
 			pw.sign("L", taskOutsider, "describes", obj("about", obj("content", dig("ZZ")), "note", "n"))
 		}},
 		{"authors an unrelated blob", func(pw *propWorld) { pw.authored("L", taskOutsider, "ZZ", "licence", "MIT") }},
+		{"authors a derived unrelated blob (a rival citation)", func(pw *propWorld) {
+			pw.authored("L", taskOutsider, "ZZ", "prov", []string{"W", "ZI"})
+		}},
 		{"authors a fixture result blob, carrying no fulfills", func(pw *propWorld) { pw.authored("L", taskOutsider, "rX") }},
 		{"anchors its own log", func(pw *propWorld) {
 			pw.authored("LA", taskOutsider, "ZZ")
@@ -474,7 +477,11 @@ func taskOutsideAdditions() []addition {
 // the statement attributed to the outsider. Control: a decide by the beneficiary on a fresh submission does
 // change the decision, so the harness reaches the view.
 func TestPropertyExchangeNonInterference(t *testing.T) {
-	conformance.Partial(t, "P-03", "the exchange view: the task view (explanation included) and each key's credit numerators are unchanged by an outsider's holds, describes, rival authored and lifecycle statements on another task; an outsider's lifecycle statements naming the task change no decision and are shown; see TestPropertyNonInterferenceResources for the rest")
+	// the last view P-03 names: with authorship (TestNonInterferenceProperty), resources, membership and
+	// observations (props_noninterference_test.go), rc/2 additions (TestPropertyNonInterferenceMixedMajors) and
+	// the gates (P-04, internal/gate.TestPropertyNoThirdPartyVeto), every view is checked. A credit count over
+	// the "all" denominator is excluded by definition (PROPS-F6): it counts every key's statements of a kind.
+	conformance.Covers(t, "P-03")
 	for _, a := range taskOutsideAdditions() {
 		t.Run(a.name, func(t *testing.T) {
 			fixture.Check(t, taskPropBase+3000, 20, taskFixtureOpts, func(f fixture.Fixture) string {
@@ -548,6 +555,27 @@ func TestPropertyExchangeNonInterference(t *testing.T) {
 		tk1, _ := New(storeOf(t, tw.lines), taskOpts()...).Task(tw.g)
 		if taskDecision(tk0) == taskDecision(tk1) {
 			t.Fatal("the beneficiary's accept changed no decision: the harness does not reach the task view")
+		}
+	})
+
+	// PROPS-F6, pinned: the one credit answer an outsider's derived blob moves is a denominator over every key
+	// (DenomAll), which is why creditNumerators leaves it out. If this stops holding, the exclusion can go.
+	t.Run("an outsider's derived blob moves only the all-keys citation denominator", func(t *testing.T) {
+		tw := concretizeTask(t, fixture.Gen(taskPropBase+3000, taskFixtureOpts))
+		rule := &CreditRule{Name: "all", Window: AllHeld{}}
+		count := func() CreditCount {
+			for _, c := range New(storeOf(t, tw.lines), taskOpts()...).Credit(tw.signer("A"), rule).Counts {
+				if c.Name == "citation" {
+					return c
+				}
+			}
+			return CreditCount{}
+		}
+		c0 := count()
+		tw.authored("L", taskOutsider, "ZZ", "prov", []string{"W", "ZI"})
+		c1 := count()
+		if c1.N != c0.N || c1.Of != c0.Of+1 || c1.Denominator != DenomAll {
+			t.Fatalf("citation before %+v, after %+v: want the numerator unchanged and the all-keys denominator one more", c0, c1)
 		}
 	})
 }
