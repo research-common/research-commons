@@ -186,6 +186,26 @@ func IdentityDraft(d Draft, actor *Actor, marker *canon.Object) (Draft, error) {
 		}
 		return Draft{}, refusal.Malformed("%s", why)
 	}
+	return identityDraft(d, actor, marker)
+}
+
+// TypedGenesisDraft returns the genesis d prepared as a typed-controller genesis (identity profile §2.1: a
+// bare-key creator can sign a typed genesis): rc/2, crit [x_identity_v1], the body marker {} and NO actor, since a
+// genesis is a raw-key statement (§2.3). It is the one place a genesis is written in rc/2; WriterMajor("genesis",
+// false) stays Major, so a genesis of key-only controllers is never routed here and stays byte-for-byte rc/1. Only
+// a genesis is accepted: a typed-controller edition is not a raw-key statement and is not written from a bare key.
+// Like IdentityDraft it does not check the body schema: Write reads the signed line back through the identity
+// reader, which applies the typed-subject and satisfiable rules.
+func TypedGenesisDraft(d Draft) (Draft, error) {
+	if d.Kind != "genesis" {
+		return Draft{}, refusal.Malformed("%s is not a typed-controller genesis; only a genesis is written in rc/2 from a bare key", d.Kind)
+	}
+	return identityDraft(d, nil, nil)
+}
+
+// identityDraft is the shared tail of IdentityDraft and TypedGenesisDraft: the caller has decided the draft is
+// written in rc/2.
+func identityDraft(d Draft, actor *Actor, marker *canon.Object) (Draft, error) {
 	if actor != nil && (!reID.MatchString(actor.Identity) || !reID.MatchString(actor.Grant)) {
 		return Draft{}, refusal.Malformed("%s needs identity and grant statement ids", ActorField)
 	}
