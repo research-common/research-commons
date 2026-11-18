@@ -474,9 +474,9 @@ var limits = []limit{
 	},
 	{
 		id:  "L-21",
-		gap: "A collection's controllers cannot be changed to name an identity from the CLI: the writer refuses an edition whose `contents.controllers` name an identity (a bare key's edition is rc/1, and an edition is not a raw-key statement of the identity profile), although the reader resolves a typed identity controller; an act for an identity on an edition (`publish --as`) is refused unless the grant carries `edition` for a resource that already exists. A collection genesis naming an identity controller is written (`publish --draft`, rc/2)",
+		gap: "A collection's controllers cannot be changed to name an identity from the CLI: the writer refuses an edition whose `contents.controllers` name an identity (a bare key's edition is rc/1, and an edition is not a raw-key statement of the identity profile), although the reader resolves a typed identity controller. So a key-controlled collection cannot be moved to identity control; create an identity-controlled collection instead: a collection genesis naming an identity controller is written (`publish --draft`, rc/2), and a key acting for the identity under a grant carrying `edition` for it publishes its editions (`publish --as`)",
 		sources: []limitSource{
-			{file: "CHANGELOG.md", says: "collections cannot be identity-controlled from the CLI (KNOWN-LIMITS L-21)"},
+			{file: "CHANGELOG.md", says: "KNOWN-LIMITS L-21 now covers that case"},
 			{file: "docs/COLLABORATING.md", says: "the CLI refuses an edition whose `controllers` name an identity"},
 			{help: []string{"publish"}, says: "An edition naming an identity controller is refused (KNOWN-LIMITS L-21)"},
 		},
