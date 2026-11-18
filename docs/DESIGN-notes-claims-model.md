@@ -219,8 +219,9 @@ read from the key's own log (wire-format note §7). It is in force once it chain
   an edition does not protect it from a revocation (it does protect it from a withdrawal, §8).
 
 Restoring what a revocation cut is not possible in-band, because the two holders of a key are
-indistinguishable. A key's owner can make it possible ahead of time with a recovery key committed when the
-key is created; that mechanism is specified separately.
+indistinguishable. There is no in-band recovery for a bare key in 1.0. A recovery commitment made when the key
+is created is a possible later extension (additive, so a MINOR release); it is not specified. For identities,
+see the fixed-root identity note §1: recovery there is a new identity plus a second controller subject on resources.
 
 ## 5. Authorship, priority and observation
 
