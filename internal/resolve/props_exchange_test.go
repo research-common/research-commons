@@ -375,3 +375,179 @@ func TestPropertyExchangeOrderInvariance(t *testing.T) {
 		t.Fatal("an accept and a reject give one snapshot: the harness does not reach the decisions")
 	}
 }
+
+// taskDecision is every part of the task view a reader acts on, without the explanation: the resource decision,
+// each submission's counting state and verdict, each decision's counting and supersession, each grant that
+// counts, readiness with its counts, and the verify exit.
+func taskDecision(tk *Task) string {
+	var b strings.Builder
+	b.WriteString(resourceDecision(tk.Resource))
+	for _, s := range tk.Submissions {
+		fmt.Fprintf(&b, "sub %s counts=%v eligible=%v granted=%s verdict=%s", s.Statement, s.Counts, s.Eligible, s.Granted, s.Verdict)
+		if s.V1 != nil {
+			fmt.Fprintf(&b, " v1=%s current=%v", s.V1.State, s.V1.Current)
+		}
+		b.WriteString("\n")
+	}
+	for _, d := range tk.Decisions {
+		if d.Counts { // a decision that counts toward nothing is listed for the reader, and decides nothing
+			fmt.Fprintf(&b, "dec %s by=%s\n", d.Statement, d.SupersededBy)
+		}
+	}
+	for _, g := range tk.Grants {
+		fmt.Fprintf(&b, "grant %s %s\n", g.Statement, g.Grantee)
+	}
+	for _, rd := range tk.Readiness {
+		fmt.Fprintf(&b, "ready %s %s n=%d k=%d groups=%v check=%s\n", rd.Edition, rd.Token, rd.N, rd.K, rd.Groups, rd.Check)
+	}
+	fmt.Fprintf(&b, "conflict=%v exit=%d\n", tk.DecisionConflict, tk.VerifyExit())
+	return b.String()
+}
+
+// creditNumerators is each fixture key's credit under every rule, without the "all" denominators: a count's
+// numerator, and its denominator when that is the key's own (own submissions, decided). DenomAll is every
+// counted statement of the kind by any key, so any new statement of the kind moves it by its definition (the
+// reader chose a denominator over everyone); that is a bearing on the reader's predicate, not interference.
+func (tw *taskWorld) creditNumerators(r *Resolver) string {
+	var b strings.Builder
+	for _, k := range taskKeyNames {
+		for _, rule := range creditRules {
+			for _, cc := range r.Credit(tw.signer(k), rule).Counts {
+				fmt.Fprintf(&b, "%s %s %s n=%d", k, rule.Name, cc.Name, cc.N)
+				if cc.Denominator != DenomAll {
+					fmt.Fprintf(&b, " of=%d", cc.Of)
+				}
+				b.WriteString("\n")
+			}
+		}
+	}
+	return b.String()
+}
+
+// taskOutsider is the outsider key of the exchange P-03: it signs nothing in a task fixture.
+const taskOutsider = "QQ"
+
+// taskOutsideAdditions are statements of the outsider with no authority over task G and no bearing on any
+// answer about it: the kinds P-03 names (holds, describes, a rival authored on another blob) and every
+// lifecycle kind aimed at another task.
+func taskOutsideAdditions() []addition {
+	other := func(pw *propWorld) (string, string) {
+		g := pw.task("OG", "OR")
+		return g, pw.taskEdition("OE", "OR", g, []string{g}, pw.v1c("OR", "quorum", quorum(1, IndependenceNotRequired)))
+	}
+	return []addition{
+		{"holds an unrelated blob", func(pw *propWorld) { pw.sign("L", taskOutsider, "holds", obj("content", contentOf("ZZ"))) }},
+		{"describes an unrelated blob", func(pw *propWorld) {
+			pw.sign("L", taskOutsider, "describes", obj("about", obj("content", dig("ZZ")), "note", "n"))
+		}},
+		{"authors an unrelated blob", func(pw *propWorld) { pw.authored("L", taskOutsider, "ZZ", "licence", "MIT") }},
+		{"authors a fixture result blob, carrying no fulfills", func(pw *propWorld) { pw.authored("L", taskOutsider, "rX") }},
+		{"anchors its own log", func(pw *propWorld) {
+			pw.authored("LA", taskOutsider, "ZZ")
+			pw.anchor("L", taskOutsider, "btc:101")
+		}},
+		{"rotates its own key", func(pw *propWorld) { pw.sign("L", taskOutsider, "rotate_key", obj("successor", pw.signer("QZ"))) }},
+		{"intends, progresses and withdraws on another task", func(pw *propWorld) {
+			g, e := other(pw)
+			pw.life("LI", taskOutsider, "intent", g, e)
+			pw.life("LP", taskOutsider, "progress", g, e)
+			pw.life("L", taskOutsider, "withdraw", g, e)
+		}},
+		{"submits to another task, and that task's beneficiary accepts", func(pw *propWorld) {
+			g, e := other(pw)
+			s := pw.submit("LS", taskOutsider, g, e, "rX")
+			pw.decide("L", "OR", g, e, "accept", []string{s})
+		}},
+		{"is granted on another task", func(pw *propWorld) {
+			g, e := other(pw)
+			pw.grant("L", "OR", g, pw.ed(e), taskOutsider)
+		}},
+	}
+}
+
+// TestPropertyExchangeNonInterference: P-03 over the exchange view. For each generated task world S and each
+// statement L of an outsider key with no authority over task G and no bearing on it (taskOutsideAdditions),
+// the task view of S+L equals that of S, explanation included, and every credit numerator (and own denominator)
+// of every fixture key is unchanged. A second class names G but comes from a key with no authority (a decide by
+// a non-beneficiary, a grant by a non-coordinator, a withdraw and a progress with no intent, a decide that
+// supersedes the beneficiary's decision): the decision (taskDecision) is unchanged, and the explanation shows
+// the statement attributed to the outsider. Control: a decide by the beneficiary on a fresh submission does
+// change the decision, so the harness reaches the view.
+func TestPropertyExchangeNonInterference(t *testing.T) {
+	conformance.Partial(t, "P-03", "the exchange view: the task view (explanation included) and each key's credit numerators are unchanged by an outsider's holds, describes, rival authored and lifecycle statements on another task; an outsider's lifecycle statements naming the task change no decision and are shown; see TestPropertyNonInterferenceResources for the rest")
+	for _, a := range taskOutsideAdditions() {
+		t.Run(a.name, func(t *testing.T) {
+			fixture.Check(t, taskPropBase+3000, 20, taskFixtureOpts, func(f fixture.Fixture) string {
+				before := concretizeTask(t, f)
+				r0 := New(storeOf(t, before.lines), taskOpts()...)
+				tk0, _ := r0.Task(before.g)
+				after := concretizeTask(t, f)
+				n := len(after.lines)
+				a.add(after.asProp())
+				if len(after.lines) == n {
+					return "the addition signed nothing"
+				}
+				r1 := New(storeOf(t, after.lines), taskOpts()...)
+				tk1, _ := r1.Task(after.g)
+				if tk0.Render() != tk1.Render() {
+					return "the task view changed:\n" + firstDiff(tk0.Render(), tk1.Render())
+				}
+				if c0, c1 := before.creditNumerators(r0), after.creditNumerators(r1); c0 != c1 {
+					return "a credit count changed:\n" + firstDiff(c0, c1)
+				}
+				return ""
+			})
+		})
+	}
+
+	t.Run("outsider statements naming the task decide nothing", func(t *testing.T) {
+		fixture.Check(t, taskPropBase+3100, 20, taskFixtureOpts, func(f fixture.Fixture) string {
+			tw := concretizeTask(t, f)
+			read := func() *Task {
+				tk, _ := New(storeOf(t, tw.lines), taskOpts()...).Task(tw.g)
+				return tk
+			}
+			d0 := taskDecision(read())
+			e := tw.eds[0]
+			sub := unheldID("none")
+			if len(tw.subs) > 0 {
+				sub = tw.subs[0]
+			}
+			for i, add := range []func() string{
+				func() string { return tw.decide(fmt.Sprint("Q", 0), taskOutsider, tw.g, e, "reject", []string{sub}) },
+				func() string { return tw.grant("Q1", taskOutsider, tw.g, tw.ed(e), taskOutsider) },
+				func() string { return tw.life("Q2", taskOutsider, "withdraw", tw.g, e) },
+				func() string { return tw.life("Q3", taskOutsider, "progress", tw.g, e, "note", "heartbeat") },
+				func() string {
+					if d := tw.ids["last-decide"]; d != "" {
+						return tw.decide("Q4", taskOutsider, tw.g, e, "reject", []string{sub}, "supersedes", d)
+					}
+					return tw.decide("Q4", taskOutsider, tw.g, e, "accept", []string{sub})
+				},
+			} {
+				id := add()
+				tk := read()
+				if d := taskDecision(tk); d != d0 {
+					return fmt.Sprintf("outsider statement %d changed the decision on the task:\n%s", i, firstDiff(d0, d))
+				}
+				// a decide and a grant are listed, attributed to the outsider; withdraw and progress with no intent
+				// continue no attempt and are not listed (nothing they could be attributed to)
+				if (i == 0 || i == 1 || i == 4) && !strings.Contains(tk.Render(), keylog.Short(id)) {
+					return fmt.Sprintf("outsider statement %d is not shown in the task view:\n%s", i, tk.Render())
+				}
+			}
+			return ""
+		})
+	})
+
+	t.Run("control: the beneficiary's decision bears on the task", func(t *testing.T) {
+		tw := concretizeTask(t, fixture.Gen(taskPropBase+3000, taskFixtureOpts))
+		s := tw.submit("ctl", "C", tw.g, tw.eds[0], "rCTL")
+		tk0, _ := New(storeOf(t, tw.lines), taskOpts()...).Task(tw.g)
+		tw.decide("ctlD", "R", tw.g, tw.eds[0], "accept", []string{s})
+		tk1, _ := New(storeOf(t, tw.lines), taskOpts()...).Task(tw.g)
+		if taskDecision(tk0) == taskDecision(tk1) {
+			t.Fatal("the beneficiary's accept changed no decision: the harness does not reach the task view")
+		}
+	})
+}
