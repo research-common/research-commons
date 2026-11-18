@@ -191,7 +191,7 @@ func TestPropertyExchangeVerifiersNeverPass(t *testing.T) {
 // that plugs one in does. Minimal: one criterion c1, quorum 2, two submissions of one result, the evaluator
 // answering "pass" for every criterion. Seedless (no generator involved).
 func TestFindingRubricOutcomeOutsideVocabulary(t *testing.T) {
-	t.Skip("finding PROPS-F7: a rubric outcome outside {ok, fail, unchecked} is read as passing (ready, exit 0); product fix is the steward's call (rc.2 candidate)")
+	t.Skip("finding PROPS-F7: a rubric outcome outside {ok, fail, unchecked} is read as passing (ready, exit 0); product fix pending (rc.2 candidate)")
 	for _, reading := range []string{"v1", "provisional"} {
 		w := newWorld(t)
 		g := w.task("G", "R")
@@ -218,7 +218,7 @@ func TestFindingRubricOutcomeOutsideVocabulary(t *testing.T) {
 // network and height on a verified bound, so only a reader-supplied verifier reaches it. Minimal: deadline at
 // height 100, one submission anchored once, quorum 1. Seedless.
 func TestFindingDeadlineMetByUnplacedBound(t *testing.T) {
-	t.Skip("finding PROPS-F8: a verified bound with no network/height meets every deadline (height 0 <= h); product fix is the steward's call (rc.2 candidate)")
+	t.Skip("finding PROPS-F8: a verified bound with no network/height meets every deadline (height 0 <= h); product fix pending (rc.2 candidate)")
 	w := newWorld(t)
 	g := w.task("G", "R")
 	e := w.taskEdition("E", "R", g, []string{g}, w.v1c("R", "deadline", obj("height", 100), "quorum", quorum(1, IndependenceNotRequired)))
