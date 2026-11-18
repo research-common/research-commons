@@ -2,6 +2,9 @@ package wire
 
 import (
 	"bytes"
+	"crypto/ed25519"
+	"encoding/hex"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -105,6 +108,53 @@ func TestKeyOnlyGenesisBytes(t *testing.T) {
 	}
 }
 
+// TestTypedGenesisBytes pins the rc/2 typed-controller genesis the way TestKeyOnlyGenesisBytes pins rc/1: the same
+// seed key, a genesis naming {identity, key} controllers under k_of_n 2, signed through TypedGenesisDraft. Ed25519
+// is deterministic, so the line and the id are frozen; the signed string is rebuilt here by the DSSE formula (not by
+// PAE or PayloadType) to show the signature covers the rc/2 payload type and that the id is sha256 of that string.
+func TestTypedGenesisBytes(t *testing.T) {
+	k := tgKey()
+	td, err := TypedGenesisDraft(tgGenesis(tgSubjects(hex64('a'), k.Signer()), tgRule(2)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	line, id := Sign(td, k)
+	got := string(line)
+	if !strings.Contains(got, `"rc":"rc/2"`) || !strings.Contains(got, `"crit":["x_identity_v1"]`) {
+		t.Fatalf("typed genesis is not rc/2 with the identity crit: %s", got)
+	}
+	st, err := Write(td, k, tgNow)
+	if err != nil || st.Status != Valid || st.ID != id || !bytes.Equal(st.Line(), line) {
+		t.Fatalf("Write of a typed genesis: %v %v", st, err)
+	}
+	if got != tgTypedLine || id != tgTypedID {
+		t.Fatalf("typed genesis bytes moved\n got %s\n id %s", got, id)
+	}
+	// The signed string, by the note's formula: the payload type names major 2, the payload is the JCS envelope
+	// without sig.
+	const ptype = "application/vnd.research-commons.genesis.v2+json"
+	env := strings.Replace(tgTypedLine, `"sig":"`+st.Sig+`",`, "", 1)
+	if env == tgTypedLine {
+		t.Fatal("could not strip sig from the pinned line")
+	}
+	ss := "DSSEv1 " + strconv.Itoa(len(ptype)) + " " + ptype + " " + strconv.Itoa(len(env)) + " " + env
+	if string(PAE(PayloadType("genesis", 2), []byte(env))) != ss {
+		t.Error("PAE(PayloadType(genesis, 2), env) differs from the DSSE formula")
+	}
+	if ID([]byte(ss)) != tgTypedID {
+		t.Errorf("id is not sha256 of the rc/2 signed string")
+	}
+	pub, _ := hex.DecodeString(strings.TrimPrefix(k.Signer(), "ed25519:"))
+	sig, _ := hex.DecodeString(st.Sig)
+	if !ed25519.Verify(pub, []byte(ss), sig) {
+		t.Error("the pinned signature does not verify over the rc/2 signed string")
+	}
+	// the same draft signed under the rc/1 payload type would be a different statement: the type is in the PAE
+	if ID(PAE(PayloadType("genesis", 1), []byte(env))) == tgTypedID {
+		t.Error("the rc/1 and rc/2 payload types hash to the same id")
+	}
+}
+
 // TestTypedGenesisRefusals: the identity reader's rules still refuse what no reader would read; Write returns the
 // invalid statement (the CLI refuses it, nothing signed), and the draft constructor refuses every other kind.
 func TestTypedGenesisRefusals(t *testing.T) {
@@ -165,6 +215,8 @@ func TestTypedGenesisRefusals(t *testing.T) {
 }
 
 const (
+	tgTypedLine   = `{"alg":"ed25519","body":{"controllers":[{"identity":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},{"key":"ed25519:70df9e2279adbec6d12bf2921184c9222eb24ed852005bf640139f52e59cd9ae"}],"name":"c","rule":{"k_of_n":{"k":2}},"type":"collection","x_identity_v1":{}},"crit":["x_identity_v1"],"kind":"genesis","prev":null,"rc":"rc/2","seq":0,"sig":"2152d604b6a239557896e66b281d0d0dde5c24f5720944fad9f0e0d0579363c37be7e8cdf4ec33956ce18a30db6df3b57b82a5063ce348bb89ab913aac93f602","signer":"ed25519:70df9e2279adbec6d12bf2921184c9222eb24ed852005bf640139f52e59cd9ae","ts":"2026-11-17T00:00:00Z"}`
+	tgTypedID     = "2ab3d96e70bcb4ce82cde6a70dd902bcda760782ee3bdbee0ca53a9ad28f7664"
 	tgKeyOnlyLine = `{"alg":"ed25519","body":{"controllers":["ed25519:70df9e2279adbec6d12bf2921184c9222eb24ed852005bf640139f52e59cd9ae"],"name":"c","rule":{"any_one":true},"type":"collection"},"kind":"genesis","prev":null,"rc":"rc/1","seq":0,"sig":"63d862ffacc914486d2d589e29753cf411118935ff75546705cafd5cbca047cd91aa75adeff34dcd2e0990e8ecf68cbc563d48c3bbf839e881e796a9412e730f","signer":"ed25519:70df9e2279adbec6d12bf2921184c9222eb24ed852005bf640139f52e59cd9ae","ts":"2026-11-17T00:00:00Z"}`
 	tgKeyOnlyID   = "c58bfa899fcef977bd4f9258809a23b62844c7e0691277ec1f41e8a281659fe7"
 )
