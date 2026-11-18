@@ -19,6 +19,12 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   wrapped to `$COLUMNS` (80 when unset, between 60 and 120). An unknown option now names its command in the `next`
   hint (`run commons help publish to list its options`) and an unknown command suggests the nearest one. `--json`
   help output is byte-identical; no byte, identifier or exit-code change.
+- Wording: the `contract_profile` text of a provisional contract now says what is true ("provisional: read under this
+  profile, not task-contract-v1") instead of "the contract grammar is pending", `show` and `publish task` render it through
+  one helper, and a stale "nothing is frozen" comment on the `rc/2` reader is corrected. New documented limit L-21:
+  collections cannot be identity-controlled from the CLI (KNOWN-LIMITS L-21): the writer refuses a collection genesis that
+  names an identity controller, and `publish --as` on an edition needs a grant carrying `edition` for an existing
+  resource; planned for 1.1. No byte, identifier, exit code or `--json` member name changes.
 - Documentation: the README, security policy, contributing guide and design-note status lines now describe the release
   candidate (frozen format, install from PyPI or a release archive and how to verify it, a "Testing the release candidate"
   section) instead of the alpha; `--json` stability wording and limits L-08 and L-12 say what holds at 1.0. No byte,
