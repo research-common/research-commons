@@ -386,7 +386,8 @@ func (r *Resolver) deadlineStatements(s *Submission, p *Placed) (sts []*Placed, 
 var resolvable = []string{"pending", "insufficient-confirmations", "missing-proof", "unknown-height", "backend-unconfigured", "backend-unavailable", "stale-chain"}
 
 func meets(b Bound, h int64) bool {
-	return (b.verified() || (b.State == "verified-historical" && b.Network != "")) && b.Height <= h
+	// A bound the verifier did not place (no network) is at no height, never below every deadline.
+	return (b.verified() || b.State == "verified-historical") && b.Network != "" && b.Height <= h
 }
 
 // deadline computes one submission's deadline outcome (§4.3).

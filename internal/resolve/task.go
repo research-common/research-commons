@@ -457,6 +457,10 @@ func (r *Resolver) admitSubmission(t *Task, s *Submission, p *Placed, bd Binding
 			}
 			for _, c := range tm.Rubric {
 				out, why := r.exch.rubric.Evaluate(c, p.St)
+				if out != RuleOK && out != RuleFail && out != RuleUnchecked {
+					// An evaluator outside the §13 vocabulary never passes (as edition rules, C-core-95).
+					out, why = RuleUnchecked, fmt.Sprintf("evaluator returned %q, not a rubric outcome", out)
+				}
 				s.Rubric = append(s.Rubric, CriterionEval{c.ID, out, why})
 			}
 			if tm.Quorum != nil {

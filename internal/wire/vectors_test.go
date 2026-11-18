@@ -159,7 +159,7 @@ func TestResignVectors(t *testing.T) {
 // stores the canonical one whichever arrived (§4).
 func TestEquivalentEncodings(t *testing.T) {
 	conformance.Partial(t, "C-core-10", "wire half: one id per body, stored canonical; the delivery outcome is internal/cli.TestPullEquivalentEncodingsOneStatement")
-	conformance.Partial(t, "P-02", "counts not multiplying needs projections; this checks one id per body at the wire layer")
+	conformance.Partial(t, "P-02", "the wire half: one id per body; counts not multiplying is internal/resolve.TestPropertyExchangeDuplicatesAndEncodings")
 	v := vectors(t)
 	v1 := v.Positive[0]
 	if v.Equivalent.Of != "V1" || v.Equivalent.Canonical != v1.Sig {

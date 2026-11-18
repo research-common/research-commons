@@ -9,6 +9,20 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ## [Unreleased]
 
+### Fixed
+
+- Task readiness no longer passes on a reader-supplied check that answers outside its contract: a rubric evaluator that
+  returns anything but `ok`, `fail` or `unchecked` now reads `unchecked` (as edition rules already did), and a time bound
+  that claims Bitcoin quality without a network and height no longer meets a deadline. Neither is reachable with the
+  checks the reference CLI ships; found by the new property tests. No byte, identifier, exit code or `--json` member name
+  changes.
+
+### Tests
+
+- Property cases P-01, P-02, P-03 and P-12 are covered over the exchange view and the gates (a seeded task-world
+  generator; duplicate and re-encoded delivery, every delivery order, outsider statements, withheld statements); P-08's
+  time-context half and P-09 over the exchange's delegated checks are checked. Conformance properties 10/12.
+
 ### Changed
 
 - Help text layout: `commons help`, `help <command>`, `help exits` and `help outputs` print a dedicated page instead of
