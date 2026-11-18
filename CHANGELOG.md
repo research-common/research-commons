@@ -9,6 +9,18 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ## [Unreleased]
 
+### Added
+
+- A collection genesis may name an identity as a controller. `publish --draft` of a `genesis` whose `controllers` hold
+  typed subjects (`{"identity": "<id>"}` and/or `{"key": "<key>"}`, sorted and duplicate-free) is signed from a bare key
+  as `rc/2` with the body marker `{}` and no actor, exactly as the fixed-root identity design note (section 2.1)
+  describes. It is read back through the identity reader before anything is appended, so a typed genesis that reads
+  invalid (a `k_of_n` its controllers cannot satisfy, an unsorted list, a malformed id) is refused with nothing signed.
+  A genesis whose controllers are all plain keys is unchanged, byte for byte `rc/1`, and so is the genesis `publish task`
+  writes. An edition naming an identity controller is still refused (an edition is not a raw-key statement of the
+  profile): KNOWN-LIMITS L-21 now covers that case and the `publish --as` grant requirement. No change to the reader, the
+  wire format or its documents, or the `rc/1` schema.
+
 ### Fixed
 
 - Task readiness no longer passes on a reader-supplied check that answers outside its contract: a rubric evaluator that
@@ -35,10 +47,8 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   help output is byte-identical; no byte, identifier or exit-code change.
 - Wording: the `contract_profile` text of a provisional contract now says what is true ("provisional: read under this
   profile, not task-contract-v1") instead of "the contract grammar is pending", `show` and `publish task` render it through
-  one helper, and a stale "nothing is frozen" comment on the `rc/2` reader is corrected. New documented limit L-21:
-  collections cannot be identity-controlled from the CLI (KNOWN-LIMITS L-21): the writer refuses a collection genesis that
-  names an identity controller, and `publish --as` on an edition needs a grant carrying `edition` for an existing
-  resource; planned for 1.1. No byte, identifier, exit code or `--json` member name changes.
+  one helper, and a stale "nothing is frozen" comment on the `rc/2` reader is corrected. New documented limit L-21
+  (narrowed by the typed-genesis entry under Added). No byte, identifier, exit code or `--json` member name changes.
 - Documentation: the README, security policy, contributing guide and design-note status lines now describe the release
   candidate (frozen format, install from PyPI or a release archive and how to verify it, a "Testing the release candidate"
   section) instead of the alpha; `--json` stability wording and limits L-08 and L-12 say what holds at 1.0. No byte,

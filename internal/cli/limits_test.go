@@ -474,18 +474,19 @@ var limits = []limit{
 	},
 	{
 		id:  "L-21",
-		gap: "Collections cannot be identity-controlled from the CLI: the writer refuses a collection genesis whose `controllers` name an identity (a controller must be a key), although the reader resolves a typed identity controller; an act for an identity on an edition (`publish --as`) is refused unless the grant carries `edition` for a resource that already exists",
+		gap: "A collection's controllers cannot be changed to name an identity from the CLI: the writer refuses an edition whose `contents.controllers` name an identity (a bare key's edition is rc/1, and an edition is not a raw-key statement of the identity profile), although the reader resolves a typed identity controller; an act for an identity on an edition (`publish --as`) is refused unless the grant carries `edition` for a resource that already exists. A collection genesis naming an identity controller is written (`publish --draft`, rc/2)",
 		sources: []limitSource{
 			{file: "CHANGELOG.md", says: "collections cannot be identity-controlled from the CLI (KNOWN-LIMITS L-21)"},
-			{file: "docs/COLLABORATING.md", says: "the CLI refuses a collection genesis whose `controllers` name an identity"},
-			{help: []string{"publish"}, says: "a controller that is an identity is refused (KNOWN-LIMITS L-21)"},
+			{file: "docs/COLLABORATING.md", says: "the CLI refuses an edition whose `controllers` name an identity"},
+			{help: []string{"publish"}, says: "An edition naming an identity controller is refused (KNOWN-LIMITS L-21)"},
 		},
-		probe:  "`publish --draft` of a collection genesis whose `controllers` is a typed `{identity: …}` exits 2 (`controllers[0] is not a key`) and changes nothing",
-		closes: "a collection genesis naming an identity controller, written by the CLI (planned for 1.1)",
+		probe:  "`publish --draft` of an edition whose `contents.controllers` is a typed `{identity: …}` exits 2 (`controllers[0] is not a key`) and changes nothing",
+		closes: "an edition naming an identity controller, written by the CLI (planned for 1.1)",
 		open: func(t *testing.T) (bool, string) {
 			h := newIDHome(t, wire.AlgEd25519)
 			ident := string(h.ok("identity", "new").Members["identity"].(canon.String))
-			draft := h.file("genesis.json", `{"kind":"genesis","body":{"type":"collection","name":"c","controllers":[{"identity":"`+ident+`"}],"rule":{"any_one":true}}}`)
+			g := firstID(t, h.ok("publish", "--draft", h.file("genesis.json", `{"kind":"genesis","body":{"type":"collection","name":"c","controllers":["`+h.signer+`"],"rule":{"any_one":true}}}`)))
+			draft := h.file("edition.json", `{"kind":"edition","body":{"resource":"`+g+`","predecessors":["`+g+`"],"contents":{"members":[],"controllers":[{"identity":"`+ident+`"}],"rule":{"any_one":true}}}}`)
 			before := storeBytes(t, h.store)
 			r := h.run("publish", "--draft", draft)
 			return r.code == ExitDidNotStart && strings.Contains(r.stdout, "controllers[0] is not a key") && storeBytes(t, h.store) == before, r.stdout

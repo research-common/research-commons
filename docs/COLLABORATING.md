@@ -104,9 +104,11 @@ commit. The list is a floor, not a guarantee: it matches whole field names, so `
 through where `account_id` does not. Details in the README under **Topic-scoped forbidden
 field names**.
 
-A collection is controlled by keys, not identities: the CLI refuses a collection genesis whose `controllers` name an
-identity (KNOWN-LIMITS L-21; planned for 1.1), and an act for an identity (`--as`) on an edition needs a grant that
-carries `edition` for a resource that already exists.
+A collection's genesis may name an identity as a controller (`{"identity": "<id>"}`, alone or beside `{"key": ...}`
+subjects in a sorted list): any key can sign it with `publish --draft`, and it is written `rc/2`. Changing a collection's
+controllers to name an identity later is not possible from the CLI (KNOWN-LIMITS L-21): the CLI refuses an edition whose
+`controllers` name an identity, and an act for an identity (`--as`) on an edition needs a grant that carries `edition`
+for a resource that already exists.
 
 `collection.json` shape: see **Collections** in the tool README. It needs `scope`,
 `maintainers` (with your address), `members`, and ideally `task_criteria` and

@@ -22,12 +22,17 @@ statements this store holds plus this line reads the act eligible (exit 2 when
 it is denied, naming why; exit 3 when it cannot decide, e.g. the grant or the
 identity is not held).
 
-A collection's genesis (a draft) names key controllers only: a controller that
-is an identity is refused (KNOWN-LIMITS L-21), and an act for an identity on an
-edition (--as) needs a grant carrying `edition` for a resource that already
-exists. A holds is written beside an authored or observed whose bytes this store
-keeps (--no-holds withholds it); it stays your key's own (rc/1): your key holds
-the bytes.
+A collection's genesis (a draft) may name typed controllers ({key: K} and/or
+{identity: I}): it is then signed rc/2 (body marker {}, no actor) from a bare
+key, and refused with nothing signed unless it reads valid (sorted and
+duplicate-free, a rule its controllers can satisfy). Controllers that are all
+plain keys stay rc/1. An edition naming an identity controller is refused
+(KNOWN-LIMITS L-21), and an act for an identity on an edition (--as) needs a
+grant carrying `edition` for a resource that already exists.
+
+A holds is written beside an authored or observed whose bytes this store keeps
+(--no-holds withholds it); it stays your key's own (rc/1): your key holds the
+bytes.
 
 External signing (identity profile §8): --prepare <file> --signer <key> writes
 an external-signing package and appends nothing; sign its PAE bytes with the key
