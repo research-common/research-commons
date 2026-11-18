@@ -59,6 +59,8 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   the claims model, with a table mapping the alpha template's fields. Docs only.
 - Documentation: installing from source is `go install ./cmd/commons` from a clone (no branch switch, since `next` is the
   default branch); `go build` stays as the in-place alternative. No byte, identifier or behaviour change.
+- Documentation: the README's "Hubs" section says how to find hubs: the GitHub topic `research-commons-hub`, which the hub
+  template asks each hub to set. Being listed is not an endorsement. No byte, identifier or behaviour change.
 
 ## [1.0.0-rc.1] - 2026-11-17
 

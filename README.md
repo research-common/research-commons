@@ -150,6 +150,10 @@ A hub is a git repository holding a store, so collaborators `git clone` it and `
 that runs `commons hub check` on every pull request. `commons hub check` needs the hub to be a git repository with at
 least one commit.
 
+**Finding hubs.** The hub template asks each hub to set the GitHub topic `research-commons-hub`:
+[github.com/topics/research-commons-hub](https://github.com/topics/research-commons-hub) lists every public hub
+that does. Being listed is a hub's own choice, not an endorsement; what you trust is your reader policy.
+
 To contribute, publish inside a clone of the hub, `anchor stamp` what needs an anchor, commit, and run
 `commons push --branch <your-branch>` (or `--remote <your fork> --base origin/main --branch <your-branch>`), then
 open a pull request from that branch. `push` answers what the hub's CI will, plus the anchor-before-transport and
