@@ -1025,7 +1025,8 @@ Files in this candidate:
   delegate inception D); the root's `identity_inception`, an `identity_grant` for the worker, two
   `identity_cut`s (`last_good` set and `null`), and the root's raw **`rc/1` `revoke_key`** after them (§2.1: raw key
   events stay `rc/1`; a root revoke is therefore not an `rc/2` positive); the worker's two `authored` acts
-  under `x_actor_v1`, the second carrying `amends`. Each positive entry gives the payload type
+  under `x_actor_v1`, the second carrying `amends`; and the worker's `rc/2` typed-controller `genesis` (§2.1: a bare key
+  proposing `{"identity": I}` as the one controller, marker `{}`, no actor, its id usable as a resource id). Each positive entry gives the payload type
   (`…<kind>.v2+json`), the JCS payload, the exact PAE signed string, its byte count, the statement id, the
   signature and the delivered line, plus the outcome the candidate reader must give (and the actor it must
   read). Negative entries are delivered lines derived from a positive by exactly the members named in
