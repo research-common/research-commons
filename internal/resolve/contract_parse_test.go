@@ -221,7 +221,7 @@ func TestProvisionalContractReadsWhatItChecks(t *testing.T) {
 		t.Fatalf("sampling %+v", tm.Sampling)
 	}
 	// the provisional label survives on every display
-	if !strings.Contains(strings.Join(tm.describe(), "\n"), "contract profile "+ProvisionalProfile+" (PROVISIONAL reading: contract grammar pending)") {
+	if !strings.Contains(strings.Join(tm.describe(), "\n"), "contract profile "+ProvisionalProfile+" (PROVISIONAL reading, not "+TaskContractV1Profile+")") {
 		t.Fatalf("label lost: %v", tm.describe())
 	}
 }

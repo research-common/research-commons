@@ -36,7 +36,7 @@ type ContractReader interface {
 type NoContractReader struct{}
 
 // NoContractProfile is why a contract is unread when the reader configured no contract reader.
-const NoContractProfile = "no contract profile configured by this reader (contract grammar pending)"
+const NoContractProfile = "no contract profile configured by this reader"
 
 // Read implements ContractReader.
 func (NoContractReader) Read(*canon.Object) (*Terms, string, bool) {
@@ -167,7 +167,7 @@ func (t *Terms) Describe() []string { return t.describe() }
 func (t *Terms) describe() []string {
 	label := "contract profile " + t.Profile
 	if t.Provisional {
-		label += " (PROVISIONAL reading: contract grammar pending)"
+		label += " (PROVISIONAL reading, not " + TaskContractV1Profile + ")"
 	}
 	out := []string{label}
 	if t.Question != "" {
@@ -249,7 +249,7 @@ func (t *Terms) describe() []string {
 // ProvisionalProfile is the profile name the provisional reading recognises in `contract.profile`.
 const ProvisionalProfile = "provisional-task-contract-0"
 
-// ProvisionalContract is the PROVISIONAL contract reading (contract grammar pending). It recognises only a
+// ProvisionalContract is the PROVISIONAL contract reading (not task-contract-v1). It recognises only a
 // contract whose `profile` is ProvisionalProfile, and reads:
 //
 //	beneficiary       key R
