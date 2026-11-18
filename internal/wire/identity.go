@@ -15,7 +15,8 @@ import (
 // production reader (ReadStored, dual.go), active: every view reads rc/2 through it. Read, the zero Reader,
 // NewReader and Major are unchanged: Read stays the rc/1-only reader (an rc/2 line an unverified other-major line).
 // The writer signs a statement in rc/2 when it acts for an identity or administers one (WriterMajor, IdentityDraft:
-// write.go), rc/1 otherwise. The wire format is still a candidate until the 1.0 release: nothing here is frozen.
+// write.go), rc/1 otherwise. The rc/2 wire format is frozen at 1.0 (see the note's status header); the fixed-root
+// profile's bytes do not change after it.
 
 const (
 	// CandidateMajor is the identity profile's major. The production reader reads it (ReaderMajors) and the writer
