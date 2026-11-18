@@ -65,7 +65,7 @@ func (pw *propWorld) scopeProblem(r *Resolver, scope string) string {
 }
 
 func TestPropertyWithheldStatementsScopeTheStatus(t *testing.T) {
-	conformance.Partial(t, "P-12", "corroboration status and every surface's wording over generated worlds, each retraction, contradiction, refutation and edition withheld in turn (and a statement withheld mid-log, which also detaches its signer's later lines); resource `current` and the authorship line are scoped by the CLI's one footer per view (PROPS-F5, internal/cli.TestStatusScopeFooter), not in the resolver's renderings, and no CLI command prints a resource or membership view yet")
+	conformance.Partial(t, "P-12", "corroboration status and every surface's wording over generated worlds, each retraction, contradiction, refutation and edition withheld in turn (and a statement withheld mid-log, which also detaches its signer's later lines); resource `current` and the authorship line are scoped by the CLI's one footer per view (PROPS-F5, internal/cli.TestStatusScopeFooter), not in the resolver's renderings; the resource and membership views through pull are internal/cli.TestWithheldEditionAndContradictionAreScoped, which covers the case")
 	fixture.Check(t, propBaseSeed+7000, 40, fixture.Extended, func(f fixture.Fixture) string {
 		pw := concretize(t, f)
 		type variant struct {
