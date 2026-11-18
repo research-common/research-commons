@@ -95,14 +95,26 @@ func TestWriterReproducesSignedVectors(t *testing.T) {
 			d.Prev = string(pr)
 		}
 		want := WriterMajor(p.Kind, actor != nil)
-		if (want == CandidateMajor) != (p.RC == "rc/2") {
+		// A typed-controller genesis is rc/2 but is written only through the explicit TypedGenesisDraft path:
+		// WriterMajor(genesis, false) stays rc/1, so the writer never picks the typed path by itself.
+		typedGenesis := p.Kind == "genesis" && p.RC == "rc/2"
+		if typedGenesis {
+			if want != Major || actor != nil {
+				t.Fatalf("%s: WriterMajor %d (actor %v) for a typed genesis; the typed path is explicit", p.Name, want, actor)
+			}
+		} else if (want == CandidateMajor) != (p.RC == "rc/2") {
 			t.Fatalf("%s: WriterMajor %d for a vector in %s", p.Name, want, p.RC)
 		}
-		if want == CandidateMajor {
+		switch {
+		case typedGenesis:
+			if d, err = TypedGenesisDraft(d); err != nil {
+				t.Fatalf("%s: %v", p.Name, err)
+			}
+		case want == CandidateMajor:
 			if d, err = IdentityDraft(d, actor, marker); err != nil {
 				t.Fatalf("%s: %v", p.Name, err)
 			}
-		} else {
+		default:
 			d.Body = body
 		}
 		k := keys[p.Signer]
@@ -122,7 +134,7 @@ func TestWriterReproducesSignedVectors(t *testing.T) {
 		}
 		n++
 	}
-	if n < 16 {
+	if n < 18 {
 		t.Fatalf("only %d positive vectors rebuilt", n)
 	}
 }

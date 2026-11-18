@@ -232,6 +232,11 @@ func ivChain(chain string, root, work Key) []*ivPos {
 	a2env := Draft{RC: "rc/2", Kind: "authored", Seq: 2, Prev: a1.id, TS: ivTS, Crit: []string{IdentityCrit}, Body: a2b}.Envelope(work)
 	a2 := add("authored-amends", "rc/2", work, ivSignEnv(withActor(a2env), work, 2), "valid", "")
 	a2.actorI, a2.actorG = inc.id, grant.id
+	// A typed-controller genesis (§2.1): the worker, a bare key, signs an rc/2 genesis whose one controller is the
+	// identity I. A raw-key statement: marker {}, no actor. Its id is a resource id.
+	gen := ivObj("type", "collection", "name", "vector", "controllers", canon.Array{ivObj("identity", inc.id)},
+		"rule", ivObj("any_one", true))
+	add("typed-genesis", "rc/2", work, ivSignEnv(ivDraft("rc/2", "genesis", 3, a2.id, true, gen, work), work, 2), "valid", "")
 	cut := func(lg any) *canon.Object {
 		return ivObj("identity", inc.id, "grant", grant.id, "last_good", lg, "reason", "key_compromise")
 	}
@@ -680,7 +685,7 @@ func TestSignedIdentityPositiveVectors(t *testing.T) {
 	}
 	// coverage the gate asks for: both algorithms, every listed kind, an actor under a grant, both cut forms
 	for _, alg := range []string{AlgEd25519, AlgEIP191} {
-		for _, k := range []string{"rc/2 identity_inception", "rc/2 identity_grant", "rc/2 identity_cut", "rc/2 authored", "rc/1 revoke_key"} {
+		for _, k := range []string{"rc/2 identity_inception", "rc/2 identity_grant", "rc/2 identity_cut", "rc/2 authored", "rc/2 genesis", "rc/1 revoke_key"} {
 			if counts[alg+" "+k] == 0 {
 				t.Errorf("no %s positive for %s", k, alg)
 			}
@@ -693,6 +698,7 @@ func TestSignedIdentityPositiveVectors(t *testing.T) {
 	// actor names the inception and the grant; the cuts name the grant; last_good is the first act or null
 	for _, chain := range []string{"ed", "eip"} {
 		var inc, grant, genesis, act *conformance.IdentityPositive
+		var amendsID string
 		for i := range v.Positive {
 			x := &v.Positive[i]
 			if x.Chain != chain {
@@ -716,6 +722,20 @@ func TestSignedIdentityPositiveVectors(t *testing.T) {
 				}
 			case chain + "-authored":
 				act = x
+			case chain + "-authored-amends":
+				amendsID = x.ID
+			case chain + "-typed-genesis":
+				// a bare-key creator's proposal naming the identity: one {identity: I} controller, marker {}, no actor
+				ctrl, _ := body.Members["controllers"].(canon.Array)
+				if len(ctrl) != 1 || !bytes.Equal(canon.Encode(ctrl[0]), canon.Encode(ivObj("identity", inc.ID))) {
+					t.Errorf("%s: controllers are not exactly [{identity: the inception}]", x.Name)
+				}
+				if m, _ := body.Members[IdentityCrit].(*canon.Object); m == nil || len(m.Keys) != 0 || x.ActorIdentity != "" {
+					t.Errorf("%s: marker is not {} or the line carries an actor", x.Name)
+				}
+				if p, _ := env.Members["prev"].(canon.String); string(p) != amendsID {
+					t.Errorf("%s: not the worker's next statement after the amending act", x.Name)
+				}
 			case chain + "-cut-last-good":
 				if string(body.Members["last_good"].(canon.String)) != act.ID {
 					t.Errorf("%s: last_good is not the first act", x.Name)
@@ -732,6 +752,33 @@ func TestSignedIdentityPositiveVectors(t *testing.T) {
 				t.Errorf("%s: actor does not name the inception and the grant", x.Name)
 			}
 		}
+	}
+}
+
+// TestSignedIdentityTypedGenesisIsAResource: the id of each typed-controller genesis vector is a resource id: an
+// rc/2 edition naming it as its resource (and as its predecessor) reads Valid, while a malformed resource id (63
+// hex) reads Invalid naming the resource, so the Valid read is the id's doing. (The reader holds no log: whether the
+// genesis exists is the resolver's.)
+func TestSignedIdentityTypedGenesisIsAResource(t *testing.T) {
+	v := ivLoad(t)
+	n := 0
+	for _, x := range v.Positive {
+		if x.Kind != "genesis" || x.RC != "rc/2" {
+			continue
+		}
+		n++
+		ed := ivObj("resource", x.ID, "predecessors", canon.Array{canon.String(x.ID)}, "contents", ivObj("members", canon.Array{}))
+		st := rc2Read(t, "edition", ed, ivObj(), nil)
+		if st.Status != Valid || st.Why != "" {
+			t.Errorf("%s: an edition naming the genesis id as its resource reads %s (%s)", x.Name, st.Status, st.Why)
+		}
+		bad := ivObj("resource", x.ID[:63], "predecessors", canon.Array{canon.String(x.ID)}, "contents", ivObj("members", canon.Array{}))
+		if st := rc2Read(t, "edition", bad, ivObj(), nil); st.Status != Invalid || !strings.Contains(st.Why, "resource") {
+			t.Errorf("%s: a 63-hex resource id reads %s (%s), want Invalid naming the resource", x.Name, st.Status, st.Why)
+		}
+	}
+	if n != 2 {
+		t.Fatalf("%d typed genesis vectors, want one per algorithm", n)
 	}
 }
 
