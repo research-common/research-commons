@@ -185,7 +185,7 @@ func TestExplainSinceNamesTheCause(t *testing.T) {
 // answer is unchanged and no change is named. The comparison is a pure function of the two outputs: the same file
 // gives the same bytes twice.
 func TestExplainSinceNamesEveryDifference(t *testing.T) {
-	conformance.Partial(t, "P-08", "statement, key-event, hub/reader/time policy and evaluator changes between two explains are each named with their cause (explain --since; P-08 sweep over the fixture); a time-context change and an execution-context change are not exercised: no command configures a chain backend (the only source of a read-time-dependent answer), and execution context is verify --rerun's, not explain's")
+	conformance.Partial(t, "P-08", "statement, key-event, hub/reader/time policy and evaluator changes between two explains are each named with their cause (explain --since; P-08 sweep over the fixture); a time-context change is TestExplainSinceNamesTimeContext; an execution-context change is not an explain input: verify --rerun names it as `environment mismatch: <field>` (internal/run.TestRerun*, C-exec-13), and whether that meets the case is open")
 	w := fixture(t)
 	refs := w.refsOf()
 	saved := map[string]result{}
