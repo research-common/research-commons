@@ -663,3 +663,15 @@ func TestNoProseOutcomes(t *testing.T) {
 		t.Fatal("the gate worlds printed no rows: the sweep read nothing")
 	}
 }
+
+// TestContractProfileText: the provisional reading is named as read under its own profile and not task-contract-v1;
+// the profile name stays the prefix, and a task-contract-v1 contract is the bare name.
+func TestContractProfileText(t *testing.T) {
+	prov := &resolve.Terms{Profile: resolve.ProvisionalProfile, Provisional: true}
+	if got, want := contractProfile(prov), resolve.ProvisionalProfile+" (provisional: read under this profile, not task-contract-v1)"; got != want {
+		t.Fatalf("provisional: %q, want %q", got, want)
+	}
+	if got := contractProfile(&resolve.Terms{Profile: resolve.TaskContractV1Profile}); got != resolve.TaskContractV1Profile {
+		t.Fatalf("v1: %q", got)
+	}
+}
