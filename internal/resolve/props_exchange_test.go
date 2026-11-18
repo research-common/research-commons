@@ -181,22 +181,10 @@ var creditRules = []*CreditRule{
 // explanation), the counts behind it as numbers, and each key's credit under every rule.
 func (tw *taskWorld) taskSnapshot(r *Resolver) string {
 	var b strings.Builder
-	tk, ok := r.Task(tw.g)
-	if !ok {
-		return "task not resolved\n"
-	}
-	b.WriteString(tk.Render())
-	fmt.Fprintf(&b, "counts: submissions=%d decisions=%d attempts=%d grants=%d bound=%d refutations=%d exit=%d\n",
-		len(tk.Submissions), len(tk.Decisions), len(tk.Attempts), len(tk.Grants), len(tk.Bound), len(tk.Refutations), tk.VerifyExit())
-	for _, s := range tk.Submissions {
-		fmt.Fprintf(&b, "submission %s counts=%v eligible=%v verdict=%s refuted=%d", keylog.Short(s.Statement), s.Counts, s.Eligible, s.Verdict, len(s.Refuted))
-		if s.V1 != nil {
-			fmt.Fprintf(&b, " v1=%s current=%v retracted=%d", s.V1.State, s.V1.Current, len(s.V1.Retracted))
-		}
-		b.WriteString("\n")
-	}
-	for _, rd := range tk.Readiness {
-		fmt.Fprintf(&b, "readiness %s %s n=%d k=%d groups=%d\n", keylog.Short(rd.Edition), rd.Token, rd.N, rd.K, len(rd.Groups))
+	if tk, ok := r.Task(tw.g); ok {
+		taskAnswers(&b, tk)
+	} else {
+		b.WriteString("task not held\n") // the genesis withheld: the credit projections below are still answers
 	}
 	for _, k := range taskKeyNames {
 		for _, rule := range creditRules {
@@ -208,6 +196,22 @@ func (tw *taskWorld) taskSnapshot(r *Resolver) string {
 		}
 	}
 	return b.String()
+}
+
+func taskAnswers(b *strings.Builder, tk *Task) {
+	b.WriteString(tk.Render())
+	fmt.Fprintf(b, "counts: submissions=%d decisions=%d attempts=%d grants=%d bound=%d refutations=%d exit=%d\n",
+		len(tk.Submissions), len(tk.Decisions), len(tk.Attempts), len(tk.Grants), len(tk.Bound), len(tk.Refutations), tk.VerifyExit())
+	for _, s := range tk.Submissions {
+		fmt.Fprintf(b, "submission %s counts=%v eligible=%v verdict=%s refuted=%d", keylog.Short(s.Statement), s.Counts, s.Eligible, s.Verdict, len(s.Refuted))
+		if s.V1 != nil {
+			fmt.Fprintf(b, " v1=%s current=%v retracted=%d", s.V1.State, s.V1.Current, len(s.V1.Retracted))
+		}
+		b.WriteString("\n")
+	}
+	for _, rd := range tk.Readiness {
+		fmt.Fprintf(b, "readiness %s %s n=%d k=%d groups=%d\n", keylog.Short(rd.Edition), rd.Token, rd.N, rd.K, len(rd.Groups))
+	}
 }
 
 func (tw *taskWorld) answers(t *testing.T, lines [][]byte) string {
@@ -578,4 +582,37 @@ func TestPropertyExchangeNonInterference(t *testing.T) {
 			t.Fatalf("citation before %+v, after %+v: want the numerator unchanged and the all-keys denominator one more", c0, c1)
 		}
 	})
+}
+
+// TestPropertyExchangeWithheldClaimsNoAbsence: P-12 over the exchange view. For each generated task world and
+// each of its statements withheld in turn (a submission, a decision, a grant, a refutation, a retraction, an
+// edition, a withdraw...), the task view and every credit projection computed from the rest claim no absence
+// of what the reader never received, and a projection says it is chosen by the reader over what it holds. The
+// scope itself is printed once per view by the CLI (TestStatusScopeFooter); this is the resolver's wording.
+// Control: completenessClaim does match a rendering that claims absence, so the check is not vacuous.
+func TestPropertyExchangeWithheldClaimsNoAbsence(t *testing.T) {
+	conformance.Partial(t, "P-12", "the exchange view: the task view and every credit projection claim no absence with each statement of a generated task world withheld in turn; internal/cli.TestWithheldEditionAndContradictionAreScoped covers the case")
+	if !completenessClaim.MatchString("readiness: no other statements") || !completenessClaim.MatchString("no newer edition") {
+		t.Fatal("completenessClaim matches nothing it should: the check is vacuous")
+	}
+	withheld := 0
+	fixture.Check(t, taskPropBase+5000, 24, taskFixtureOpts, func(f fixture.Fixture) string {
+		tw := concretizeTask(t, f)
+		for i := range tw.lines {
+			lines := slices.Delete(slices.Clone(tw.lines), i, i+1)
+			snap := tw.answers(t, lines)
+			withheld++
+			// "all statements held" is the AllHeld window's label: scoped by its own last word, not a claim
+			if m := completenessClaim.FindString(strings.ReplaceAll(snap, "all statements held", "")); m != "" {
+				return fmt.Sprintf("with line %d withheld the exchange view claims %q:\n%s", i, m, snap)
+			}
+			if !strings.Contains(snap, "(chosen by the reader)") {
+				return "a credit projection does not say it is the reader's choice"
+			}
+		}
+		return ""
+	})
+	if withheld == 0 {
+		t.Fatal("nothing was withheld")
+	}
 }
