@@ -50,6 +50,10 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 - Pins the bytes of a typed-controller genesis (the `rc/2` line and id a bare key signs for `{identity, key}` controllers,
   next to the key-only `rc/1` pin) and adds a positive signed vector per algorithm: an `rc/2` genesis naming the identity
   as its controller, whose id is usable as a resource id. The existing vectors are byte-identical.
+- Pins the bytes of a bare key's marker-only approval of an edition of that genesis (`rc/2`, marker `{}`, no actor, written
+  through `MarkerOnlyDraft`), and adds per algorithm to the signed vectors that approval, the identity's approval of the
+  same edition body under a grant for the resource, and the grant. A consumer test shows both approvals name one edition
+  id. The existing vectors are byte-identical.
 - Property cases P-01, P-02, P-03 and P-12 are covered over the exchange view and the gates (a seeded task-world
   generator; duplicate and re-encoded delivery, every delivery order, outsider statements, withheld statements); P-08's
   time-context half and P-09 over the exchange's delegated checks are checked. Conformance properties 10/12.
