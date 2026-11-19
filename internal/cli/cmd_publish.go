@@ -194,7 +194,7 @@ func init() {
 	)
 	Register(&Command{Name: "publish task", Summary: "create a task (genesis + first edition) or publish a new edition of one",
 		Store: true, Writes: true, Flags: tflags, Prepare: preparePublishTask, Run: publishTaskCmd,
-		Help: "A new task: --name and --contract; your key is its one controller (any one approves). A new edition: --task and --contract. Prints how the edition will be settled: by counting (its quorum), or by review when the contract has no quorum predicate, or readiness unchecked when this reader cannot read the contract."})
+		Help: "A new task: --name and --contract; your key is its one controller (any one approves). A new edition: --task and --contract. Prints how the edition will be settled: by counting (its quorum), or by review when the contract has no quorum predicate, or readiness unchecked when this reader cannot read the contract. This reader evaluates no rubric and verifies no independence: a counted contract with a rubric reads readiness unchecked, and one with independence required reads unknown, so neither reaches ready by counting; settle such work by review (no quorum, the beneficiary's decide). A deadline is checked only against a header chain this reader has synced (anchor headers sync; KNOWN-LIMITS L-01, L-02), and is unchecked without one. counting_unit identity needs an rc/2 task edition (task_roles), which this command does not write: under this contract placement it reads unknown."})
 }
 
 // pubPrep is what Prepare read.

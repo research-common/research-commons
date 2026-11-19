@@ -92,7 +92,9 @@ reader policy: [`docs/READER-POLICY.md`](docs/READER-POLICY.md).
 - A blob made by a script can carry `--provenance` (workflow, inputs, environment); `verify --rerun --exec-policy
   <file>` re-runs it in a sandbox under *your* policy: [`docs/EXEC-POLICY.md`](docs/EXEC-POLICY.md).
 - Tasks others can claim: `commons publish task --help`. Rules for how editions are read: the
-  [claims model](docs/DESIGN-notes-claims-model.md).
+  [claims model](docs/DESIGN-notes-claims-model.md). This reader evaluates no rubric and verifies no independence, so a
+  counted contract using either never reads `ready` (settle that work by review), and a deadline is checked only against
+  a synced header chain ([KNOWN-LIMITS](docs/KNOWN-LIMITS.md) L-01, L-02).
 - Fetch bytes a `holds` statement points at: `commons fetch --help`.
 
 ## 7. Share it as a hub

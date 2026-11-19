@@ -85,6 +85,11 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   marker as a plain body member that no reader takes for an identity act (it forked a collection's editions, or left a
   task naming no beneficiary). `next` names `--as`/`--grant`, or a genesis naming an identity as controller, whose
   editions the writer marks itself. The `rc/2` marker-only forms the writer adds are unchanged.
+- `publish task --help` and GETTING-STARTED now say what this reader does not check in a task contract: it evaluates
+  no rubric and verifies no independence, so a counted contract with a rubric reads `unchecked` and one with
+  `independence: required` reads `unknown`, and neither reaches `ready` by counting (settle such work by review); a
+  deadline is checked only against a synced header chain (KNOWN-LIMITS L-01, L-02) and is `unchecked` without one; and
+  `counting_unit: identity` needs an `rc/2` task edition, which `publish task` does not write.
 
 ### Tests
 
