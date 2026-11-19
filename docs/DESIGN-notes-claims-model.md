@@ -221,7 +221,7 @@ read from the key's own log (wire-format note §7). It is in force once it chain
 Restoring what a revocation cut is not possible in-band, because the two holders of a key are
 indistinguishable. There is no in-band recovery for a bare key in 1.0. A recovery commitment made when the key
 is created is a possible later extension (additive, so a MINOR release); it is not specified. For identities,
-see the fixed-root identity note §1: recovery there is a new identity plus a second controller subject on resources.
+see the fixed-root identity note §1: recovery there is a new identity plus an independent second controller subject on resources (fixed-root identity note §8).
 
 ## 5. Authorship, priority and observation
 

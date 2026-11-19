@@ -42,8 +42,9 @@ holding R can sign grants, cuts and forks that look exactly like the owner's, on
 branch and with any timestamp. A prefix-preserving root revoke would trust R's own
 statement about where the compromise began, which is the statement a compromise makes
 worthless. The delegates' bytes survive as bare-key statements; nothing "as I" passes.
-Recovery is a new identity plus resources that list a second controller subject
-(§8). Issuer tools must say this before an inception is signed.
+Recovery is a new identity plus resources that list an independent second controller
+subject (§8); a resource controlled by I alone does not survive it. Issuer tools must say
+this before an inception is signed.
 
 This is not proof of a person, institutional membership, unique operator, independent
 experiment, truth, or freshness. Public key/identity associations are correlatable.
@@ -906,11 +907,30 @@ prefix-preserving cut needs L known at cut time, so it cannot be pre-signed. The
 must therefore be reachable within the exposure window the hub tolerates. That, rather
 than fear of compromise, is what pulls a root toward being kept warm.
 
-**Hub resources should list a second controller subject.** If a resource's controllers
-are `{identity: I}` alone, re-accepting it after a compromise of R is authorized by
-"predecessor controllers" (§2.1), which then includes the thief. A second subject (a
-second identity, or a key held apart) under a controller `rule` gives the resource layer
-the threshold this profile does not have.
+**Hub resources should list an independent second controller subject.** If a resource's
+controllers are `{identity: I}` alone, a compromise of R ends it: after R's `key_compromise`
+revocation every edition approved only as I stops counting (above: the revocation is
+retroactive), the resource has no authorized controller left, and recovery is a successor
+resource (claims-model note §8). Its members' own statements are untouched; only the edition
+chain is redone. A second subject (a second identity, or a key held apart) changes that, and
+what it buys depends on the rule:
+
+* **`any_one`** gives *recovery*, not prevention. A thief holding R can fork the resource and
+  rewrite its controllers on that branch, but once R is revoked nothing the thief did as I
+  counts, and the second subject alone publishes the next edition (from the genesis, or from
+  the last edition it also approved), dropping I (naming a successor identity in its place is
+  KNOWN-LIMITS L-21: a key can be named today). The cost is that
+  either subject alone can also capture the resource, so a theft of the *second* subject is
+  answered by that key's own revocation with `last_good`.
+* **`k_of_n` with k = 2** gives *prevention*: no single stolen subject authorizes an edition.
+  The cost is that losing either subject freezes the resource, and so does R's revocation,
+  which voids I's approvals. Two of three, with the third subject held cold, tolerates one
+  loss or one compromise and keeps the editions the other two approved.
+
+**The second subject must be independent of the first**: a different custodian, or at least
+a different device and seed. A second identity derived from the same seed and passphrase, or
+a key file on the machine that holds R's delegate keys, shares the loss and the compromise
+and buys nothing.
 
 **Co-maintenance.** There are two honest patterns: shared custody of one root file (§1
 treats a restored copy as the same root), or one identity per maintainer with every hub

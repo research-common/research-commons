@@ -54,7 +54,7 @@ One line each: `authored` type, what it derives from which datasets (by digest o
 the grade a re-derivation could reach (T0 byte-identical · T1 under a comparator · T2 rubric review), status.
 
 ## Collections
-For each: name, controllers and rule (list a second controller subject), selection (`curated` · `rule-based` ·
+For each: name, controllers and rule (and who holds each subject: see R13), selection (`curated` · `rule-based` ·
 `completeness` with class, source and window), member roles, and how members are added.
 
 ## Holdbacks
@@ -88,7 +88,7 @@ than ok.
 | R10 disclosures | Sampling is declared where a result is statistical; replication says `bytes` only when the deterministic public source is named; shelf life is set where the data ages. Declared values are shown beside what a reader computes, never in place of it. |
 | R11 DQ disclosure | Known duplicates, gaps and migrations are disclosed with the fix or erratum. Publishing known-bad bytes needs a stated reason. |
 | R12 determinism | Workflows pin their inputs and environment, sort outputs, keep wall-clock time out of outputs, and use no network in steps (a workflow that needs the network publishes `observed`). |
-| R13 signing & control | The doc names who signs: a bare key, or an identity and the grant it acts under. A key signs for one audience only. Collections list a second controller subject, so a lost or stolen root does not end or capture them. |
+| R13 signing & control | The doc names who signs: a bare key, or an identity and the grant it acts under. A key signs for one audience only. Collections say what a lost or stolen root does to them: controlled by one identity alone, a root compromise ends the collection (recovery is a successor collection, stated in the doc); with an independent second subject (a different custodian, or a different device and seed) under `any_one`, the other subject recovers it after the root is revoked; under `k_of_n` 2 (best: 2 of 3 with one subject cold) no single theft captures it. A second subject on the same seed is not independent. |
 | R14 gaps upstream | Anything the format can't express yet is recorded as a tool issue, not worked around silently. |
 
 **Verdict:** `ready` (publishable once the human decisions land) · `ready-with-fixes` (list them) · `not-yet`

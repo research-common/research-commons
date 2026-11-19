@@ -48,6 +48,12 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ### Changed
 
+- The advice to list a second controller subject on a resource now says what it buys. A resource controlled by one
+  identity alone does not survive a compromise of its root: the root's revocation voids every edition approved only as
+  that identity, and recovery is a successor resource. An independent second subject under `any_one` recovers the
+  resource after the root is revoked (and could capture it alone); under `k_of_n` 2 no single stolen subject can, at
+  the price of freezing on any one loss. A second subject on the same seed is not independent. Fixed-root identity
+  note §8 (and §1), the claims-model note §4.1 pointer, and COMMONS-TEMPLATE R13 and its Collections line.
 - Help text layout: `commons help`, `help <command>`, `help exits` and `help outputs` print a dedicated page instead of
   the generic key/value listing: the commands grouped by purpose, a short usage line (`commons publish [options]`) for a
   command with many options, options in aligned columns with their value placeholders (`--key <file>`), the options of
