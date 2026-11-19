@@ -28,6 +28,14 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   that claims Bitcoin quality without a network and height no longer meets a deadline. Neither is reachable with the
   checks the reference CLI ships; found by the new property tests. No byte, identifier, exit code or `--json` member name
   changes.
+- An `observed` statement's disclosures are now shown. `licence`, `replication`, `availability`, `sampling`,
+  `shelf_life_days`, `pre_registration` and the other single-party fields an `observed` signs were never displayed: `show`
+  of a blob with only observations read `licence: unknown` and `replication: undeclared`. Such a blob now shows the value
+  its counted observations agree on, `contested` (each value with its signer) when they differ, undeclared when none
+  sets it, and `unknown` with the reason when the reader's observation selection is unmet. One helper serves both this
+  display and the input summary of a derived result, so the two cannot disagree; a blob that also has a counted `authored`
+  statement is unchanged. Read-side only: no signed byte, exit code, command, flag or `--json` member name changes, and a
+  disclosure still never moves a grade or an exit.
 
 ### Tests
 

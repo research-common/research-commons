@@ -241,6 +241,14 @@ one key's `authored` or `observed` statement, chosen by the rules below. Rival v
 listed with their signers and never silently dropped. A consumer that needs certainty pins a specific
 statement rather than relying on the default.
 
+**A blob with only observations.** When no counted `authored` statement exists for a blob, its single-party
+fields come from its counted `observed` statements, by the rule the input summary of a derived result already uses
+(§7): the value those observations agree on is the default, with the statements that set it; values that differ make
+the field `contested`, each listed with its signer; a field no observation sets is undeclared (a missing licence is
+`unknown`). A reader's observation selection narrows which observations are read, and an unmet one leaves the field
+unknown, saying why. A blob with a counted `authored` statement keeps the rules above; its observations' values are
+not mixed in. These disclosures are shown beside the grade like any other and never move an exit (I6).
+
 **A forked log.** On an uncleared fork of a key's log (wire-format note §7), every `authored` statement of
 that key on a blob that no later statement of the key amends is current, whichever branch it is on. Current
 statements with the same provenance are one claim, and a field on which they disagree is `contested` on that
