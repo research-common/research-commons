@@ -23,6 +23,14 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ### Fixed
 
+- A collection whose genesis names an identity and a plain key (`{identity: I}`, `{key: K}`) can now advance under
+  `k_of_n`: a bare key's `publish --draft` of an `edition` or `withdraw_approval` of a resource whose genesis is `rc/2` is
+  written `rc/2` with the body marker `{}` and no actor (identity design note sections 2.2 and 2.3), so it approves the
+  same edition as an identity's approval of the same draft. Before, it was written `rc/1`, a different edition id, and a
+  `k_of_n` collection with an identity controller could never get past its genesis. The major follows the genesis this
+  store holds; an edition of a resource whose genesis is not held is refused (exit 3, nothing signed). Editions of
+  resources whose genesis is `rc/1`, and a controller change to plain key strings, are unchanged, byte for byte `rc/1`.
+  No change to the reader, an existing signed byte or vector, an exit code or a command.
 - Task readiness no longer passes on a reader-supplied check that answers outside its contract: a rubric evaluator that
   returns anything but `ok`, `fail` or `unchecked` now reads `unchecked` (as edition rules already did), and a time bound
   that claims Bitcoin quality without a network and height no longer meets a deadline. Neither is reachable with the

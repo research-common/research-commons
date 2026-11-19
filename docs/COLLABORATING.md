@@ -109,6 +109,9 @@ subjects in a sorted list): any key can sign it with `publish --draft`, and it i
 published by a key acting for the identity (`publish --draft <edition.json> --as <identity> --grant <grant>`) under a
 grant from the identity's root that carries `edition` for that collection: `identity grant` with
 `--permissions '[{"kind":"edition","targets":{"resources":["<genesis id>"]}}]'`, signed after the genesis exists.
+A plain key listed beside the identity (`{"key": ...}`) approves the same draft bare (`publish --draft <edition.json>`):
+its edition is written `rc/2`, marker only, so under `k_of_n` the identity's approval and the key's approval of one draft
+are approvals of one edition.
 Changing an existing collection's controllers to name an identity is not possible from the CLI (KNOWN-LIMITS L-21): the
 CLI refuses an edition whose `controllers` name an identity, so create the identity-controlled collection from the start.
 
