@@ -45,6 +45,16 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   statement is unchanged. Read-side only: no signed byte, exit code, command, flag or `--json` member name changes, and a
   disclosure still never moves a grade or an exit.
 
+- Output and help wording from the first end-to-end run, text only (no exit code, flag, `--json` member or signed byte
+  changes): a clean `pull`, `hub check` or `push` now prints `objects: none refused, labelled or undecided` instead of
+  `objects: (none)` beside `admitted: 1` (the list carries refused, labelled and undecided rows only; the JSON `objects: []`
+  is unchanged); the `publish`, `identity new` and `identity grant` help say a dry run's id is the id the real run signs
+  only with the same `--ts` and while the signer's log has not moved (the id commits to `prev` and `seq`); and
+  `push --store` still exits 2 with the same problem type but its `next` names the reason (push runs from inside a git
+  checkout of the hub; a store kept elsewhere is pulled into one first). GETTING-STARTED section 4 now says a script
+  reads exit 3 as "could not check", the expected answer for an output nobody re-derived, and that it moves to 0 when an
+  independent key re-derives it.
+
 ### Tests
 
 - Pins the bytes of a typed-controller genesis (the `rc/2` line and id a bare key signs for `{identity, key}` controllers,
