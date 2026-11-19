@@ -116,6 +116,10 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ### Changed
 
+- The exact-bytes class now says what it fits. Two exact-bytes observations at one block hash with different bytes
+  contradict each other, so a filtered extraction from a block (one contract's logs over a range, a parsed table) is
+  published as `source` or `method`, or as one blob per referent, never as two exact-bytes blobs at one hash. Claims-model
+  note §5.3.1 and COMMONS-TEMPLATE R1. Documentation only: the reader is unchanged.
 - The advice to list a second controller subject on a resource now says what it buys. A resource controlled by one
   identity alone does not survive a compromise of its root: the root's revocation voids every edition approved only as
   that identity, and recovery is a successor resource. An independent second subject under `any_one` recovers the
