@@ -66,6 +66,9 @@ type Command struct {
 	// Store: the command reads a store. The registry discovers it, checks its marker and its policy file, and
 	// opens it (journal replay, storage note §3.4) before Run.
 	Store bool
+	// NoStoreHint, for a command that reads no store, is the command's own reason --store does not apply: it
+	// replaces the generic "drop --store" next line (the problem's type, title and exit are unchanged).
+	NoStoreHint string
 	// ReaderPolicy: the command answers under the reader policy (--policy <file>, else $COMMONS_POLICY). The
 	// registry adds the --policy option and parses the file before Run; a command without it rejects
 	// --policy and ignores the environment variable.

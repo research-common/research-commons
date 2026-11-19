@@ -684,3 +684,19 @@ func TestPushTransport(t *testing.T) {
 		}
 	})
 }
+
+// TestPushStoreFlagNamesTheReason: push runs from inside a git checkout of the hub, so --store does not apply. The
+// refusal keeps its type and exit 2, and its next line names why instead of the generic "drop --store"; another
+// command that reads no store keeps the generic line.
+func TestPushStoreFlagNamesTheReason(t *testing.T) {
+	w := newWorld(t)
+	r := w.run("push", "--store", w.root, "--json")
+	if r.code != 2 || !strings.Contains(r.stdout, "urn:research-commons:problem:unknown-option") ||
+		!strings.Contains(r.stdout, "git checkout of the hub") || !strings.Contains(r.stdout, "pulled into a hub checkout first") {
+		t.Fatalf("push --store: exit %d\n%s%s", r.code, r.stdout, r.stderr)
+	}
+	r = w.run("key", "sign", "--store", w.root, "--json")
+	if r.code != 2 || !strings.Contains(r.stdout, `"next":"drop --store"`) {
+		t.Fatalf("generic line changed: exit %d\n%s%s", r.code, r.stdout, r.stderr)
+	}
+}

@@ -346,8 +346,12 @@ func dispatch(argv []string, env *Env) (*Obj, int, error) {
 		ctx.Store = s
 	} else {
 		if _, ok := p.flags["store"]; ok {
+			next := "drop --store"
+			if cmd.NoStoreHint != "" {
+				next = cmd.NoStoreHint
+			}
 			return nil, 0, usage("unknown-option", "this command reads no store", "--store does not apply; nothing was done",
-				"option --store", "drop --store", "")
+				"option --store", next, "")
 		}
 		if cmd.Before != nil {
 			if prob := cmd.Before(ctx); prob != nil {
