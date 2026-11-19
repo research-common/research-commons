@@ -320,8 +320,24 @@ func evidenceObj(e btctime.Evidence) *Obj {
 	if e.Why != "" {
 		o.set("why", textV(e.Why))
 	}
+	chainFields(o, e)
 	o.set("policy_fingerprint", refV(e.PolicyFingerprint)).set("verifier_version", textV(e.VerifierVersion))
 	return o
+}
+
+// chainFields adds a verified bound's chain position (bitcoin-time note §9: the bound is a record): the block's height
+// and hash, its header time labelled miner-reported (display only, never an ordering key), the confirmations in the
+// reader's view and, for a view no longer fresh, the sync it rests on. Nothing for any other state.
+func chainFields(o *Obj, e btctime.Evidence) {
+	if e.State != btctime.StateVerified && e.State != btctime.StateVerifiedHistorical {
+		return
+	}
+	o.set("network", textV(e.Network)).set("block_height", intV(e.BlockHeight)).set("block_hash", refV(e.BlockHash)).
+		set("header_time_miner_reported", refV(time.Unix(int64(e.HeaderTime), 0).UTC().Format(time.RFC3339))).
+		set("confirmations", intV(e.Confirmations)).set("chain_validation", textV(e.ChainValidation))
+	if !e.AsOf.IsZero() {
+		o.set("as_of", refV(e.AsOf.UTC().Format(time.RFC3339)))
+	}
 }
 
 // --- verify ------------------------------------------------------------------------------------------------

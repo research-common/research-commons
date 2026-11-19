@@ -52,6 +52,12 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   gains that one member on statement views; an `anchors` line keeps its own `time` evidence member, resource views
   (an edition's approvals list) are unchanged, and no signed byte, exit code, command or flag changes: the bound is a
   disclosure and `verify` exits as it did.
+- A verified time bound now shows where it sits on the chain. Beside `quality: bitcoin` and `time_state: verified`, the bound
+  (on a statement, on an artifact's claim, and on an `anchors` line's own evidence) carries `network`, `block_height`,
+  `block_hash`, `header_time_miner_reported` (display only, never an ordering key), `confirmations`, `chain_validation` and,
+  on a view that is no longer fresh, `as_of`: the record the bitcoin-time design note (section 9) lists. Before, a reader saw
+  `verified` with no height. Shown only for `verified` and `verified-historical`; no other state, exit code or signed byte
+  changes.
 
 - Output and help wording from the first end-to-end run, text only (no exit code, flag, `--json` member or signed byte
   changes): a clean `pull`, `hub check` or `push` now prints `objects: none refused, labelled or undecided` instead of

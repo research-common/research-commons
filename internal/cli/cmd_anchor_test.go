@@ -141,6 +141,12 @@ func TestAnchorHeadersSyncVerifies(t *testing.T) {
 	if r := c.run("show", x, "--json"); !strings.Contains(r.stdout, `"quality":"bitcoin"`) {
 		t.Fatalf("show after sync: %s", r.stdout)
 	}
+	// a verified bound is a record (bitcoin-time note §9): its chain position is shown beside the quality, on the
+	// claim's time and on the anchors line's own evidence; K1's anchor attests height 10 on a 30-header view
+	if r := c.run("show", x, "--json"); !strings.Contains(r.stdout, `"block_height":10`) || !strings.Contains(r.stdout, `"confirmations":21`) ||
+		!strings.Contains(r.stdout, `"header_time_miner_reported":`) || !strings.Contains(r.stdout, `"chain_validation":"headers-spv"`) {
+		t.Fatalf("show after sync: no chain position on a verified bound: %s", r.stdout)
+	}
 	tc, _ := jsonOf(t, c.run("explain", x, "--json")).Members["time_context"].(canon.String)
 	if !strings.Contains(string(tc), "chain view (cli-test, tip 30") || !strings.Contains(string(tc), "fresh") {
 		t.Fatalf("explain time context: %s", tc)

@@ -282,6 +282,7 @@ func (v *view) boundObj(b resolve.Bound) *Obj {
 		o.set("anchor", refV(b.Anchor))
 		if e, ok := v.anchorEvidence(b.Anchor); ok {
 			o.set("time_state", tokV(tok(string(e.State))))
+			chainFields(o, e)
 		}
 	}
 	return o
