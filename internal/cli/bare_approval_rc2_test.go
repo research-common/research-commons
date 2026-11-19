@@ -282,9 +282,10 @@ func TestBareWithdrawOfTypedResource(t *testing.T) {
 
 // TestBareEditionOfTypedResourceEdges: what a bare key's edition of an rc/2 resource does at the edges. A controller
 // change to plain key strings (the rc/1 form, which the rc/2 schema does not read) stays rc/1 as before; a typed
-// controller change is written marker-only; a draft that already carries the marker is refused (the writer adds
-// it); an edition of a resource whose genesis is not held is refused, exit 3, naming the resource: its major cannot
-// be guessed. Every refusal leaves the store byte-identical.
+// controller change (keys, or an identity beside a key) is written marker-only; a draft that already carries the
+// marker is refused (the writer adds it); an edition of a resource whose genesis is not held is refused, exit 3,
+// naming the resource: its major cannot be guessed; --prepare (external signing) is for acts only and refuses a bare
+// edition as before. Every refusal leaves the store byte-identical.
 func TestBareEditionOfTypedResourceEdges(t *testing.T) {
 	m := newMixedCollection(t, wire.AlgEd25519, `{"any_one":true}`)
 	draft := func(name, resource, contents, extra string) string {
@@ -301,6 +302,11 @@ func TestBareEditionOfTypedResourceEdges(t *testing.T) {
 	if r.code != ExitCouldNot || !strings.Contains(r.stdout, "problem:resource-not-held") || !strings.Contains(r.stdout, other) {
 		t.Fatalf("an edition of a resource not held: %d %s", r.code, r.stdout)
 	}
+	// external signing prepares only an act for an identity: a bare edition is not prepared, so it has no other form
+	r = runIn(m.backup.store, nil, "publish", "--draft", draft("x.json", m.gid, "", ""), "--prepare", filepath.Join(t.TempDir(), "x.pkg"), "--signer", m.backup.signer, "--json")
+	if r.code != ExitDidNotStart || !strings.Contains(r.stdout, "publish --prepare needs --as") {
+		t.Fatalf("a bare edition prepared: %d %s", r.code, r.stdout)
+	}
 	if storeBytes(t, m.backup.store) != before {
 		t.Fatal("a refused edition changed the store")
 	}
@@ -311,4 +317,12 @@ func TestBareEditionOfTypedResourceEdges(t *testing.T) {
 	}
 	typed := firstID(t, m.backup.ok("publish", "--draft", draft("t.json", m.gid, `,"controllers":[{"key":"`+m.backup.signer+`"}],"rule":{"any_one":true}`, "")))
 	markerOnly(t, lineOf(t, m.backup.store, typed))
+	// a typed controller change naming an identity is written too: the resource is already identity-aware (its
+	// genesis is rc/2); a key-controlled collection's edition naming an identity is still refused (KNOWN-LIMITS L-21)
+	ctrl := []string{`{"identity":"` + m.ident + `"}`, `{"key":"` + m.backup.signer + `"}`}
+	if ctrl[0] > ctrl[1] {
+		ctrl[0], ctrl[1] = ctrl[1], ctrl[0]
+	}
+	ident := firstID(t, m.backup.ok("publish", "--draft", draft("i.json", m.gid, `,"controllers":[`+strings.Join(ctrl, ",")+`],"rule":{"k_of_n":{"k":2}}`, "")))
+	markerOnly(t, lineOf(t, m.backup.store, ident))
 }
