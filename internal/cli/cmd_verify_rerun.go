@@ -203,7 +203,9 @@ type rerunPin struct {
 }
 
 // selectPin picks the authored claim whose derivation the re-run checks: current counted authored statements
-// on the blob with full provenance, sorted by id; the first is taken and the others are named.
+// on the blob with full provenance, sorted by id; the first carrying an environment record is taken (else the
+// first by id) and the others are named. A claim without an environment record re-asserts a derivation and pins
+// no environment to re-run under (the resolver counts one key's claims of one output as one run, the same way).
 func (v *view) selectPin(d string) (*rerunPin, []string) {
 	a := v.r.Artifact(d)
 	var ids []string
@@ -218,20 +220,34 @@ func (v *view) selectPin(d string) (*rerunPin, []string) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	p, ok := v.r.Statement(ids[0])
-	if !ok {
+	pick := func(id string) *rerunPin {
+		p, ok := v.r.Statement(id)
+		if !ok {
+			return nil
+		}
+		pv, _ := p.St.Body.Get("provenance")
+		po, _ := pv.(*canon.Object)
+		if po == nil {
+			return nil
+		}
+		wf, _ := po.Members["workflow"].(canon.String)
+		env, _ := po.Members["environment"].(*canon.Object)
+		return &rerunPin{statement: p.St.ID, signer: p.St.Signer, workflow: string(wf), env: env}
+	}
+	pin, why := pick(ids[0]), "the first by id"
+	if pin == nil {
 		return nil, nil
 	}
-	pv, _ := p.St.Body.Get("provenance")
-	po, _ := pv.(*canon.Object)
-	if po == nil {
-		return nil, nil
+	if pin.env == nil {
+		for _, id := range ids[1:] {
+			if q := pick(id); q != nil && q.env != nil {
+				pin, why = q, "the first by id carrying an environment record"
+				break
+			}
+		}
 	}
-	wf, _ := po.Members["workflow"].(canon.String)
-	env, _ := po.Members["environment"].(*canon.Object)
-	pin := &rerunPin{statement: p.St.ID, signer: p.St.Signer, workflow: string(wf), env: env}
 	if len(ids) > 1 {
-		pin.note = "several authored claims pin this blob; the re-run checks " + ids[0] + " (the first by id); name another with commons verify <id>"
+		pin.note = "several authored claims pin this blob; the re-run checks " + pin.statement + " (" + why + "); name another with commons verify <id>"
 	}
 	return pin, ids
 }

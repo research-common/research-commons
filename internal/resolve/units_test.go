@@ -177,12 +177,19 @@ func TestIdentityUnitDerivationGroup(t *testing.T) {
 		}
 	}, unitsOpts(f)...)
 
-	// I's same-key successor does not retire A0 from the group (same-key ancestry amends nothing for I), an
-	// explicit amendment does.
+	// I's same-key successor does not retire A0 from I's claim (same-key ancestry amends nothing for I), an
+	// explicit amendment does. Both stay current, but one key's two claims of the same output are one run, not
+	// a re-derivation: only a `reproduced` adds a run of the same key.
 	w.authored("A1", "K1", "X", "prov", []string{"wf", "in"})
 	f.set(w.ids, "A1", policy.ActorEligible)
-	if g := w.store(nil, unitsOpts(f)...).Artifact(dig("X")).Group; g == nil || len(g.Runs) != 3 {
-		t.Fatalf("same-key ancestry retired an identity run: %+v", g)
+	a := w.store(nil, unitsOpts(f)...).Artifact(dig("X"))
+	both := []string{w.ids["A0"], w.ids["A1"]}
+	slices.Sort(both)
+	if !slices.ContainsFunc(a.Claims, func(c *Claim) bool { return c.Subject == IdentitySubject(actorI) && slices.Equal(c.Current, both) }) {
+		t.Fatalf("same-key ancestry retired an identity claim: %+v", a.Claims)
+	}
+	if g := a.Group; g == nil || len(g.Runs) != 2 {
+		t.Fatalf("one key's two current claims of one output read as two runs: %+v", g)
 	}
 	w.authored("A2", "K2", "X", "prov", []string{"wf", "in"}, wire.IdentityCrit, amendsBody(w.ids["A0"], w.ids["A1"]))
 	f.set(w.ids, "A2", policy.ActorEligible)
@@ -392,4 +399,81 @@ func TestIdentityAuthorshipSignedRC2(t *testing.T) {
 	if b.State != NoClaim || !strings.Contains(b.Render(), "unknown (identity profile not active)") {
 		t.Fatalf("hook absent:\n%s", b.Render())
 	}
+}
+
+// TestOneKeyOneAuthoredRun: a key contributes at most one `authored` run per output to a derivation group, whatever
+// the context (bare, or for an identity): its bare claim from the run plus its identity-context claim of the same
+// bytes and provenance re-assert one derivation, they do not re-run it, so the output is `not re-derived` and
+// verify exits 3 (I4). The run kept is the one carrying an environment record. Controls: two different keys (one
+// bare, one for I) are two runs (T0, exit 0); the same key's own `reproduced` is still a second run ("re-derived by
+// its author only", T0, exit 0). A regression for C-core-25b's "the author's own `reproduced` is a second run": a
+// re-claim is not one.
+func TestOneKeyOneAuthoredRun(t *testing.T) {
+	env := obj("image_digest", dig("img"), "platform", "linux/amd64")
+	prov := obj("workflow", dig("W"), "inputs", []string{dig("I")}, "environment", env)
+
+	// the D5 shape: K's bare claim (with environment) and K's claim for I (no environment), same bytes + provenance
+	w := newWorld(t)
+	w.workflow("WA", "W", "bytes", "")
+	w.authored("K0", "K", "X", "provenance", prov)
+	w.authored("KI", "K", "X", "prov", []string{"W", "I"}, wire.IdentityCrit, canon.Value(obj()))
+	f := &actorFake{}
+	f.set(w.ids, "KI", policy.ActorEligible)
+	sampledOrderArtifact(t, w, "X", func(a *Artifact) {
+		if a.Group == nil || len(a.Group.Runs) != 1 || a.Group.Runs[0].Statement != w.ids["K0"] {
+			t.Fatalf("one key's two authored claims read as several runs, or kept the one without an environment: %+v\n%s", a.Group, a.Render())
+		}
+		if a.Step.Why != NotRederived {
+			t.Fatalf("step %s\n%s", a.Step, a.Render())
+		}
+		has(t, a.Render(), "1 authored claim not counted as a further run")
+		wantExit(t, a, 3, "derivation: not re-derived")
+	}, unitsOpts(f)...)
+	if code, why := w.store(nil, unitsOpts(f)...).Verify(dig("X")); code != 3 || !strings.Contains(strings.Join(why, ";"), "not re-derived") {
+		t.Fatalf("Verify %d %v", code, why)
+	}
+
+	// control: two DIFFERENT keys, one bare and one for I, are two runs: T0, exit 0 (unchanged)
+	w = newWorld(t)
+	w.workflow("WA", "W", "bytes", "")
+	w.authored("K0", "K", "X", "provenance", prov)
+	w.authored("JI", "J", "X", "prov", []string{"W", "I"}, wire.IdentityCrit, canon.Value(obj()))
+	f = &actorFake{}
+	f.set(w.ids, "JI", policy.ActorEligible)
+	sampledOrderArtifact(t, w, "X", func(a *Artifact) {
+		if a.Group == nil || len(a.Group.Runs) != 2 || a.Step.Tier != "T0" {
+			t.Fatalf("two keys: %+v\n%s", a.Group, a.Render())
+		}
+		hasNot(t, a.Render(), "not counted as a further run")
+		wantExit(t, a, 0, "")
+	}, unitsOpts(f)...)
+
+	// control: the same key bare plus its own `reproduced` is still a second run (unchanged)
+	w = newWorld(t)
+	w.workflow("WA", "W", "bytes", "")
+	w.authored("K0", "K", "X", "provenance", prov)
+	w.sign("KR", "K", "reproduced", obj("of", w.ids["K0"], "result", "match", "content", contentOf("X"), "provenance", prov))
+	everyOrderArtifact(t, w, "X", func(a *Artifact) {
+		if a.Group == nil || len(a.Group.Runs) != 2 || a.Step.Tier != "T0" {
+			t.Fatalf("own reproduced: %+v\n%s", a.Group, a.Render())
+		}
+		has(t, a.Render(), "re-derived by its author only")
+		wantExit(t, a, 0, "")
+	})
+
+	// the same key bare + for I + its own `reproduced`: the two authored are one run, the reproduced the second
+	w = newWorld(t)
+	w.workflow("WA", "W", "bytes", "")
+	w.authored("K0", "K", "X", "provenance", prov)
+	w.authored("KI", "K", "X", "prov", []string{"W", "I"}, wire.IdentityCrit, canon.Value(obj()))
+	w.sign("KR", "K", "reproduced", obj("of", w.ids["K0"], "result", "match", "content", contentOf("X"), "provenance", prov))
+	f = &actorFake{}
+	f.set(w.ids, "KI", policy.ActorEligible)
+	sampledOrderArtifact(t, w, "X", func(a *Artifact) {
+		if a.Group == nil || len(a.Group.Runs) != 2 || a.Step.Tier != "T0" {
+			t.Fatalf("bare + for I + reproduced: %+v\n%s", a.Group, a.Render())
+		}
+		has(t, a.Render(), "re-derived by its author only")
+		wantExit(t, a, 0, "")
+	}, unitsOpts(f)...)
 }

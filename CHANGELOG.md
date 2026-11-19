@@ -68,6 +68,14 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   checkout of the hub; a store kept elsewhere is pulled into one first). GETTING-STARTED section 4 now says a script
   reads exit 3 as "could not check", the expected answer for an output nobody re-derived, and that it moves to 0 when an
   independent key re-derives it.
+- One key's two `authored` claims of the same output under the same provenance no longer read as a re-derivation. A key's
+  bare claim from `run --publish` plus its own `publish --as I --grant G` of the same bytes and provenance counted as two
+  runs, so the output read T0 and `verify` exited 0 though nothing was re-run. Within a derivation group a key now
+  contributes at most one `authored` run per output, whether bare or for any identity (the one carrying an environment
+  record, else the lowest statement id); only a `reproduced` adds a further run of the same key, which still reads
+  "re-derived by its author only". The output reads `not re-derived`, `verify` exits 3, and `explain` says the extra claim
+  is not counted as a run. `verify --rerun` with several claims pinning a blob now re-runs the first by id that carries an
+  environment record (and says so) rather than the first by id. Two different keys are unchanged. No signed byte changes.
 
 ### Tests
 

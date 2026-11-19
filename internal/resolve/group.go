@@ -205,6 +205,7 @@ func (r *Resolver) group(p *Provenance, only string) *Group {
 			g.Derivers = append(g.Derivers, q.St.Signer)
 		}
 	}
+	collapsed := oneAuthoredRunPerKey(g)
 	for _, q := range r.byKind["reproduced"] {
 		if r.counts(q) && authored[str(q.St.Body, "of")] && provenance(q.St.Body).key() == p.key() {
 			g.Runs = append(g.Runs, Run{Signer: q.St.Signer, Statement: q.St.ID, Kind: "reproduced", Output: contentDigest(q.St.Body),
@@ -268,7 +269,49 @@ func (r *Resolver) group(p *Provenance, only string) *Group {
 	if len(g.Runs) > 1 && g.only == "" && !slices.ContainsFunc(g.Runs, func(run Run) bool { return run.Signer != g.Runs[0].Signer }) {
 		g.Explain = append(g.Explain, "re-derived by its author only: the re-run shows the bytes reproduce, not that anyone else got them (independence is claims §9.3's question)")
 	}
+	if collapsed > 0 && g.only == "" {
+		g.Explain = append(g.Explain, fmt.Sprintf("%s: a key's several current authored claims of one output under this provenance (its own or for an identity) are one run, not a re-derivation; only a `reproduced` adds a run (claims §5.2)",
+			plural(collapsed, "authored claim")+" not counted as a further run"))
+	}
 	return g
+}
+
+// oneAuthoredRunPerKey keeps at most one `authored` run per key and output: a key re-claiming bytes it already
+// claims (bare, for an identity, or on two branches of its log) re-asserts the derivation, it does not re-run it,
+// so only a `reproduced` adds a further run of the same key (claims §5.2, §13: the author's own `reproduced` is a
+// second run). The run kept is the one carrying an environment record, else the lowest statement id. It returns
+// how many authored runs it folded away.
+func oneAuthoredRunPerKey(g *Group) int {
+	keep := map[string]int{}
+	var out []Run
+	for _, run := range g.Runs {
+		if run.Kind != "authored" {
+			out = append(out, run)
+			continue
+		}
+		k := run.Signer + "|" + run.Output
+		i, seen := keep[k]
+		if !seen {
+			keep[k] = len(out)
+			out = append(out, run)
+			continue
+		}
+		if preferRun(run, out[i]) {
+			out[i] = run
+		}
+	}
+	n := len(g.Runs) - len(out)
+	g.Runs = out
+	return n
+}
+
+// preferRun reports whether authored run a is kept over b for the same key and output: an environment record
+// first, then the lower statement id.
+func preferRun(a, b Run) bool {
+	if (a.Env != "") != (b.Env != "") {
+		return a.Env != ""
+	}
+	return a.Statement < b.Statement
 }
 
 // amended reports whether a later counted `authored` of the same key on the same blob follows q.

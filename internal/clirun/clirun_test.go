@@ -329,3 +329,48 @@ func TestCorroborationRerun(t *testing.T) {
 		t.Fatalf("a diverging re-run of a corroborated result: %d %s", d.code, d.stdout)
 	}
 }
+
+// TestRerunPicksTheClaimWithAnEnvironment: several current authored claims pin one blob and the first by id carries
+// no environment record (a claim re-asserting the derivation, not a run): the re-run checks the claim that carries
+// one, says which and why, and matches in the pinned environment (exit 0) rather than staging without a pin.
+func TestRerunPicksTheClaimWithAnEnvironment(t *testing.T) {
+	p := newPinned(t)
+	s, err := store.Open(p.root, store.Options{NoSync: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := s.Statements()
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := wire.Read(st[p.resultStmt])
+	if err != nil {
+		t.Fatal(err)
+	}
+	pv, _ := parsed.Body.Get("provenance")
+	po := pv.(*canon.Object)
+	bare := object("workflow", po.Members["workflow"], "inputs", po.Members["inputs"])
+	content, _ := parsed.Body.Get("content")
+	// another key's claim of the same bytes and provenance with no environment; sign variants until its id sorts
+	// before the pinned run's, so "the first by id" alone would pick it
+	var line []byte
+	for i := 0; ; i++ {
+		k := wire.Ed25519Key{Seed: func() []byte { h := sha256.Sum256([]byte(fmt.Sprintf("clirun re-asserter %d", i))); return h[:] }()}
+		l, id := wire.Sign(wire.Draft{Kind: "authored", Seq: 0, TS: "2026-10-16T02:00:00Z", Body: object(
+			"type", canon.String("dataset"), "content", content, "provenance", bare)}, k)
+		if id < p.resultStmt {
+			line = l
+			break
+		}
+	}
+	if _, err := s.Commit("publish", [][]byte{line}, nil); err != nil {
+		t.Fatal(err)
+	}
+	r := p.verify(&Bridge{Runner: fake(catStep)}, p.output, "--rerun", "--exec-policy", p.policy)
+	if r.code != 0 || !strings.Contains(r.stdout, `"state":"match"`) {
+		t.Fatalf("re-run: %d %s", r.code, r.stdout)
+	}
+	if !strings.Contains(r.stdout, "the re-run checks "+p.resultStmt+" (the first by id carrying an environment record)") {
+		t.Fatalf("the re-run did not pick the claim with an environment record: %s", r.stdout)
+	}
+}

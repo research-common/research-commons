@@ -1,6 +1,9 @@
 package cli
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"os"
 	"strings"
 	"testing"
 
@@ -172,4 +175,71 @@ func TestIdentityCutLastGoodBareKeyLine(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestPublishAsReclaimIsNotARerun: one key's bare `authored` of a derived output (carrying an environment record)
+// plus its own identity-context `authored` of the same bytes and provenance is one run, not two: `verify` reads
+// `not re-derived` and exits 3, not T0 / exit 0 (I4). Control: the identity claim made by a DIFFERENT key is a
+// second run, T0, exit 0. Through the commands: identity new, identity grant, publish, publish --as.
+func TestPublishAsReclaimIsNotARerun(t *testing.T) {
+	for _, alg := range []string{wire.AlgEd25519, wire.AlgEIP191} {
+		t.Run(alg, func(t *testing.T) {
+			setup := func() (*idHome, *idHome, string, string, string, string) {
+				root, worker, ident, _, grant := idSetup(t, alg, `[{"kind":"authored","targets":{"any_content":true},"amend":"own"}]`)
+				wf := worker.file("wf.json", `{"step":"sum"}`)
+				in := worker.file("in.csv", "a,1\n")
+				worker.ok("publish", "--kind", "authored", "--type", "workflow", "--content", wf, "--licence", "CC0-1.0", "--replication", "bytes")
+				worker.ok("publish", "--kind", "authored", "--content", in, "--licence", "CC0-1.0")
+				wfd := fileDigest(t, wf)
+				ind := fileDigest(t, in)
+				return root, worker, ident, grant, wfd, ind
+			}
+			root, worker, ident, grant, wfd, ind := setup()
+			out := worker.file("out.csv", "a,1\n# derived\n")
+			withEnv := `{"workflow":"` + wfd + `","inputs":["` + ind + `"],"environment":{"image_digest":"sha256:` + strings.Repeat("d9", 32) + `","platform":"linux/amd64"}}`
+			bare := `{"workflow":"` + wfd + `","inputs":["` + ind + `"]}`
+			worker.ok("publish", "--kind", "authored", "--content", out, "--licence", "CC0-1.0", "--provenance", withEnv)
+			od := fileDigest(t, out)
+			if r := worker.read("verify", od); r.code != ExitCouldNot || !strings.Contains(r.stdout, "not re-derived") {
+				t.Fatalf("one bare run: %d %s", r.code, r.stdout)
+			}
+			worker.ok("publish", "--kind", "authored", "--content", out, "--licence", "CC0-1.0", "--provenance", bare, "--as", ident, "--grant", grant)
+			r := worker.read("verify", od)
+			if r.code != ExitCouldNot || !strings.Contains(r.stdout, "not re-derived") || strings.Contains(r.stdout, `"T0"`) {
+				t.Fatalf("one key bare + for its identity read as a re-derivation: %d %s", r.code, r.stdout)
+			}
+			if r := worker.read("explain", od); !strings.Contains(r.stdout, "not counted as a further run") {
+				t.Fatalf("explain does not say why: %s", r.stdout)
+			}
+			_ = root
+
+			// control: a different key (a second delegate of the identity) makes the identity claim: two runs, T0
+			root, worker, ident, _, wfd, ind = setup()
+			other := newIDHome(t, alg)
+			other.pullFrom(worker)
+			d2 := firstID(t, other.ok("publish", "--kind", "authored", "--content", other.file("o0", "other first line"), "--licence", "CC0-1.0"))
+			root.pullFrom(other)
+			g2 := string(root.ok("identity", "grant", "--identity", ident, "--delegate", other.signer, "--delegate-inception", d2, "--permissions", `[{"kind":"authored","targets":{"any_content":true},"amend":"own"}]`).Members["grant"].(canon.String))
+			other.pullFrom(root)
+			out = worker.file("out.csv", "a,1\n# derived\n")
+			withEnv = `{"workflow":"` + wfd + `","inputs":["` + ind + `"],"environment":{"image_digest":"sha256:` + strings.Repeat("d9", 32) + `","platform":"linux/amd64"}}`
+			bare = `{"workflow":"` + wfd + `","inputs":["` + ind + `"]}`
+			worker.ok("publish", "--kind", "authored", "--content", out, "--licence", "CC0-1.0", "--provenance", withEnv)
+			other.pullFrom(worker)
+			other.ok("publish", "--kind", "authored", "--content", other.file("out.csv", "a,1\n# derived\n"), "--licence", "CC0-1.0", "--provenance", bare, "--as", ident, "--grant", g2)
+			if r := other.read("verify", od); r.code != ExitOK || !strings.Contains(r.stdout, `"T0"`) {
+				t.Fatalf("two keys (one bare, one for I): %d %s", r.code, r.stdout)
+			}
+		})
+	}
+}
+
+func fileDigest(t *testing.T, path string) string {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := sha256.Sum256(b)
+	return "sha256:" + hex.EncodeToString(h[:])
 }
