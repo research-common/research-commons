@@ -59,6 +59,14 @@ Exit 0 means checked and passed: the statements held support the answer. Exit co
 1 checked and wrong, 2 did not start, 3 could not check, 4 nothing to re-run, 5 environment mismatch. Everything
 is stated "within statements you hold": nothing is claimed about statements this store never received.
 
+A script should read exit 3 as "could not check", not as failure. It is the expected answer for a derived output
+nobody else re-derived (grade `not re-derived`): the store holds nothing that could confirm or refute it yet. It
+moves to 0 when an independent key re-derives the output (and to 1 if the re-derivation disagrees). An observation
+that no second key has corroborated shows corroboration `unchecked`; `commons show <statement-id>` of the
+observation reports `corroborated n` once a second key corroborates it, but a verify of the bare blob digest of an
+observation can still exit 3 (`no authorship claim`), because an observation is not an authorship claim. Reserve
+"failed" for 1.
+
 ## 5. Pull into a second store
 
 ```bash
