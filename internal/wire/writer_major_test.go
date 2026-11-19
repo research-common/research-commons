@@ -98,7 +98,14 @@ func TestWriterReproducesSignedVectors(t *testing.T) {
 		// A typed-controller genesis is rc/2 but is written only through the explicit TypedGenesisDraft path:
 		// WriterMajor(genesis, false) stays rc/1, so the writer never picks the typed path by itself.
 		typedGenesis := p.Kind == "genesis" && p.RC == "rc/2"
-		if typedGenesis {
+		// A bare key's edition approval of an rc/2 resource is rc/2 marker-only (no actor), written only through the
+		// explicit MarkerOnlyDraft path: WriterMajor(edition, false) stays rc/1.
+		markerOnly := p.Kind == "edition" && p.RC == "rc/2" && actor == nil
+		if markerOnly {
+			if want != Major {
+				t.Fatalf("%s: WriterMajor %d for a marker-only edition; the marker-only path is explicit", p.Name, want)
+			}
+		} else if typedGenesis {
 			if want != Major || actor != nil {
 				t.Fatalf("%s: WriterMajor %d (actor %v) for a typed genesis; the typed path is explicit", p.Name, want, actor)
 			}
@@ -106,6 +113,10 @@ func TestWriterReproducesSignedVectors(t *testing.T) {
 			t.Fatalf("%s: WriterMajor %d for a vector in %s", p.Name, want, p.RC)
 		}
 		switch {
+		case markerOnly:
+			if d, err = MarkerOnlyDraft(d); err != nil {
+				t.Fatalf("%s: %v", p.Name, err)
+			}
 		case typedGenesis:
 			if d, err = TypedGenesisDraft(d); err != nil {
 				t.Fatalf("%s: %v", p.Name, err)

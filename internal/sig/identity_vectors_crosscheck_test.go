@@ -61,8 +61,8 @@ func TestSignedIdentityVectorsTwoImplementations(t *testing.T) {
 		}
 		cases = append(cases, c{x.Name, x.Signer, x.VerifiedString, x.Sig, step})
 	}
-	if nPos != 9 || len(cases) != 9+16 {
-		t.Fatalf("%d positives / %d cases of Ed25519, want 9 / 25", nPos, len(cases))
+	if nPos != 12 || len(cases) != 12+16 {
+		t.Fatalf("%d positives / %d cases of Ed25519, want 12 / 28", nPos, len(cases))
 	}
 	accepted, stockOnly := 0, 0
 	for i, x := range cases {

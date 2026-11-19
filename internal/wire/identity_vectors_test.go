@@ -236,13 +236,26 @@ func ivChain(chain string, root, work Key) []*ivPos {
 	// identity I. A raw-key statement: marker {}, no actor. Its id is a resource id.
 	gen := ivObj("type", "collection", "name", "vector", "controllers", canon.Array{ivObj("identity", inc.id)},
 		"rule", ivObj("any_one", true))
-	add("typed-genesis", "rc/2", work, ivSignEnv(ivDraft("rc/2", "genesis", 3, a2.id, true, gen, work), work, 2), "valid", "")
+	tg := add("typed-genesis", "rc/2", work, ivSignEnv(ivDraft("rc/2", "genesis", 3, a2.id, true, gen, work), work, 2), "valid", "")
 	cut := func(lg any) *canon.Object {
 		return ivObj("identity", inc.id, "grant", grant.id, "last_good", lg, "reason", "key_compromise")
 	}
 	c1 := add("cut-last-good", "rc/2", root, ivSignEnv(ivDraft("rc/2", "identity_cut", 2, grant.id, true, cut(a1.id), root), root, 2), "valid", "")
 	c2 := add("cut-null", "rc/2", root, ivSignEnv(ivDraft("rc/2", "identity_cut", 3, c1.id, true, cut(nil), root), root, 2), "valid", "")
-	add("revoke-key", "rc/1", root, ivSignEnv(ivDraft("rc/1", "revoke_key", 4, c2.id, false, ivObj("reason", "key_compromise"), root), root, 1), "valid", "")
+	rk := add("revoke-key", "rc/1", root, ivSignEnv(ivDraft("rc/1", "revoke_key", 4, c2.id, false, ivObj("reason", "key_compromise"), root), root, 1), "valid", "")
+	// A bare key's approval of an edition of the typed genesis (§2.3, §2.2), and the identity's approval of the same edition
+	// body under a grant that covers editions. Both carry the marker and the same body bytes, so both name ONE edition id;
+	// the first has no actor, the second x_actor_v1. The grant is a second root statement (seq 5, after the revoke_key: no
+	// existing entry's seq or prev moves); the reader holds no log, so vectors check representation only.
+	g2b := ivObj("identity", inc.id, "delegate", ivObj("key", work.Signer(), "inception", k0.id),
+		"permissions", canon.Array{ivObj("kind", "edition", "targets", ivObj("resources", canon.Array{canon.String(tg.id)}))})
+	grant2 := add("grant-edition", "rc/2", root, ivSignEnv(ivDraft("rc/2", "identity_grant", 5, rk.id, true, g2b, root), root, 2), "valid", "")
+	edBody := ivObj("resource", tg.id, "predecessors", canon.Array{canon.String(tg.id)},
+		"contents", ivObj("members", canon.Array{}, "selection", "curated"))
+	mo := add("typed-edition-marker-only", "rc/2", work, ivSignEnv(ivDraft("rc/2", "edition", 4, tg.id, true, edBody, work), work, 2), "valid", "")
+	ia := add("typed-edition-identity", "rc/2", work, ivSignEnv(setField(ivDraft("rc/2", "edition", 5, mo.id, true, edBody, work), ActorField,
+		ivObj("identity", inc.id, "grant", grant2.id)), work, 2), "valid", "")
+	ia.actorI, ia.actorG = inc.id, grant2.id
 	if work.Alg() == AlgEIP191 {
 		for _, p := range out {
 			raw, _ := hex.DecodeString(p.sig[2:])
@@ -685,7 +698,7 @@ func TestSignedIdentityPositiveVectors(t *testing.T) {
 	}
 	// coverage the gate asks for: both algorithms, every listed kind, an actor under a grant, both cut forms
 	for _, alg := range []string{AlgEd25519, AlgEIP191} {
-		for _, k := range []string{"rc/2 identity_inception", "rc/2 identity_grant", "rc/2 identity_cut", "rc/2 authored", "rc/2 genesis", "rc/1 revoke_key"} {
+		for _, k := range []string{"rc/2 identity_inception", "rc/2 identity_grant", "rc/2 identity_cut", "rc/2 authored", "rc/2 genesis", "rc/2 edition", "rc/1 revoke_key"} {
 			if counts[alg+" "+k] == 0 {
 				t.Errorf("no %s positive for %s", k, alg)
 			}
@@ -748,7 +761,7 @@ func TestSignedIdentityPositiveVectors(t *testing.T) {
 			if x.Kind == "identity_cut" && (string(body.Members["identity"].(canon.String)) != inc.ID || string(body.Members["grant"].(canon.String)) != grant.ID) {
 				t.Errorf("%s: cut does not name the identity and the grant", x.Name)
 			}
-			if x.ActorIdentity != "" && (x.ActorIdentity != inc.ID || x.ActorGrant != grant.ID) {
+			if x.ActorIdentity != "" && (x.ActorIdentity != inc.ID || x.ActorGrant != grant.ID) && x.Name != chain+"-typed-edition-identity" {
 				t.Errorf("%s: actor does not name the inception and the grant", x.Name)
 			}
 		}
@@ -779,6 +792,56 @@ func TestSignedIdentityTypedGenesisIsAResource(t *testing.T) {
 	}
 	if n != 2 {
 		t.Fatalf("%d typed genesis vectors, want one per algorithm", n)
+	}
+}
+
+// TestSignedIdentityMarkerOnlyApprovalSharesTheEdition: per algorithm, a bare key's marker-only approval of an edition
+// of the typed genesis and the identity's `--as` approval of the same edition body name ONE edition id (the property a
+// bare key's rc/2 approval exists for, §2.2): the bodies are byte-identical, so the edition id is the same under the
+// v2 edition-body domain, while the two statements are distinct (different ids, one has an actor, one has none) and
+// the v1 domain would give a different edition. The marker-only line has no actor and the marker {}; the identity's
+// names the inception and the grant that covers this very resource; both name the typed genesis as resource.
+func TestSignedIdentityMarkerOnlyApprovalSharesTheEdition(t *testing.T) {
+	v := ivLoad(t)
+	by := map[string]*conformance.IdentityPositive{}
+	for i := range v.Positive {
+		by[v.Positive[i].Name] = &v.Positive[i]
+	}
+	for _, chain := range []string{"ed", "eip"} {
+		mo, ia, tg := by[chain+"-typed-edition-marker-only"], by[chain+"-typed-edition-identity"], by[chain+"-typed-genesis"]
+		inc, g2 := by[chain+"-inception"], by[chain+"-grant-edition"]
+		if mo == nil || ia == nil || tg == nil || inc == nil || g2 == nil {
+			t.Fatalf("%s: missing entries", chain)
+		}
+		if mo.ID == ia.ID || mo.Signer != ia.Signer || mo.ActorIdentity != "" || ia.ActorIdentity != inc.ID || ia.ActorGrant != g2.ID {
+			t.Errorf("%s: approvals are not one bare-key and one identity statement by one signer", chain)
+		}
+		bm := ivParseLine(t, mo.Line).Members["body"].(*canon.Object)
+		bi := ivParseLine(t, ia.Line).Members["body"].(*canon.Object)
+		if !bytes.Equal(canon.Encode(bm), canon.Encode(bi)) {
+			t.Fatalf("%s: the two approvals sign different body bytes", chain)
+		}
+		if ivStr(bm, "resource") != tg.ID {
+			t.Errorf("%s: the edition's resource is not the typed genesis", chain)
+		}
+		if m, _ := bm.Members[IdentityCrit].(*canon.Object); m == nil || len(m.Keys) != 0 {
+			t.Errorf("%s: marker is not {}", chain)
+		}
+		e2 := ID(PAE(EditionBodyType(2), canon.Encode(bm)))
+		e2b := ID(PAE(EditionBodyType(2), canon.Encode(bi)))
+		if e2 != e2b {
+			t.Errorf("%s: edition ids differ: %s vs %s", chain, e2, e2b)
+		}
+		if ID(PAE(EditionBodyType(1), canon.Encode(bm))) == e2 {
+			t.Errorf("%s: v1 and v2 edition-body domains give one id", chain)
+		}
+		// the grant covers exactly this resource, and the file's edition_ids rule pins the domain in the formula test
+		gb := ivParseLine(t, g2.Line).Members["body"].(*canon.Object)
+		perm := gb.Members["permissions"].(canon.Array)[0].(*canon.Object)
+		tgt := perm.Members["targets"].(*canon.Object).Members["resources"].(canon.Array)
+		if ivStr(perm, "kind") != "edition" || len(tgt) != 1 || string(tgt[0].(canon.String)) != tg.ID {
+			t.Errorf("%s: the edition grant does not cover exactly the typed genesis", chain)
+		}
 	}
 }
 
