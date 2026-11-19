@@ -85,10 +85,10 @@ func TestObservedDisclosuresContestedMutation(t *testing.T) {
 	has(t, out, `"CC0-1.0" by `)
 	has(t, out, `"MIT" by `)
 	// the mutation reached the field, but the exit is the one an observation has with agreeing disclosures
-	ac, _ := agree.VerifyExit()
+	ac, awhy := agree.VerifyExit()
 	fc, why := flip.VerifyExit()
-	if ac != fc {
-		t.Fatalf("a disagreeing disclosure moved the exit: %d (%v) vs %d", fc, why, ac)
+	if ac != fc || strings.Join(why, ";") != strings.Join(awhy, ";") {
+		t.Fatalf("a disagreeing disclosure moved the exit or its causes: %d %v vs %d %v", fc, why, ac, awhy)
 	}
 	// the disclosures are signed beside the claim, not part of it: Verify (the exit-only path) agrees
 	w := newWorld(t)
@@ -174,4 +174,15 @@ func TestObservedDisclosuresOneRule(t *testing.T) {
 	if f := a.Field("shelf_life_days"); f.State != FieldDefault {
 		t.Fatalf("shelf_life_days %s, want default", f.State)
 	}
+}
+
+// TestObservedPreRegistration: the pre-registration display reads the observation's own declaration.
+func TestObservedPreRegistration(t *testing.T) {
+	w := newWorld(t)
+	noteObs(w, "O1", "O", "OBS", "pre_registration", "exploratory")
+	a := w.store(nil).Artifact(dig("OBS"))
+	if a.PreReg == nil || a.PreReg.Display != "exploratory" {
+		t.Fatalf("pre-registration = %+v, want exploratory", a.PreReg)
+	}
+	has(t, a.Render(), "pre_registration: exploratory")
 }
