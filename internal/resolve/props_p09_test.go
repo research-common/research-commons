@@ -69,7 +69,14 @@ func derivedWorld(t *testing.T, mode, comparator string, opts ...Option) (*Artif
 }
 
 func TestPropertyUnverifiedEvidenceNeverPasses(t *testing.T) {
-	conformance.Partial(t, "P-09", "every delegated check the resolver has (time verifier, comparator, replication declaration, attestation verifier, referent checker, finality rules, cohort rules, edition-rule dialect and domain, segment re-check, content reader) substituted by a missing, unsupported, failing or lying variant; the exchange's verifiers (rubric, independence, grant, deadline) are TestPropertyExchangeVerifiersNeverPass, with two counterexamples (PROPS-F7, PROPS-F8); execution exit codes are internal/clirun.TestRerunExits (timeout/failed 3, environment mismatch 5); left: a per-check substitution sweep over the gates' delegated checks (hub CI, pull, push, pre-pin; today only the series freeze re-check and refuse_incomplete are shown could-not-check, internal/hubcheck)")
+	// P-09 is covered across the packages that own each check: the resolver's own (this test, and the generated worlds
+	// below), the exchange's verifiers (TestPropertyExchangeVerifiersNeverPass, TestPropertyMissingEvidenceNeverPasses),
+	// execution exits (internal/clirun TestRerunExits), the gates' delegated checks at all four gates (internal/gate
+	// TestSweepRuleEvidenceNeverPasses, TestSweepSegmentEvidenceNeverPasses, TestSweepCompletenessEvidenceNeverPasses,
+	// TestSweepTimeEvidenceNeverPasses), hub check and push (internal/hubcheck TestSweepHubContentEvidenceNeverPasses,
+	// TestSweepHubActorEvidenceNeverPasses, TestSweepPushWithheldNeverPasses, TestSweepPushAnchorNeverPasses) and the
+	// shipped commands (internal/cli TestSweepPullPublishRuleEvidenceNeverPasses).
+	conformance.Covers(t, "P-09")
 
 	t.Run("time verifier: priority needs a verified bound", func(t *testing.T) {
 		good := priorityWorld(t, WithTimeVerifier(newFakeBitcoin(100, 101)))
@@ -447,7 +454,6 @@ func (badRule) Eval(*Domain) (Outcome, string, []string) { return "pass", "", ni
 // no Verify exit of 0 where the default reader cannot have run a comparison. A fixture whose derivation group
 // has two outputs under a protocol workflow exits non-zero without a comparator.
 func TestPropertyUnverifiedGenerated(t *testing.T) {
-	conformance.Partial(t, "P-09", "generated worlds, default reader: no priority without a verified bound, no T1 and no exit 0 on a protocol group without a comparator, no endorsed member on an undeclared dialect; the substitutions of each check are in TestPropertyUnverifiedEvidenceNeverPasses")
 	fixture.Check(t, propBaseSeed+6000, 40, fixture.Extended, func(f fixture.Fixture) string {
 		pw := concretize(t, f)
 		r := New(storeOf(t, pw.deliver(nil))) // no verifier, comparator, dialect or checker

@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/research-common/research-commons/internal/canon"
-	"github.com/research-common/research-commons/internal/conformance"
 	"github.com/research-common/research-commons/internal/wire"
 )
 
@@ -45,7 +44,6 @@ type exchP09Row struct {
 }
 
 func TestPropertyExchangeVerifiersNeverPass(t *testing.T) {
-	conformance.Partial(t, "P-09", "the exchange's delegated checks (rubric evaluator, independence verifier, grant reading, the time verifier under a deadline) substituted by a missing, unsupported, failing or lying variant never make an edition ready with a passing check; see TestPropertyMissingEvidenceNeverPasses for the resolver's checks")
 	rubric := func(reader string) func(t *testing.T, w *world) (string, string) {
 		return func(t *testing.T, w *world) (string, string) {
 			g := w.task("G", "R")

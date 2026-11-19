@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/research-common/research-commons/internal/canon"
-	"github.com/research-common/research-commons/internal/conformance"
 	"github.com/research-common/research-commons/internal/resolve"
 )
 
@@ -399,10 +398,4 @@ func TestSweepTimeEvidenceNeverPasses(t *testing.T) {
 			}
 		}
 	}
-}
-
-// TestSweepGatesEveryRow is the P-09 declaration for the gates: the rows above are the sweep; the exchange and
-// resolver checks are in package resolve, execution exits in clirun, and hub-side and push-side checks in hubcheck.
-func TestSweepGatesEveryRow(t *testing.T) {
-	conformance.Partial(t, "P-09", "gate-level sweep (rule/content/segment/completeness/time) is TestSweep* in internal/gate; see the hubcheck sweep for the rest")
 }

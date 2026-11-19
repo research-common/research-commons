@@ -84,6 +84,13 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 - Property cases P-01, P-02, P-03 and P-12 are covered over the exchange view and the gates (a seeded task-world
   generator; duplicate and re-encoded delivery, every delivery order, outsider statements, withheld statements); P-08's
   time-context half and P-09 over the exchange's delegated checks are checked. Conformance properties 10/12.
+- P-09 is covered: a per-check substitution sweep over the gates' delegated checks. At pull, hub check, push and the
+  pre-pin check, the rule dialect, content reader and step budget behind `intended_for`, the series segment re-check
+  behind `series.refuse_premature_freeze`, the completeness evaluator behind `selection.refuse_incomplete` and the
+  time verifier behind contested authorship are each given missing, unsupported, failing or lying evidence; none is
+  shown as passing (`unchecked`, could not check, or refused), with a control row for each. The same for push's
+  withheld-bytes and anchor-required preconditions, hub check's content and actor evidence, and the shipped
+  `pull --dry-run` and `publish --intended-for`. Conformance properties 11/12 (P-08's execution-context half remains).
 
 ### Changed
 
