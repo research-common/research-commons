@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -87,5 +89,88 @@ func TestBareApprovalOfTypedResourceCombines(t *testing.T) {
 				t.Fatalf("verify: %d %s", r.code, r.stdout)
 			}
 		})
+	}
+}
+
+// markerOnly fails unless line is a bare key's rc/2 line: rc/2, crit [x_identity_v1], the marker {}, no actor.
+func markerOnly(t *testing.T, line string) {
+	t.Helper()
+	for _, want := range []string{`"rc":"rc/2"`, `"crit":["x_identity_v1"]`, `"x_identity_v1":{}`} {
+		if !strings.Contains(line, want) {
+			t.Fatalf("not a marker-only rc/2 line (lacks %s): %s", want, line)
+		}
+	}
+	if strings.Contains(line, wire.ActorField) {
+		t.Fatalf("a bare key's line carries an actor: %s", line)
+	}
+}
+
+// TestBareEditionOfTypedResourceAnyOne: under any_one, K2 alone publishes an edition of a resource whose genesis is
+// rc/2: authorized and current as before, now written rc/2 marker-only.
+func TestBareEditionOfTypedResourceAnyOne(t *testing.T) {
+	for _, alg := range []string{wire.AlgEd25519, wire.AlgEIP191} {
+		t.Run(alg, func(t *testing.T) {
+			m := newMixedCollection(t, alg, `{"any_one":true}`)
+			id := firstID(t, m.backup.ok("publish", "--draft", m.edition(m.backup, "e.json")))
+			markerOnly(t, lineOf(t, m.backup.store, id))
+			reader, rv := m.view(t)
+			eds := m.nonGenesis(rv)
+			if len(eds) != 1 || eds[0].Members["state"] != canon.String("edition") || rv.Members["current"] != eds[0].Members["edition"] {
+				t.Fatalf("K2's edition under any_one: %s", canon.Encode(rv))
+			}
+			if r := reader.read("verify", m.gid); r.code != ExitOK {
+				t.Fatalf("verify: %d %s", r.code, r.stdout)
+			}
+		})
+	}
+}
+
+// pinnedKey writes an Ed25519 key file with a fixed seed (Ed25519 signing is deterministic, so its lines are too).
+func pinnedKey(t *testing.T) (string, string) {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "pinned.key")
+	if err := os.WriteFile(p, []byte(`{"alg":"ed25519","format":"rc-key/0","seed":"`+strings.Repeat("3d", 32)+`"}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r := runIn(filepath.Dir(p), nil, "key", "show", p, "--json")
+	if r.code != ExitOK {
+		t.Fatalf("key show: %d %s", r.code, r.stdout)
+	}
+	return p, string(jsonOf(t, r).Members["signer"].(canon.String))
+}
+
+// The rc/1 edition a bare key writes for a collection whose genesis is rc/1 (key controllers only), captured from
+// the writer before typed resources were routed by their genesis's major (origin/next at 8b61959).
+const (
+	keyOnlyEditionLine = `{"alg":"ed25519","body":{"contents":{"members":[],"selection":"curated"},"predecessors":["0592066bd02a3c433a0f64c53edf507b2be5e612769467e464f54a198a5d6e62"],"resource":"0592066bd02a3c433a0f64c53edf507b2be5e612769467e464f54a198a5d6e62"},"kind":"edition","prev":"0592066bd02a3c433a0f64c53edf507b2be5e612769467e464f54a198a5d6e62","rc":"rc/1","seq":1,"sig":"d565a362d22deed09f74a298adaf3aad525e9486e04250809e6f184e154fb25be73d4d252bd0a1b3a69b145e340ddec26852f4630b59098982315725c42c110d","signer":"ed25519:70df9e2279adbec6d12bf2921184c9222eb24ed852005bf640139f52e59cd9ae","ts":"2026-11-18T00:00:01Z"}`
+	keyOnlyEditionID   = "c6458746a6aaa0dd63ec3b5763e22b83b79094d45bd3910185bfa591f259cbb4"
+)
+
+// TestBareEditionOfKeyOnlyResourceBytes: a bare key's edition of a collection whose genesis is rc/1 stays rc/1, no
+// marker and no crit, byte for byte as before.
+func TestBareEditionOfKeyOnlyResourceBytes(t *testing.T) {
+	key, signer := pinnedKey(t)
+	st := drillStore(t)
+	run := func(args ...string) *canon.Object {
+		t.Helper()
+		r := runIn(st, nil, append(args, "--key", key, "--json")...)
+		if r.code != ExitOK {
+			t.Fatalf("%v: %d %s", args, r.code, r.stdout)
+		}
+		return jsonOf(t, r)
+	}
+	dir := t.TempDir()
+	g := filepath.Join(dir, "g.json")
+	os.WriteFile(g, []byte(`{"kind":"genesis","body":{"type":"collection","name":"plain","controllers":["`+signer+`"],"rule":{"any_one":true}}}`), 0o644)
+	gid := firstID(t, run("publish", "--draft", g, "--ts", "2026-11-18T00:00:00Z"))
+	e := filepath.Join(dir, "e.json")
+	os.WriteFile(e, []byte(`{"kind":"edition","body":{"resource":"`+gid+`","predecessors":["`+gid+`"],"contents":{"members":[],"selection":"curated"}}}`), 0o644)
+	id := firstID(t, run("publish", "--draft", e, "--ts", "2026-11-18T00:00:01Z"))
+	line := lineOf(t, st, id)
+	if !strings.Contains(line, `"rc":"rc/1"`) || strings.Contains(line, "crit") || strings.Contains(line, wire.IdentityCrit) {
+		t.Fatalf("an edition of a key-only collection is not plain rc/1: %s", line)
+	}
+	if line != keyOnlyEditionLine || id != keyOnlyEditionID {
+		t.Fatalf("rc/1 edition bytes moved\n got %s\n id %s", line, id)
 	}
 }
