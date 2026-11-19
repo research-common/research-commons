@@ -83,3 +83,39 @@ func TestPublishTypedGenesis(t *testing.T) {
 		})
 	}
 }
+
+// TestDraftMarkerOnRC1Refused: a draft the writer signs rc/1 (an edition of an rc/1 resource, a key-only genesis, a
+// describes) whose body carries x_identity_v1 is refused, exit 2, nothing signed and the store byte-identical, with
+// next naming --as/--grant and the identity-controlled genesis. Before, it was signed rc/1 with the marker as a
+// plain body member. The writer's own marker-only form (an identity-controlled genesis) is unchanged: rc/2, {}.
+func TestDraftMarkerOnRC1Refused(t *testing.T) {
+	for _, alg := range []string{wire.AlgEd25519, wire.AlgEIP191} {
+		t.Run(alg, func(t *testing.T) {
+			h := newIDHome(t, alg)
+			ident := string(h.ok("identity", "new").Members["identity"].(canon.String))
+			g := firstID(t, h.ok("publish", "--draft", h.file("g.json", `{"kind":"genesis","body":{"type":"collection","name":"plain","controllers":["`+h.signer+`"],"rule":{"any_one":true}}}`)))
+			before := storeBytes(t, h.store)
+			for name, d := range map[string]string{
+				"edition of an rc/1 resource":   `{"kind":"edition","body":{"resource":"` + g + `","predecessors":["` + g + `"],"contents":{"members":[],"selection":"curated"},"x_identity_v1":{}}}`,
+				"edition, a marker with fields": `{"kind":"edition","body":{"resource":"` + g + `","predecessors":["` + g + `"],"contents":{"members":[],"selection":"curated"},"x_identity_v1":{"task_roles":{}}}}`,
+				"key-only genesis":              `{"kind":"genesis","body":{"type":"collection","name":"other","controllers":["` + h.signer + `"],"rule":{"any_one":true},"x_identity_v1":{}}}`,
+				"describes":                     `{"kind":"describes","body":{"about":{"statement":"` + g + `"},"note":"n","x_identity_v1":{}}}`,
+			} {
+				r := h.run("publish", "--draft", h.file("d.json", d))
+				if r.code != ExitDidNotStart || !strings.Contains(r.stdout, "the draft body carries x_identity_v1") ||
+					!strings.Contains(r.stdout, "--as <identity> --grant <grant>") || !strings.Contains(r.stdout, `"committed":false`) {
+					t.Fatalf("%s: %d %s", name, r.code, r.stdout)
+				}
+				if storeBytes(t, h.store) != before {
+					t.Fatalf("%s: a refused draft changed the store", name)
+				}
+			}
+			// the writer's own marker-only form is unaffected
+			o := h.ok("publish", "--draft", h.file("t.json", `{"kind":"genesis","body":{"type":"collection","name":"typed","controllers":[{"identity":"`+ident+`"},{"key":"`+h.signer+`"}],"rule":{"any_one":true}}}`))
+			lines, _ := mustStore(t, h.store).Statements()
+			if l := string(lines[firstID(t, o)]); !strings.Contains(l, `"rc":"rc/2"`) || !strings.Contains(l, `"x_identity_v1":{}`) {
+				t.Fatalf("typed genesis: %s", l)
+			}
+		})
+	}
+}

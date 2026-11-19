@@ -789,6 +789,9 @@ func publishCmd(c *Ctx) (*Obj, int, error) {
 			drafts[0] = d
 		}
 	}
+	if prob := markerOnRC1(drafts[0]); prob != nil {
+		return nil, 0, prob
+	}
 	// the holds beside the claim: only for bytes this unit installs or this store already keeps (an observed whose
 	// bytes this store does not keep has nothing to serve)
 	if haveBytes := digest != "" && (p.content != "" || c.Store.HasBlob(store.Digest(digest))); p.holds && haveBytes {
@@ -821,6 +824,25 @@ func publishCmd(c *Ctx) (*Obj, int, error) {
 	}
 	// the pre-pin state was resolved from the statements this store holds: the output carries the view's scope
 	return v.scopedResult(commitUnit(c, out, "publish", sts, blobs, p.content, h))
+}
+
+// markerOnRC1 refuses a draft the writer would sign rc/1 whose body carries the identity profile's body marker
+// x_identity_v1: rc/1 does not register the extension, so the marker would be signed as a plain body member that no
+// reader takes for an identity act (it forks a collection's editions, or names no beneficiary). The writer adds the
+// marker itself on every path that writes rc/2 (publish --as, an identity-controlled genesis and its editions);
+// a draft never carries it. Exit 2, nothing signed.
+func markerOnRC1(d wire.Draft) *Problem {
+	if d.RC != "" || d.Body == nil {
+		return nil
+	}
+	if _, ok := d.Body.Get(wire.IdentityCrit); !ok {
+		return nil
+	}
+	return usage("malformed-argument", "the draft body carries "+wire.IdentityCrit,
+		"this "+d.Kind+" is written rc/1, which carries no identity marker: it would be signed as a plain body member that no reader takes for an identity act; nothing was signed",
+		"option --draft",
+		"drop "+wire.IdentityCrit+" from the body: to act for an identity give --as <identity> --grant <grant>; for a resource an identity controls, publish a genesis naming it as a controller ({\"identity\": \"<id>\"}), whose editions the writer marks itself",
+		d.Kind)
 }
 
 // typedResource reports whether the resource an edition or withdraw_approval body names has an rc/2 genesis, read

@@ -80,6 +80,11 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   `statements`, `resources`, `tasks`) as its help says, not only the permission list. An unsorted or duplicated set was
   refused as `not valid (the signed line reads back as invalid statement)` with no field named; it now signs the same
   grant as the sorted, duplicate-free input. Input already sorted signs the same bytes as before.
+- `publish --draft` refuses a draft whose body carries `x_identity_v1` when the writer would sign it `rc/1` (an edition of
+  an `rc/1` resource, a key-only genesis, any other kind): exit 2, nothing signed. Before, it was signed `rc/1` with the
+  marker as a plain body member that no reader takes for an identity act (it forked a collection's editions, or left a
+  task naming no beneficiary). `next` names `--as`/`--grant`, or a genesis naming an identity as controller, whose
+  editions the writer marks itself. The `rc/2` marker-only forms the writer adds are unchanged.
 
 ### Tests
 
