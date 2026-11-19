@@ -43,6 +43,9 @@ type Obj struct {
 	// surface marks a member printed on one surface only ('j' JSON, 'h' human): the JSON shape of a value may
 	// change in the alpha (CLI-OUTPUTS "Stability") while the human line it was printed as stays the same.
 	surface map[string]byte
+	// empty names, per member, the human line printed for an empty list in place of "(none)" when "(none)"
+	// would read as "nothing happened"; it never affects the JSON form.
+	empty map[string]string
 	// text, when set, renders the object on the human surface at the given terminal width instead of the
 	// generic member listing (help pages: helptext.go). It never affects the JSON form.
 	text func(width int) string
@@ -289,8 +292,21 @@ func writeObj(b *strings.Builder, o *Obj, ind string) {
 		if o.surface[k] == 'j' {
 			continue
 		}
+		if l, ok := o.vals[k].(listV); ok && len(l) == 0 && o.empty[k] != "" {
+			b.WriteString(ind + strings.ReplaceAll(k, "_", " ") + ": " + o.empty[k] + "\n")
+			continue
+		}
 		writeMember(b, k, o.vals[k], ind)
 	}
+}
+
+// emptyText sets the human line for member k when its list is empty.
+func (o *Obj) emptyText(k, text string) *Obj {
+	if o.empty == nil {
+		o.empty = map[string]string{}
+	}
+	o.empty[k] = text
+	return o
 }
 
 func writeMember(b *strings.Builder, k string, v value, ind string) {

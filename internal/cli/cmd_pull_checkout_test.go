@@ -53,3 +53,24 @@ func TestPullFromCheckout(t *testing.T) {
 		t.Fatalf("the top-level .git should still be the one skipped:\n%s", r.stdout)
 	}
 }
+
+// TestPullCleanObjectsLine: a clean first admission has nothing in the objects list (it carries refused,
+// labelled and undecided rows only); the human line says so instead of "(none)" beside "admitted: 1", and the
+// JSON member stays an empty array.
+func TestPullCleanObjectsLine(t *testing.T) {
+	src := newWorld(t)
+	src.blob("a", []byte("a"))
+	src.authored("A:a", "K1", "a", "licence", "CC0-1.0")
+	pkg := t.TempDir()
+	copyData(t, src.root, pkg)
+	dst := newWorld(t)
+	r := dst.run("pull", pkg)
+	if r.code != 0 || !strings.Contains(r.stdout, "objects: none refused, labelled or undecided\n") || strings.Contains(r.stdout, "objects: (none)") {
+		t.Fatalf("human: exit %d\n%s", r.code, r.stdout)
+	}
+	dst = newWorld(t)
+	r = dst.run("pull", pkg, "--json")
+	if r.code != 0 || !strings.Contains(r.stdout, `"objects":[]`) || strings.Contains(r.stdout, "none refused") {
+		t.Fatalf("json: exit %d\n%s", r.code, r.stdout)
+	}
+}

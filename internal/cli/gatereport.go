@@ -94,6 +94,8 @@ func gateReport(rep *gate.Report) *Obj {
 	}
 	o.set("gate", textV(rep.Gate))
 	o.set("objects", objs)
+	// the list carries only refused, labelled and undecided rows; "(none)" beside "admitted: 1" reads as "nothing was pulled"
+	o.emptyText("objects", "none refused, labelled or undecided")
 	c := newObj()
 	for _, v := range []string{"admitted", "admitted and labelled", "refused", "could not check", "not applied"} {
 		c.set(strings.ReplaceAll(v, " ", "_"), intV(counts[v]))
