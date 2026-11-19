@@ -203,8 +203,27 @@ func TypedGenesisDraft(d Draft) (Draft, error) {
 	return identityDraft(d, nil, nil)
 }
 
-// identityDraft is the shared tail of IdentityDraft and TypedGenesisDraft: the caller has decided the draft is
-// written in rc/2.
+// markerOnlyKinds are the kinds MarkerOnlyDraft writes: a bare key's approval of an edition of a resource, and its
+// withdrawal.
+var markerOnlyKinds = map[string]bool{"edition": true, "withdraw_approval": true}
+
+// MarkerOnlyDraft returns the edition or withdraw_approval d prepared as a bare key's statement about a resource
+// whose genesis is rc/2 (identity profile §2.3: an rc/2 line with the marker and no actor is key(K)'s, on an
+// identity-aware body): rc/2, crit [x_identity_v1], the body marker {} and NO actor. Approvals of one edition share
+// the major and the body bytes (§2.2), so a bare key's approval written this way and an identity's approval
+// (IdentityDraft) of the same draft approve one edition. The caller decides that the resource's genesis is rc/2;
+// WriterMajor(kind, false) stays Major, so nothing else is routed here. Like IdentityDraft it refuses a body that
+// already carries the marker and does not check the body schema: Write reads the signed line back through the
+// identity reader, which does.
+func MarkerOnlyDraft(d Draft) (Draft, error) {
+	if !markerOnlyKinds[d.Kind] {
+		return Draft{}, refusal.Malformed("%s is not written marker-only; only an edition or a withdraw_approval of an rc/2 resource is", d.Kind)
+	}
+	return identityDraft(d, nil, nil)
+}
+
+// identityDraft is the shared tail of IdentityDraft, TypedGenesisDraft and MarkerOnlyDraft: the caller has decided
+// the draft is written in rc/2.
 func identityDraft(d Draft, actor *Actor, marker *canon.Object) (Draft, error) {
 	if actor != nil && (!reID.MatchString(actor.Identity) || !reID.MatchString(actor.Grant)) {
 		return Draft{}, refusal.Malformed("%s needs identity and grant statement ids", ActorField)
