@@ -148,14 +148,18 @@ func prepareIdentityGrant(c *Ctx) *Problem {
 	return nil
 }
 
-// normalizePermissions sorts and dedupes a permission list by canonical encoding (the order the reader requires)
-// and checks its size. Each entry's schema is the reader's: the signed line is read back before anything is written.
+// normalizePermissions sorts and dedupes each permission's exact target set and then the permission list by
+// canonical encoding (the orders the reader requires), and checks its size. Each entry's schema is the reader's:
+// the signed line is read back before anything is written. An input already sorted and duplicate-free is signed
+// byte for byte as given.
 func normalizePermissions(a canon.Array) (canon.Array, string) {
 	seen := map[string]canon.Value{}
 	for i, x := range a {
-		if _, ok := x.(*canon.Object); !ok {
+		o, ok := x.(*canon.Object)
+		if !ok {
 			return nil, "permission " + itoa(i) + " is not an object"
 		}
+		x = normalizeTargets(o)
 		seen[string(canon.Encode(x))] = x
 	}
 	keys := make([]string, 0, len(seen))
@@ -174,6 +178,44 @@ func normalizePermissions(a canon.Array) (canon.Array, string) {
 		return nil, "a grant carries at most 64 permissions"
 	}
 	return out, ""
+}
+
+// exactTargetModes are the target modes whose value is a set of ids or digests (identity profile §3).
+var exactTargetModes = map[string]bool{"contents": true, "statements": true, "resources": true, "tasks": true}
+
+// normalizeTargets returns permission o with its exact target set sorted and deduplicated (the reader's set order),
+// or o itself when it has none or the set holds anything but strings (the reader names what is wrong with it).
+func normalizeTargets(o *canon.Object) *canon.Object {
+	t, ok := o.Members["targets"].(*canon.Object)
+	if !ok || len(t.Keys) != 1 || !exactTargetModes[t.Keys[0]] {
+		return o
+	}
+	mode := t.Keys[0]
+	set, ok := t.Members[mode].(canon.Array)
+	if !ok {
+		return o
+	}
+	ids := make([]string, 0, len(set))
+	for _, e := range set {
+		s, ok := e.(canon.String)
+		if !ok {
+			return o
+		}
+		ids = append(ids, string(s))
+	}
+	slices.SortFunc(ids, canon.CompareKeys)
+	ids = slices.Compact(ids)
+	sorted := make(canon.Array, len(ids))
+	for i, s := range ids {
+		sorted[i] = canon.String(s)
+	}
+	nt := &canon.Object{Keys: t.Keys, Members: map[string]canon.Value{mode: sorted}}
+	no := &canon.Object{Keys: o.Keys, Members: map[string]canon.Value{}}
+	for k, v := range o.Members {
+		no.Members[k] = v
+	}
+	no.Members["targets"] = nt
+	return no
 }
 
 func prepareIdentityCut(c *Ctx) *Problem {

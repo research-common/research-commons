@@ -177,3 +177,77 @@ func TestIdentityCommands(t *testing.T) {
 		})
 	}
 }
+
+// TestIdentityGrantSortsTargetSets: `identity grant --permissions` sorts and dedupes each exact target set
+// (contents, statements, resources, tasks) as its help says, not only the permission list: an unsorted set with a
+// duplicate signs the same statement id as the sorted, duplicate-free set (same --ts), instead of a refusal that the
+// signed line reads back invalid. An input already sorted is signed as given (its id does not move).
+func TestIdentityGrantSortsTargetSets(t *testing.T) {
+	for _, alg := range []string{wire.AlgEd25519, wire.AlgEIP191} {
+		t.Run(alg, func(t *testing.T) {
+			root, worker := newIDHome(t, alg), newIDHome(t, alg)
+			ident := string(root.ok("identity", "new", "--ts", "2026-11-13T00:00:00Z").Members["identity"].(canon.String))
+			d := firstID(t, worker.ok("publish", "--kind", "authored", "--content", worker.file("c0", "worker first line"), "--licence", "CC0-1.0"))
+			root.pullFrom(worker)
+			a, b, c := strings.Repeat("1", 64), strings.Repeat("a", 64), strings.Repeat("c", 64)
+			da, db := "sha256:"+strings.Repeat("0", 64), "sha256:"+strings.Repeat("f", 64)
+			sorted := `[{"kind":"authored","targets":{"contents":["` + da + `","` + db + `"]},"amend":"own"},` +
+				`{"kind":"retracts","targets":{"statements":["` + a + `","` + b + `"]}},` +
+				`{"kind":"submit","targets":{"tasks":["` + a + `","` + c + `"]}}]`
+			unsorted := `[{"kind":"submit","targets":{"tasks":["` + c + `","` + a + `","` + c + `"]}},` +
+				`{"kind":"authored","targets":{"contents":["` + db + `","` + da + `","` + db + `"]},"amend":"own"},` +
+				`{"kind":"retracts","targets":{"statements":["` + b + `","` + a + `"]}}]`
+			grant := func(perms string, dry bool) result {
+				args := []string{"identity", "grant", "--identity", ident, "--delegate", worker.signer, "--delegate-inception", d,
+					"--permissions", perms, "--ts", "2026-11-13T00:00:01Z"}
+				if dry {
+					args = append(args, "--dry-run")
+				}
+				return root.run(args...)
+			}
+			want := grant(sorted, true)
+			got := grant(unsorted, true)
+			if want.code != ExitOK || got.code != ExitOK {
+				t.Fatalf("dry runs: sorted %d %s\nunsorted %d %s", want.code, want.stdout, got.code, got.stdout)
+			}
+			id := firstID(t, jsonOf(t, want))
+			if gid := firstID(t, jsonOf(t, got)); gid != id {
+				t.Fatalf("unsorted target sets sign %s, sorted %s", gid, id)
+			}
+			r := grant(unsorted, false)
+			if r.code != ExitOK {
+				t.Fatalf("grant of unsorted target sets refused: %d %s", r.code, r.stdout)
+			}
+			o := jsonOf(t, r)
+			if g := string(o.Members["grant"].(canon.String)); g != id {
+				t.Fatalf("signed grant %s, dry run of the sorted input %s", g, id)
+			}
+			lines, _ := mustStore(t, root.store).Statements()
+			if !strings.Contains(string(lines[id]), `"tasks":["`+a+`","`+c+`"]`) || !strings.Contains(string(lines[id]), `"contents":["`+da+`","`+db+`"]`) {
+				t.Fatalf("signed line: %s", lines[id])
+			}
+		})
+	}
+}
+
+// TestNormalizePermissionsKeepsSortedBytes: a permission list whose target sets and order are already sorted and
+// duplicate-free encodes byte for byte as given, so a grant signed from it is the grant signed before target sets
+// were sorted; target sets that are not string arrays are left for the reader to name.
+func TestNormalizePermissionsKeepsSortedBytes(t *testing.T) {
+	for _, in := range []string{
+		`[{"amend":false,"kind":"authored","targets":{"any_content":true}}]`,
+		`[{"amend":"own","kind":"authored","targets":{"contents":["sha256:` + strings.Repeat("0", 64) + `","sha256:` + strings.Repeat("f", 64) + `"]}},{"kind":"submit","targets":{"tasks":["` + strings.Repeat("1", 64) + `","` + strings.Repeat("a", 64) + `"]}}]`,
+		`[{"kind":"edition","targets":{"resources":["` + strings.Repeat("b", 64) + `"]}},{"kind":"log"}]`,
+		`[{"kind":"submit","targets":{"tasks":"not a set"}}]`,
+		`[{"kind":"submit","targets":{"tasks":[1,"a"]}}]`,
+	} {
+		v, err := canon.Parse([]byte(in))
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, why := normalizePermissions(v.(canon.Array))
+		if why != "" || string(canon.Encode(out)) != in {
+			t.Fatalf("%s\n-> %s (%s)", in, canon.Encode(out), why)
+		}
+	}
+}

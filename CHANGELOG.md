@@ -76,6 +76,10 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   "re-derived by its author only". The output reads `not re-derived`, `verify` exits 3, and `explain` says the extra claim
   is not counted as a run. `verify --rerun` with several claims pinning a blob now re-runs the first by id that carries an
   environment record (and says so) rather than the first by id. Two different keys are unchanged. No signed byte changes.
+- `identity grant --permissions` now sorts and deduplicates each permission's exact target set (`contents`,
+  `statements`, `resources`, `tasks`) as its help says, not only the permission list. An unsorted or duplicated set was
+  refused as `not valid (the signed line reads back as invalid statement)` with no field named; it now signs the same
+  grant as the sorted, duplicate-free input. Input already sorted signs the same bytes as before.
 
 ### Tests
 
