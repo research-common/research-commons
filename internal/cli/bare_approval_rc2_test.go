@@ -279,3 +279,36 @@ func TestBareWithdrawOfTypedResource(t *testing.T) {
 		})
 	}
 }
+
+// TestBareEditionOfTypedResourceEdges: what a bare key's edition of an rc/2 resource does at the edges. A controller
+// change to plain key strings (the rc/1 form, which the rc/2 schema does not read) stays rc/1 as before; a typed
+// controller change is written marker-only; a draft that already carries the marker is refused (the writer adds
+// it); an edition of a resource whose genesis is not held is refused, exit 3, naming the resource: its major cannot
+// be guessed. Every refusal leaves the store byte-identical.
+func TestBareEditionOfTypedResourceEdges(t *testing.T) {
+	m := newMixedCollection(t, wire.AlgEd25519, `{"any_one":true}`)
+	draft := func(name, resource, contents, extra string) string {
+		return m.backup.file(name, `{"kind":"edition","body":{"resource":"`+resource+`","predecessors":["`+resource+`"],"contents":{"members":[],"selection":"curated"`+contents+`}`+extra+`}}`)
+	}
+
+	before := storeBytes(t, m.backup.store)
+	r := m.backup.run("publish", "--draft", draft("m.json", m.gid, "", `,"x_identity_v1":{}`))
+	if r.code != ExitDidNotStart || !strings.Contains(r.stdout, "already carries x_identity_v1") {
+		t.Fatalf("a draft carrying the marker: %d %s", r.code, r.stdout)
+	}
+	other := strings.Repeat("e", 64)
+	r = m.backup.run("publish", "--draft", draft("n.json", other, "", ""))
+	if r.code != ExitCouldNot || !strings.Contains(r.stdout, "problem:resource-not-held") || !strings.Contains(r.stdout, other) {
+		t.Fatalf("an edition of a resource not held: %d %s", r.code, r.stdout)
+	}
+	if storeBytes(t, m.backup.store) != before {
+		t.Fatal("a refused edition changed the store")
+	}
+
+	plain := firstID(t, m.backup.ok("publish", "--draft", draft("p.json", m.gid, `,"controllers":["`+m.backup.signer+`"],"rule":{"any_one":true}`, "")))
+	if l := lineOf(t, m.backup.store, plain); !strings.Contains(l, `"rc":"rc/1"`) || strings.Contains(l, wire.IdentityCrit) {
+		t.Fatalf("a plain-key controller change is not rc/1: %s", l)
+	}
+	typed := firstID(t, m.backup.ok("publish", "--draft", draft("t.json", m.gid, `,"controllers":[{"key":"`+m.backup.signer+`"}],"rule":{"any_one":true}`, "")))
+	markerOnly(t, lineOf(t, m.backup.store, typed))
+}

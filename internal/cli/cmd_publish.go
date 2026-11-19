@@ -781,7 +781,7 @@ func publishCmd(c *Ctx) (*Obj, int, error) {
 		if prob != nil {
 			return nil, 0, prob
 		}
-		if typed {
+		if typed && !keyControllerChange(body) {
 			d, err := wire.MarkerOnlyDraft(drafts[0])
 			if err != nil {
 				return nil, 0, writeRefused(err)
@@ -839,6 +839,26 @@ func (v *view) typedResource(body *canon.Object) (bool, *Problem) {
 			Next:   "fetch the resource, then publish again", Peer: string(res), Exit: ExitCouldNot}
 	}
 	return pl.St.RC == "rc/"+strconv.Itoa(wire.CandidateMajor), nil
+}
+
+// keyControllerChange reports whether an edition body changes the controllers to plain key strings (the rc/1 form).
+// The rc/2 schema reads controllers only as typed subjects, so no identity's approval can share that body: it stays
+// rc/1, as it was written before rc/2 resources were routed by their genesis.
+func keyControllerChange(body *canon.Object) bool {
+	c, _ := body.Members["contents"].(*canon.Object)
+	if c == nil {
+		return false
+	}
+	a, ok := c.Members["controllers"].(canon.Array)
+	if !ok || len(a) == 0 {
+		return false
+	}
+	for _, e := range a {
+		if _, typed := e.(*canon.Object); typed {
+			return false
+		}
+	}
+	return true
 }
 
 // typedControllers reports whether a genesis body's controllers carry a typed subject (an object member, {key: K} or
