@@ -46,7 +46,7 @@ var (
 	ledgerPathFlag = Flag{Name: "ledger-path", Value: "path", Check: checkLedgerPath,
 		Help: "the BIP-32 path of the device's key, m/44'/60'/<account>'/0/<index> (' or h marks hardened); required with --ledger, no default. Use an account that never holds funds: never reuse a payment key as a Commons key"}
 	ledgerDeviceFlag = Flag{Name: "ledger-device", Value: "device", Check: ledger.CheckSpec,
-		Help: "which device: a hidraw node (/dev/hidrawN, Linux) or an emulator's APDU port (tcp:<host>:<port>, no hardware); else $" + LedgerDeviceEnv + ", else the one Ledger attached by USB"}
+		Help: "which device: a hidraw node (/dev/hidrawN, Linux) or an emulator's APDU port (tcp:<host>:<port>, no hardware); else $" + LedgerDeviceEnv + ", else the one Ledger attached by USB (on macOS, where a USB device is not named, attach only one)"}
 	ledgerConfirmFlag = Flag{Name: "ledger-confirm", Help: "show the address on the device and wait for you to confirm it there (recommended once, before an identity's inception)"}
 	ledgerTimeoutFlag = Flag{Name: "ledger-timeout", Value: "duration", Check: checkLedgerTimeout,
 		Help: "how long to wait for you to approve or reject on the device (a Go duration such as 90s or 10m; 1s to 1h); default 10m. Every other exchange with the device waits 10s"}
@@ -61,7 +61,7 @@ func checkLedgerTimeout(v string) error {
 }
 
 const ledgerHelp = " With --ledger the key is a Ledger device running the Ethereum app (tested on the Speculos emulator for Nano S Plus and Nano X, " +
-	"and drilled by hand on a physical Nano X), opened over USB on Linux (hidraw) or as an emulator (tcp:<host>:<port>); " +
+	"and drilled by hand on a physical Nano X), opened over USB on Linux (hidraw) and macOS (IOKit) or as an emulator (tcp:<host>:<port>); " +
 	"on other systems the USB connector is not built. --ledger-path names the key (m/44'/60'/<account>'/0/<index>, no default): " +
 	"use an account that never holds funds. Identity PAEs are typically 300 to 800 bytes; the Ethereum app 1.23 accepts about 7.6 KB (less when a byte is not printable). " +
 	"Finish or reject a review on the device before running another command: the emulator refuses other requests while one is pending (ledger-busy), " +

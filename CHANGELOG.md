@@ -11,6 +11,13 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ### Added
 
+- `key show --ledger` and `key sign --ledger` reach a Ledger over USB on macOS (arm64 and amd64). The transport binds
+  IOKit's HID manager without cgo, so release builds stay `CGO_ENABLED=0` and reproducible, and it reads the device's
+  input reports from an IOKit queue. Such a queue delivers a report only when it differs from the one before, so on
+  macOS each exchange is sent on a fresh Ledger HID channel (the device echoes it); Linux keeps channel 0x0101. On macOS
+  a USB device is not named: attach one Ledger. KNOWN-LIMITS L-20 now covers Windows only. No change to what is signed,
+  to the package flow, or to any byte, identifier, exit code or `--json` member.
+
 - A collection genesis may name an identity as a controller. `publish --draft` of a `genesis` whose `controllers` hold
   typed subjects (`{"identity": "<id>"}` and/or `{"key": "<key>"}`, sorted and duplicate-free) is signed from a bare key
   as `rc/2` with the body marker `{}` and no actor, exactly as the fixed-root identity design note (section 2.1)

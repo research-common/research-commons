@@ -5,8 +5,9 @@
 //
 // The package signs nothing itself and trusts nothing the device returns: the caller verifies every signature
 // with the reader's own check before using it. A Transport carries one APDU and its response; this package
-// provides two, Linux hidraw (Ledger HID framing, no cgo) and the Speculos emulator's TCP APDU port, and Open
-// picks one from a device spec. On other operating systems the hidraw transport is not built and Open says so.
+// provides three, USB HID on Linux (hidraw) and on macOS (IOKit), both with Ledger HID framing and no cgo, and the
+// Speculos emulator's TCP APDU port, and Open picks one from a device spec. On other operating systems the USB
+// transport is not built and Open says so.
 package ledger
 
 import (
@@ -39,7 +40,7 @@ type Device struct {
 	Transport
 	// Model is the device model as the transport learned it ("Nano X", from the USB product), "" when unknown.
 	Model string
-	// Where names the device for a person: the hidraw node, or "emulator at <host:port>".
+	// Where names the device for a person: the hidraw node, the IOKit registry entry, or "emulator at <host:port>".
 	Where string
 	// Emulator is true for the Speculos TCP transport: no hardware is involved.
 	Emulator bool

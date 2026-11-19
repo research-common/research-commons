@@ -78,7 +78,7 @@ func ioError(err error) error {
 }
 
 // Open opens the device a spec names:
-//   - "" : the one Ledger device attached by USB (Linux hidraw); none or several is a failure;
+//   - "" : the one Ledger device attached by USB (Linux hidraw, macOS IOKit); none or several is a failure;
 //   - "/dev/hidrawN" : that hidraw node (Linux);
 //   - "tcp:<host>:<port>" : a Speculos emulator's APDU port (no hardware; labelled an emulator).
 func Open(spec string) (*Device, error) {

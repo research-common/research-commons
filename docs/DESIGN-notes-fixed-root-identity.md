@@ -832,9 +832,13 @@ cannot hold (it answers after the last chunk), a request the app refuses, a disc
 a timeout (`--ledger-timeout`, default 10 minutes for the approval, 10 seconds for every
 other exchange) is exit 3; each writes nothing. The package flow stays the boundary: `--complete`,
 `identity` and `publish` never open a device, so the device never sits on the store's
-machine. Transport: USB HID on Linux (hidraw, Ledger framing); the Speculos emulator's APDU
+machine. Transport: USB HID on Linux (hidraw, Ledger framing) and on macOS (IOKit's HID
+manager, bound without cgo so release builds stay `CGO_ENABLED=0`; reports are read from an
+IOKit queue, which delivers a report only when it differs from the one before, so each
+exchange is sent on a fresh channel, which the device echoes); the Speculos emulator's APDU
 port (`--ledger-device tcp:<host>:<port>`, labelled an emulator: no hardware protects its
-key). USB on macOS and Windows is not built.
+key). On macOS a USB device is not named: the one Ledger attached is used. USB on Windows is
+not built.
 
 Tested through the commands with an in-process fake of the Ethereum app (every refusal
 above, each signature encoding the device may return) over the emulator's APDU protocol and
@@ -860,6 +864,24 @@ answered further requests instead of refusing them as busy, the pending review s
 responding to the buttons, and the device switched itself off. Finish or reject a review
 on the device before running another command, and after an interrupted `key sign`, check
 the device's screen first; a device that stops responding recovers by being restarted.
+**Physical-device drill, recorded (Nano X, Ethereum app 1.10.3, macOS USB).** `key show
+--ledger` read the address, also from a second process right after the first (the case an IOKit
+queue would drop without a fresh channel). Through the package, in a throwaway store: `identity
+new --prepare` (321-byte PAE), `package show --expect-pae-sha256` matched, `key sign --ledger`
+approved on the device, `identity new --complete` committed and `fsck` was clean. A second
+inception rejected on the device was exit 1 (`ledger-rejected`) with no signature written and the
+store unchanged; an interrupt while the review waited was exit 3 (`ledger-interrupted`) and the
+device answered normally once the holder had rejected the review; unplugging the device during
+a review was exit 3 (`ledger-disconnected`), nothing written. This app version shows a long
+message as it arrives: it answers each chunk only after the holder presses on through it, so a
+message of more than about two chunks meets the 10-second wait of a chunk that is not the last
+and fails as `ledger-timeout` (exit 3, nothing signed); later versions read the whole message
+first. On one such message (1,500 bytes, six chunks, traced with long waits) the app answered the last
+chunk with a bare `9000`, no signature, while text was still unshown, and the review then froze once
+the process had gone, until the device was restarted. Its size limit was therefore not measured.
+The connector's timeouts are left as they are: such a failure signs nothing. The drilled versions
+are Ethereum app 1.19.3 (Linux) and 1.10.3 (macOS); no minimum version is stated, since where the
+app began reading the whole message first has not been bisected.
 `key sign --ledger` prints, as its last line before the device is asked, that the review is
 now on the device. An interrupt (SIGINT or SIGTERM) while the device waits for the holder,
 in `key sign --ledger` or `key show --ledger --ledger-confirm`, prints "a review may still

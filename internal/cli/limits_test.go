@@ -449,16 +449,16 @@ var limits = []limit{
 	},
 	{
 		id:  "L-20",
-		gap: "The Ledger connector's USB transport is built for Linux only (hidraw); on macOS and Windows `key sign --ledger` reaches only an emulator",
+		gap: "The Ledger connector's USB transport is built for Linux (hidraw) and macOS (IOKit) only; on Windows `key sign --ledger` reaches only an emulator",
 		sources: []limitSource{
-			{file: "docs/DESIGN-notes-fixed-root-identity.md", says: "USB on macOS and Windows is not built."},
+			{file: "docs/DESIGN-notes-fixed-root-identity.md", says: "USB on Windows is not built."},
 			{help: []string{"key", "sign"}, says: "on other systems the USB connector is not built"},
 		},
-		probe:  "for GOOS=darwin and GOOS=windows, `internal/ledger` builds `hid_other.go`, which declares `HIDBuilt = false`",
-		closes: "a USB HID transport for macOS (IOKit) and Windows (the HID API)",
+		probe:  "for GOOS=windows, `internal/ledger` builds `hid_other.go`, which declares `HIDBuilt = false`",
+		closes: "a USB HID transport for Windows (the HID API)",
 		open: func(t *testing.T) (bool, string) {
 			root, _ := conformance.RepoRoot()
-			for _, goos := range []string{"darwin", "windows"} {
+			for _, goos := range []string{"windows"} {
 				ctx := build.Default
 				ctx.GOOS, ctx.GOARCH, ctx.CgoEnabled = goos, "amd64", false
 				pkg, err := ctx.ImportDir(filepath.Join(root, "internal", "ledger"), 0)
@@ -469,7 +469,7 @@ var limits = []limit{
 					return false, goos + " builds a USB transport"
 				}
 			}
-			return true, "darwin and windows build hid_other.go (HIDBuilt = false)"
+			return true, "windows builds hid_other.go (HIDBuilt = false)"
 		},
 	},
 	{

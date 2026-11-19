@@ -93,6 +93,14 @@ jobs:
         with:
           go-version-file: go.mod
       - run: CGO_ENABLED=0 go build ./...
+      # The macOS USB transport binds IOKit without cgo (internal/ledger/iokit_*_darwin*): prove here, on Linux, that
+      # the darwin binaries release.yml builds still cross-compile, rather than finding out at a release.
+      - name: cross-build darwin/amd64 and darwin/arm64
+        run: |
+          for arch in amd64 arm64; do
+            CGO_ENABLED=0 GOOS=darwin GOARCH=$arch go build -trimpath -o /dev/null ./cmd/commons
+            CGO_ENABLED=0 GOOS=darwin GOARCH=$arch go vet ./internal/ledger/
+          done
 
   test-sandbox-oci:
     # The OCI sandbox backend and `commons run` on it, against the runner's own docker. NOT a required check

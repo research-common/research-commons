@@ -2,8 +2,9 @@ package ledger
 
 import "time"
 
-// Ledger HID framing (the same on every model): an APDU travels in 64-byte reports, each starting with the channel
-// 0x0101, the tag 0x05 and a 2-byte big-endian sequence index from 0; the first report then carries the APDU's
+// Ledger HID framing (the same on every model): an APDU travels in 64-byte reports, each starting with a 2-byte
+// channel (0x0101 unless the port asks for another, see ChannelPort; the device answers on the channel it was
+// sent), the tag 0x05 and a 2-byte big-endian sequence index from 0; the first report then carries the APDU's
 // 2-byte big-endian length. The response comes back framed the same way. On the wire to the device each report is
 // prefixed with the HID report id 0 (65 bytes written); the reports read back have no prefix.
 
@@ -13,13 +14,17 @@ const (
 	tagAPDU    = 0x05
 )
 
-// Frame splits an APDU into the 64-byte reports that carry it (zero-padded), without the report-id prefix.
-func Frame(apdu []byte) [][]byte {
+// Frame splits an APDU into the 64-byte reports that carry it (zero-padded) on channel 0x0101, without the
+// report-id prefix.
+func Frame(apdu []byte) [][]byte { return FrameOn(channel, apdu) }
+
+// FrameOn is Frame on the channel ch.
+func FrameOn(ch uint16, apdu []byte) [][]byte {
 	var out [][]byte
 	data := append([]byte{byte(len(apdu) >> 8), byte(len(apdu))}, apdu...)
 	for seq := 0; len(data) > 0 || seq == 0; seq++ {
 		p := make([]byte, packetSize)
-		p[0], p[1], p[2], p[3], p[4] = channel>>8, channel&0xff, tagAPDU, byte(seq>>8), byte(seq)
+		p[0], p[1], p[2], p[3], p[4] = byte(ch>>8), byte(ch), tagAPDU, byte(seq>>8), byte(seq)
 		n := copy(p[5:], data)
 		data = data[n:]
 		out = append(out, p)
@@ -27,11 +32,13 @@ func Frame(apdu []byte) [][]byte {
 	return out
 }
 
-// Unframer reassembles a framed response from reports read one at a time.
+// Unframer reassembles a framed response from reports read one at a time. Channel is the channel the request was
+// sent on; 0 means 0x0101.
 type Unframer struct {
-	seq  int
-	want int
-	buf  []byte
+	Channel uint16
+	seq     int
+	want    int
+	buf     []byte
 }
 
 // Add takes the next report. It returns the whole response once every byte has arrived (done true), and an error
@@ -40,7 +47,11 @@ func (u *Unframer) Add(p []byte) (resp []byte, done bool, err error) {
 	if len(p) < 5 {
 		return nil, false, &Error{Slug: BadResponse, Detail: "a HID report is shorter than its header"}
 	}
-	if int(p[0])<<8|int(p[1]) != channel {
+	want := u.Channel
+	if want == 0 {
+		want = channel
+	}
+	if uint16(p[0])<<8|uint16(p[1]) != want {
 		return nil, false, &Error{Slug: BadResponse, Detail: "a HID report arrived on another channel"}
 	}
 	if p[2] != tagAPDU {
@@ -78,6 +89,14 @@ type HIDPort interface {
 	SetReadDeadline(t time.Time) error
 }
 
+// ChannelPort is implemented by a HID port that needs each exchange on its own channel. The macOS port does: an IOKit
+// queue delivers an input report only when it differs from the previous one, so an answer byte-equal to the last
+// report (the same request twice) would never arrive. NextChannel returns a channel no report on the port carried
+// last; the device echoes it, so the first report of every answer differs from the one before.
+type ChannelPort interface {
+	NextChannel() uint16
+}
+
 // HIDTransport carries APDUs over a HID port with Ledger framing.
 type HIDTransport struct {
 	port    HIDPort
@@ -92,13 +111,17 @@ func (h *HIDTransport) SetTimeout(d time.Duration) { h.timeout = d }
 
 // Exchange frames the APDU, writes every report (report id 0 first), and reads reports until the response is whole.
 func (h *HIDTransport) Exchange(apdu []byte) ([]byte, error) {
-	for _, p := range Frame(apdu) {
+	ch := uint16(channel)
+	if cp, ok := h.port.(ChannelPort); ok {
+		ch = cp.NextChannel()
+	}
+	for _, p := range FrameOn(ch, apdu) {
 		if _, err := h.port.Write(append([]byte{0}, p...)); err != nil {
 			return nil, ioError(err)
 		}
 	}
 	h.port.SetReadDeadline(time.Now().Add(h.timeout))
-	var u Unframer
+	u := Unframer{Channel: ch}
 	buf := make([]byte, packetSize+1)
 	for {
 		n, err := h.port.Read(buf)
