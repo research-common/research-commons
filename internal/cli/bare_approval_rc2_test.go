@@ -32,11 +32,12 @@ func newMixedCollection(t *testing.T, alg, rule string) *mixedCollection {
 	return m
 }
 
-// edition writes an edition draft off the genesis listing members (strings) in h's key directory.
-func (m *mixedCollection) edition(h *idHome, name string, members ...string) string {
-	ms := make([]string, len(members))
-	for i, s := range members {
-		ms[i] = `"` + s + `"`
+// edition writes an edition draft off the genesis in h's key directory, listing one member per digit d (content
+// sha256 of 64 d's).
+func (m *mixedCollection) edition(h *idHome, name string, digits ...string) string {
+	ms := make([]string, len(digits))
+	for i, d := range digits {
+		ms[i] = `{"content":"sha256:` + strings.Repeat(d, 64) + `","role":"dataset"}`
 	}
 	return h.file(name, `{"kind":"edition","body":{"resource":"`+m.gid+`","predecessors":["`+m.gid+`"],"contents":{"members":[`+strings.Join(ms, ",")+`],"selection":"curated"}}}`)
 }
@@ -172,5 +173,109 @@ func TestBareEditionOfKeyOnlyResourceBytes(t *testing.T) {
 	}
 	if line != keyOnlyEditionLine || id != keyOnlyEditionID {
 		t.Fatalf("rc/1 edition bytes moved\n got %s\n id %s", line, id)
+	}
+}
+
+// state is the state of the non-genesis edition whose approvals include statement id.
+func (m *mixedCollection) stateOf(t *testing.T, rv *canon.Object, id string) (string, string) {
+	t.Helper()
+	for _, e := range m.nonGenesis(rv) {
+		for _, a := range e.Members["approvals"].(canon.Array) {
+			if a.(*canon.Object).Members["statement"] == canon.String(id) {
+				return string(e.Members["state"].(canon.String)), string(e.Members["edition"].(canon.String))
+			}
+		}
+	}
+	t.Fatalf("no edition carries approval %s: %s", id, canon.Encode(rv))
+	return "", ""
+}
+
+// TestBareApprovalAfterRootRevoke: the recovery path after a root compromise. The identity's root revokes its key
+// (key_compromise, nothing kept), so every approval made for the identity stops counting (identity profile §1: root
+// compromise is total and retroactive). Under k_of_n 2, an edition approved by both I and K2 is pending again: K2's
+// approval alone is one of two. Under any_one, K2 alone publishes an edition off the genesis and it is current.
+func TestBareApprovalAfterRootRevoke(t *testing.T) {
+	for _, alg := range []string{wire.AlgEd25519, wire.AlgEIP191} {
+		t.Run(alg, func(t *testing.T) {
+			revokeRoot := func(m *mixedCollection) {
+				t.Helper()
+				m.root.ok("revoke", "--reason", "key_compromise", "--last-good", "none")
+			}
+
+			// k_of_n 2: co-approved, then the root is revoked: pending
+			m := newMixedCollection(t, alg, `{"k_of_n":{"k":2}}`)
+			m.worker.ok("publish", "--draft", m.edition(m.worker, "e.json"), "--as", m.ident, "--grant", m.grant)
+			m.backup.pullFrom(m.worker)
+			k2 := firstID(t, m.backup.ok("publish", "--draft", m.edition(m.backup, "e.json")))
+			if _, rv := m.view(t); rv.Members["current"] == canon.String(m.gid) {
+				t.Fatalf("co-approved edition is not current before the revoke: %s", canon.Encode(rv))
+			}
+			revokeRoot(m)
+			reader, rv := m.view(t)
+			if st, _ := m.stateOf(t, rv, k2); st != "pending" || rv.Members["current"] != canon.String(m.gid) {
+				t.Fatalf("k_of_n 2 after the root revoke: %s %s", st, canon.Encode(rv))
+			}
+			_ = reader // verify exits 0 here: the genesis is the current authority, a valid state (no FORK)
+
+			// any_one: the identity's edition is current, the root is revoked, K2 alone carries on off the genesis
+			m = newMixedCollection(t, alg, `{"any_one":true}`)
+			wid := firstID(t, m.worker.ok("publish", "--draft", m.edition(m.worker, "e.json", "a"), "--as", m.ident, "--grant", m.grant))
+			revokeRoot(m)
+			m.backup.pullFrom(m.worker)
+			m.backup.pullFrom(m.root)
+			k2 = firstID(t, m.backup.ok("publish", "--draft", m.edition(m.backup, "k2.json", "b")))
+			markerOnly(t, lineOf(t, m.backup.store, k2))
+			reader, rv = m.view(t)
+			st, eid := m.stateOf(t, rv, k2)
+			if st != "edition" || rv.Members["current"] != canon.String(eid) {
+				t.Fatalf("any_one K2 after the root revoke: %s %s", st, canon.Encode(rv))
+			}
+			if st, _ := m.stateOf(t, rv, wid); st == "edition" {
+				t.Fatalf("the identity's edition still counts after its root's key_compromise revoke: %s", canon.Encode(rv))
+			}
+			if r := reader.read("verify", m.gid); r.code != ExitOK {
+				t.Fatalf("verify: %d %s", r.code, r.stdout)
+			}
+		})
+	}
+}
+
+// TestBareWithdrawOfTypedResource: K2 withdraws its own marker-only approval (a bare withdrawal takes back the key's
+// bare approvals, identity profile §5.2). The withdrawal is itself written marker-only, and the co-approved
+// edition is pending again; the identity's approval is untouched.
+func TestBareWithdrawOfTypedResource(t *testing.T) {
+	for _, alg := range []string{wire.AlgEd25519, wire.AlgEIP191} {
+		t.Run(alg, func(t *testing.T) {
+			m := newMixedCollection(t, alg, `{"k_of_n":{"k":2}}`)
+			m.worker.ok("publish", "--draft", m.edition(m.worker, "e.json"), "--as", m.ident, "--grant", m.grant)
+			m.backup.pullFrom(m.worker)
+			m.backup.pullFrom(m.root)
+			k2 := firstID(t, m.backup.ok("publish", "--draft", m.edition(m.backup, "e.json")))
+			_, rv := m.view(t)
+			_, eid := m.stateOf(t, rv, k2)
+			if rv.Members["current"] != canon.String(eid) {
+				t.Fatalf("co-approved edition not current: %s", canon.Encode(rv))
+			}
+			w := firstID(t, m.backup.ok("publish", "--draft", m.backup.file("w.json",
+				`{"kind":"withdraw_approval","body":{"resource":"`+m.gid+`","edition":"`+eid+`"}}`)))
+			markerOnly(t, lineOf(t, m.backup.store, w))
+			_, rv = m.view(t)
+			if st, _ := m.stateOf(t, rv, k2); st != "pending" || rv.Members["current"] != canon.String(m.gid) {
+				t.Fatalf("after K2's withdrawal: %s %s", st, canon.Encode(rv))
+			}
+			var withdrawn, kept int
+			for _, e := range m.nonGenesis(rv) {
+				for _, a := range e.Members["approvals"].(canon.Array) {
+					if ao := a.(*canon.Object); ao.Members["withdrawn_by"] == canon.String(w) {
+						withdrawn++
+					} else {
+						kept++
+					}
+				}
+			}
+			if withdrawn != 1 || kept != 1 {
+				t.Fatalf("withdrawn %d kept %d: %s", withdrawn, kept, canon.Encode(rv))
+			}
+		})
 	}
 }
