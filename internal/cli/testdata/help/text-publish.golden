@@ -13,8 +13,10 @@ and content under 64 bytes it warns that short content may be enumerable against
 its hash (a heuristic; include a nonce) and proceeds; the warning is not
 recorded.
 
-A rotate_key draft is signed as written: none of `commons rotate`'s checks run
-(successor, key events already held, merged tips), so the way out after a
+--dry-run signs nothing; with the same --ts its id is the id a real run signs
+only while your log has not moved, because the id commits to your log's prev and
+seq. A rotate_key draft is signed as written: none of `commons rotate`'s checks
+run (successor, key events already held, merged tips), so the way out after a
 compromise stays open; it warns and proceeds. With --as <identity> --grant <id>
 the statement acts for a fixed-root identity (rc/2, the actor in the signed
 envelope): it is refused, nothing signed, unless the identity evaluator over the

@@ -36,7 +36,7 @@ func init() {
 			"The root key must be fresh: a key with any line in this store is refused (exit 1), since the identity's lineage is the root key's whole log. " +
 			"That check sees this store only, not any other: use a key generated for this purpose, one that has signed nothing anywhere (the tool cannot see other stores, and an old key's earlier lines would become part of the identity's lineage). " +
 			"Use the root key for administration only (identity grant, identity cut) and keep it offline: it is the identity's only administrator, and fixed-root-v1 has no recovery if it is lost or stolen. " +
-			"--dry-run prints the exact statement and signs nothing; with --ts the dry run's id is the id the real run signs." + extHelp})
+			"--dry-run prints the exact statement and signs nothing; with the same --ts the dry run's id is the id the real run signs, as long as the signer's log has not moved in between (the id commits to prev and seq)." + extHelp})
 	gflags := append(slices.Clone(writerFlags), extFlags...)
 	gflags = append(gflags,
 		Flag{Name: "identity", Value: "id", Help: "the identity (its inception id); your key must be its root", Check: checkIDFlag},
