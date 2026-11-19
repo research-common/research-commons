@@ -155,6 +155,12 @@ claim that the remaining positive grant is complete (§5).
 | An envelope member in the actor name space other than `x_actor_v1` (`x_actor_v2`, …), with or without `x_actor_v1`, or any `x_actor_*` member inside the body | Unsupported/non-passing (`actor <member>`), never a key fallback. `crit` names body members, so it cannot guard the envelope's actor: this rule does. |
 | Marker object has a field inappropriate to this kind | Invalid candidate; do not ignore it. |
 
+A writer signs a bare key's `edition` or `withdraw_approval` of a resource whose genesis is
+`rc/2` as an `rc/2` marker-only line (the second row), so it approves the same edition as an
+identity's approval of the same body (§2.2: approvals of one edition share the major and the
+body bytes). An edition that sets controllers to plain key strings has no `rc/2` reading and
+stays `rc/1`.
+
 Marker fields are kind-specific: `authored`/`observed` may contain `amends`;
 `edition` may contain `task_roles`; `progress`/`withdraw` must contain `intent`;
 other candidate kinds use `{}`. `amends` requires an identity actor. Genesis,
