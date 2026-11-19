@@ -44,6 +44,14 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   display and the input summary of a derived result, so the two cannot disagree; a blob that also has a counted `authored`
   statement is unchanged. Read-side only: no signed byte, exit code, command, flag or `--json` member name changes, and a
   disclosure still never moves a grade or an exit.
+- A statement covered by its signer's `anchors` line now shows its time bound. `show`, `verify` and `explain` of a statement
+  id of any kind except `anchors` (an edition, an authored line, an observation, …) carry a `time` member, the bound the
+  reader already derives for it, in the shape an authored artifact's claim shows it: `quality` (`local` or `bitcoin`), the
+  covering `anchor` and its `time_state`; a statement no counting anchor covers shows `quality: none`. Before, only the
+  `anchors` line itself and a blob's claims showed a time, so a covered `edition` read as if nothing bounded it. `--json`
+  gains that one member on statement views; an `anchors` line keeps its own `time` evidence member, resource views
+  (an edition's approvals list) are unchanged, and no signed byte, exit code, command or flag changes: the bound is a
+  disclosure and `verify` exits as it did.
 
 - Output and help wording from the first end-to-end run, text only (no exit code, flag, `--json` member or signed byte
   changes): a clean `pull`, `hub check` or `push` now prints `objects: none refused, labelled or undecided` instead of
@@ -57,6 +65,9 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ### Tests
 
+- Pins the statement view's time bound (an uncovered statement shows `none`, a covered one `local` with its anchor and
+  `time_state`, an `edition` statement and an anchors line included) and that covering a statement changes no exit and no
+  other member of `show`, `verify` or `explain`.
 - Pins the bytes of a typed-controller genesis (the `rc/2` line and id a bare key signs for `{identity, key}` controllers,
   next to the key-only `rc/1` pin) and adds a positive signed vector per algorithm: an `rc/2` genesis naming the identity
   as its controller, whose id is usable as a resource id. The existing vectors are byte-identical.
