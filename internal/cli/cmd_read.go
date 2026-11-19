@@ -178,6 +178,13 @@ func (v *view) statementCore(id string) (*Obj, *wire.Statement) {
 	}
 	// a fork of the signer's log is shown beside every line on it; it never changes counted or an exit
 	v.setLogForks(o, st.Signer, id)
+	// the time bound the reader derives for the statement from its signer's anchors lines (bitcoin-time note §2):
+	// a disclosure that never moves an exit. An anchors line carries its own time evidence instead.
+	if st.Kind != "anchors" {
+		if b, ok := v.r.StatementBound(id); ok {
+			o.set("time", v.boundObj(b))
+		}
+	}
 	return o, st
 }
 

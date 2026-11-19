@@ -209,6 +209,16 @@ func (r *Resolver) bound(st *wire.Statement) Bound {
 	return best
 }
 
+// StatementBound is the bound the reader shows for the statement with this id (bound), and false when no such
+// statement is held. A statement no counting anchor of its signer covers has the bound of quality NoBound.
+func (r *Resolver) StatementBound(id string) (Bound, bool) {
+	p, ok := r.byID[id]
+	if !ok {
+		return Bound{}, false
+	}
+	return r.bound(p.St), true
+}
+
 // earlier reports whether bound a ranks strictly before bound b for priority (bitcoin-time note §8.3, claims
 // §5.2): a is verified, and b is either unverified (the earliest verified claim, C-btc-01 (b)) or verified on
 // the same network at a lower height by more than the reader's margin. Same height, a gap within the margin,
