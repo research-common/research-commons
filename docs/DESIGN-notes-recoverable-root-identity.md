@@ -66,7 +66,7 @@ R is the current root, C the committed recovery key. "Copy" means the owner stil
 | R stolen, owner keeps a copy of R and holds C | grant, cut, revoke R, fork R's log, until recovery | recover: name the last good line and a new root | **Recovered.** History up to the last good line is kept; the thief's lines are void, a revoke included. A thief line the owner places inside the kept prefix keeps counting, as with a cut. |
 | R lost, no copy | nothing | nothing | **Not recoverable.** Administration is frozen; existing grants keep working; nothing can be cut or retired. Same as fixed-root. This follows from rule 2 and is why R needs a backup. |
 | C stolen, R safe | nothing | plan a recovery at leisure | **Nothing happens.** C alone is inert. |
-| C lost, R safe | nothing | nothing about C | The identity behaves as a fixed-root identity from then on. The loss is silent unless checked (§7). |
+| C lost, R safe | nothing | nothing about C | The identity behaves as a fixed-root identity from then on. The loss is silent unless checked (§7.3). |
 | R and C both stolen, owner keeps copies | recover to their own root | recover to the owner's root | Two rival recoveries: **retired for good** (rule 5). Never a takeover the owner cannot answer. |
 | R and C both stolen, owner keeps no copy of one | recover to their own root | nothing in-band | **Takeover.** Resources must drop the identity by other means. |
 | R and C both lost | nothing | nothing | Frozen, as fixed-root. |
@@ -176,15 +176,81 @@ Still to write as scenarios: a delegate's acts under a kept grant, under a void 
 by a later root; an edition approved under a grant that a recovery voids, and the resource views that follow;
 the generation cap; a handover whose carried statement has a bad signature or an unsupported algorithm.
 
-## 7. Custody
+## 7. Setting up and holding the recovery key
 
-- **R needs a backup** (rule 2 makes a root lost without a copy unrecoverable), and so does C. The two
-  backups must not sit together: one theft must not yield both keys.
-- **C is used once.** After a recovery, destroy C and its backup. The old root is treated as public.
-- **C can be lost without anyone noticing**, since it never signs. Holding it can be checked without signing
-  or publishing anything: derive its public form on the device, compute the commitment, compare. The tool
-  should offer this as a command and suggest a schedule.
-- **Recovery is not prevention.** Until the recovery is published and has reached a reader, a stolen root
+Command names here are working names. The rules in this section are tool behaviour and guidance, not format:
+the commitment covers a key, and a reader never learns how the key was made or kept.
+
+### 7.1 One kind of recovery key, two ways to hold it
+
+The tool makes one kind of recovery key: an `eip191-secp256k1` key at one fixed, fully hardened path under a
+24-word BIP-39 phrase. Proposed path: `m/44'/60'/1581'/0'/0'`. It is printed with the phrase, because a
+holder needs it to restore the key anywhere else.
+
+Because the key is derived the standard way, the two ways of holding it are interchangeable:
+
+- **A printed recovery phrase** (the default). Nothing to buy; the key exists on a computer for a moment at
+  setup and again at recovery.
+- **A Ledger device** (the hardware option). The key never leaves the device. The device's own backup sheet
+  is then the backup of the recovery key.
+
+A phrase can be restored onto a device later, and a device's key at that path is the key its sheet derives.
+Checked on a device emulator running the Ethereum app: the address the app reports at three paths under
+`m/44'/60'` equals the address standard BIP-39 and BIP-32 software derives from the same phrase. The app
+refused a path under `m/43'`, so the path has to sit under `m/44'/60'`. Not checked: a physical device, a
+24-word phrase (the emulator's test phrase has 12), a BIP-39 passphrase, and whether the device warns when
+signing at this path.
+
+The commitment accepts any supported key, so a holder can commit to a key made another way (an Ed25519 key
+file kept offline, a key on a smart card). The tool does not build flows for those. A key generated on a
+card that cannot export it has no backup, which §7.4 rules out.
+
+### 7.2 Setup
+
+Making the recovery key and creating the identity are separate steps, so that whoever runs the second never
+sees the secret of the first.
+
+1. **Make the recovery key and get its commitment.**
+   - Phrase: `commons recovery new` generates the phrase, shows it once with the path, asks for a few of its
+     words back, and prints the commitment. It writes nothing to disk and keeps nothing.
+   - Device: `commons recovery commitment --ledger` reads the device's address at the path, has the holder
+     confirm it on the device, and prints the commitment.
+2. **Create the identity:** `commons identity new --recovery <commitment>`, signed by the root as today (a
+   key file, or a device through a signing package). The tool refuses a commitment to the root's own key.
+
+**The phrase is the one secret the tool ever prints.** Every other command keeps the rule "key material is
+never printed" (`KEY-FILES.md`). `recovery new` therefore runs only on an interactive terminal: it refuses
+when its output is redirected or `--json` is asked for, and it has no option to write the phrase to a file.
+
+**Where step 1 must not run.** Anything shown in a session that is recorded or relayed is disclosed: a
+remote shell with logging, a screen share, a terminal driven by an AI agent or an automation service. The
+holder runs step 1 personally, on a machine they trust, and hands only the commitment to whatever runs step 2.
+
+### 7.3 Checking and recovering
+
+- **Possession check.** A key that never signs can be lost unnoticed. `commons recovery check --identity <I>`
+  takes the phrase (typed at a terminal, never as an argument) or a device, derives the key, computes the
+  commitment and compares it with the one in force. It signs nothing and writes nothing. Suggested: once
+  after setup, from the backup and not from memory of the setup session, and then yearly.
+- **Recovery** needs three signatures (§4): the new root's first line, the recovery statement, the old
+  root's handover. Before starting, the holder makes the next recovery key as in §7.2, since the recovery
+  statement commits to it. The recovery key signs its one statement either on the device or, for a phrase,
+  on a machine that is offline for the purpose: the phrase is typed at a terminal, the key exists in memory
+  for one signature, and only the signed statement leaves.
+- **After a recovery,** destroy the used recovery key and every backup of it (rule 5 and §3: the old pair
+  can still sign a rival recovery). For a device, that means wiping it and destroying its sheet, or never
+  again unlocking that seed.
+
+### 7.4 Custody rules
+
+- **The root needs a backup** (rule 2 makes a root lost without a copy unrecoverable), and so does the
+  recovery key. The two backups must not sit together: one theft must not yield both keys.
+- **The recovery key's seed is not the root's seed.** A recovery key derived from the phrase that also
+  derives the root is one secret, not two. The tool cannot see this; it is the holder's rule. With two
+  devices, that means two different phrases.
+- **A phrase is not a password.** Nothing rate-limits a guess or lets it be changed: whoever reads it holds
+  the key, and replacing it takes a recovery.
+- **Recovery is not prevention.** Until a recovery is published and has reached a reader, a stolen root
   acts as the identity for that reader. A resource that must not accept a single stolen key at all still
   needs more than one controller subject.
 
@@ -221,3 +287,5 @@ the generation cap; a handover whose carried statement has a bad signature or an
 6. **Commitment encoding** and the **generation cap**: are the proposed digest and 16 right?
 7. **Does a recovery need a reason token**, as a cut has, and should the tool refuse a `last_good` that is
    not on the branch the owner has been using?
+8. **The recovery key's path and phrase** (§7.1): is `m/44'/60'/1581'/0'/0'` acceptable, should a BIP-39
+   passphrase be offered, and is typing a phrase into an offline machine at recovery an acceptable default?
