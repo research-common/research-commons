@@ -200,8 +200,11 @@ the generation cap; a handover whose carried statement has a bad signature or an
 
 ## 9. Questions for review
 
-1. **Should `fixed-root-v1` stay writable?** It must stay readable. Options: keep `identity new` able to
-   write both; make recoverable the default and fixed-root an explicit choice; or stop writing fixed-root.
+1. **Decided: `fixed-root-v1` stays readable for good and stays writable behind an explicit option.**
+   `identity new` creates a recoverable identity by default, and the getting-started documents teach that
+   one kind. The fixed-root writer is kept because the reader's conformance cases are built from it and
+   because it is the reviewed fallback if this profile is found wanting. An existing fixed-root identity
+   cannot be converted (§8).
 2. **Rule 6.** Is "the root alone can retire, and the pair can undo it" right? The alternative, a root revoke
    that stays terminal, lets a thief of the root destroy the identity, which is today's behaviour.
 3. **Rival recoveries.** Rule 5 retires for good and needs the used recovery key destroyed after a recovery.
