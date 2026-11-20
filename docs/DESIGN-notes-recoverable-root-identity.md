@@ -82,15 +82,20 @@ All are `rc/2` statements with the `x_identity_v1` marker, raw-key signed, and t
 
 | Kind | Signed by | Body besides the marker | Notes |
 |---|---|---|---|
-| `identity_inception` | R, `seq` 0 | `profile:"recoverable-root-v1"`, `recovery:{commitment}` | The id is I. The commitment is required: an identity that wants none uses `fixed-root-v1`. |
+| `identity_inception` | R, `seq` 0 | `profile:"recoverable-root-v1"`, `recovery:{commitments:[c], rule:{any_one:true}}` | The id is I. The commitment is required: an identity that wants none uses `fixed-root-v1`. |
 | `identity_succession` | the new root R′, `seq` 0 | `identity:I` | R′ consents and pins its own lineage, as a delegate's first line does for a grant. R′ must be a fresh key. |
-| `identity_recovery` | C, `seq` 0, `prev` null | `identity:I`, `last_good:L-or-null`, `successor:{key:R′, inception:D′}` or null, `next:{commitment}` | C's only statement. `successor:null` closes the identity with its history kept (§5, RR-11); `next` is then absent. |
+| `identity_recovery` | C, `seq` 0, `prev` null | `identity:I`, `last_good:L-or-null`, `successor:{key:R′, inception:D′}` or null, `next:{commitments:[c], rule:{any_one:true}}` | C's only statement. `successor:null` closes the identity with its history kept (§5, RR-11); `next` is then absent. |
 | `identity_handover` | R | `identity:I`, `recovery:<the whole signed identity_recovery>` | R's half of rule 2. It carries the recovery statement, not its id (below). |
 
 **The commitment** is a digest of the recovery key's public form under its own domain string, so it can be
 confused with no statement id or content digest. Proposed: lowercase hex SHA-256 of
 `PAE("application/vnd.research-commons.recovery-commitment.v1", <signer string>)`. Publishing a digest and not
 the key keeps the key's public form unknown until use.
+
+**One recovery key (decided).** This version reads exactly one commitment under `any_one`. The member is
+written as a set with a rule so that a later version can add a threshold without another profile; a reader
+of this version reads any other count or rule as unsupported for the whole identity, never as "any one of
+them". A holder who wants redundancy keeps backup copies of the one key.
 
 **Why the handover carries the statement.** If it named the recovery by id, a thief holding only R could sign
 a handover naming an id that does not exist. A reader cannot tell "not received" from "never existed", so the
