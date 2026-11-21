@@ -198,7 +198,8 @@ func (NoReferentChecker) Check(*wire.Statement) ReCheck {
 
 // AttestationVerifier verifies the attestation behind a declared `device-attested` or `source-attested` level
 // against the bytes the statement names (§5.3.3). It answers for the level the statement declares and no
-// other, from receiver-local trust roots, never from a field of the statement.
+// other, from receiver-local trust roots, never from a field of the statement. For `source-attested` on a
+// source-class observation the proven source must be the endpoint the referent pins (claims §5.3.3).
 type AttestationVerifier interface {
 	VerifyAttestation(st *wire.Statement) (ok bool, why string)
 }

@@ -1049,7 +1049,9 @@ as an optional field (a minor change, §6) modelled on RFC 9581 §3.5.4 and FITS
   that the named source served the bytes (claims-model note §5.3.3). It is added now because the list is
   closed: a value a reader does not know is malformed to it, so a level added after 1.0 could not be read by a
   1.0 reader. `device-attested` is not widened to cover it, because the two say different things (which device
-  produced the bytes; which source served them). The contents of `capture.attestation` stay out of scope
+  produced the bytes; which source served them). The level names what is proven, so it covers a response the
+  source signed as well as a proof over the session. Every class may declare it: a class restriction could not
+  be lifted after 1.0 for the same reason a value cannot be added. The contents of `capture.attestation` stay out of scope
   (§11): any object is valid, and a later note that names its members changes no existing bytes (§5;
   C-core-52a).
 

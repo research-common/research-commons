@@ -596,15 +596,28 @@ the reader relies on, and makes fabrication more expensive:
 | **anchored at capture** | the bytes existed by time T, which rules out later fabrication with hindsight | that they were captured rather than invented before T |
 | **witnessed** | simultaneous observers co-sign, each with its own `observed` statement | that the witnesses don't collude or share a feed |
 | **device-attested** | a specific sealed device (secure hardware, TEE) produced the bytes | that the sensor saw reality; trust moves to the manufacturer's attestation root and the sensor's physical integrity |
-| **source-attested** | a proof that the named source served the bytes in a session (a notarised or zero-knowledge proof over the transport session, for example) | that the source was right; trust moves to whoever attests the session (a notary or attestor, where the proof system has one) and to the source's own key |
+| **source-attested** | a proof that a named source served the bytes: the source's own signature over the response, or a notarised or zero-knowledge proof over the transport session | that the source was right; trust moves to the source's key and, for a session proof, to whoever attests the session (a notary or attestor, where the proof system has one) |
 
 The observer declares one level. The levels are not ordered: each names a different kind of evidence, and none
 implies another. The tool displays only what it verified: an attestation the reader cannot verify shows as
 `device-attested (unverified)` or `source-attested (unverified)`, and a verifier for one of the two never
-verifies the other (C-core-52, C-core-52a). `source-attested` is about where the bytes came from, so it reads
-naturally on a source-class observation; the other classes may declare it, and what it then means is for the
-attestation's own format to say. What the `attestation` object holds, and how a proof binds to the statement,
-belong to the attestation note (§15). Agent-operated captures (#17) record roles explicitly: the signer who
+verifies the other (C-core-52, C-core-52a).
+
+A level names what is proven, not the mechanism that proves it. `source-attested` covers a response the source
+signed itself as well as a proof over the session that carried it; both say "this source served these bytes".
+
+Any class may declare `source-attested`. A method-class observation of a hosted system is the common case
+outside the source class: the proof shows that the provider's endpoint served the output, which the observer
+otherwise only asserts. The class does not fix which source is meant, so:
+
+- an attestation behind `source-attested` names the source it proves;
+- on a source-class observation that source must be the endpoint the referent pins (every endpoint, for a
+  batch). A proof about any other source does not verify the level;
+- on any other class, a reader that reads the level as verified shows the proven source beside it, because
+  the referent does not say which source to expect.
+
+These are rules for a verifier, and no verifier ships yet. What the `attestation` object holds, and how a proof
+binds to the statement, belong to the attestation note (§15). Agent-operated captures (#17) record roles explicitly: the signer who
 vouches, the operator (human or agent) who ran the capture, and the instrument or source. One key need not
 stand for one person.
 

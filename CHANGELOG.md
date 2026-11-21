@@ -12,9 +12,9 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 ### Added
 
 - **Wire format: a fifth capture-evidence level, `source-attested`.** An `observed` may declare
-  `capture.evidence: "source-attested"`: a proof that the named source served the bytes (a notarised or
-  zero-knowledge proof over the transport session, for example), beside `device-attested`, which says a sealed device
-  produced them. It is added before the 1.0 freeze because the list is closed: a reader refuses a value it does not
+  `capture.evidence: "source-attested"`: a proof that a named source served the bytes (the source's own signature
+  over the response, or a notarised or zero-knowledge proof over the transport session), beside `device-attested`,
+  which says a sealed device produced them. Any class may declare it. It is added before the 1.0 freeze because the list is closed: a reader refuses a value it does not
   know as malformed, so this is the last point at which a level can be added without a new major. **No existing
   byte changes**, and every statement a `1.0.0-rc.1` writer signed reads as before. A statement declaring the new level
   is malformed to a `1.0.0-rc.1` or earlier reader; upgrade readers before writing one. No verifier ships: every
