@@ -70,7 +70,7 @@ R is the current root, C the committed recovery key. "Copy" means the owner stil
 | R and C both stolen, owner keeps copies | recover to their own root | recover to the owner's root | Two rival recoveries: **retired for good** (rule 5). Never a takeover the owner cannot answer. |
 | R and C both stolen, owner keeps no copy of one | recover to their own root | nothing in-band | **Takeover.** Resources must drop the identity by other means. |
 | R and C both lost | nothing | nothing | Frozen, as fixed-root. |
-| After a recovery, the old R and old C are both obtained by someone | sign a rival recovery of the old root | nothing in-band | **Retired for good**, even years later (rule 5). After a recovery the used recovery key and its backup must be destroyed; the old root is assumed stolen already. See §9, question 3. |
+| After a recovery, the old R and old C are both obtained by someone | sign a rival recovery of the old root | nothing in-band | **Retired for good**, even years later (rule 5). After a recovery the used recovery key and its backup must be destroyed; the old root is assumed stolen already. See §9, open question 2. |
 | A reader holds only part of the evidence | n/a | n/a | A reader that lacks the recovery reads the pre-recovery state, as it reads an identity today without a cut it has not received. A reader that holds a valid recovery but lacks a line it names reads unknown. |
 
 Compared with the fixed-root profile, the common disaster (the root's device or backup is compromised) goes
@@ -105,7 +105,7 @@ against the commitment) or complete, from its own bytes. This came out of the mo
 
 **A handover is judged by signature, not by its place in R's log.** It is bound to the identity three ways:
 it names I, R signed it, and the carried statement's signer matches the commitment in force. So it applies
-wherever it sits, including on a branch the recovery itself voids. Open to challenge (§9, question 4).
+wherever it sits, including on a branch the recovery itself voids. Open to challenge (§9, open question 6).
 
 **Root generations.** The inception's root is generation 0. Each recovery with a successor starts the next
 generation, whose root is R′, whose lineage starts at D′, and whose recovery commitment is `next`. A reader
@@ -165,16 +165,23 @@ end-to-end conformance cases when the profile is built; until then they are scen
 | RR-14 | A reader that holds everything but the handover | The pre-recovery state. |
 | RR-15 | A recovery whose `next` repeats a commitment already used | Void. |
 | RR-16 | R′ is revoked by its own key event | Retired at generation 1, recoverable by R′ and the second recovery key. |
-| RR-17 | (reserved: a delegate's acts across a recovery; see below) | |
+| RR-17 | A delegate's acts across a recovery: (a) under a grant inside the kept prefix; (b) under a grant the recovery voids; (c) the new root cuts a grant the old root issued; (d) the old root signs a cut after the recovery | (a) Counts before and after. (b) Counted before the recovery is read, counts for nothing after, whenever the act was signed. (c) The grant is cut. (d) Void: the grant still counts. |
 | RR-18 | `last_good: null` | Only the inception is kept: no earlier grant counts. |
 | RR-19 | The owner names a `last_good` that has a root key event among its ancestors | Retired for good: a key event inside the kept prefix is terminal. |
 | RR-20 | After a recovery, the old R is revoked | No effect on the identity. |
 | RR-21 | Every subset of RR-02's statements | No subset reads generation 1 with a thief grant counting. |
 | RR-22 | A complete recovery, plus a second valid one whose `last_good` is not held | Unknown: a possible rival is never passed over. |
+| RR-23 | More generations than the reader's cap | Unknown, with the cap as the reason. Never a guess at the current root. |
+| RR-24 | A handover whose carried recovery statement does not verify, or uses an algorithm the reader does not support | Void for a bad signature; unknown for an unsupported algorithm. The identity is otherwise unchanged. |
+| RR-25 | The root signs a statement outside its vocabulary (an ordinary `authored`, say: issue #271). Then (b) the owner recovers with `last_good` before that line, or (c) with `last_good` at or after it | Unknown, as in the fixed-root profile. (b) Current at generation 1: the line is outside the kept prefix. (c) Still unknown. |
 
-Still to write as scenarios: a delegate's acts under a kept grant, under a void grant, and under a grant cut
-by a later root; an edition approved under a grant that a recovery voids, and the resource views that follow;
-the generation cap; a handover whose carried statement has a bad signature or an unsupported algorithm.
+RR-24's unsupported-algorithm half is not in the reference model, which has no notion of an algorithm; the
+rest of the table is. RR-25 matters beyond theft: today one mistaken command with the root key ends a
+fixed-root identity (issue #271), and under this profile the owner can recover from it.
+
+Still to write as a scenario: an edition approved under a grant that a recovery voids, and the resource
+views that follow (RR-17b says the approval stops counting; what a collection's reader then shows needs its
+own cases).
 
 ## 7. Setting up and holding the recovery key
 
@@ -269,23 +276,39 @@ holder runs step 1 personally, on a machine they trust, and hands only the commi
   actions a signing package can carry today. The package format is revised once, together with packages for
   bare-key statements and key events (issue #266), and that revision gets its own note.
 
-## 9. Questions for review
+## 9. Decided, and open for review
 
-1. **Decided: `fixed-root-v1` stays readable for good and stays writable behind an explicit option.**
-   `identity new` creates a recoverable identity by default, and the getting-started documents teach that
-   one kind. The fixed-root writer is kept because the reader's conformance cases are built from it and
-   because it is the reviewed fallback if this profile is found wanting. An existing fixed-root identity
-   cannot be converted (§8).
-2. **Rule 6.** Is "the root alone can retire, and the pair can undo it" right? The alternative, a root revoke
-   that stays terminal, lets a thief of the root destroy the identity, which is today's behaviour.
-3. **Rival recoveries.** Rule 5 retires for good and needs the used recovery key destroyed after a recovery.
-   An alternative is precedence by proven time (the recovery with the earlier Bitcoin-quality bound wins),
-   which removes the standing risk but makes an identity's state depend on time evidence. Not proposed here.
-4. **Handover placement.** §4 judges a handover by signature alone. Is there a case where requiring it on
-   the root's lineage, with complete ancestry, is safer?
-5. **Closing with history kept** (RR-11). Wanted, or out of scope for a first version?
-6. **Commitment encoding** and the **generation cap**: are the proposed digest and 16 right?
-7. **Does a recovery need a reason token**, as a cut has, and should the tool refuse a `last_good` that is
-   not on the branch the owner has been using?
-8. **The recovery key's path and phrase** (§7.1): is `m/44'/60'/1581'/0'/0'` acceptable, should a BIP-39
-   passphrase be offered, and is typing a phrase into an offline machine at recovery an acceptable default?
+**Decided by the maintainer.** Review is welcome, but these are the frame the rest is built in:
+
+- A recovery commitment sits in the inception, under a new profile token. An existing fixed-root identity
+  cannot be converted (§8).
+- One recovery key, with an offline backup. The commitment is written as a set with a rule so that more can
+  be read later; a reader treats anything but one key under `any_one` as unsupported.
+- A recovery needs the recovery key **and** the current root. The recovery key alone does nothing.
+- `identity new` creates a recoverable identity by default. `fixed-root-v1` stays readable for good and
+  stays writable behind an explicit option, because the reader's conformance cases are built from it and it
+  is the reviewed fallback if this profile is found wanting.
+- No signing policy inside an identity (several keys that must agree). Separate roles are separate
+  identities.
+
+**Open: the author's proposals, not decisions.** Each is written into the text above as if settled, so that
+the note reads as one design. None is.
+
+1. **Rule 6: can the root alone retire the identity, and can the pair undo it?** The alternative, a root
+   revoke that stays terminal, lets a thief of the root destroy the identity, which is today's behaviour.
+2. **Rule 5: rival recoveries retire for good.** It needs the used recovery key and its backups destroyed
+   after a recovery. An alternative is precedence by proven time (the recovery with the earlier
+   Bitcoin-quality bound wins), which removes the standing risk but makes an identity's state depend on time
+   evidence. Not proposed here.
+3. **Closing with history kept** (RR-11, a recovery naming no successor). Wanted, or out of scope for a
+   first version?
+4. **The recovery key's path** (§7.1): is `m/44'/60'/1581'/0'/0'` acceptable?
+5. **A BIP-39 passphrase on the recovery phrase:** offered or not? And is typing a phrase into an offline
+   machine at recovery an acceptable default?
+6. **Encoding details:**
+   - the commitment digest (§4), and whether it should hide the key at all;
+   - handover placement: §4 judges a handover by signature alone. Is there a case where requiring it on the
+     root's lineage, with complete ancestry, is safer?
+   - the generation cap of 16 (RR-23);
+   - whether a recovery needs a reason token, as a cut has, and whether the tool should refuse a `last_good`
+     that is not on the branch the owner has been using.
