@@ -104,3 +104,74 @@ statement (`package-kind-unsupported`, exit 2) before computing a summary. A sta
 new tag. Rejected: an open `/2`, where a later release adds kinds under the same tag and older `/2` readers refuse
 them. It is also safe (they refuse), but it breaks the frozen promise in a quieter way: "reads `/2`" would no longer
 say which packages a release can sign, and a holder would learn it only from a refusal at the signing machine.
+
+## 3. What a `/2` package carries
+
+### 3.1 Members
+
+A `/2` package is one JSON object, written canonical (JCS) and newline-terminated, with exactly the `/1` members
+plus one:
+
+| member | type | value |
+|---|---|---|
+| `format` | string | `rc-signing-package/2` |
+| `envelope` | object | the unsigned statement, every member but `sig`: an `rc/1` envelope (a bare-key `rc/1` statement or a key event) or an `rc/2` envelope with the identity marker and **no actor**. The only source of every derived member below |
+| `pae` | string | the exact signed string (wire §2 PAE of the envelope, under the envelope's own major), standard base64 with padding |
+| `alg`, `signer`, `statement` | string | as `/1`: the envelope's `alg` and `signer`, and the proposed statement id (sha256 of the PAE) |
+| `log_head` | string or object | as `/1`: `"genesis"` when `prev` is null, else `{"seq": seq - 1, "statement": prev}` |
+| `log_tips` | array | **new.** The tips of the signer's log this store held when the package was prepared: a sorted, duplicate-free set of statement ids, `[]` when it held no line of the key |
+| `summary` | object | tokens and envelope values only (§6) |
+
+Every member but `log_tips` is derived from the envelope, and `package show`, `key sign` and `--complete`
+recompute and compare each, as for `/1`. `log_tips` is not derived from the envelope: it records what the store
+held when the holder reviewed the plan. A signing machine with no store checks its shape only (sorted ids, and
+`prev` and every `merges` id among them or among their ancestors is not checkable there, so it is not checked) and
+displays it as "prepared against these tips; the store checks them". `--complete` compares it with the store (§3.3).
+
+`log_tips` is **not a security boundary.** It is not signed, and whoever can edit the package on the store's
+machine can make it match. The boundary is the signed bytes, which already fix `seq`, `prev` and `merges`, and the
+rebuild check of §3.3. `log_tips` exists so that an honest store refuses to append a key event whose effect on
+the log changed after the holder reviewed it (§4.2); editing it cannot make a changed statement pass, because the
+statement is rebuilt from the store's current state and compared byte for byte.
+
+The "prepared form" rule of `/1` carries over: the envelope must be exactly what `--prepare` writes for the
+statement it reads as, so a package cannot smuggle an inert member a reader would ignore. Two differences: a
+key event's envelope may carry `merges` (they are part of the plan, §4), and an `rc/1` envelope is checked
+unsigned under the `rc/1` rules (today's unsigned check reads `rc/2` only, and is extended, not loosened).
+
+### 3.2 The bare-key binding
+
+A bare-key statement is signed by the key itself, with no actor, so the package binds it to nothing but the
+key's own log: `seq` and `prev` in the envelope, which the signature covers. The binding is the same as `/1`'s
+for an identity act: the envelope extends the one tip the store holds (a fork is refused at `--prepare` unless
+`--prev` names the line, as for direct signing), and `log_head` says which line. Nothing about an identity is
+bound, because there is none; the statement's other references (a `resource`, an edition's `predecessors`) are
+in the body and covered by the signature.
+
+**Which bare-key statements `/2` carries: `edition` and `withdraw_approval`**, in either major: `rc/2` marker-only
+for a resource whose genesis is `rc/2` (so the approval shares its edition id with an identity's approval of the
+same body), `rc/1` for a resource whose genesis is `rc/1`, exactly as `publish` chooses today. These are what a
+controller key exists to sign (#266, reason 2). Every other bare-key kind (`authored`, `observed`, `holds`,
+`describes`, `anchors`, task acts, a `genesis`) stays without a package route in `/2`: a device-held key that
+publishes claims does so as a delegate of an identity, through `publish --as`, which `/1` already carries. This is
+a decision for review (§9): adding the other kinds is mechanical, but each is one more summary to define and freeze.
+
+### 3.3 The staleness rule, by action
+
+`--complete` always rebuilds the statement from the package's inputs over the statements the store holds now
+and refuses unless it is the prepared envelope byte for byte (`stale-prepare`, exit 1, appending nothing), as
+`/1` does. What else counts as "the log moved" depends on what the statement's effect depends on:
+
+| action | `--complete` refuses (`stale-prepare`, exit 1) when | why |
+|---|---|---|
+| bare-key `edition`, `withdraw_approval` | the signer's log is not at `log_head` (as `/1`) | the line is ordinary; its effect does not depend on other branches |
+| key event (`revoke_key`, `rotate_key`) | the tips the store holds now are not `log_tips`, **or** the log is not at `log_head` | a key event cuts every line outside its history (claims-model §4.1): a line or tip that arrived after the review would be cut, or kept, without the holder having seen it (§4.2) |
+| recovery: `identity_succession` | the new root's log is not empty | it must be that key's `seq` 0 |
+| recovery: `identity_recovery` | the recovery key's log is not empty | a recovery key signs one statement; a held line of it is a rival recovery, and an alarm (§5) |
+| recovery: `identity_handover` | never refused for a moved root log; it warns that the handover forks the root's log | a handover is judged by signature, not by its place in the root's log, so a thief extending the root's log must not be able to block a recovery (§5) |
+
+A signature made over a stale package is not destroyed by the refusal: it is a valid signature over valid bytes,
+sitting in a file. For an ordinary line that matters little (it is one more line of the key's log if it is ever
+published). For a key event it matters: a key event signed on an old head, published later by anyone who holds
+the signature file, cuts the lines signed since. So the refusal names this, and the guidance is to delete the
+signature file of a refused key event unless it is kept on purpose as an escrowed revocation (§4.3).
