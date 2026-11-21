@@ -46,7 +46,7 @@ count subjects, so two delegates of one identity are one approval; that already 
 3. A recovery names a **last good line** of the root's log. The root's lines at or before it keep counting.
    Every other line of that root counts for nothing, whenever it was or will be signed.
 4. A recovery names a **successor root** and the **next recovery commitment**. The identity id is unchanged.
-   A recovery key is used once.
+   A recovery key is used once, and a key is an identity's root at most once.
 5. Two complete recoveries of the same root that differ in any effect **retire the identity for good**. No
    clock, arrival order or first-seen rule decides between them.
 6. The root alone can still **retire** the identity with a raw `revoke_key`, as today. Unlike today, a later
@@ -70,7 +70,7 @@ R is the current root, C the committed recovery key. "Copy" means the owner stil
 | R and C both stolen, owner keeps copies | recover to their own root | recover to the owner's root | Two rival recoveries: **retired for good** (rule 5). Never a takeover the owner cannot answer. |
 | R and C both stolen, owner keeps no copy of one | recover to their own root | nothing in-band | **Takeover.** Resources must drop the identity by other means. |
 | R and C both lost | nothing | nothing | Frozen, as fixed-root. |
-| After a recovery, the old R and old C are both obtained by someone | sign a rival recovery of the old root | nothing in-band | **Retired for good**, even years later (rule 5). After a recovery the used recovery key and its backup must be destroyed; the old root is assumed stolen already. See §9, open question 2. |
+| After a recovery, the old R and old C are both obtained by someone | sign a rival recovery of the old root | nothing in-band | **Retired for good**, even years later (rule 5). After a recovery the used recovery key and its backup must be destroyed; the old root is assumed stolen already. See §9, open question 1. |
 | A reader holds only part of the evidence | n/a | n/a | A reader that lacks the recovery reads the pre-recovery state, as it reads an identity today without a cut it has not received. A reader that holds a valid recovery but lacks a line it names reads unknown. |
 
 Compared with the fixed-root profile, the common disaster (the root's device or backup is compromised) goes
@@ -105,11 +105,14 @@ against the commitment) or complete, from its own bytes. This came out of the mo
 
 **A handover is judged by signature, not by its place in R's log.** It is bound to the identity three ways:
 it names I, R signed it, and the carried statement's signer matches the commitment in force. So it applies
-wherever it sits, including on a branch the recovery itself voids. Open to challenge (§9, open question 6).
+wherever it sits, including on a branch the recovery itself voids. Open to challenge (§9, open question 4).
 
 **Root generations.** The inception's root is generation 0. Each recovery with a successor starts the next
 generation, whose root is R′, whose lineage starts at D′, and whose recovery commitment is `next`. A reader
-evaluates generation by generation, with a cap (proposed: 16; over the cap reads unknown, never partial).
+evaluates generation by generation. The evaluation ends without help: a key is a root at most once and a
+commitment is used at most once, so a chain of generations cannot loop, and it is no longer than the
+statements held. A reader may still bound the work with a cap; over a cap it reads unknown, never partial
+(RR-23). Whether the profile should fix a number is open (§9).
 
 **Signing order for a recovery:** R′ signs D′; C signs the recovery naming D′; R signs the handover carrying
 it. Three signatures, each of which may come from a device through a signing package.
@@ -121,8 +124,10 @@ For identity I at generation g, with root R, lineage start D and commitment K:
 1. Collect every `identity_handover` signed by R that names I. One whose carried statement is not a valid
    `identity_recovery` for I, at `seq` 0, signed by a key whose commitment is K, is **void**: it is reported
    and changes nothing. So is one whose `last_good` is a line of another key or another lineage, whose
-   successor statement is not that key's `seq`-0 `identity_succession` for I, or whose `next` repeats a
-   commitment already used by this identity.
+   successor statement is not that key's `seq`-0 `identity_succession` for I, whose `next` repeats a
+   commitment already used by this identity, or whose successor is a key that was already a root of this
+   identity. (A key is an identity's root at most once. Otherwise a recovery naming a former root would make
+   that root's whole log current again, including lines an earlier recovery voided: RR-26.)
 2. A valid handover that names a line the reader does not hold (the last good line, an ancestor of it, the
    successor's first line) makes the identity **unknown**. Unlike step 1 this needs both keys, so only the
    owner or a holder of both can cause it.
@@ -173,6 +178,7 @@ end-to-end conformance cases when the profile is built; until then they are scen
 | RR-22 | A complete recovery, plus a second valid one whose `last_good` is not held | Unknown: a possible rival is never passed over. |
 | RR-23 | More generations than the reader's cap | Unknown, with the cap as the reason. Never a guess at the current root. |
 | RR-24 | A handover whose carried recovery statement does not verify, or uses an algorithm the reader does not support | Void for a bad signature; unknown for an unsupported algorithm. The identity is otherwise unchanged. |
+| RR-26 | R is replaced by R′, a thief of R′ grants, R′ is replaced by R″ with `last_good` before that grant. A third recovery then names R′ as the successor | Void: R″ stays the root, and the thief's grant stays void. Found by the reference model after this note was first posted; the first version of §5 let the grant count again. |
 | RR-25 | The root signs a statement outside its vocabulary (an ordinary `authored`, say: issue #271). Then (b) the owner recovers with `last_good` before that line, or (c) with `last_good` at or after it | Unknown, as in the fixed-root profile. (b) Current at generation 1: the line is outside the kept prefix. (c) Still unknown. |
 
 RR-24's unsupported-algorithm half is not in the reference model, which has no notion of an algorithm; the
@@ -190,9 +196,17 @@ the commitment covers a key, and a reader never learns how the key was made or k
 
 ### 7.1 One kind of recovery key, two ways to hold it
 
-The tool makes one kind of recovery key: an `eip191-secp256k1` key at one fixed, fully hardened path under a
-24-word BIP-39 phrase. Proposed path: `m/44'/60'/1581'/0'/0'`. It is printed with the phrase, because a
-holder needs it to restore the key anywhere else.
+The tool makes one kind of recovery key: an `eip191-secp256k1` key at one fixed path under a 24-word BIP-39
+phrase, with no BIP-39 passphrase. The path is `m/44'/60'/1581'/0/0` (decided): the shape the tool already
+asks for with a device (`m/44'/60'/<account>'/0/<index>`), at an account number chosen to collide with
+nothing in use. The number has no other meaning. Hardening the last two levels was considered and dropped:
+it protects against a leaked extended public key, and none is published here. The path is printed with the
+phrase, because a holder needs it to restore the key anywhere else.
+
+**No passphrase on the printed phrase (decided).** A passphrase is a second secret, and losing it loses the
+recovery key. What it would guard against, someone reading the paper, is already blunted: the recovery key
+alone does nothing (rule 2). A holder who keeps the key on a device may still use the device's own
+passphrase feature; the tool neither knows nor cares.
 
 Because the key is derived the standard way, the two ways of holding it are interchangeable:
 
@@ -203,10 +217,11 @@ Because the key is derived the standard way, the two ways of holding it are inte
 
 A phrase can be restored onto a device later, and a device's key at that path is the key its sheet derives.
 Checked on a device emulator running the Ethereum app: the address the app reports at three paths under
-`m/44'/60'` equals the address standard BIP-39 and BIP-32 software derives from the same phrase. The app
-refused a path under `m/43'`, so the path has to sit under `m/44'/60'`. Not checked: a physical device, a
-24-word phrase (the emulator's test phrase has 12), a BIP-39 passphrase, and whether the device warns when
-signing at this path.
+`m/44'/60'`, one of them of this shape, equals the address standard BIP-39 and BIP-32 software derives from
+the same phrase. The app refused a path under `m/43'`, so the path has to sit under `m/44'/60'`. Checked on
+a physical device: it reports an address at `m/44'/60'/1581'/0/0`. Not checked: that the physical device's
+address at this path matches software derivation from its phrase, a 24-word phrase (the emulator's test
+phrase has 12), and whether the device warns when signing at this path.
 
 The commitment accepts any supported key, so a holder can commit to a key made another way (an Ed25519 key
 file kept offline, a key on a smart card). The tool does not build flows for those. A key generated on a
@@ -244,6 +259,10 @@ holder runs step 1 personally, on a machine they trust, and hands only the commi
   statement commits to it. The recovery key signs its one statement either on the device or, for a phrase,
   on a machine that is offline for the purpose: the phrase is typed at a terminal, the key exists in memory
   for one signature, and only the signed statement leaves.
+  **This is the most dangerous moment in the identity's life.** A recovery happens because the root is
+  believed stolen, so whoever learns the phrase now holds both keys and can sign a rival recovery, which
+  retires the identity for good (rule 5). The machine must be one the thief of the root cannot have touched:
+  not the machine the root was used on, and not one that goes back online before the recovery is published.
 - **After a recovery,** destroy the used recovery key and every backup of it (rule 5 and §3: the old pair
   can still sign a rival recovery). For a device, that means wiping it and destroying its sheet, or never
   again unlocking that seed.
@@ -291,24 +310,42 @@ holder runs step 1 personally, on a machine they trust, and hands only the commi
 - No signing policy inside an identity (several keys that must agree). Separate roles are separate
   identities.
 
+- **The root alone can retire the identity, and a recovery can undo that** (rule 6). A root revoke that
+  stayed terminal would let a thief of the root destroy the identity, which is today's behaviour. The cost:
+  a reader cannot tell a retirement that will stand from one that will be undone.
+- **An identity can be closed with its history kept** (RR-11, a recovery naming no successor). It is the one
+  final way to end an identity whose earlier statements should go on counting.
+- **The recovery key's path is `m/44'/60'/1581'/0/0`, with no BIP-39 passphrase** (§7.1).
+
 **Open: the author's proposals, not decisions.** Each is written into the text above as if settled, so that
 the note reads as one design. None is.
 
-1. **Rule 6: can the root alone retire the identity, and can the pair undo it?** The alternative, a root
-   revoke that stays terminal, lets a thief of the root destroy the identity, which is today's behaviour.
-2. **Rule 5: rival recoveries retire for good.** It needs the used recovery key and its backups destroyed
-   after a recovery. An alternative is precedence by proven time (the recovery with the earlier
-   Bitcoin-quality bound wins), which removes the standing risk but makes an identity's state depend on time
-   evidence. Not proposed here.
-3. **Closing with history kept** (RR-11, a recovery naming no successor). Wanted, or out of scope for a
-   first version?
-4. **The recovery key's path** (§7.1): is `m/44'/60'/1581'/0'/0'` acceptable?
-5. **A BIP-39 passphrase on the recovery phrase:** offered or not? And is typing a phrase into an offline
-   machine at recovery an acceptable default?
-6. **Encoding details:**
+1. **Rule 5: rival recoveries retire for good.** It needs the used recovery key and its backups destroyed
+   after a recovery, which nobody can prove was done. That makes it the design's weakest point: after a
+   recovery, the old root and the old recovery key together stay a way to retire the identity, for as long
+   as both exist.
+   The alternative is precedence by proven time: the recovery with the earlier Bitcoin-quality bound wins,
+   or a rival proven long after the first is void. Both were run through the reference model. Both remove
+   the standing risk above **when the owner's recovery carries a proof**. Both make the other case worse: a
+   thief who holds both keys before any recovery signs one, timestamps it, and shows it to nobody. A
+   timestamp proves a statement existed by a time, not that anyone could see it. When the owner later
+   recovers, the thief reveals the earlier one and wins: the owner has lost the identity to the thief and
+   can no longer even retire it. Under rule 5 the same theft ends in retirement. So time precedence trades
+   "a thief with both keys can destroy the identity" for "a thief with both keys can take it", and it also
+   makes an identity's state depend on which proofs a reader holds. Not proposed. A counter-argument, or a
+   rule that keeps the first property without the second, is the most valuable thing a reviewer could bring.
+2. **Should the profile fix a generation cap, and at what number?** The evaluation does not need one to end
+   (§4). A cap is a resource limit: every generation a reader walks costs it the old root's whole kept
+   prefix. Only a holder of both keys can add a generation, so a long chain is self-inflicted or the work of
+   a thief who could do worse. A fixed cap has a cost of its own: an owner who replaces the root on a
+   schedule spends one generation each time, and at the cap the identity reads unknown to every reader for
+   good. Options: no cap in the profile (a reader's own limit, reported as such); a cap far above any honest
+   use; or a low cap with the rule that rotation for hygiene is not what recovery is for.
+3. **Typing a phrase into an offline machine at recovery** (§7.3): acceptable as the default, given how much
+   rides on that machine?
+4. **Encoding details:**
    - the commitment digest (§4), and whether it should hide the key at all;
    - handover placement: §4 judges a handover by signature alone. Is there a case where requiring it on the
      root's lineage, with complete ancestry, is safer?
-   - the generation cap of 16 (RR-23);
-   - whether a recovery needs a reason token, as a cut has, and whether the tool should refuse a `last_good`
-     that is not on the branch the owner has been using.
+   - whether a recovery needs a reason token, as a cut has, and whether the tool should refuse, or only warn
+     about, a `last_good` that is not on the branch the owner has been using.
