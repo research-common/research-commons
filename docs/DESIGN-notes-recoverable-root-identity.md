@@ -257,9 +257,20 @@ holder runs step 1 personally, on a machine they trust, and hands only the commi
   after setup, from the backup and not from memory of the setup session, and then yearly.
 - **Recovery** needs three signatures (§4): the new root's first line, the recovery statement, the old
   root's handover. Before starting, the holder makes the next recovery key as in §7.2, since the recovery
-  statement commits to it. The recovery key signs its one statement either on the device or, for a phrase,
-  on a machine that is offline for the purpose: the phrase is typed at a terminal, the key exists in memory
-  for one signature, and only the signed statement leaves.
+  statement commits to it. How the recovery key signs its one statement depends on how it is held:
+  - **On its own device:** it signs there. Nothing else to do.
+  - **As a printed phrase, with a hardware wallet available (taught first):** restore the phrase onto the
+    device and sign there, so the phrase never touches a computer. Restoring wipes the seed the device
+    holds. If the root lives on that same device, the order is: restore the recovery phrase, sign the
+    recovery statement, wipe, restore the root's phrase, sign the handover. That needs the root's backup
+    sheet to hand; a second device avoids it.
+  - **As a printed phrase, with no hardware wallet (the fallback):** on a machine that is offline for the
+    purpose, the phrase is typed at a terminal, the key exists in memory for one signature, and only the
+    signed statement leaves. The tool warns when it can see a live network connection. It does not refuse:
+    it cannot tell reliably, and a refusal that may be wrong is worse than a warning at this moment.
+
+  No route needs hardware. A hardware wallet is the safer way to do this step, never a requirement for
+  using the tool.
   **This is the most dangerous moment in the identity's life.** A recovery happens because the root is
   believed stolen, so whoever learns the phrase now holds both keys and can sign a rival recovery, which
   retires the identity for good (rule 5). The machine must be one the thief of the root cannot have touched:
@@ -346,10 +357,11 @@ holder runs step 1 personally, on a machine they trust, and hands only the commi
   the tool lists every line that would stop counting and asks for confirmation; it does not refuse, because
   dropping a branch can be exactly what the owner means.
 
-**Open: one point.**
+- **Signing at recovery with a printed phrase** (§7.3). The documents teach restoring the phrase onto a
+  hardware wallet first, and typing it into an offline machine as the fallback. The tool warns about a live
+  network connection on the typed route and does not refuse. Hardware is never required: an identity can be
+  created, used and recovered with key files and a sheet of paper.
 
-1. **How the recovery key signs at recovery when it is held as a printed phrase** (§7.3). The note's default
-   is typing the phrase into a machine that is offline for the purpose. The alternative is restoring the
-   phrase onto a hardware wallet and signing there, so the phrase never touches a computer. Which should the
-   documents teach first, and should the tool do anything to discourage the typed route on a connected
-   machine?
+**Open: nothing the maintainer has left undecided.** Every point above has a decision and a reason, and
+each can be reopened by a counterexample. The review asked for is of the whole: the matrix (§3), the rules
+(§2) and the scenarios (§6).
