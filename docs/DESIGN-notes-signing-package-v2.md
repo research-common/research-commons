@@ -177,3 +177,78 @@ sitting in a file. For an ordinary line that matters little (it is one more line
 published). For a key event it matters: a key event signed on an old head, published later by anyone who holds
 the signature file, cuts the lines signed since. So the refusal names this, and the guidance is to delete the
 signature file of a refused key event unless it is kept on purpose as an escrowed revocation (§4.3).
+
+## 4. Key events: `revoke --prepare`, `rotate --prepare`, and `--complete`
+
+### 4.1 Prepare: the plan is made where the log is
+
+`revoke` and `rotate` gain `--prepare <file> --signer <key>` and `--complete <file> --signature <file|->`, with the
+`/1` option rules (`--prepare` takes no `--key`, no `--ledger`, no `--dry-run`; `--complete` takes its inputs from
+the package). `--prepare` runs the command's whole planning step exactly as direct signing does, over the store
+the command runs on, and stops where it would sign:
+
+- **Placement:** `prev` is the one tip, or the line `--prev` names; on a forked log a hard revocation asks for
+  `--prev`, a soft revocation or rotation picks a tip as it does today or asks. A key with no line held here gets
+  `seq` 0 and the same `warning_key_not_held` as `--ledger`; `--expect-signer` is not needed, since `--signer`
+  already names the key, and a key event prepared for a key the store holds no line of is the one case where
+  `--prepare` asks for `--confirm-unheld` (or refuses, exit 2): preparing a revocation of the wrong key is the
+  mistake #268's hand run found, and on the package route nothing else catches it before the signature.
+- **Merges:** by reason, as today: a soft revocation and a rotation merge every held tip (C-core-127c's refusal
+  of a tip whose branch carries another key event included); a hard revocation merges only what `--merge` names.
+- **`last_good`:** required for a hard reason, checked to lie in the revocation's own history.
+- **What the holder reviews:** every tip with what happens to it, the lines that stop counting, and
+  `grants_not_closed`, as the direct command prints them. Unlike the `--ledger` dry run, `--prepare` can list the
+  lines that stop counting, because it reads the unsigned statement's effect (the effect of a key event does not
+  depend on its signature; computing it from the unsigned envelope is an implementation change, not a format one).
+- **Rotation:** the successor checks run (not the signing key itself; the successor's log holds no key event).
+
+It then writes the package (`log_head` and `log_tips` from the same view the plan was made from) and appends
+nothing. The plan the holder reviews is printed by `--prepare` on the store's machine, and the package's summary
+carries its result, `merges` and `last_good` included (§6), so the signing machine shows what the plan decided
+even though it cannot recompute it.
+
+### 4.2 Complete: the plan is checked again before appending
+
+`--complete` checks the package (§3.1) and the signature over the recomputed PAE, takes the writer lock for the
+signer, and then, before anything is appended:
+
+1. **The tips are the reviewed ones.** The tips of the signer's log held now must equal `log_tips`. A new line,
+   a new branch, or a line that filled a gap (a detached line that now chains) changes the tips; each refuses
+   `stale-prepare`, exit 1, naming what changed. This is the check `/1` does not need: for an ordinary line,
+   a new branch beside it changes nothing about it; for a key event it changes what is cut.
+2. **The plan is rebuilt.** The command's planning step runs again with the package's inputs (reason,
+   `last_good`, merges as prepared, successor, note), and the statement it would sign must be the prepared
+   envelope byte for byte. Every refusal of direct signing applies: a key event that is now outside the history
+   (a key event held now in the history being extended, so a rotation counts toward nothing), a successor whose
+   log now carries a key event.
+3. **The line is verified and committed** through the same commit unit as direct signing. It is byte for byte
+   the line the key's file or the Ledger signs for the same plan and `--ts`.
+
+Every refusal appends nothing. The writer lock is held from step 1 to the commit, as for every writer. It is not
+held across the signing itself: the signing happens elsewhere, minutes or days later, so the package (its
+`log_head`, `log_tips` and the rebuild) does the job the lock does for `revoke --ledger`, where #268 keeps the
+lock held through the device's approval for exactly this reason (a key event signed on a stale head).
+
+Why refuse on any change of tips, and not only on a change that alters the plan: a change that leaves the
+statement byte-identical can still change what it does. A hard revocation keeps only `last_good`'s history; a
+branch that arrived after the review is cut, which may be the point (a thief's branch) or a loss (the owner's
+own second machine). The holder approved a list of tips and what happens to each; only that list is consented to.
+Rejected: refusing only when the rebuilt statement differs (it would append a revocation whose consequences the
+holder never saw).
+
+### 4.3 Escrowed revocations and the refusal
+
+An escrowed revocation (a `revoke_key` signed early and kept offline, to be published if the key is lost) is
+prepared like any other, and its signature is kept instead of completed. When it is completed later, the log has
+usually moved, so `--complete` refuses it. That is the right default for a fresh revocation and the wrong one for
+an escrowed one, which is meant to be published over whatever the log has become: it was signed on an old head on
+purpose, and every line after it stops counting, as its signer intended.
+
+Proposed: `--complete --escrowed` skips checks 1 and 2 (it still verifies the signature, checks the package, and
+reads the line as every reader reads it), and its output lists every line that stops counting before appending.
+It is refused for anything but a `revoke_key`. Rejected: no escrow route (the holder would then publish the signed
+line by hand, which bypasses every check and every listing; publishing it through the command is safer than not
+offering it). Rejected: making escrow the default (a fresh revocation completed over a moved log would then cut
+silently). An escrowed revocation needs the whole line, so the package and the signature file are kept together;
+`--complete` takes both, as for any package. Whether a separate "assemble the signed line from a package and a
+signature" command is worth having for escrow kept outside any store is left to review (§9).
