@@ -189,10 +189,11 @@ the command runs on, and stops where it would sign:
 
 - **Placement:** `prev` is the one tip, or the line `--prev` names; on a forked log a hard revocation asks for
   `--prev`, a soft revocation or rotation picks a tip as it does today or asks. A key with no line held here gets
-  `seq` 0 and the same `warning_key_not_held` as `--ledger`; `--expect-signer` is not needed, since `--signer`
-  already names the key, and a key event prepared for a key the store holds no line of is the one case where
-  `--prepare` asks for `--confirm-unheld` (or refuses, exit 2): preparing a revocation of the wrong key is the
-  mistake #268's hand run found, and on the package route nothing else catches it before the signature.
+  `seq` 0 and the same `warning_key_not_held` as `--ledger` (a first-line key event is valid, so a warning, not a
+  refusal). `--expect-signer` is not needed: `--signer` names the key, and the signing side refuses any other
+  (`key sign` checks the key file's signer, `key sign --ledger` the device's address at the path, before anything
+  is signed). So the mistake #268's hand run found, a wrong path or passphrase giving another key, is caught on
+  this route by the signing side; what is left is a wrong `--signer`, which the warning names.
 - **Merges:** by reason, as today: a soft revocation and a rotation merge every held tip (C-core-127c's refusal
   of a tip whose branch carries another key event included); a hard revocation merges only what `--merge` names.
 - **`last_good`:** required for a hard reason, checked to lie in the revocation's own history.
