@@ -70,7 +70,7 @@ R is the current root, C the committed recovery key. "Copy" means the owner stil
 | R and C both stolen, owner keeps copies | recover to their own root | recover to the owner's root | Two rival recoveries: **retired for good** (rule 5). Never a takeover the owner cannot answer. |
 | R and C both stolen, owner keeps no copy of one | recover to their own root | nothing in-band | **Takeover.** Resources must drop the identity by other means. |
 | R and C both lost | nothing | nothing | Frozen, as fixed-root. |
-| After a recovery, the old R and old C are both obtained by someone | sign a rival recovery of the old root | nothing in-band | **Retired for good**, even years later (rule 5). After a recovery the used recovery key and its backup must be destroyed; the old root is assumed stolen already. See §9, open question 1. |
+| After a recovery, the old R and old C are both obtained by someone | sign a rival recovery of the old root | nothing in-band | **Retired for good**, even years later (rule 5). After a recovery the used recovery key and its backup must be destroyed; the old root is assumed stolen already. See §9 on why time does not decide. |
 | A reader holds only part of the evidence | n/a | n/a | A reader that lacks the recovery reads the pre-recovery state, as it reads an identity today without a cut it has not received. A reader that holds a valid recovery but lacks a line it names reads unknown. |
 
 Compared with the fixed-root profile, the common disaster (the root's device or backup is compromised) goes
@@ -105,14 +105,14 @@ against the commitment) or complete, from its own bytes. This came out of the mo
 
 **A handover is judged by signature, not by its place in R's log.** It is bound to the identity three ways:
 it names I, R signed it, and the carried statement's signer matches the commitment in force. So it applies
-wherever it sits, including on a branch the recovery itself voids. Open to challenge (§9, open question 4).
+wherever it sits, including on a branch the recovery itself voids. Open to challenge (§9, open question 2).
 
 **Root generations.** The inception's root is generation 0. Each recovery with a successor starts the next
 generation, whose root is R′, whose lineage starts at D′, and whose recovery commitment is `next`. A reader
 evaluates generation by generation. The evaluation ends without help: a key is a root at most once and a
 commitment is used at most once, so a chain of generations cannot loop, and it is no longer than the
-statements held. A reader may still bound the work with a cap; over a cap it reads unknown, never partial
-(RR-23). Whether the profile should fix a number is open (§9).
+statements held. Every reader follows at least 64 recoveries of one identity (decided, §9). A reader may stop at a limit
+of its own above that; past its limit it reads unknown, never partial (RR-23).
 
 **Signing order for a recovery:** R′ signs D′; C signs the recovery naming D′; R signs the handover carrying
 it. Three signatures, each of which may come from a device through a signing package.
@@ -176,7 +176,7 @@ end-to-end conformance cases when the profile is built; until then they are scen
 | RR-20 | After a recovery, the old R is revoked | No effect on the identity. |
 | RR-21 | Every subset of RR-02's statements | No subset reads generation 1 with a thief grant counting. |
 | RR-22 | A complete recovery, plus a second valid one whose `last_good` is not held | Unknown: a possible rival is never passed over. |
-| RR-23 | More generations than the reader's cap | Unknown, with the cap as the reason. Never a guess at the current root. |
+| RR-23 | More recoveries than the reader's own limit (which is at least 64) | Unknown, with the limit as the reason. Never a guess at the current root. A chain of 64 recoveries is followed by every reader. |
 | RR-24 | A handover whose carried recovery statement does not verify, or uses an algorithm the reader does not support | Void for a bad signature; unknown for an unsupported algorithm. The identity is otherwise unchanged. |
 | RR-26 | R is replaced by R′, a thief of R′ grants, R′ is replaced by R″ with `last_good` before that grant. A third recovery then names R′ as the successor | Void: R″ stays the root, and the thief's grant stays void. Found by the reference model after this note was first posted; the first version of §5 let the grant count again. |
 | RR-25 | The root signs a statement outside its vocabulary (an ordinary `authored`, say: issue #271). Then (b) the owner recovers with `last_good` before that line, or (c) with `last_good` at or after it | Unknown, as in the fixed-root profile. (b) Current at generation 1: the line is outside the kept prefix. (c) Still unknown. |
@@ -317,33 +317,34 @@ holder runs step 1 personally, on a machine they trust, and hands only the commi
   final way to end an identity whose earlier statements should go on counting.
 - **The recovery key's path is `m/44'/60'/1581'/0/0`, with no BIP-39 passphrase** (§7.1).
 
+- **Rival recoveries retire the identity for good** (rule 5). After a recovery, the used recovery key and
+  its backups must be destroyed, which nobody can prove was done. That makes this the design's weakest
+  point: the old root and the old recovery key together stay a way to retire the identity for as long as
+  both exist.
+  Precedence by proven time was considered and rejected. Two forms were run through the reference model:
+  the recovery with the earlier Bitcoin-quality bound wins, and a rival proven long after the first is void.
+  Both remove the standing risk above when the owner's recovery carries a proof. Both make another case
+  worse: a thief who holds both keys before any recovery signs one, timestamps it, and shows it to nobody. A
+  timestamp proves a statement existed by a time, not that anyone could see it. When the owner later
+  recovers, the thief reveals the earlier one and wins: the owner has lost the identity to the thief and can
+  no longer even retire it. Under rule 5 the same theft ends in retirement. So time precedence trades "a
+  thief with both keys can destroy the identity" for "a thief with both keys can take it". It would also
+  make ownership depend on time evidence, which the claims model rules out (its §10: time evidence is never
+  used for ownership or edit rights). A rule that keeps the first property without the second would reopen
+  this, and is the most valuable thing a reviewer could bring.
+- **Generations: a required minimum for readers, no maximum.** Every reader follows at least 64 recoveries
+  of one identity, that is, through generation 64. The profile sets no upper limit; a reader that stops
+  before the end of the chain it holds reports unknown with its own limit as the reason (RR-23). The writer
+  warns as an identity nears 64 recoveries. The evaluation needs no cap
+  to end (§4), so this is a resource floor and nothing else. A low fixed cap was rejected because it would
+  end, for every reader and for good, an identity whose owner replaces the root on a schedule.
+
 **Open: the author's proposals, not decisions.** Each is written into the text above as if settled, so that
 the note reads as one design. None is.
 
-1. **Rule 5: rival recoveries retire for good.** It needs the used recovery key and its backups destroyed
-   after a recovery, which nobody can prove was done. That makes it the design's weakest point: after a
-   recovery, the old root and the old recovery key together stay a way to retire the identity, for as long
-   as both exist.
-   The alternative is precedence by proven time: the recovery with the earlier Bitcoin-quality bound wins,
-   or a rival proven long after the first is void. Both were run through the reference model. Both remove
-   the standing risk above **when the owner's recovery carries a proof**. Both make the other case worse: a
-   thief who holds both keys before any recovery signs one, timestamps it, and shows it to nobody. A
-   timestamp proves a statement existed by a time, not that anyone could see it. When the owner later
-   recovers, the thief reveals the earlier one and wins: the owner has lost the identity to the thief and
-   can no longer even retire it. Under rule 5 the same theft ends in retirement. So time precedence trades
-   "a thief with both keys can destroy the identity" for "a thief with both keys can take it", and it also
-   makes an identity's state depend on which proofs a reader holds. Not proposed. A counter-argument, or a
-   rule that keeps the first property without the second, is the most valuable thing a reviewer could bring.
-2. **Should the profile fix a generation cap, and at what number?** The evaluation does not need one to end
-   (§4). A cap is a resource limit: every generation a reader walks costs it the old root's whole kept
-   prefix. Only a holder of both keys can add a generation, so a long chain is self-inflicted or the work of
-   a thief who could do worse. A fixed cap has a cost of its own: an owner who replaces the root on a
-   schedule spends one generation each time, and at the cap the identity reads unknown to every reader for
-   good. Options: no cap in the profile (a reader's own limit, reported as such); a cap far above any honest
-   use; or a low cap with the rule that rotation for hygiene is not what recovery is for.
-3. **Typing a phrase into an offline machine at recovery** (§7.3): acceptable as the default, given how much
+1. **Typing a phrase into an offline machine at recovery** (§7.3): acceptable as the default, given how much
    rides on that machine?
-4. **Encoding details:**
+2. **Encoding details:**
    - the commitment digest (§4), and whether it should hide the key at all;
    - handover placement: §4 judges a handover by signature alone. Is there a case where requiring it on the
      root's lineage, with complete ancestry, is safer?
