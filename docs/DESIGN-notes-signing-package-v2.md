@@ -66,8 +66,8 @@ on both, with a `/2`-tagged copy of a valid `/1` inception package and with one 
 
 - `package show <file>`: `malformed-package`, "not an external-signing package", exit 2.
 - `key sign --package <file> --key <keyfile>`: the same refusal, exit 2; no signature file is written.
-- `key sign --package <file> --ledger …`: the package check runs before the device is opened, so the same
-  refusal, exit 2; the device is never asked anything.
+- `key sign --package <file> --ledger …`: not run against a device; in the code the package check runs before
+  the device is opened, so it is the same refusal, exit 2, and the device is never asked anything.
 - `<command> --complete <file> --signature …`: the same refusal, exit 2, scoped to `--complete`; nothing appended.
 
 It refuses at the `format` member, before it reads the envelope, so it never computes a summary, never shows a
@@ -122,8 +122,8 @@ plus one:
 | `log_tips` | array | **new.** The tips of the signer's log this store held when the package was prepared: a sorted, duplicate-free set of statement ids, `[]` when it held no line of the key |
 | `summary` | object | tokens and envelope values only (§6) |
 
-Every member but `log_tips` is derived from the envelope, and `package show`, `key sign` and `--complete`
-recompute and compare each, as for `/1`. `log_tips` is not derived from the envelope: it records what the store
+Every member but `log_tips` is derived from the envelope (a key event's `summary` from the envelope and
+`log_tips`, §6), and `package show`, `key sign` and `--complete` recompute and compare each, as for `/1`. `log_tips` is not derived from the envelope: it records what the store
 held when the holder reviewed the plan. A signing machine with no store checks its shape only (a sorted,
 duplicate-free set of statement ids; it cannot check that the envelope's `prev` and `merges` lie under them) and
 displays it as "prepared against these tips; the store checks them". `--complete` compares it with the store (§3.3).
@@ -279,10 +279,13 @@ the profile wants (no machine needs both keys).
 The commands are the recovery proposal's to name; the package needs only this order:
 
 1. `--prepare` the succession with `--signer R′`; sign it; `--complete` it. (R′'s log must be empty: §3.3.)
+   It is committed first because the recovery names D′ by id, and the store must hold it to check that.
 2. `--prepare` the recovery with `--signer C`, naming the identity, `last_good`, the successor (R′ and D′, which
    must be held) and the next commitment; sign it with C (on its device, or from the typed phrase on an offline
    machine, recovery proposal §7.3); `--complete` it, which commits the recovery statement to the store. Alone it
-   does nothing (rule 2 of that proposal); held, it is the input to step 3.
+   does nothing (rule 2 of that proposal); held, it is the input to step 3. (Alternative left to review: not
+   committing it, and giving step 3 the recovery's package and signature instead. Committing it is simpler and
+   costs nothing, since publishing it alone changes no answer.)
 3. `--prepare` the handover with `--signer R`, naming the recovery statement held in step 2; sign it with R;
    `--complete` it.
 
