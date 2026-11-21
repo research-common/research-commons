@@ -46,11 +46,12 @@ count subjects, so two delegates of one identity are one approval; that already 
 3. A recovery names a **last good line** of the root's log. The root's lines at or before it keep counting.
    Every other line of that root counts for nothing, whenever it was or will be signed.
 4. A recovery names a **successor root** and the **next recovery commitment**. The identity id is unchanged.
-   A recovery key is used once, and a key is an identity's root at most once.
+   A recovery key is used once, a key is an identity's root at most once, and a recovery key is never one
+   of the identity's roots.
 5. Two complete recoveries of the same root that differ in any effect **retire the identity for good**. No
    clock, arrival order or first-seen rule decides between them.
 6. The root alone can still **retire** the identity with a raw `revoke_key`, as today. Unlike today, a later
-   recovery whose kept prefix excludes that revoke undoes it. (Otherwise a thief of the root could always
+   recovery whose kept prefix excludes that revoke undoes it. A recovery whose kept prefix includes it is void. (Otherwise a thief of the root could always
    destroy the identity.)
 7. Everything else is the fixed-root profile: grants, cuts, permissions, delegate consent, evaluation and
    uncertainty rules. "The root lineage" becomes "the kept prefix of each earlier root, then the current
@@ -74,7 +75,12 @@ R is the current root, C the committed recovery key. "Copy" means the owner stil
 | A reader holds only part of the evidence | n/a | n/a | A reader that lacks the recovery reads the pre-recovery state, as it reads an identity today without a cut it has not received. A reader that holds a valid recovery but lacks a line it names reads unknown. |
 
 Compared with the fixed-root profile, the common disaster (the root's device or backup is compromised) goes
-from "new identity, successor resources" to one ceremony. The new ways to lose all need **both** keys.
+from "new identity, successor resources" to one ceremony. The new ways to lose need **both** keys, with one
+exception that needs the root and a file: a recovery statement the recovery key signed and the owner never
+published (RR-27, §7.3). Whoever holds it and the stolen root can retire the identity for good.
+
+The standing cost of rule 5, stated once more because it is the design's weakest point: for as long as a
+used recovery key or any copy of it exists, the identity is one theft of that old pair away from retirement.
 
 ## 4. Vocabulary (working names)
 
@@ -90,7 +96,15 @@ All are `rc/2` statements with the `x_identity_v1` marker, raw-key signed, and t
 **The commitment** is a digest of the recovery key's public form under its own domain string, so it can be
 confused with no statement id or content digest: lowercase hex SHA-256 of
 `PAE("application/vnd.research-commons.recovery-commitment.v1", <signer string>)`. Publishing a digest and not
-the key keeps the key's public form unknown until use (decided, §9).
+the key keeps the key's public form unknown until use (decided, §9). The signer string is the canonical one
+of the wire format (its §4): `ed25519:` plus 64 lowercase hex, or `0x` plus 40 lowercase hex. A checksummed
+or upper-case address is not a signer string, so a tool that reads an address from a device lowercases it
+before computing the commitment, and `recovery check` recomputes from the key, never from a displayed form.
+
+**The recovery key is no root of the identity.** A carried recovery signed by a key that is, or was, a root
+of this identity, or by the successor it names, is void (RR-30). Without this rule a commitment to the
+root's own key would let the root alone sign both halves of a recovery: the statement need only be a second
+`seq`-0 line of that key.
 
 **One recovery key (decided).** This version reads exactly one commitment under `any_one`. The member is
 written as a set with a rule so that a later version can add a threshold without another profile; a reader
@@ -102,6 +116,12 @@ a handover naming an id that does not exist. A reader cannot tell "not received"
 identity would read unknown, and a real recovery could never clear it, because the unreadable handover might
 be a rival. Carrying the signed statement makes a handover either void (the carried bytes do not verify
 against the commitment) or complete, from its own bytes. This came out of the model, not out of prior art.
+
+That argument depends on the **order of the checks**, which §5 fixes: the commitment is compared first. It
+is a digest of the carried statement's signer string, so a reader can compute it whether or not it supports
+the statement's algorithm. A holder of R alone cannot match it (the recovery key's public form is hidden
+until its first use), so whatever they carry is void. Only a statement by the committed key can read
+unknown, and that needs both keys (RR-24).
 
 **A handover is judged by signature, not by its place in R's log.** It is bound to the identity three ways:
 it names I, R signed it, and the carried statement's signer matches the commitment in force. So it applies
@@ -122,9 +142,19 @@ it. Three signatures, each of which may come from a device through a signing pac
 
 For identity I at generation g, with root R, lineage start D and commitment K:
 
-1. Collect every `identity_handover` signed by R that names I. One whose carried statement is not a valid
-   `identity_recovery` for I, at `seq` 0, signed by a key whose commitment is K, is **void**: it is reported
-   and changes nothing. So is one whose `last_good` is a line of another key or another lineage, whose
+1. Collect every `identity_handover` signed by R that names I, and judge each carried statement in this
+   order:
+   - a. Compute the commitment of its signer string. If it is not K, the handover is **void**, whatever the
+     statement's algorithm and whether or not its signature can be checked. Void means reported, and
+     changing nothing.
+   - b. If the reader does not support the statement's algorithm, the identity is **unknown**. (Both
+     required algorithms are supported by every reader, so this is a case for a later algorithm only.)
+   - c. If it is not a valid `identity_recovery` for I at `seq` 0, with a signature that verifies, it is void.
+   - d. If its signer is or was a root of I, or is the successor it names, it is void (RR-30).
+
+   Also void: a handover whose `last_good` is a line of another key or another lineage, whose kept prefix
+   (`last_good` and its ancestors) holds a raw root key event or a root line outside the closed vocabulary
+   (RR-19, RR-25), whose
    successor statement is not that key's `seq`-0 `identity_succession` for I, whose `next` repeats a
    commitment already used by this identity, or whose successor is a key that was already a root of this
    identity. (A key is an identity's root at most once. Otherwise a recovery naming a former root would make
@@ -139,7 +169,7 @@ For identity I at generation g, with root R, lineage start D and commitment K:
      in-lineage line whose ancestry is unresolved makes the identity unknown.
    - **One:** the kept prefix is `last_good` and its ancestors through `prev` and `merges`, plus D. R's
      administrative lines inside it count (grants accumulate, cuts apply). Every other line of R is void.
-     A raw key event inside the kept prefix stays terminal. If there is a successor, continue at generation
+     If there is a successor, continue at generation
      g+1; if not, the identity is **closed**: its kept history counts and nothing new can be administered.
 4. Grants of every generation are grants of I. The current root can cut a grant an earlier root issued. A
    recovery closes no grant by itself: the new root cuts the ones it no longer wants.
@@ -173,22 +203,24 @@ end-to-end conformance cases when the profile is built; until then they are scen
 | RR-16 | R′ is revoked by its own key event | Retired at generation 1, recoverable by R′ and the second recovery key. |
 | RR-17 | A delegate's acts across a recovery: (a) under a grant inside the kept prefix; (b) under a grant the recovery voids; (c) the new root cuts a grant the old root issued; (d) the old root signs a cut after the recovery | (a) Counts before and after. (b) Counted before the recovery is read, counts for nothing after, whenever the act was signed. (c) The grant is cut. (d) Void: the grant still counts. |
 | RR-18 | `last_good: null` | Only the inception is kept: no earlier grant counts. |
-| RR-19 | The owner names a `last_good` that has a root key event among its ancestors | Retired for good: a key event inside the kept prefix is terminal. |
+| RR-19 | The owner names a `last_good` that has a root key event among its ancestors, then signs a second recovery with a `last_good` before it | The first recovery is void, so the raw event stands: retired, and a recovery can undo it (rule 6). The second is then the only complete one: current at generation 1. A void recovery is no rival. (The first version of this note read the first as retired for good. That made the owner's likeliest mistake permanent and gave a thief nothing they lacked.) |
 | RR-20 | After a recovery, the old R is revoked | No effect on the identity. |
 | RR-21 | Every subset of RR-02's statements | No subset reads generation 1 with a thief grant counting. |
 | RR-22 | A complete recovery, plus a second valid one whose `last_good` is not held | Unknown: a possible rival is never passed over. |
 | RR-23 | More recoveries than the reader's own limit (which is at least 64) | Unknown, with the limit as the reason. Never a guess at the current root. A chain of 64 recoveries is followed by every reader. |
-| RR-24 | A handover whose carried recovery statement does not verify, or uses an algorithm the reader does not support | Void for a bad signature; unknown for an unsupported algorithm. The identity is otherwise unchanged. |
+| RR-24 | A handover whose carried recovery statement (a) is by the committed key and does not verify; (b) is by another key, under an algorithm the reader does not support; (c) is by the committed key, under such an algorithm | (a) Void. (b) Void: the commitment is compared first, so a holder of R alone cannot cause unknown. (c) Unknown; it needs both keys. |
 | RR-26 | R is replaced by R′, a thief of R′ grants, R′ is replaced by R″ with `last_good` before that grant. A third recovery then names R′ as the successor | Void: R″ stays the root, and the thief's grant stays void. Found by the reference model after this note was first posted; the first version of §5 let the grant count again. |
-| RR-25 | The root signs a statement outside its vocabulary (an ordinary `authored`, say: issue #271). Then (b) the owner recovers with `last_good` before that line, or (c) with `last_good` at or after it | Unknown, as in the fixed-root profile. (b) Current at generation 1: the line is outside the kept prefix. (c) Still unknown. |
+| RR-25 | The root signs a statement outside its vocabulary (an ordinary `authored`, say: issue #271). Then (b) the owner recovers with `last_good` before that line, or (c) with `last_good` at or after it | Unknown, as in the fixed-root profile. (b) Current at generation 1: the line is outside the kept prefix. (c) That recovery is void, as in RR-19: still unknown, and a second recovery as in (b) clears it. |
+| RR-27 | The recovery key signs recovery A; the owner abandons it and publishes a different recovery B with a handover. Later a holder of R obtains A's bytes and hands A over | With A's successor line held: **retired for good**, by R and a file, with no second key stolen. Without that line: unknown. A second signing with the same effect would have been harmless (RR-07). §7.3 says what the tool does about it. |
+| RR-28 | An edition approved by a delegate under a grant that a recovery voids; another under a grant the recovery keeps | The first counted before the recovery is read and does not count after. The second counts both times. |
+| RR-29 | A thief's grant extends the owner's tip; the owner, unaware, issues two grants after it. Route (a): `last_good` before the thief's grant. Route (b): `last_good` at the owner's tip, then the new root cuts the thief's grant | (a) The thief's grant is void, and so are the owner's two later grants and every act under them. (b) The owner's grants all count; the thief's counts until the cut is read, and not after. No set of statements that holds the recovery and the cut lets it count. |
+| RR-30 | The commitment in force names (a) the root's own key, or (b) the successor root itself; that key signs a recovery and its handover | Void in both: the recovery key is no root of the identity. Without the rule, one key would recover alone. |
 
-RR-24's unsupported-algorithm half is not in the reference model, which has no notion of an algorithm; the
-rest of the table is. RR-25 matters beyond theft: today one mistaken command with the root key ends a
+The whole table is in the reference model. RR-25 matters beyond theft: today one mistaken command with the root key ends a
 fixed-root identity (issue #271), and under this profile the owner can recover from it.
 
-Still to write as a scenario: an edition approved under a grant that a recovery voids, and the resource
-views that follow (RR-17b says the approval stops counting; what a collection's reader then shows needs its
-own cases).
+Still to write: what a collection's reader shows after RR-28 and RR-29 (an edition that stops counting, and
+the editions built on it).
 
 ## 7. Setting up and holding the recovery key
 
@@ -241,6 +273,15 @@ sees the secret of the first.
 2. **Create the identity:** `commons identity new --recovery <commitment>`, signed by the root as today (a
    key file, or a device through a signing package). The tool refuses a commitment to the root's own key.
 
+**A recovery key must be a key with no log, used for one identity.** It signs its one statement at `seq` 0,
+so a key that has signed anything can never recover. The tool refuses what it can see: `recovery new` makes
+a fresh key and never takes an existing one; `identity new --recovery`, and the `next` of a recovery, refuse
+a commitment that matches any key the store holds a line of (the root, an earlier root, the successor, a
+delegate, a key of another identity). `recovery check` and `show <identity>` warn when the key behind the
+commitment in force has a log. One recovery key committed by two identities can recover only the first of
+them it is used for; nothing in a reader refuses the second, but the second statement cannot be at `seq` 0
+of a log that already has a line.
+
 **The phrase is the one secret the tool ever prints.** Every other command keeps the rule "key material is
 never printed" (`KEY-FILES.md`). `recovery new` therefore runs only on an interactive terminal: it refuses
 when its output is redirected or `--json` is asked for, and it has no option to write the phrase to a file.
@@ -275,6 +316,34 @@ holder runs step 1 personally, on a machine they trust, and hands only the commi
   believed stolen, so whoever learns the phrase now holds both keys and can sign a rival recovery, which
   retires the identity for good (rule 5). The machine must be one the thief of the root cannot have touched:
   not the machine the root was used on, and not one that goes back online before the recovery is published.
+- **The recovery key signs once, and the signed statement is as sensitive as the key until it is
+  published.** A recovery statement that was signed and then set aside, because a file was lost or the owner
+  changed their mind about the last good line, is all a holder of the stolen root needs to retire the
+  identity: they hand it over beside the one the owner published (RR-27). So:
+  - Before the recovery key signs, the tool has the holder confirm that the new root and the next recovery
+    key are backed up. After that signature, losing the new root leaves two bad choices: publish anyway and
+    freeze the identity under a root nobody holds, or sign a second, different recovery.
+  - The prepared recovery is written to one file, and the command is resumable from it. Run again for the
+    same identity and generation, it offers the same successor, last good line and next commitment, or
+    refuses. It never offers a second recovery with a different effect. A second signature over the same
+    effect is harmless (RR-07).
+  - A device shows the holder what matters, not the whole statement: the command prints the successor, the
+    next commitment and the SHA-256 of the signed string, for comparison on the device's screen.
+  - An abandoned signed statement is destroyed like a key: every copy, on the offline machine too.
+- **Which last good line to name.** A thief who forks the root's log is caught by the writer, which refuses
+  to extend a forked log silently. A thief who extends the owner's tip is not: the owner's next line builds
+  on the thief's, and from then on every line the owner signs has the thief's among its ancestors. Naming a
+  last good line before the theft then voids the owner's own later grants, and every act under them
+  (RR-29). So:
+  - When the unwanted root lines are grants, **keep them and cut them**: name the owner's tip as the last
+    good line, and have the new root cut each unwanted grant with that delegate's own last good line. The
+    owner's history stays whole.
+  - Name a line before the theft only when the prefix would otherwise hold something a cut cannot undo: a
+    raw key event, a cut of one of the owner's own delegates, or an ordinary statement by the root (#271).
+    A recovery that keeps a key event or an ordinary root statement is void in any case (RR-19, RR-25), and
+    the tool refuses to prepare one.
+  - Before anything is signed, the command lists every root line that would stop counting and, beside each
+    grant, how many acts held in the store depend on it.
 - **After a recovery,** destroy the used recovery key and every backup of it (rule 5 and §3: the old pair
   can still sign a rival recovery). For a device, that means wiping it and destroying its sheet, or never
   again unlocking that seed.
@@ -288,6 +357,10 @@ holder runs step 1 personally, on a machine they trust, and hands only the commi
   devices, that means two different phrases.
 - **A phrase is not a password.** Nothing rate-limits a guess or lets it be changed: whoever reads it holds
   the key, and replacing it takes a recovery.
+- **A recovery key on a device can be destroyed in one step; a printed phrase cannot.** Rule 5 asks for the
+  used recovery key and every copy of it to be destroyed after a recovery. Wiping a device is one act that
+  can be checked. A phrase on paper may have copies its holder has forgotten. Where the choice exists, that
+  is a reason to hold the recovery key on a device. It is not a requirement (§9).
 - **Recovery is not prevention.** Until a recovery is published and has reached a reader, a stolen root
   acts as the identity for that reader. A resource that must not accept a single stolen key at all still
   needs more than one controller subject.
@@ -361,6 +434,19 @@ holder runs step 1 personally, on a machine they trust, and hands only the commi
   hardware wallet first, and typing it into an offline machine as the fallback. The tool warns about a live
   network connection on the typed route and does not refuse. Hardware is never required: an identity can be
   created, used and recovered with key files and a sheet of paper.
+
+**Changed after the first outside review (issue #274).** Each of these came from the review and was checked
+on the reference model before it was written in:
+
+- A recovery whose kept prefix holds a raw root key event, or a root line outside the vocabulary, is void
+  and no longer terminal (RR-19, RR-25). A holder of both keys loses nothing by this, since rivals still
+  retire; an owner who names the wrong line can sign again.
+- The order of the checks on a carried recovery is fixed, commitment first, so that a holder of the root
+  alone cannot make the identity unknown (§5 step 1, RR-24).
+- The recovery key is no root of the identity (§4, RR-30).
+- A signed and unpublished recovery is named as a risk of its own, with what the tool does about it (§3,
+  §7.3, RR-27).
+- Keeping an unwanted grant and cutting it is taught ahead of naming an earlier last good line (§7.3, RR-29).
 
 **Open: nothing the maintainer has left undecided.** Every point above has a decision and a reason, and
 each can be reopened by a counterexample. The review asked for is of the whole: the matrix (§3), the rules
