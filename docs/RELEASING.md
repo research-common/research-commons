@@ -61,9 +61,9 @@ README, not by the major number.
   rather than a change to existing bytes, the maintainers may hold `1.0.0` and land it before the next
   candidate. This is an exception to "only bug fixes and wording", made openly: the decision and its reason go
   in the tracking issue, the formats a candidate already froze keep their bytes, and the next candidate starts
-  a new quiet window. A tester's finding against the earlier candidate still counts against the next one. (First used after `1.0.0-rc.1`:
-  the recoverable-root identity profile and a signing-package revision, #266; and the `source-attested`
-  capture-evidence level, added while the list of levels can still grow.)
+  a new quiet window. A tester's finding against the earlier candidate still counts against the next one.
+  (First used after `1.0.0-rc.1`: the recoverable-root identity profile and a signing-package revision, #266;
+  and the `source-attested` capture-evidence level, added while the list of levels can still grow.)
 
 Use the dotted prerelease form (`1.0.0-rc.1`, not `1.0.0-rc1`) so `rc.2` sorts before `rc.10` under SemVer precedence.
 
