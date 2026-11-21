@@ -77,3 +77,38 @@ func signedStatements(sts []signed) []*wire.Statement {
 	}
 	return out
 }
+
+// rootLinesObj is the reader's pointer (issue #271): the held lines signed by the root of the identity whose
+// inception is ident, outside the closed root vocabulary. Every one of them reads unsupported_root_event, which
+// leaves the identity's acts unknown; nil when there is none, so a sound identity's output is unchanged.
+func (v *view) rootLinesObj(root, ident string) *Obj {
+	l := listV{}
+	for _, ln := range v.logs.Log(root).View().Lines {
+		st := ln.St
+		if st.ID == ident || st.Kind == "identity_inception" && st.Seq == 0 || identity.InRootVocabulary(st) {
+			continue
+		}
+		l = append(l, newObj().set("statement", refV(st.ID)).set("kind", peerV(st.Kind)).set("seq", intV(st.Seq)))
+	}
+	if len(l) == 0 {
+		return nil
+	}
+	return newObj().set("identity", refV(ident)).set("lines", l).
+		set("effect", textV("these lines by the identity's root are outside the closed root vocabulary (inception, grants, cuts, describes, anchors, key events): every reader that holds one reads the identity's acts unknown, earlier acts included")).
+		set("recovery", textV("if a line never left the store it was written in, removing it there restores the identity; once another store holds it, treat the identity as one whose root is lost"))
+}
+
+// rootLinesFor is rootLinesObj for every valid identity inception signed by key that this store holds.
+func (v *view) rootLinesFor(key string) listV {
+	ids, err := rootInceptions(v.st, key)
+	if err != nil {
+		return nil
+	}
+	l := listV{}
+	for _, id := range ids {
+		if o := v.rootLinesObj(key, id); o != nil {
+			l = append(l, o)
+		}
+	}
+	return l
+}

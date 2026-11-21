@@ -32,6 +32,9 @@ func (v *view) keyObj(key string) *Obj {
 	o.set("lines", intV(int64(len(lv.Lines)))).set("tips", refs(lv.Tips...))
 	o.set("bare_key", bareKeyObj(lv.KeyState()))
 	o.set("grants", v.grantsObj(key))
+	if rl := v.rootLinesFor(key); len(rl) > 0 {
+		o.set("ordinary_root_lines", rl)
+	}
 	return o
 }
 

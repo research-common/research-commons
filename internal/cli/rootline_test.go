@@ -56,11 +56,29 @@ func TestRootOrdinaryLineRefused(t *testing.T) {
 			bare.key = root.key
 			bare.ok("publish", "--kind", "authored", "--content", bare.file("c3", "elsewhere"), "--licence", "CC0-1.0")
 
+			// a sound identity: show names no ordinary root line (describes is in the vocabulary)
+			for _, ref := range []string{ident, root.signer} {
+				if r := root.read("show", ref); r.code != ExitOK || strings.Contains(r.stdout, "ordinary_root_lines") {
+					t.Fatalf("show %s on a sound identity: %d %s", ref, r.code, r.stdout)
+				}
+			}
+
 			// mutation: with the guard off, the line lands and the delegate's next act no longer counts
 			rootLineGuard = false
 			defer func() { rootLineGuard = true }()
-			root.ok("publish", "--kind", "authored", "--content", root.file("y4", "root bytes 4"), "--licence", "CC0-1.0")
+			bad := firstID(t, root.ok("publish", "--kind", "authored", "--content", root.file("y4", "root bytes 4"), "--licence", "CC0-1.0"))
 			rootLineGuard = true
+			// the reader's pointer: show <identity> and show <root key> name the line (and its holds)
+			for _, ref := range []string{ident, root.signer} {
+				r := root.read("show", ref)
+				if r.code != ExitOK || !strings.Contains(r.stdout, "ordinary_root_lines") || !strings.Contains(r.stdout, bad) {
+					t.Fatalf("show %s does not name the root's ordinary line %s: %d %s", ref, bad, r.code, r.stdout)
+				}
+				h := runIn(root.store, nil, "show", ref)
+				if !strings.Contains(h.stdout, bad) || !strings.Contains(h.stdout, "outside the closed root vocabulary") {
+					t.Fatalf("human show %s: %s", ref, h.stdout)
+				}
+			}
 			// gc --release signs a holds (withdrawn) with the root: refused too, nothing signed or deleted
 			before := storeBytes(t, root.store)
 			lines, _ := mustStore(t, root.store).Statements()

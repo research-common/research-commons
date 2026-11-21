@@ -20,7 +20,7 @@ func init() {
 	// show and explain also take a key: its bare-key status beside each grant naming it (identity profile §4.1)
 	refKey := []Arg{{Name: "digest|id", Shape: ShapeRefOrKey}}
 	Register(&Command{Name: "show", Examples: []string{"commons show --store store <digest>"}, Summary: "show a blob (authorship, grade, every disclosure), a statement, a resource, or a key", Args: refKey, Store: true, ReaderPolicy: true,
-		Help: "A digest shows the blob: authorship and every claimant, labels, whether the bytes are held here, the grade with the full disclosure set beside it, derivation groups, and every other statement about it. An id shows the statement. A resource's id is its genesis statement's id: show prints the genesis and the resource view beside it (controllers and rule, the current edition and the chain behind it by hash, every edition with its approvals, any FORK, the current edition's members and the receiver's check of a completeness claim). An edition id, or the statement id of one of its approvals, shows the resource pinned at that edition. An observation's statement shows its corroboration status. A statement on a fork of its signer's log shows the fork (FORK with its tips, or merged with the clearing line); it never changes whether the statement counts. An identity statement shows its actor (identity, grant, eligible / denied / unknown, the reasons) with freshness not_established: relative to held evidence; no claim that no cut exists. A key (ed25519:<64 hex> or 0x<40 hex>) shows its two axes side by side: bare_key, its own rotate_key and revoke_key and what each leaves counting, and grants, every grant naming the key by id with its state (open, cut at last_good, cut null, unknown, denied); a key's own key event closes no grant.",
+		Help: "A digest shows the blob: authorship and every claimant, labels, whether the bytes are held here, the grade with the full disclosure set beside it, derivation groups, and every other statement about it. An id shows the statement. A resource's id is its genesis statement's id: show prints the genesis and the resource view beside it (controllers and rule, the current edition and the chain behind it by hash, every edition with its approvals, any FORK, the current edition's members and the receiver's check of a completeness claim). An edition id, or the statement id of one of its approvals, shows the resource pinned at that edition. An observation's statement shows its corroboration status. A statement on a fork of its signer's log shows the fork (FORK with its tips, or merged with the clearing line); it never changes whether the statement counts. An identity statement shows its actor (identity, grant, eligible / denied / unknown, the reasons) with freshness not_established: relative to held evidence; no claim that no cut exists. A key (ed25519:<64 hex> or 0x<40 hex>) shows its two axes side by side: bare_key, its own rotate_key and revoke_key and what each leaves counting, and grants, every grant naming the key by id with its state (open, cut at last_good, cut null, unknown, denied); a key's own key event closes no grant. An identity's inception, and its root key, list under ordinary_root_lines every held line of the root outside the closed root vocabulary (inception, grants, cuts, describes, anchors, key events): each such line leaves every act of the identity unknown.",
 		Run:  showCmd})
 	Register(&Command{Name: "verify", Examples: []string{"commons verify --store store <digest>"}, Summary: "check a blob or a statement from the statements held; exit per the exit table", Args: ref, Store: true, ReaderPolicy: true,
 		Flags:   rerunFlags,
@@ -212,6 +212,11 @@ func (v *view) showStatement(id string) (*Obj, bool) {
 	if st.Kind == "anchors" {
 		if e, ok := v.anchorEvidence(id); ok {
 			o.set("time", evidenceObj(e))
+		}
+	}
+	if st.Kind == "identity_inception" && st.Seq == 0 && st.Verified && st.Status == wire.Valid {
+		if rl := v.rootLinesObj(st.Signer, id); rl != nil {
+			o.set("ordinary_root_lines", rl)
 		}
 	}
 	if d := contentOf(st); d != "" && st.Kind == "authored" {
