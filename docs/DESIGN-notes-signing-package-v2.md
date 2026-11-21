@@ -383,3 +383,79 @@ device app.
   cuts. The tips and the lines that stop counting are visible only on the store's machine (`--prepare`) and in the
   summary on the signing machine. For a key event, the hash comparison proves the bytes are the prepared ones, not
   that the plan is the one the holder wanted.
+
+## 8. Conformance cases to add, and KNOWN-LIMITS L-22
+
+### 8.1 Cases
+
+Proposed cases, with working handles `PKG-nn`. When the revision is implemented they are registered as rows of
+the identity note's §10 table (as `C-id-` cases, so the harness counts them) or of a table of their own, a choice
+for the implementation; until then they are not registered, and no test claims them. Each is checked through the
+commands, with the signing side run on a machine that holds no store (as `TestPackageShowKeySignEndToEnd` does for
+`/1`) and every refusal shown to append nothing (store bytes unchanged).
+
+**Format and compatibility**
+
+| Handle | Scenario | Outcome |
+|---|---|---|
+| PKG-01 | A `/2` package given to a `/1`-only release (`package show`, `key sign` with a key file and with `--ledger`, `--complete`) | `malformed-package`, exit 2, before the envelope is read; nothing signed, no device asked, nothing appended. (Recorded today against `1.0.0-rc.1`, §2.1; kept as a fixture so the claim stays checked.) |
+| PKG-02 | A `/1` package of each of the four `/1` actions, prepared by `1.0.0-rc.1`, completed by a `/2` release (and signed by a `/2` `key sign`) | accepted; the committed line is byte-identical to the one `rc.1` commits from the same package and signature |
+| PKG-03 | Tag/envelope mismatch: a `/2`-tagged inception package; a `/1`-tagged key-event or bare-key package | `package-format-mismatch`, exit 2, on every command; nothing signed |
+| PKG-04 | A `/1` package carrying an actor-less `rc/2` envelope (a marker-only edition) | `malformed-package`, exit 2 (today: internal error, exit 3; §2) |
+| PKG-05 | A `/2` package whose envelope is a kind `/2` does not carry (`authored` bare, `anchors`, `genesis`) | `package-kind-unsupported`, exit 2, before a summary is computed |
+| PKG-06 | `format` `rc-signing-package/3` | `unsupported-package-format`, exit 2, naming the tag |
+| PKG-07 | A `/2` package with an inert extra envelope member, an extra package member, `log_tips` unsorted or duplicated, or any derived member changed | each refused, naming the member (exit 2 at `--complete`, exit 1 on `package show` and `key sign`, as `/1`) |
+
+**Bare-key statements**
+
+| Handle | Scenario | Outcome |
+|---|---|---|
+| PKG-10 | A controller key held apart signs, through the package, an `rc/2` marker-only edition of a two-subject resource | committed line byte-identical to direct signing at the same `--ts`; the edition id equals the identity approval's; the approval fills the `{key: K}` slot |
+| PKG-11 | As PKG-10 for an `rc/1` resource, and for a `withdraw_approval` | as PKG-10; the withdrawal applies |
+| PKG-12 | The signer's log moves (one more line) between `--prepare` and `--complete` of a bare-key edition | `stale-prepare`, exit 1, nothing appended; `--prev` naming the prepared line forks deliberately and is disclosed |
+| PKG-13 | An edition package whose resource's current edition moved between prepare and complete (another controller approved) | the rebuild runs every check of direct signing; refused exactly when direct signing would be refused |
+
+**Key events**
+
+| Handle | Scenario | Outcome |
+|---|---|---|
+| PKG-20 | `revoke --prepare --reason key_compromise --last-good L` by a key held apart; `key sign`; `--complete` | committed line byte-identical to `revoke --key` (and to `revoke --ledger`) for the same plan and `--ts`; `fsck` clean; lines outside L's history stop counting |
+| PKG-21 | `rotate --prepare`, as PKG-20 | as PKG-20; the successor checks ran at prepare and again at complete |
+| PKG-22 | A new line of the key arrives between prepare and complete, extending the prepared head | `stale-prepare`, exit 1 (the log moved) |
+| PKG-23 | A new branch arrives (a line forking below the prepared head), the head unchanged | `stale-prepare`, exit 1, naming the new tip: the tips are not the reviewed ones, although the statement rebuilds identically |
+| PKG-24 | A detached line of the key fills its gap between prepare and complete, changing the tips | `stale-prepare`, exit 1 |
+| PKG-25 | A soft revocation whose merged tip, between prepare and complete, gains a branch carrying another key event (C-core-127c) | refused at `--complete` with direct signing's refusal; nothing appended |
+| PKG-26 | A rotation whose successor's log gains a key event between prepare and complete | refused, exit 1, as direct signing |
+| PKG-27 | `--complete --escrowed` of a hard `revoke_key` prepared at seq n, completed after the log reached n+5 | appended; the output lists the five lines that stop counting; the same package without `--escrowed` is `stale-prepare` |
+| PKG-28 | `--escrowed` on a `rotate_key` or a bare-key package | refused, exit 2 |
+| PKG-29 | `revoke --prepare` for a key the store holds no line of | package written, `warning_key_not_held`; `key sign --ledger` at a path whose address is another key refuses before signing |
+| PKG-30 | The summary of a revoke package: `reason_class` for `key_compromise`, `superseded` and an undocumented token; `tips` equal to `log_tips` | `hard`, `soft`, `hard`; the summary is recomputed from the envelope plus `log_tips` and any edit is refused |
+
+**Recovery statements** (only if the recoverable-root profile is adopted)
+
+| Handle | Scenario | Outcome |
+|---|---|---|
+| PKG-40 | The three-package recovery: succession, recovery, handover, each signed by a different key held apart | the identity reads recovered at the next generation; each line byte-identical to direct signing |
+| PKG-41 | A handover package whose carried recovery's signature is altered, or which names another identity | malformed, exit 2, on `package show`, `key sign` and `--complete`; nothing signed |
+| PKG-42 | The root's log gains lines (a thief extending it) between preparing and completing the handover | appended as a fork of the root's log, disclosed; not refused |
+| PKG-43 | A rival complete handover with a different effect is held at `--complete` | refused, exit 1, naming the rival; with `--retire-on-rival` appended, and the identity reads retired |
+| PKG-44 | A recovery package whose recovery key already has a line held | `stale-prepare`, exit 1, naming the held line as a possible rival recovery |
+| PKG-45 | `package show` of a handover | prints `recovery_commitment` computed from the carried statement's signer, equal to the inception's commitment |
+
+### 8.2 KNOWN-LIMITS L-22: end state
+
+Today L-22 reads: a bare-key statement cannot be signed by a device, and a key event can be signed by a device
+only on a Ledger attached to the store's machine. With this revision implemented:
+
+- **The package half closes.** A bare-key `edition` and `withdraw_approval`, and a key's `revoke_key` and
+  `rotate_key`, can be signed by any key held apart: on another machine (a key file, `key sign`), on a Ledger
+  (`key sign --ledger`), or by any signer that signs the PAE bytes (`package show --pae-out`, as a YubiKey does
+  through its OpenPGP applet, #250). L-22's probe (`revoke --prepare` and `rotate --prepare` exit 2
+  `unknown-option`; `publish --prepare` of a `revoke_key` exits 2) then finds the gap closed, and the row is
+  removed in the same change, as the limits test requires.
+- **What stays open moves, not into L-22:** bare-key kinds other than approvals have no package route (§3.2): a
+  new, narrower row if that decision stands (probe: `publish --prepare --signer` of a bare `authored` exits 2).
+  A device other than a Ledger still has no connector (L-07): it signs through `--pae-out`, which is a route, not
+  a connector.
+- **Recovery:** the recovery statements are new kinds of a new profile; their package route lands with the
+  profile, and no limit row is needed for something that does not exist yet.
