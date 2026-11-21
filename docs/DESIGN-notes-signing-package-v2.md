@@ -158,6 +158,12 @@ controller key exists to sign (#266, reason 2). Every other bare-key kind (`auth
 publishes claims does so as a delegate of an identity, through `publish --as`, which `/1` already carries. This is
 a decision for review (§9): adding the other kinds is mechanical, but each is one more summary to define and freeze.
 
+A bare-key approval prepared for a key that is an identity's root is refused at `--prepare` and again at
+`--complete`, as direct signing refuses it (an ordinary line signed by a root stops every delegate's act from
+counting, and the writer refuses it with `root-ordinary-line`, #271). The package route adds no way around that
+refusal: both steps run the same commit checks as direct signing. A root's own `revoke_key` and `rotate_key` are
+in the root's vocabulary and are not affected.
+
 ### 3.3 The staleness rule, by action
 
 `--complete` always rebuilds the statement from the package's inputs over the statements the store holds now
