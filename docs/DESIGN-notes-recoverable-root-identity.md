@@ -84,13 +84,13 @@ All are `rc/2` statements with the `x_identity_v1` marker, raw-key signed, and t
 |---|---|---|---|
 | `identity_inception` | R, `seq` 0 | `profile:"recoverable-root-v1"`, `recovery:{commitments:[c], rule:{any_one:true}}` | The id is I. The commitment is required: an identity that wants none uses `fixed-root-v1`. |
 | `identity_succession` | the new root R′, `seq` 0 | `identity:I` | R′ consents and pins its own lineage, as a delegate's first line does for a grant. R′ must be a fresh key. |
-| `identity_recovery` | C, `seq` 0, `prev` null | `identity:I`, `last_good:L-or-null`, `successor:{key:R′, inception:D′}` or null, `next:{commitments:[c], rule:{any_one:true}}` | C's only statement. `successor:null` closes the identity with its history kept (§5, RR-11); `next` is then absent. |
+| `identity_recovery` | C, `seq` 0, `prev` null | `identity:I`, `last_good:L-or-null`, `successor:{key:R′, inception:D′}` or null, `next:{commitments:[c], rule:{any_one:true}}`, optional `note` | C's only statement. It carries no reason token: a recovery has one meaning, and a free-text `note` is enough for the record. `successor:null` closes the identity with its history kept (§5, RR-11); `next` is then absent. |
 | `identity_handover` | R | `identity:I`, `recovery:<the whole signed identity_recovery>` | R's half of rule 2. It carries the recovery statement, not its id (below). |
 
 **The commitment** is a digest of the recovery key's public form under its own domain string, so it can be
-confused with no statement id or content digest. Proposed: lowercase hex SHA-256 of
+confused with no statement id or content digest: lowercase hex SHA-256 of
 `PAE("application/vnd.research-commons.recovery-commitment.v1", <signer string>)`. Publishing a digest and not
-the key keeps the key's public form unknown until use.
+the key keeps the key's public form unknown until use (decided, §9).
 
 **One recovery key (decided).** This version reads exactly one commitment under `any_one`. The member is
 written as a set with a rule so that a later version can add a threshold without another profile; a reader
@@ -105,7 +105,8 @@ against the commitment) or complete, from its own bytes. This came out of the mo
 
 **A handover is judged by signature, not by its place in R's log.** It is bound to the identity three ways:
 it names I, R signed it, and the carried statement's signer matches the commitment in force. So it applies
-wherever it sits, including on a branch the recovery itself voids. Open to challenge (§9, open question 2).
+wherever it sits, including on a branch the recovery itself voids (decided, §9): a thief of the root can
+fill the root's log with lines, and a recovery has to work all the same.
 
 **Root generations.** The inception's root is generation 0. Each recovery with a successor starts the next
 generation, whose root is R′, whose lineage starts at D′, and whose recovery commitment is `next`. A reader
@@ -339,14 +340,16 @@ holder runs step 1 personally, on a machine they trust, and hands only the commi
   to end (§4), so this is a resource floor and nothing else. A low fixed cap was rejected because it would
   end, for every reader and for good, an identity whose owner replaces the root on a schedule.
 
-**Open: the author's proposals, not decisions.** Each is written into the text above as if settled, so that
-the note reads as one design. None is.
+- **Encoding.** The commitment is a digest that hides the recovery key until use (§4). A handover is judged
+  by signature, not by its place in the root's log (§4). A recovery carries no reason token, only an
+  optional note. When the named last good line is not the tip of the branch the store has been extending,
+  the tool lists every line that would stop counting and asks for confirmation; it does not refuse, because
+  dropping a branch can be exactly what the owner means.
 
-1. **Typing a phrase into an offline machine at recovery** (§7.3): acceptable as the default, given how much
-   rides on that machine?
-2. **Encoding details:**
-   - the commitment digest (§4), and whether it should hide the key at all;
-   - handover placement: §4 judges a handover by signature alone. Is there a case where requiring it on the
-     root's lineage, with complete ancestry, is safer?
-   - whether a recovery needs a reason token, as a cut has, and whether the tool should refuse, or only warn
-     about, a `last_good` that is not on the branch the owner has been using.
+**Open: one point.**
+
+1. **How the recovery key signs at recovery when it is held as a printed phrase** (§7.3). The note's default
+   is typing the phrase into a machine that is offline for the purpose. The alternative is restoring the
+   phrase onto a hardware wallet and signing there, so the phrase never touches a computer. Which should the
+   documents teach first, and should the tool do anything to discourage the typed route on a connected
+   machine?
