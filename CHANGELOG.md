@@ -103,6 +103,11 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ### Tests
 
+- Pins two reader behaviours a later identity profile relies on (`TestUnknownInceptionProfile`, `TestUnknownRootKind`): an inception of
+  an unknown profile token reads `unsupported` naming the profile and an act under it reads `unknown` with
+  `unsupported_identity_profile`; a `fixed-root-v1` inception with an extra member still reads `valid`; an unknown `rc/2` kind on a
+  fixed-root root log reads `unknown kind` and makes an earlier act `unknown` with `unsupported_root_event`.
+
 - Pins the statement view's time bound (an uncovered statement shows `none`, a covered one `local` with its anchor and
   `time_state`, an `edition` statement and an anchors line included) and that covering a statement changes no exit and no
   other member of `show`, `verify` or `explain`.
