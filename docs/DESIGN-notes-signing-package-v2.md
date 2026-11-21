@@ -253,3 +253,70 @@ offering it). Rejected: making escrow the default (a fresh revocation completed 
 silently). An escrowed revocation needs the whole line, so the package and the signature file are kept together;
 `--complete` takes both, as for any package. Whether a separate "assemble the signed line from a package and a
 signature" command is worth having for escrow kept outside any store is left to review (§9).
+
+## 5. The recovery statements
+
+This section depends on the recoverable-root proposal (`recoverable-root-v1`), which is itself a proposal: its
+kinds and members are working names, and so are the package actions below. If that profile changes, this section
+changes with it. If it is not adopted, this section is dropped and the rest of the note stands.
+
+### 5.1 Three statements, three packages, one envelope form
+
+A recovery takes three signatures by three keys, in order (that proposal's §4): the successor root R′ signs its
+`identity_succession` D′ (`seq` 0); the recovery key C signs the `identity_recovery` naming D′; the current root R
+signs the `identity_handover` carrying the signed recovery. Each is one statement by one key over one PAE, so each
+fits the `/2` envelope as it stands: an `rc/2` envelope with the identity marker and no actor. **No new package
+member and no package-level kind marker is needed:** the envelope's `kind` already names the statement, and the
+summary's `action` token (§6) is what a reviewer reads. Rejected: a separate package format, or a `recovery`
+member, for recovery. Either would be a second shape for what is, byte for byte, a single-signer statement.
+
+**The handover carries two signatures, and only one is made from its package.** The handover's body holds the
+whole signed recovery statement, C's signature included; R's signature covers that body. So the handover's
+package is prepared only once C's signature exists: its envelope contains the signed recovery, and its PAE covers
+it. The signing device for R signs R's PAE only. The two signatures never meet in one signing step, which is what
+the profile wants (no machine needs both keys).
+
+The commands are the recovery proposal's to name; the package needs only this order:
+
+1. `--prepare` the succession with `--signer R′`; sign it; `--complete` it. (R′'s log must be empty: §3.3.)
+2. `--prepare` the recovery with `--signer C`, naming the identity, `last_good`, the successor (R′ and D′, which
+   must be held) and the next commitment; sign it with C (on its device, or from the typed phrase on an offline
+   machine, recovery proposal §7.3); `--complete` it, which commits the recovery statement to the store. Alone it
+   does nothing (rule 2 of that proposal); held, it is the input to step 3.
+3. `--prepare` the handover with `--signer R`, naming the recovery statement held in step 2; sign it with R;
+   `--complete` it.
+
+Rejected: one package carrying all three statements. A package carries one statement and one PAE, which is what
+makes the signing side simple and auditable, and the three are signed in a fixed order by three different keys
+on what should be three different machines or devices.
+
+### 5.2 What the signing side can check with no store
+
+For the recovery and the succession, the same as for any package: the PAE, the id and the summary are recomputed
+from the envelope. For the handover, more: the carried recovery is a complete signed statement inside the
+envelope, so `package show` and `key sign` verify its signature, check that it names the same identity as the
+handover, and compute **the recovery key's commitment** (the profile's commitment digest of the carried
+statement's signer). The summary carries that commitment, and the review asks the holder to compare it with the
+commitment they recorded at setup (the inception holds it; the signing side cannot read the inception). A carried
+statement whose signature does not verify, or that names another identity, makes the package malformed (exit 2)
+on every command, before any signing.
+
+### 5.3 Staleness for recovery statements
+
+As §3.3 says: the succession and the recovery are `seq` 0 statements of fresh keys, so `--complete` refuses if
+either key's log is not empty here (for C, a line held means a second recovery by the same key exists somewhere,
+which is a rival in the making and reported as such). The handover is **not** refused for a moved root log. The
+profile judges a handover by its signature and the statement it carries, not by its place in R's log, because a
+thief holding R can keep extending R's log; refusing on a moved head would let that thief block the recovery. So:
+
+- the handover is prepared at R's current tip (or `--prev`);
+- at `--complete`, if that line is no longer a tip, the handover is appended where it was prepared, as a fork of
+  R's log, and the output says so (a fork is disclosed by every read command, as today);
+- the rebuild check still runs: the identity, the carried recovery and every reference must still read as they
+  did at `--prepare`.
+
+**A rival recovery held at `--complete`.** If the store holds another complete handover for the same root with a
+different effect, appending this one retires the identity for good (profile rule 5). That may be the right move
+(a thief who holds both keys has already published a recovery that hands them the identity, and a rival is the
+only answer left), but it must never happen by accident. Proposed: `--complete` refuses (exit 1, naming the rival)
+unless `--retire-on-rival` is given. The same check runs at `--prepare`.
