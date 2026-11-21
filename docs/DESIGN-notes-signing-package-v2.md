@@ -124,9 +124,11 @@ plus one:
 
 Every member but `log_tips` is derived from the envelope, and `package show`, `key sign` and `--complete`
 recompute and compare each, as for `/1`. `log_tips` is not derived from the envelope: it records what the store
-held when the holder reviewed the plan. A signing machine with no store checks its shape only (sorted ids, and
-`prev` and every `merges` id among them or among their ancestors is not checkable there, so it is not checked) and
+held when the holder reviewed the plan. A signing machine with no store checks its shape only (a sorted,
+duplicate-free set of statement ids; it cannot check that the envelope's `prev` and `merges` lie under them) and
 displays it as "prepared against these tips; the store checks them". `--complete` compares it with the store (§3.3).
+For a statement whose effect does not depend on other branches (§3.3, first row) it is written all the same, so
+every `/2` package has one shape, and `--complete` does not compare it.
 
 `log_tips` is **not a security boundary.** It is not signed, and whoever can edit the package on the store's
 machine can make it match. The boundary is the signed bytes, which already fix `seq`, `prev` and `merges`, and the
