@@ -160,6 +160,7 @@ var vocabulary = []Token{
 	{"actor: eligible", "label", "hub check: an added identity statement whose signer acts for the identity it names under the grant it names, judged by the evidence of the change and the base; a label only, admission and exit are unchanged"},
 	{"actor: denied", "label", "hub check: the evidence of the change and the base shows the signer does not act for that identity (the reason is named); a label only, the statement is still admitted"},
 	{"actor: unknown", "label", "hub check: the evidence of the change and the base cannot decide whether the signer acts for that identity (the reason is named); a label only, the statement is still admitted"},
+	{"identity root: ordinary line", "label", "hub check: an added statement signed by the root of an identity the change and the base hold, of a kind outside the closed root vocabulary (inception, grants, cuts, describes, anchors, key events); the line and the identity are named: this line stops the identity's delegates' acts from counting. A label only, the statement is still admitted; dropping it before it leaves the change restores the identity"},
 	{"unreferenced", "label", "a blob no statement of the evaluated set names"},
 	{"unavailable", "label", "a statement names a blob neither the package nor the receiver holds"},
 	{"not held here (policy)", "label", "the receiver's policy does not serve the blob a statement names (not_served)"},

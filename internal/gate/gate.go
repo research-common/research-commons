@@ -494,6 +494,7 @@ func Admit(gate string, pkg Package, held Held, pol *Policy, opt Options) (*Repo
 	// names an identity actor. Labels only (I8).
 	if opt.ActorLabels {
 		actorLabels(results, cands, evaluated)
+		rootLineLabels(results, cands, evaluated)
 	}
 
 	// 5. Resolver-level policy: intended_for re-application (C-core-98) and the freeze policy (C-core-104).
