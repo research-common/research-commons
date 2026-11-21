@@ -320,3 +320,66 @@ different effect, appending this one retires the identity for good (profile rule
 (a thief who holds both keys has already published a recovery that hands them the identity, and a rival is the
 only answer left), but it must never happen by accident. Proposed: `--complete` refuses (exit 1, naming the rival)
 unless `--retire-on-rival` is given. The same check runs at `--prepare`.
+
+## 6. Summary and review for each new action
+
+As in `/1`: `summary.action` is a token, every other member is a value copied or computed from the envelope (a
+member the envelope lacks is `null`), and the summary holds no prose. The words a human reads beside it are
+rendered at display time by `--prepare`, `package show` and `key sign` (with or without `--ledger`), so a package
+reads the same under every release that reads `/2`. Every `/2` summary carries `major` (`"rc/1"` or `"rc/2"`,
+the envelope's `rc`), because the same kind is a different statement in each major (an edition's id domain, wire
+§3), and a reviewer approving a controller's edition should see which.
+
+| `action` | other members | review rendered at display time (working wording) |
+|---|---|---|
+| `approve` | `kind` (`edition` or `withdraw_approval`), `major`, `resource`, `edition` (the edition id the signature approves or withdraws: for an `edition`, computed from its body under the envelope's major; for a `withdraw_approval`, its `body.edition`), `predecessors` (an `edition`'s, else `null`), `controllers` and `rule` (an `edition`'s `contents`, when it changes them; else `null`) | "approve edition E of resource R as the bare key S" / "withdraw S's approval of edition E"; when `controllers` is not null: "this edition changes who controls the resource" and the new set |
+| `revoke` | `major`, `reason`, `reason_class` (`hard` or `soft`, by the wire note's rule: an unknown token is `hard`), `last_good` (`null` when absent), `merges` (the envelope's, `[]` when none), `tips` (= the package's `log_tips`) | "revoke the key S: every line of S outside this revocation's history stops counting, for every reader that holds it; this cannot be undone"; hard: "only last_good and its history keep counting" (`last_good` null: "no line of S counts any more"); soft: "S's history keeps counting" |
+| `rotate` | `major`, `successor`, `merges`, `tips` | "retire the key S and name SUCCESSOR as its successor: S signs nothing more that counts; the successor inherits no claims; this cannot be undone" |
+| `succession` | `identity`, `root` (the signer: the new root R′) | "make S the next root of identity I; this is S's first line, and a key is an identity's root at most once" |
+| `recovery` | `identity`, `last_good`, `successor` (key), `successor_inception` (D′), `next_commitment` (or `null` when the identity is closed) | "as the recovery key of I: replace its root with SUCCESSOR, keep the current root's lines up to LAST_GOOD and void every other one, whenever signed; a recovery key signs once"; `successor` null: "close the identity: its kept history counts; nothing new can be administered" |
+| `handover` | `identity`, `recovery` (the carried statement's id), `recovery_signer`, `recovery_commitment` (computed, §5.2), and the carried statement's `last_good`, `successor`, `successor_inception`, `next_commitment` | "as the current root of I: hand I over under the recovery above"; "compare recovery_commitment with the commitment recorded at setup"; "a second, different recovery of this root retires I for good" |
+
+**Why the tips are in a key event's summary.** On the signing machine, the summary is all the holder sees of the
+plan. A revocation's bytes name `prev` and `merges` but not what they leave out; the tips the store held are what
+make "these branches are cut" visible. They are copied from `log_tips`, which the signing side cannot check
+against a store, so the review says "the store this was prepared on held these tips; `--complete` refuses if
+that changed". The lines that stop counting are not in the summary: their number is unbounded, and `--prepare`
+prints them on the store's machine, where they can be checked.
+
+**On the device.** The Ledger Ethereum app shows the PAE, not the summary (§7). The summary and review are for
+`package show` and `key sign` on the machine the device is attached to; a holder who trusts no machine reads
+the PAE on the device and compares `pae_sha256` (or the EIP-191 hash) received by a separate channel, as today.
+
+Rejected: a single `key_event` action with `kind` as a member (it would put "revoke" and "rotate" one member
+apart in a summary whose purpose is to make them unmistakable). Rejected: prose in the summary (`/0`'s mistake:
+the words of a package would differ between releases).
+
+## 7. The new kinds on the Ledger Ethereum app
+
+The connector stays as it is: EIP-191 `personal_sign` over the PAE bytes, the app showing the message as text
+when every byte is printable ASCII, and as hex otherwise. Nothing in this note needs a new algorithm, preimage or
+device app.
+
+- **Key events read acceptably: checked on hardware.** #268's hand run, on a Ledger Nano X with the Ethereum app
+  1.19.3, signed a `revoke_key` and a `rotate_key` through `revoke --ledger` and `rotate --ledger`, each approved
+  on the device after review, each committed with `fsck` clean, and each checked outside the tool (the EIP-191
+  signature recovers the device's address; the statement id is the SHA-256 of the PAE). A `revoke_key` PAE is
+  short: the signed `revoke_key` vectors are 323 bytes (`key_compromise`, no `last_good`), about two screens'
+  worth of chunks, as #266 estimated. A package changes nothing the device sees: `key sign --ledger` of a `/2`
+  key-event package sends the same PAE bytes `revoke --ledger` sends today, so that result carries over.
+- **Bare-key approvals read like the identity acts already drilled.** A marker-only `rc/2` edition is about 480 to
+  550 bytes in the signed vectors, inside the range of the inception (321), cut (603) and grant (681) drilled
+  through the package on the emulator and the device. An `rc/1` edition is a little shorter. Printable unless a
+  body string carries non-ASCII text (a resource name in another script), which turns the display to hex, as for
+  every kind today.
+- **Recovery statements are the longest.** Estimated from the recovery proposal's working shapes with
+  `eip191-secp256k1` keys: a succession about 380 bytes, a recovery about 710, a handover about 1,220 (it carries
+  the whole signed recovery). All far below the app's measured limit (about 7.6 KB of printable text), but the
+  handover is long to read on a device: the identity, the successor and the commitment are 64-hex values deep in
+  the message. The review that matters is on the machine (§5.2: the commitment comparison) and the hash
+  comparison on the device; a holder is not expected to read a handover screen by screen. Not checked on
+  hardware: none of the recovery statements exists yet.
+- **What a device does not protect.** The device's screen shows what is signed; it cannot show what a key event
+  cuts. The tips and the lines that stop counting are visible only on the store's machine (`--prepare`) and in the
+  summary on the signing machine. For a key event, the hash comparison proves the bytes are the prepared ones, not
+  that the plan is the one the holder wanted.
