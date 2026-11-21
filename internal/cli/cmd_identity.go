@@ -36,6 +36,7 @@ func init() {
 			"The root key must be fresh: a key with any line in this store is refused (exit 1), since the identity's lineage is the root key's whole log. " +
 			"That check sees this store only, not any other: use a key generated for this purpose, one that has signed nothing anywhere (the tool cannot see other stores, and an old key's earlier lines would become part of the identity's lineage). " +
 			"Use the root key for administration only (identity grant, identity cut) and keep it offline: it is the identity's only administrator, and fixed-root-v1 has no recovery if it is lost or stolen. " +
+			"One ordinary statement by the root (an authored, a holds, a genesis) ends the identity: every reader that holds it reads the identity's acts unknown, earlier ones included. Every writer refuses one (exit 1, nothing signed) in a store that holds the inception; describes, anchors and key events stay allowed. " +
 			"--dry-run prints the exact statement and signs nothing; with the same --ts the dry run's id is the id the real run signs, as long as the signer's log has not moved in between (the id commits to prev and seq)." + extHelp})
 	gflags := append(slices.Clone(writerFlags), extFlags...)
 	gflags = append(gflags,
@@ -283,7 +284,7 @@ func signIdentity(p *pubPrep, h head, d wire.Draft, actor *wire.Actor, marker *c
 	return sts, nil
 }
 
-const rootCustody = "keep the root key offline and use it only for identity grant and identity cut: it is this identity's only administrator, and fixed-root-v1 has no recovery if it is lost or stolen (a stolen root can grant and cut as you). Use a key generated for this purpose, one that has signed nothing anywhere: this check sees only this store's log of the key"
+const rootCustody = "keep the root key offline and use it only for identity grant and identity cut (one ordinary statement by it ends the identity; this store's writers refuse one): it is this identity's only administrator, and fixed-root-v1 has no recovery if it is lost or stolen (a stolen root can grant and cut as you). Use a key generated for this purpose, one that has signed nothing anywhere: this check sees only this store's log of the key"
 
 func identityNewCmd(c *Ctx) (*Obj, int, error) {
 	p := c.Prep.(*identityPrep)

@@ -33,6 +33,16 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ### Fixed
 
+- An identity's root key could sign an ordinary statement (`publish --key <root>`, a genesis through `--draft`, a
+  `holds` from `gc --release`) without a warning, and every reader holding the line then read the identity's acts
+  unknown, earlier ones included (#271). Every writer now refuses a line outside the closed root vocabulary
+  (inception, grants, cuts, describes, anchors, key events) when its key is the root of an identity whose inception the
+  store holds: exit 1, nothing signed, the identity named, no override; `--prepare` refuses the same way before writing
+  a package. `hub check` labels such a line in a change (`identity root: ordinary line`, a label only), and
+  `show <identity>` and `show <root key>` list the held ones under `ordinary_root_lines`. The fixed-root identity note
+  and GETTING-STARTED say that one ordinary statement by the root ends the identity, and how to recover. The reader is
+  unchanged; writer and reader take the allowed set from one list. No change to the wire format or any signed byte.
+
 - A collection whose genesis names an identity and a plain key (`{identity: I}`, `{key: K}`) can now advance under
   `k_of_n`: a bare key's `publish --draft` of an `edition` or `withdraw_approval` of a resource whose genesis is `rc/2` is
   written `rc/2` with the body marker `{}` and no actor (identity design note sections 2.2 and 2.3), so it approves the

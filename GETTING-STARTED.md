@@ -96,6 +96,11 @@ reader policy: [`docs/READER-POLICY.md`](docs/READER-POLICY.md).
   counted contract using either never reads `ready` (settle that work by review), and a deadline is checked only against
   a synced header chain ([KNOWN-LIMITS](docs/KNOWN-LIMITS.md) L-01, L-02).
 - Fetch bytes a `holds` statement points at: `commons fetch --help`.
+- Act for an identity (`commons identity new --help`): its root key is dedicated. One ordinary statement by the root
+  (an `authored`, a `holds`, a `genesis`) ends the identity, earlier acts included, so every writer refuses one in a
+  store that holds the identity's inception. If such a line exists anyway (`show <identity>` lists it under
+  `ordinary_root_lines`), remove it only if it never left the store that wrote it; once another store holds it, treat
+  it as a lost root ([fixed-root identity note](docs/DESIGN-notes-fixed-root-identity.md), section 3).
 
 ## 7. Share it as a hub
 

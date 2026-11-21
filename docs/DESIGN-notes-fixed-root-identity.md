@@ -360,6 +360,25 @@ Root vocabulary on the pinned I lineage is closed for authority evaluation:
   Root events on a proved rival inception do not retire I. Unknown lineage relationship
   is reported as unknown, not mistaken for a rival that can safely be ignored.
 
+The root is therefore dedicated, and **one ordinary statement by R ends the identity**: an
+`authored`, a `holds` or a `genesis` R signs on I's lineage is unsupported root state, and
+every reader that holds it reads I's acts `unknown`, earlier ones included. The reader is
+right to: the profile gives no way to tell a root that meant nothing by the line from one
+that changed I's authority. The tool's writers enforce the dedication instead. Every command
+that signs a line or writes a signing package refuses one outside the vocabulary above when
+its key is the root of an identity whose inception the store holds (exit 1, nothing signed,
+the identity named, no override). `hub check` labels such a line in a change (`identity
+root: ordinary line`, a label only: the hub admits, readers count), and `show <identity>`
+and `show <root key>` list the held ones under `ordinary_root_lines`. One list of allowed
+events serves the reader's root walk and the writer, so the two cannot disagree. The writer
+sees only its own store: R used with a store that does not hold I's inception, or by
+another implementation, is not refused, which is what the hub label is for.
+
+Recovery: if the line never left the store that wrote it, remove it there (its statement
+file under `statements/`, plus any unfinished journal record naming it that `commons
+status` shows; then `commons fsck`) and the identity reads as before. Once any other store or hub holds it, the line cannot be withdrawn: treat it as a
+loss of R (section 1: a new I, and resources and policies that move to it).
+
 A cut on I's lineage is addressed by its `grant`. A cut that names a grant of I under
 another `identity` is an invalid cut addressed to that grant: it denies the grant and is
 reported, never treated as a cut for some other identity.
