@@ -49,15 +49,16 @@ worse, a frozen `/1` reader is not built to refuse it cleanly. Checked on builds
 (today's reader), with a throwaway store and keys, by placing a signed vector's envelope, its signature
 removed and every derived member correct, in a `/1` package:
 
-| Envelope in a `/1` package | `package show`, `key sign`, `<command> --complete` today |
+| Envelope in a `/1` package | `package show`, `key sign`, `<command> --complete` on `1.0.0-rc.1` |
 |---|---|
 | an `rc/1` `revoke_key` | refused, `malformed-package`, exit 2 ("only an `rc/2` envelope is checked unsigned"); nothing signed or written |
 | an `rc/2` bare-key (marker-only) `edition` | **internal error, exit 3**: the summary is computed for an actor the envelope does not have. Nothing is signed or written, but the refusal is a crash, not a check |
 
 So `/1` cannot safely grow: the second row shows a frozen reader reaching code paths that assume the four `/1`
-actions. Extending `/1` is rejected for that reason, and for the freeze itself. (The second row is a defect in
-today's `/1` reader, worth a fix before the next candidate: refuse any envelope that is not one of the four
-actions, exit 2, before the summary is computed. The fix changes no signed byte and no package `/1` writes.)
+actions. Extending `/1` is rejected for that reason, and for the freeze itself. (The second row was a defect in
+the `/1` reader, fixed on `next` by #278: any envelope that is not one of the four actions is refused,
+`malformed-package`, exit 2, before the summary is computed. The fix changes no signed byte and nothing `/1`
+writes. A `1.0.0-rc.1` build still crashes on such a package, without signing or writing anything.)
 
 ### 2.1 What a `/1`-only reader does with a `/2` package
 
@@ -497,8 +498,8 @@ Each point below has a recommendation in the section named; review is asked of e
 8. **Summaries** (§6): one action token per kind of consent, `major` on every `/2` summary, the reviewed tips in a
    key event's summary.
 
-**A defect in today's `/1` reader, independent of this proposal** (§2): a `/1` package whose envelope is an
-actor-less `rc/2` statement makes `package show`, `key sign` and `publish --complete` stop with an internal error
-(exit 3) instead of refusing it. Nothing is signed or appended, so it is not a safety failure, but it is the crash
-of a frozen reader on a package it should refuse. The fix (refuse any envelope that is not one of the four `/1`
-actions, `malformed-package`, exit 2) changes no signed byte and nothing `/1` writes, and fits between candidates.
+**A defect in the `/1` reader, independent of this proposal, fixed by #278** (§2): a `/1` package whose envelope
+is an actor-less `rc/2` statement made `package show`, `key sign` and `publish --complete` stop with an internal
+error (exit 3) instead of refusing it. Nothing was signed or appended, so it was not a safety failure. Since #278
+they refuse any envelope that is not one of the four `/1` actions, `malformed-package`, exit 2. No signed byte
+and nothing `/1` writes changed.
