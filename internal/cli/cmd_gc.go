@@ -192,6 +192,10 @@ func profileLayoutPins(st *store.Store, d string) []store.Digest {
 }
 
 func releaseCmd(c *Ctx, d store.Digest, k wire.Key) (*Obj, int, error) {
+	// a release signs a holds (withdrawn: true): refused for an identity's root like every other ordinary line
+	if prob := rootLineRefused(c.Store, []*wire.Statement{{Kind: "holds", Signer: k.Signer(), Status: wire.Valid}}, "nothing was signed or deleted"); prob != nil {
+		return nil, 0, prob
+	}
 	res, err := c.Store.Release(d, store.SignerFromKey(k, nil))
 	committed := res != nil && res.Withdrawal != ""
 	if err != nil {

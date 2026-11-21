@@ -400,3 +400,17 @@ func idText(o *canon.Object, k string) string {
 	}
 	return s
 }
+
+// InRootVocabulary reports whether st, read as authenticated and understood, is in the closed root vocabulary of a
+// fixed-root identity (identitymodel.InRootVocabulary): what an identity's root may sign without its identity's
+// acts reading unknown. It translates st as Admit does, so the writer's refusal and the reader's
+// unsupported_root_event agree by construction. st is the writer's own line (signed or about to be signed), so it
+// is taken as verified; a line that does not read valid is outside the vocabulary.
+func InRootVocabulary(st *wire.Statement) bool {
+	if st == nil || st.Status != wire.Valid {
+		return false
+	}
+	c := *st
+	c.Verified = true
+	return identitymodel.InRootVocabulary(translate(&c, false).Event)
+}

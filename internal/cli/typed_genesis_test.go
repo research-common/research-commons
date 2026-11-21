@@ -16,7 +16,7 @@ func TestPublishTypedGenesis(t *testing.T) {
 	for _, alg := range []string{wire.AlgEd25519, wire.AlgEIP191} {
 		t.Run(alg, func(t *testing.T) {
 			h := newIDHome(t, alg) // h.key is a bare key: it is not the identity's root and holds no grant
-			ident := string(h.ok("identity", "new").Members["identity"].(canon.String))
+			ident := foreignIdentity(t, h, alg)
 			genesis := func(ctrl, rule string) string {
 				return h.file("g.json", `{"kind":"genesis","body":{"type":"collection","name":"readings","controllers":`+ctrl+`,"rule":`+rule+`}}`)
 			}
@@ -92,7 +92,7 @@ func TestDraftMarkerOnRC1Refused(t *testing.T) {
 	for _, alg := range []string{wire.AlgEd25519, wire.AlgEIP191} {
 		t.Run(alg, func(t *testing.T) {
 			h := newIDHome(t, alg)
-			ident := string(h.ok("identity", "new").Members["identity"].(canon.String))
+			ident := foreignIdentity(t, h, alg)
 			g := firstID(t, h.ok("publish", "--draft", h.file("g.json", `{"kind":"genesis","body":{"type":"collection","name":"plain","controllers":["`+h.signer+`"],"rule":{"any_one":true}}}`)))
 			before := storeBytes(t, h.store)
 			for name, d := range map[string]string{
@@ -118,4 +118,15 @@ func TestDraftMarkerOnRC1Refused(t *testing.T) {
 			}
 		})
 	}
+}
+
+// foreignIdentity makes an identity on another machine, with a root key of its own, and pulls its inception into
+// h's store: h's key is then a bare key in a store that holds the identity. An identity's root signs no genesis
+// (issue #271: one ordinary statement by the root stops the identity), so these tests never use one.
+func foreignIdentity(t *testing.T, h *idHome, alg string) string {
+	t.Helper()
+	root := newIDHome(t, alg)
+	ident := string(root.ok("identity", "new").Members["identity"].(canon.String))
+	h.pullFrom(root)
+	return ident
 }

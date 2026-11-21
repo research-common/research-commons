@@ -270,9 +270,7 @@ func (s *Snapshot) rootState(e *evaluation, root Fact, actor Actor, grant *Grant
 			e.add("unaddressable_root_cut", Unknown, id, root.ID, "cannot establish affected grant")
 			continue
 		}
-		switch f.Event {
-		case GrantEvent, Inert, CutEvent, RotateKey, RevokeKey:
-		default:
+		if !InRootVocabulary(f.Event) {
 			// Vocabulary before ancestry: an event outside the closed root vocabulary is uncertainty whatever its
 			// ancestry; a defect in that ancestry must never turn unknown into a silent warning.
 			e.proof(p.get())

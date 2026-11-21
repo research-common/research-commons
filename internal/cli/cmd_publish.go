@@ -982,6 +982,9 @@ func prepinRefused(err error, p *pubPrep) *Problem {
 // commitUnit prints a dry run, or installs the blob and commits the statements as one journal record.
 func commitUnit(c *Ctx, out *Obj, op string, sts []signed, blobs []store.Digest, content string, h head) (*Obj, int, error) {
 	if preparing(c) {
+		if prob := rootLineRefused(c.Store, signedStatements(sts), "no package was written"); prob != nil {
+			return nil, 0, prob
+		}
 		return preparedResult(c, out, sts[0], h)
 	}
 	open := func(store.Digest) (io.ReadCloser, error) { return os.Open(content) }
@@ -1001,6 +1004,9 @@ func commitUnitFrom(c *Ctx, out *Obj, op string, sts []signed, blobs []store.Dig
 			pr.Exit = ExitCouldNot
 			return nil, 0, pr
 		}
+	}
+	if prob := rootLineRefused(c.Store, signedStatements(sts), "nothing was appended"); prob != nil {
+		return nil, 0, prob
 	}
 	l := listV{}
 	var lines [][]byte

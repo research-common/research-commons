@@ -484,7 +484,7 @@ var limits = []limit{
 		closes: "an edition moving a key-controlled collection to identity control, written by the CLI (planned for 1.1)",
 		open: func(t *testing.T) (bool, string) {
 			h := newIDHome(t, wire.AlgEd25519)
-			ident := string(h.ok("identity", "new").Members["identity"].(canon.String))
+			ident := foreignIdentity(t, h, wire.AlgEd25519) // an identity's root signs no genesis (#271)
 			g := firstID(t, h.ok("publish", "--draft", h.file("genesis.json", `{"kind":"genesis","body":{"type":"collection","name":"c","controllers":["`+h.signer+`"],"rule":{"any_one":true}}}`)))
 			draft := h.file("edition.json", `{"kind":"edition","body":{"resource":"`+g+`","predecessors":["`+g+`"],"contents":{"members":[],"controllers":[{"identity":"`+ident+`"}],"rule":{"any_one":true}}}}`)
 			before := storeBytes(t, h.store)
