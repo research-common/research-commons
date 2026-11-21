@@ -578,7 +578,7 @@ their fields and meaning.
    - The observation analogue of a grade is capture evidence (claims-model note §5.3.3). A
      `min_capture_evidence` beside `min_grade` reads well but waits: the declared levels are a closed set
      (wire-format note §5, `capture.evidence`), but the claims-model note gives them no order and the tool
-     displays only the levels it verified (`device-attested (unverified)`), so there is no closed vocabulary
+     displays only the levels it verified (`device-attested (unverified)`, `source-attested (unverified)`), so there is no closed vocabulary
      of verified, ordered levels for a contract to name yet. Until there is, a contract cannot require one.
    - Corroboration never gates a count. It is a disclosure, scoped to the statements a reader holds and the
      agreement models it trusts (claims-model note §5.3.2), and a disclosure never moves a verification

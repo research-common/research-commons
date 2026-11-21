@@ -11,6 +11,19 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ### Added
 
+- **Wire format: a fifth capture-evidence level, `source-attested`.** An `observed` may declare
+  `capture.evidence: "source-attested"`: a proof that the named source served the bytes (a notarised or
+  zero-knowledge proof over the transport session, for example), beside `device-attested`, which says a sealed device
+  produced them. It is added before the 1.0 freeze because the list is closed: a reader refuses a value it does not
+  know as malformed, so this is the last point at which a level can be added without a new major. **No existing
+  byte changes**, and every statement a `1.0.0-rc.1` writer signed reads as before. A statement declaring the new level
+  is malformed to a `1.0.0-rc.1` or earlier reader; upgrade readers before writing one. No verifier ships: every
+  reader reads the level as unverified, exactly as it reads `device-attested`, the level never moves a grade or an
+  exit code, and a verifier for one of the two levels never verifies the other (new conformance case C-core-52a).
+  As before this change, `show` prints the capture record as signed, inside the statement body, and does not yet
+  print the level the reader verified beside it. What the `attestation` object holds is still any object, left to a later design
+  note. Claims-model note section 5.3.3, wire-format note sections 5 and 12, and the `rc/2` JSON schema carry the value.
+
 - `revoke --ledger --ledger-path <path>` and `rotate --ledger --ledger-path <path>`: a Ledger device signs the key's own
   `revoke_key` or `rotate_key` (EIP-191 `personal_sign` over the PAE, reviewed on the device), so a device-held identity
   root can revoke itself, and can sign an escrowed revocation right after inception (#266). The line is byte for byte

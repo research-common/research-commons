@@ -596,9 +596,15 @@ the reader relies on, and makes fabrication more expensive:
 | **anchored at capture** | the bytes existed by time T, which rules out later fabrication with hindsight | that they were captured rather than invented before T |
 | **witnessed** | simultaneous observers co-sign, each with its own `observed` statement | that the witnesses don't collude or share a feed |
 | **device-attested** | a specific sealed device (secure hardware, TEE) produced the bytes | that the sensor saw reality; trust moves to the manufacturer's attestation root and the sensor's physical integrity |
+| **source-attested** | a proof that the named source served the bytes in a session (a notarised or zero-knowledge proof over the transport session, for example) | that the source was right; trust moves to whoever attests the session (a notary or attestor, where the proof system has one) and to the source's own key |
 
-The observer declares a level. The tool displays only what it verified: an attestation the reader cannot verify
-shows as `device-attested (unverified)`. Agent-operated captures (#17) record roles explicitly: the signer who
+The observer declares one level. The levels are not ordered: each names a different kind of evidence, and none
+implies another. The tool displays only what it verified: an attestation the reader cannot verify shows as
+`device-attested (unverified)` or `source-attested (unverified)`, and a verifier for one of the two never
+verifies the other (C-core-52, C-core-52a). `source-attested` is about where the bytes came from, so it reads
+naturally on a source-class observation; the other classes may declare it, and what it then means is for the
+attestation's own format to say. What the `attestation` object holds, and how a proof binds to the statement,
+belong to the attestation note (§15). Agent-operated captures (#17) record roles explicitly: the signer who
 vouches, the operator (human or agent) who ran the capture, and the instrument or source. One key need not
 stand for one person.
 

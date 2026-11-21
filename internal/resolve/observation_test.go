@@ -787,6 +787,53 @@ func TestDeviceAttestedUnverified(t *testing.T) {
 	}
 }
 
+// levelAttest verifies an attestation for one declared level only, as a real verifier does: a device
+// attestation says nothing about which source served the bytes.
+type levelAttest struct{ level string }
+
+func (f levelAttest) VerifyAttestation(st *wire.Statement) (bool, string) {
+	if str(object(st.Body, "capture"), "evidence") == f.level {
+		return true, ""
+	}
+	return false, "no verifier for the declared level"
+}
+
+// TestSourceAttestedUnverified: C-core-52a. `source-attested` is displayed as verified only when the reader's
+// verifier answers for that level; a verifier for device attestations does not lift it, the display never names
+// a level the statement did not declare, and the verify exit does not move.
+func TestSourceAttestedUnverified(t *testing.T) {
+	conformance.Covers(t, "C-core-52a")
+	w := newWorld(t)
+	src := w.observed("O1", "O1", "X", "source", obj("endpoint", "https://api.example/v1/price", "parameters", obj(), "response_digest", dig("X")),
+		"capture", canon.Value(obj("at", "2026-10-16T00:00:00Z", "evidence", "source-attested", "attestation", obj("format", "x"))))
+	dev := w.observed("O2", "O2", "Y", "none-yet", obj(), "capture", canon.Value(obj("at", "2026-10-16T00:00:00Z", "evidence", "device-attested", "attestation", obj("format", "x"))))
+	for name, opt := range map[string]Option{
+		"no verifier":          WithAttestationVerifier(NoAttestationVerifier{}),
+		"fails":                WithAttestationVerifier(fakeAttest{false}),
+		"device verifier only": WithAttestationVerifier(levelAttest{"device-attested"}),
+	} {
+		o := obsView(t, w, src, opt)
+		has(t, o.Render(), "evidence source-attested (unverified)")
+		if o.Capture.Verified != "self-asserted" {
+			t.Fatalf("%s: verified level %s", name, o.Capture.Verified)
+		}
+	}
+	ok := obsView(t, w, src, WithAttestationVerifier(levelAttest{"source-attested"}))
+	if ok.Capture.Display != "source-attested" || ok.Capture.Verified != "source-attested" {
+		t.Fatalf("control: %s / %s", ok.Capture.Display, ok.Capture.Verified)
+	}
+	// the same reader, verifying source attestations only, leaves a device-attested statement unverified
+	if d := obsView(t, w, dev, WithAttestationVerifier(levelAttest{"source-attested"})); d.Capture.Display != "device-attested (unverified)" || d.Capture.Verified != "self-asserted" {
+		t.Fatalf("a source verifier lifted a device attestation: %s / %s", d.Capture.Display, d.Capture.Verified)
+	}
+	want, _ := ok.VerifyExit()
+	for _, opt := range []Option{WithAttestationVerifier(fakeAttest{false}), WithAttestationVerifier(NoAttestationVerifier{})} {
+		if got, why := obsView(t, w, src, opt).VerifyExit(); got != want {
+			t.Fatalf("an unverified attestation moved the verify exit: %d %v, verified %d", got, why, want)
+		}
+	}
+}
+
 // TestObservationVerifyExit: claims §13, `verify` of an observation. 0 when its signature and pins hold; 3 when
 // the referent is unpinned or its finality rule cannot be evaluated by this reader; the corroboration status
 // (corroborated, contradicted, unchecked) and the reader's re-check never move it.

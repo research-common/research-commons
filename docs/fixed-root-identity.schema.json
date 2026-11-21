@@ -535,7 +535,8 @@
             "self-asserted",
             "anchored-at-capture",
             "witnessed",
-            "device-attested"
+            "device-attested",
+            "source-attested"
           ]
         },
         "operator": {

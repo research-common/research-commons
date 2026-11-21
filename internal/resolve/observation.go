@@ -196,8 +196,9 @@ func (NoReferentChecker) Check(*wire.Statement) ReCheck {
 	return ReCheck{Outcome: ReUnchecked, Why: "no referent checker configured"}
 }
 
-// AttestationVerifier verifies a device attestation against the bytes the statement names (§5.3.3). It must
-// answer from receiver-local trust roots, never from a field of the statement.
+// AttestationVerifier verifies the attestation behind a declared `device-attested` or `source-attested` level
+// against the bytes the statement names (§5.3.3). It answers for the level the statement declares and no
+// other, from receiver-local trust roots, never from a field of the statement.
 type AttestationVerifier interface {
 	VerifyAttestation(st *wire.Statement) (ok bool, why string)
 }
@@ -312,10 +313,12 @@ type Finality struct {
 // Capture is the capture record as signed, beside what the reader verified (§5.3.3).
 type Capture struct {
 	At, Declared string
-	// Display is the level as the reader shows it: only what it verified (`device-attested (unverified)`).
+	// Display is the level as the reader shows it: only what it verified (`device-attested (unverified)`,
+	// `source-attested (unverified)`).
 	Display string
-	// Verified is the strongest level the reader verified: device-attested, anchored-at-capture, witnessed or
-	// self-asserted (the floor: the observer's signed word).
+	// Verified is the level the reader verified: the declared one (device-attested, source-attested,
+	// anchored-at-capture, witnessed) when its evidence verified, else self-asserted (the floor: the observer's
+	// signed word). The levels have no order; one statement declares one.
 	Verified string
 	// Operator and Instrument are the declared roles, "" when undeclared; never inferred from the key.
 	Operator, Instrument string
@@ -641,12 +644,14 @@ func (r *Resolver) capture(st *wire.Statement) Capture {
 		} else {
 			c.Display = "witnessed (0 own statements)"
 		}
-	case "device-attested":
+	case "device-attested", "source-attested":
+		// one verifier seam for both: the verifier reads the declared level and the attestation from the
+		// statement, and answers for that level only (a device attestation never verifies a source claim)
 		if ok, _ := r.obs.attest.VerifyAttestation(st); ok {
-			c.Display = "device-attested"
-			c.Verified = "device-attested"
+			c.Display = c.Declared
+			c.Verified = c.Declared
 		} else {
-			c.Display = "device-attested (unverified)"
+			c.Display = c.Declared + " (unverified)"
 		}
 	}
 	return c
