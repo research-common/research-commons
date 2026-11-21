@@ -284,8 +284,10 @@ The commands are the recovery proposal's to name; the package needs only this or
    must be held) and the next commitment; sign it with C (on its device, or from the typed phrase on an offline
    machine, recovery proposal §7.3); `--complete` it, which commits the recovery statement to the store. Alone it
    does nothing (rule 2 of that proposal); held, it is the input to step 3. (Alternative left to review: not
-   committing it, and giving step 3 the recovery's package and signature instead. Committing it is simpler and
-   costs nothing, since publishing it alone changes no answer.)
+   committing it, and giving step 3 the recovery's package and signature instead. Committing it is simpler: a
+   recovery statement held or published alone changes no answer, since the profile's evaluation collects
+   handovers (its §5). It does reveal the recovery key's public form, which use reveals in any case; and a thief
+   holding R who copies it into a handover of their own completes the owner's recovery, not a rival.)
 3. `--prepare` the handover with `--signer R`, naming the recovery statement held in step 2; sign it with R;
    `--complete` it.
 
