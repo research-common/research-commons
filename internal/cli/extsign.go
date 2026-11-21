@@ -321,6 +321,13 @@ func inspectPackage(pkg *canon.Object, path, scope string) (*wire.Statement, []p
 	if st.Status != wire.Valid {
 		return nil, nil, bad("the package's envelope would not be valid once signed", "it reads "+string(st.Status)+": "+st.Why, "prepare the statement again")
 	}
+	// the format carries four actions only: an identity's inception, grant and cut, and an act for an identity. Any
+	// other envelope (a bare-key statement, a key event) is refused before a summary is computed for it.
+	if !packageAction(st) {
+		return nil, nil, bad("the package's envelope is not one of the actions this format carries",
+			"a "+SigningPackageFormat+" package carries an identity's inception, grant or cut, or an act for an identity; this envelope is a statement of kind "+st.Kind+" with no actor",
+			"sign this statement with --key or --ledger on the store's machine; a package route for it does not exist yet")
+	}
 	if m := unpreparedMember(env, st); m != "" {
 		return nil, nil, bad("the package's envelope carries what --prepare never writes", "envelope member "+m+" is not the one --prepare writes for this statement",
 			"prepare the statement again; do not edit a package")
@@ -505,6 +512,15 @@ func summaryOf(st *wire.Statement) *canon.Object {
 		}
 	}
 	return o
+}
+
+// packageAction reports whether a statement is one of the four actions the package format carries.
+func packageAction(st *wire.Statement) bool {
+	switch st.Kind {
+	case "identity_inception", "identity_grant", "identity_cut":
+		return true
+	}
+	return st.Actor != nil
 }
 
 // The summary's action tokens.

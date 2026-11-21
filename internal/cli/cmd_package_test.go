@@ -380,3 +380,55 @@ func TestKeySignRefusesUnpreparedMembers(t *testing.T) {
 		})
 	}
 }
+
+// TestPackageRefusesUnsupportedAction: a package of the current format whose envelope is a statement the format does
+// not carry (here a bare key's marker-only rc/2 edition: no actor, not an administrative identity kind), with every
+// derived member consistent, is refused by package show, key sign and --complete alike, exit 2 malformed-package,
+// before a summary is computed for it. Nothing is signed, written or appended. Before the guard this was a crash
+// (internal error, exit 3) in all three. Both algorithms.
+func TestPackageRefusesUnsupportedAction(t *testing.T) {
+	for _, alg := range []string{wire.AlgEd25519, wire.AlgEIP191} {
+		t.Run(alg, func(t *testing.T) {
+			root := newExtHome(t, alg)
+			_, pkg := root.prepare("new.pkg", "identity", "new", "--ts", "2026-11-14T00:00:00Z")
+			dev := newSigningMachine(t)
+			res := strings.Repeat("c", 64)
+			ed := wire.Draft{Kind: "edition", TS: "2026-11-14T00:00:00Z", Body: objOf("resource", canon.String(res),
+				"predecessors", canon.Array{canon.String(res)}, "contents", objOf("members", canon.Array{}, "selection", canon.String("curated")))}
+			md, err := wire.MarkerOnlyDraft(ed)
+			if err != nil {
+				t.Fatal(err)
+			}
+			env := md.Envelope(root.key)
+			st, err := wire.CheckUnsigned(env)
+			if err != nil || st.Status != wire.Valid || st.Actor != nil {
+				t.Fatalf("the envelope is not a valid marker-only line (%v, %+v), so this case tests nothing", err, st)
+			}
+			p := clonePkg(pkg)
+			p.Members["envelope"] = env
+			p.Members["pae"] = canon.String(base64.StdEncoding.EncodeToString(st.SignedString))
+			p.Members["statement"] = canon.String(st.ID)
+			path := filepath.Join(dev.dir, "bare-edition.pkg")
+			writePkg(t, path, p)
+			refused := func(what string, r result) {
+				t.Helper()
+				if r.code != ExitDidNotStart || !strings.Contains(r.stdout, "malformed-package") || !strings.Contains(r.stdout, "not one of the actions this format carries") {
+					t.Fatalf("%s: %d %s", what, r.code, r.stdout)
+				}
+			}
+			refused("package show", dev.run("package", "show", path, "--json"))
+			out := filepath.Join(dev.dir, "bare.sig")
+			refused("key sign", dev.run("key", "sign", "--package", path, "--key", root.keyF, "--out", out, "--json"))
+			if _, err := os.Stat(out); err == nil {
+				t.Fatal("key sign wrote a signature")
+			}
+			before := storeBytes(t, root.store)
+			sig := filepath.Join(dev.dir, "direct.sig")
+			os.WriteFile(sig, []byte(root.key.Sign(st.SignedString)), 0o644)
+			refused("--complete", root.complete([]string{"publish"}, path, sig))
+			if storeBytes(t, root.store) != before {
+				t.Fatal("--complete changed the store")
+			}
+		})
+	}
+}

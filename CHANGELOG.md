@@ -33,6 +33,12 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ### Fixed
 
+- `package show`, `key sign --package` and `<command> --complete` refuse an `rc-signing-package/1` package whose envelope
+  is not one of the four actions the format carries (an identity's inception, grant or cut, or an act for an identity),
+  exit 2 `malformed-package`, before computing a summary. A package holding a bare key's marker-only `edition` used to
+  crash all three (internal error, exit 3); nothing was signed or written then either. No package `/1` writes, and no
+  signed byte, changes.
+
 - An identity's root key could sign an ordinary statement (`publish --key <root>`, a genesis through `--draft`, a
   `holds` from `gc --release`) without a warning, and every reader holding the line then read the identity's acts
   unknown, earlier ones included (#271). Every writer now refuses a line outside the closed root vocabulary
