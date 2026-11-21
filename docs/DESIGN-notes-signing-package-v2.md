@@ -459,3 +459,35 @@ only on a Ledger attached to the store's machine. With this revision implemented
   a connector.
 - **Recovery:** the recovery statements are new kinds of a new profile; their package route lands with the
   profile, and no limit row is needed for something that does not exist yet.
+
+## 9. Decisions for review, and what this does not change
+
+**Unchanged by this proposal:** the `rc/1` and `rc/2` wire bytes, every statement id, every signed vector, the
+key file `rc-key/0`, and `rc-signing-package/1` (its members, its summary, the packages it accepts and what it
+commits). A `/2` release writes `/1` for exactly the packages `1.0.0-rc.1` writes, byte for byte. What changes is
+the frozen set: `rc-signing-package/2` joins it, so the revision lands in a release candidate (the next one,
+`1.0.0-rc.2`), never between candidates or after `1.0.0`, and is frozen with `1.0.0` like `/1`.
+
+Each point below has a recommendation in the section named; review is asked of each.
+
+1. **A new tag, `/1` still read and still written for its four actions** (§2). Alternatives rejected: extending
+   `/1`; writing `/2` for every action.
+2. **The `/2` vocabulary is closed** (§2.3). Rejected: an open `/2`.
+3. **Bare-key approvals only** (§3.2): `edition` and `withdraw_approval`. Open: whether any other bare-key kind
+   (an `anchors` line for a key held on a device, say) is worth a summary and a freeze now.
+4. **`log_tips` in the package, and a key event refused at `--complete` on any change of tips** (§3.1, §4.2).
+   Rejected: refusing only when the rebuilt statement differs.
+5. **An explicit escrow route, `--complete --escrowed`, for `revoke_key` only** (§4.3). Open: whether a command
+   that assembles the signed line without a store is wanted for escrow kept outside any store.
+6. **The recovery statements fit the `/2` envelope unchanged, one package per signature, the handover prepared
+   after the recovery is signed** (§5). Rejected: a recovery-specific package or member; one package for all three.
+7. **A handover is not refused for a moved root log; a rival recovery held at `--complete` is refused unless
+   `--retire-on-rival`** (§5.3).
+8. **Summaries** (§6): one action token per kind of consent, `major` on every `/2` summary, the reviewed tips in a
+   key event's summary.
+
+**A defect in today's `/1` reader, independent of this proposal** (§2): a `/1` package whose envelope is an
+actor-less `rc/2` statement makes `package show`, `key sign` and `publish --complete` stop with an internal error
+(exit 3) instead of refusing it. Nothing is signed or appended, so it is not a safety failure, but it is the crash
+of a frozen reader on a package it should refuse. The fix (refuse any envelope that is not one of the four `/1`
+actions, `malformed-package`, exit 2) changes no signed byte and nothing `/1` writes, and fits between candidates.
