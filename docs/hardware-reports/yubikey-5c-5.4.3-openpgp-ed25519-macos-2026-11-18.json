@@ -1,0 +1,45 @@
+{
+  "format": "hardware-report/1",
+  "id": "yubikey-5c-5.4.3-openpgp-ed25519-macos-2026-11-18",
+  "date": "2026-11-18",
+  "by": "brandon-eigenlabs",
+  "source": "contributor",
+  "device": {
+    "vendor": "Yubico",
+    "model": "YubiKey 5C",
+    "emulator": false,
+    "firmware": "5.4.3",
+    "app": "OpenPGP",
+    "app_version": "not recorded"
+  },
+  "host": {
+    "os": "macOS 27.2",
+    "arch": "arm64"
+  },
+  "tool": {
+    "version": "1.0.0-rc.1",
+    "commit": "7c3b916"
+  },
+  "route": "package",
+  "alg": "ed25519",
+  "steps": {
+    "read": "n/a",
+    "sign": "pass",
+    "reject": "n/a",
+    "timeout": "n/a",
+    "disconnect": "n/a",
+    "size": "pass",
+    "revoke": "n/a",
+    "rotate": "n/a"
+  },
+  "notes": [
+    "Transcribed by a maintainer from the linked issue, which has the script.",
+    "No connector: the card was driven by Yubico's library; the tool's part is --prepare and --complete.",
+    "The card has no screen: the only review is package show on the host.",
+    "Sign: an identity inception (342-byte signed string), committed, fsck clean. The card signs the bytes as given (pure Ed25519).",
+    "Size: 3,055 bytes signed and verified; 3,056 refused by the host library."
+  ],
+  "links": [
+    "https://github.com/research-common/research-commons/issues/250"
+  ]
+}

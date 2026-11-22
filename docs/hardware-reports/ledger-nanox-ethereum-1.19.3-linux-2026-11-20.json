@@ -1,0 +1,44 @@
+{
+  "format": "hardware-report/1",
+  "id": "ledger-nanox-ethereum-1.19.3-linux-2026-11-20",
+  "date": "2026-11-20",
+  "by": "maintainers",
+  "source": "maintainer",
+  "device": {
+    "vendor": "Ledger",
+    "model": "Nano X",
+    "emulator": false,
+    "firmware": "not recorded",
+    "app": "Ethereum",
+    "app_version": "1.19.3"
+  },
+  "host": {
+    "os": "Ubuntu 24.04",
+    "arch": "x86_64"
+  },
+  "tool": {
+    "version": "1.0.0-rc.1",
+    "commit": "bf563e0"
+  },
+  "route": "connector",
+  "alg": "eip191-secp256k1",
+  "steps": {
+    "read": "pass",
+    "sign": "pass",
+    "reject": "pass",
+    "timeout": "pass",
+    "disconnect": "pass",
+    "size": "not-run",
+    "revoke": "pass",
+    "rotate": "pass"
+  },
+  "notes": [
+    "Run on the head of the pull request that added revoke --ledger and rotate --ledger, before it was merged as the commit named here. Changes made in review after the run (among them --expect-signer) have not been run on hardware.",
+    "Reject was seen for key sign only. A rejection of a revoke or rotate request has not been seen on hardware.",
+    "Timeout: both key-event commands, left unanswered for the default 10 minutes. Disconnect: the device reset during a rotate request.",
+    "The device's passphrase changed between two attempts, so the same path gave another address. --expect-signer exists because of that."
+  ],
+  "links": [
+    "https://github.com/research-common/research-commons/issues/266"
+  ]
+}

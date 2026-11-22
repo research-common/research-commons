@@ -1,0 +1,45 @@
+{
+  "format": "hardware-report/1",
+  "id": "yubikey-5c-5.4.3-openpgp-secp256k1-macos-2026-11-18",
+  "date": "2026-11-18",
+  "by": "brandon-eigenlabs",
+  "source": "contributor",
+  "device": {
+    "vendor": "Yubico",
+    "model": "YubiKey 5C",
+    "emulator": false,
+    "firmware": "5.4.3",
+    "app": "OpenPGP",
+    "app_version": "not recorded"
+  },
+  "host": {
+    "os": "macOS 27.2",
+    "arch": "arm64"
+  },
+  "tool": {
+    "version": "1.0.0-rc.1",
+    "commit": "7c3b916"
+  },
+  "route": "package",
+  "alg": "eip191-secp256k1",
+  "steps": {
+    "read": "n/a",
+    "sign": "pass",
+    "reject": "n/a",
+    "timeout": "n/a",
+    "disconnect": "n/a",
+    "size": "n/a",
+    "revoke": "n/a",
+    "rotate": "n/a"
+  },
+  "notes": [
+    "Transcribed by a maintainer from the linked issue, which has the script.",
+    "No connector: the card was driven by Yubico's library; the tool's part is --prepare and --complete.",
+    "The card has no screen: the only review is package show on the host.",
+    "Sign: an identity inception (321-byte signed string), committed, fsck clean. The card signs a 32-byte digest the host computes; the host normalises to low s and finds v.",
+    "Size does not apply: the card sees a digest. Firmware below 5.7.0 carries Yubico advisory YSA-2024-03 for this curve."
+  ],
+  "links": [
+    "https://github.com/research-common/research-commons/issues/250"
+  ]
+}

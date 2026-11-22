@@ -1,0 +1,44 @@
+{
+  "format": "hardware-report/1",
+  "id": "yubikey-5-5.4.3-openpgp-secp256k1-linux-2026-11-20",
+  "date": "2026-11-20",
+  "by": "maintainers",
+  "source": "maintainer",
+  "device": {
+    "vendor": "Yubico",
+    "model": "YubiKey 5 (USB-C)",
+    "emulator": false,
+    "firmware": "5.4.3",
+    "app": "OpenPGP",
+    "app_version": "3.4"
+  },
+  "host": {
+    "os": "Ubuntu 24.04",
+    "arch": "x86_64"
+  },
+  "tool": {
+    "version": "1.0.0-rc.1",
+    "commit": "4ba33cf"
+  },
+  "route": "package",
+  "alg": "eip191-secp256k1",
+  "steps": {
+    "read": "n/a",
+    "sign": "pass",
+    "reject": "n/a",
+    "timeout": "n/a",
+    "disconnect": "n/a",
+    "size": "n/a",
+    "revoke": "n/a",
+    "rotate": "n/a"
+  },
+  "notes": [
+    "No connector: the card was driven by Yubico's library with the script from the first linked issue; the tool's part is --prepare and --complete.",
+    "The key acted as an identity's delegate: publish --as --prepare, signed on the card, --complete. A third store counted the editions and verify exited 0.",
+    "A 60-member edition (6,893-byte signed string) signed: the card sees a digest, so size does not apply. Firmware below 5.7.0 carries Yubico advisory YSA-2024-03 for this curve."
+  ],
+  "links": [
+    "https://github.com/research-common/research-commons/issues/250",
+    "https://github.com/research-common/research-commons/issues/270"
+  ]
+}

@@ -11,6 +11,10 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ### Added
 
+- `docs/HARDWARE-COMPATIBILITY.md`: a page of hardware signing devices people have tested (device, firmware, app, host,
+  build, and the result of eight fixed steps), generated from one report file per run in `docs/hardware-reports/`. It
+  records observations, not support. A test checks every report's fields and verifies the signed line a report may
+  carry. Documentation and a test only: no command changes.
 - `revoke --ledger --ledger-path <path>` and `rotate --ledger --ledger-path <path>`: a Ledger device signs the key's own
   `revoke_key` or `rotate_key` (EIP-191 `personal_sign` over the PAE, reviewed on the device), so a device-held identity
   root can revoke itself, and can sign an escrowed revocation right after inception (#266). The line is byte for byte
