@@ -119,6 +119,16 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ### Tests
 
+- The `note` column of the conformance case tables is now checked (`TestNoteColumnPins`): every section, invariant
+  and worked example a row names must exist in the note it names, and every quotation must be found there. The
+  Coverage tables of `docs/CONFORMANCE.md` are generated from that column and a test fails when they drift
+  (`TestCoverageTables`; `RC_UPDATE_DOCS=1` rewrites them). The hand-kept tables had drifted both ways from the
+  rows. Nineteen rows had a quotation that was not the note's words or a section number that belongs to another
+  note; their `note` cells are corrected, and three rows gain a pin their required outcome already states. No
+  scenario or required outcome changed. CONFORMANCE.md now names the fixed-root identity profile, states that a
+  case id is never renumbered or reused, and no longer says that nothing is run; `CONTRIBUTING.md` says how a
+  change travels from note to case to test.
+
 - Pins two reader behaviours a later identity profile relies on (`TestUnknownInceptionProfile`, `TestUnknownRootKind`): an inception of
   an unknown profile token reads `unsupported` naming the profile and an act under it reads `unknown` with
   `unsupported_identity_profile`; a `fixed-root-v1` inception with an extra member still reads `valid`; an unknown `rc/2` kind on a
