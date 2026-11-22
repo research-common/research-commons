@@ -313,8 +313,8 @@ script. If the device has no screen, say so: the only review is then ` + "`commo
 ## Sending a report
 
 Copy a file in [` + "`hardware-reports/`" + `](hardware-reports/), change it, and open a pull request with it and
-the regenerated page. If you would rather not open a pull request, open an issue with the same fields and
-a maintainer will add the file, marked as reported.
+the regenerated page. If you would rather not open a pull request, open an issue with the "Hardware test
+report" form and a maintainer will add the file, marked as reported.
 
 The fields:
 
@@ -340,5 +340,5 @@ the reader every store uses. A report whose line does not verify is not merged.
 
 Each row is dated and names the build it was run with. A row for an old build is not wrong; it is old.
 A new run is a new file: old files are not edited, so the page keeps its history. A release that changes
-a connector is the time to run the drill again.
+a connector runs the drill again ([` + "`RELEASING.md`" + `](RELEASING.md), step 11).
 `

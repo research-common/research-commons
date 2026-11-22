@@ -1,0 +1,103 @@
+name: Hardware test report
+description: You ran the hardware drill on a signing device and want the result on the compatibility page.
+title: "Hardware report: <device>, <firmware or app version>, <host>"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. The steps are in [docs/HARDWARE-COMPATIBILITY.md](https://github.com/research-common/research-commons/blob/next/docs/HARDWARE-COMPATIBILITY.md).
+        A report that something fails is worth as much as one that it works.
+
+        **Before you post:** use a key that holds nothing and means nothing. Do not post serial numbers, or an
+        address or key you use for anything else. A maintainer turns this issue into a report file, marked as
+        reported, and credits the name you give.
+  - type: input
+    id: device
+    attributes:
+      label: Device
+      description: Vendor and model. Say so if it is an emulator.
+      placeholder: Ledger Nano S Plus
+    validations:
+      required: true
+  - type: input
+    id: firmware
+    attributes:
+      label: Firmware, app and app version
+      description: Write "not recorded" for what you do not know.
+      placeholder: firmware 1.3.1; Ethereum app 1.23.0
+    validations:
+      required: true
+  - type: input
+    id: host
+    attributes:
+      label: Host
+      description: Operating system, its version, and the architecture.
+      placeholder: Ubuntu 24.04 x86_64
+    validations:
+      required: true
+  - type: textarea
+    id: tool
+    attributes:
+      label: Tool build
+      description: The output of `commons --version`.
+      render: text
+    validations:
+      required: true
+  - type: dropdown
+    id: route
+    attributes:
+      label: Route
+      description: "connector: the tool talked to the device (--ledger). package: something else had the device sign a package the tool prepared."
+      options:
+        - connector
+        - package
+    validations:
+      required: true
+  - type: dropdown
+    id: alg
+    attributes:
+      label: Key kind
+      options:
+        - eip191-secp256k1
+        - ed25519
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps
+      description: For each step, one of pass, fail, not-run, n/a.
+      value: |
+        read:
+        sign:
+        reject:
+        timeout:
+        disconnect:
+        size:
+        revoke:
+        rotate:
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: What differed from the page, sizes, status words, the exact message and exit code of anything that failed. For the package route, what drove the device, and a link to the script.
+    validations:
+      required: false
+  - type: input
+    id: credit
+    attributes:
+      label: Name to credit
+      description: Shown in the table. Your GitHub handle if left empty.
+    validations:
+      required: false
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Signed line (optional)
+      description: The inception the device signed in the sign step, copied whole. Only for a throwaway key; it makes that key's address public.
+      render: json
+    validations:
+      required: false
