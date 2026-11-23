@@ -106,6 +106,12 @@ of this identity, or by the successor it names, is void (RR-30). Without this ru
 root's own key would let the root alone sign both halves of a recovery: the statement need only be a second
 `seq`-0 line of that key.
 
+The rule also runs forward: **a key this identity has committed to as a recovery key never becomes its
+root.** A handover whose successor is such a key is void, whether the commitment is an earlier one (a spent
+recovery key, every copy of which §7.3 says to destroy) or the `next` of the same recovery (RR-31). The
+reader already keeps the set of commitments the identity has used, for RR-15; it compares the successor's
+commitment against that set and against `next`.
+
 **One recovery key (decided).** This version reads exactly one commitment under `any_one`. The member is
 written as a set with a rule so that a later version can add a threshold without another profile; a reader
 of this version reads any other count or rule as unsupported for the whole identity, never as "any one of
@@ -121,7 +127,8 @@ That argument depends on the **order of the checks**, which §5 fixes: the commi
 is a digest of the carried statement's signer string, so a reader can compute it whether or not it supports
 the statement's algorithm. A holder of R alone cannot match it (the recovery key's public form is hidden
 until its first use), so whatever they carry is void. Only a statement by the committed key can read
-unknown, and that needs both keys (RR-24).
+unknown, and that needs both keys, or the root and a statement the recovery key signed and set aside
+(RR-27).
 
 **A handover is judged by signature, not by its place in R's log.** It is bound to the identity three ways:
 it names I, R signed it, and the carried statement's signer matches the commitment in force. So it applies
@@ -156,8 +163,9 @@ For identity I at generation g, with root R, lineage start D and commitment K:
    (`last_good` and its ancestors) holds a raw root key event or a root line outside the closed vocabulary
    (RR-19, RR-25), whose
    successor statement is not that key's `seq`-0 `identity_succession` for I, whose `next` repeats a
-   commitment already used by this identity, or whose successor is a key that was already a root of this
-   identity. (A key is an identity's root at most once. Otherwise a recovery naming a former root would make
+   commitment already used by this identity, whose successor is a key that was already a root of this
+   identity, or whose successor is a key the identity has committed to as a recovery key (a commitment
+   already used, or this recovery's own `next`: RR-31). (A key is an identity's root at most once. Otherwise a recovery naming a former root would make
    that root's whole log current again, including lines an earlier recovery voided: RR-26.)
 2. A valid handover that names a line the reader does not hold (the last good line, an ancestor of it, the
    successor's first line) makes the identity **unknown**. Unlike step 1 this needs both keys, so only the
@@ -214,7 +222,8 @@ end-to-end conformance cases when the profile is built; until then they are scen
 | RR-27 | The recovery key signs recovery A; the owner abandons it and publishes a different recovery B with a handover. Later a holder of R obtains A's bytes and hands A over | With A's successor line held: **retired for good**, by R and a file, with no second key stolen. Without that line: unknown. A second signing with the same effect would have been harmless (RR-07). §7.3 says what the tool does about it. |
 | RR-28 | An edition approved by a delegate under a grant that a recovery voids; another under a grant the recovery keeps | The first counted before the recovery is read and does not count after. The second counts both times. |
 | RR-29 | A thief's grant extends the owner's tip; the owner, unaware, issues two grants after it. Route (a): `last_good` before the thief's grant. Route (b): `last_good` at the owner's tip, then the new root cuts the thief's grant | (a) The thief's grant is void, and so are the owner's two later grants and every act under them. (b) The owner's grants all count; the thief's counts until the cut is read, and not after. No set of statements that holds the recovery and the cut lets it count. |
-| RR-30 | The commitment in force names (a) the root's own key, or (b) the successor root itself; that key signs a recovery and its handover | Void in both: the recovery key is no root of the identity. Without the rule, one key would recover alone. |
+| RR-30 | The commitment in force names (a) the root's own key, or (b) the successor root itself; that key signs a recovery and its handover | Void in both: the recovery key is no root of the identity. Without the rule, one key would recover alone. (Case (b) cannot arise from a recovery a reader accepts: RR-31 voids the recovery that would set it up.) |
+| RR-31 | A handover names as successor (a) a recovery key the identity has already used (generations 0 and 1 recovered with C0 and C1; the third recovery names C1 as the new root), or (b) the key its own `next` commits to | Void in both: a key the identity has committed to as a recovery key never becomes its root. Without the rule, (a) makes the root a key whose copies were to be destroyed, with two `seq`-0 lines, and (b) leaves a root with no usable recovery key. An owner's mistake, not an attack: whoever does it holds both keys. |
 
 The whole table is in the reference model. RR-25 matters beyond theft: today one mistaken command with the root key ends a
 fixed-root identity (issue #271), and under this profile the owner can recover from it.
@@ -342,6 +351,8 @@ holder runs step 1 personally, on a machine they trust, and hands only the commi
     raw key event, a cut of one of the owner's own delegates, or an ordinary statement by the root (#271).
     A recovery that keeps a key event or an ordinary root statement is void in any case (RR-19, RR-25), and
     the tool refuses to prepare one.
+  - The tool also refuses to prepare a recovery whose new root is a key the identity has committed to as a
+    recovery key, the next one included (RR-31), or whose next commitment repeats a used one (RR-15).
   - Before anything is signed, the command lists every root line that would stop counting and, beside each
     grant, how many acts held in the store depend on it.
 - **After a recovery,** destroy the used recovery key and every backup of it (rule 5 and §3: the old pair
@@ -443,7 +454,8 @@ on the reference model before it was written in:
   retire; an owner who names the wrong line can sign again.
 - The order of the checks on a carried recovery is fixed, commitment first, so that a holder of the root
   alone cannot make the identity unknown (§5 step 1, RR-24).
-- The recovery key is no root of the identity (§4, RR-30).
+- The recovery key is no root of the identity (§4, RR-30), before or after its use (RR-31, from the second
+  look of the same review).
 - A signed and unpublished recovery is named as a risk of its own, with what the tool does about it (§3,
   §7.3, RR-27).
 - Keeping an unwanted grant and cutting it is taught ahead of naming an earlier last good line (§7.3, RR-29).
