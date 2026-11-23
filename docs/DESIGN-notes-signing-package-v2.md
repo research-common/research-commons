@@ -301,21 +301,30 @@ The commands are the recovery proposal's to name; the package needs only this or
    one. (Alternative left to review: not committing it, and giving step 3 the recovery's package and signature
    instead. Committing it is preferred: the store then holds the one signed recovery, which is what lets
    `--prepare` refuse a second (§5.4), and a thief holding R who copies it into a handover of their own completes
-   the owner's recovery, not a rival. It does reveal the recovery key's public form, which use reveals in any
-   case.)
+   the owner's recovery, not a rival. **That is harmless only once the cuts are out.** With keep-and-cut, a
+   handover the thief completes before step 4 publishes the recovery without its cuts, and readers count the
+   unwanted grants until the owner's cuts arrive. It needs the recovery statement's bytes, so the store must not
+   be pushed or read by anyone else between step 2 and step 4: the profile's "one machine, offline, until the
+   recovery is published". After publication the same act meets RR-07: the same recovery, the cuts already out.
+   Committing it does reveal the recovery key's public form, which use reveals in any case.)
 3. `--prepare` the handover with `--signer R`, naming the recovery statement held in step 2 (the store repeats
-   the commitment check on it, at `--prepare` and again at `--complete`); sign it with R. **Do not complete it
-   yet when there are cuts to make** (step 4).
+   the commitment check on it, at `--prepare` and again at `--complete`). **When there are cuts to make, prepare
+   them (step 4) before completing it.** R can sign the handover before or after the cuts are prepared.
 4. **The cuts, when the recovery keeps grants the owner does not want** (the profile's keep-and-cut route, its
    §7.3 and RR-29). The new root R′ signs the cut of each. A reader that holds the recovery and not yet the cuts
    counts those grants, so no state the store can publish may hold the handover without them. The store reads
    R′ as the root only once it holds the handover, so the cuts cannot be prepared the ordinary way before
    step 3 completes. Instead:
    - `identity cut --prepare --signer R′ --under <handover package>` reads the identity **as it would be with
-     that handover held**, without appending it: R′ is the root, the kept prefix is the recovery's, and the grant
-     to cut must be one that prefix keeps. It writes an ordinary `/1` package for a statement of R′, bound to
+     that handover held**, without appending it. The package may be signed or not: a cut depends only on the
+     recovery's effect, which is fixed from C's signature at step 2, and R's signature adds nothing the cut
+     needs. So the owner can prepare the handover and the cuts in one sitting and sign with R last. Under it: R′ is the root, the kept prefix is the recovery's, and the grant
+     to cut must be one that prefix keeps (a grant the recovery voids is refused here, exit 1: there is nothing
+     to cut). It writes an ordinary `/1` package for a statement of R′, bound to
      R′'s log tip (the succession, then each earlier cut in turn).
-   - R′ signs each cut. Held without the handover, such a line does nothing: R′ is nobody's root yet.
+   - R′ signs each cut. Held without the handover, such a line does nothing: R′ is nobody's root yet. The cuts
+     chain: each is bound to the one before it, so a cut that has to be signed again (a wrong signature, a
+     changed plan) means preparing it and every later one again.
    - `--complete` of the handover takes the cut packages and their signatures with it, checks each again against
      the identity as the handover makes it, and **appends the handover and the cuts in one write.** A failure of
      any part appends nothing.
@@ -393,7 +402,9 @@ built so that a second, different one is never made by accident:
   nothing written. A void recovery is harmless to readers but it is a signed recovery lying in a file, and the
   next one the owner signs would differ from it.
 - **One prepared recovery per identity and generation.** `--prepare` writes the package and records it in the
-  store. Run again for the same identity and generation, it gives back the same package when the inputs are the
+  store. (In the store, not beside the file: the store is the one machine this step already needs, and a record
+  there is what makes "the same inputs give the same package back" checkable without the file. A store rebuilt
+  from its published statements has no such record, which is correct: an unsigned package binds nobody.) Run again for the same identity and generation, it gives back the same package when the inputs are the
   same (same successor, `last_good` and next commitment), and refuses when they differ (exit 1, naming the
   recorded package). Before C has signed, the recorded package can be discarded by an explicit option, since an
   unsigned package binds nobody.
@@ -550,6 +561,8 @@ commands, with the signing side run on a machine that holds no store (as `TestPa
 | PKG-52 | A held handover the profile reads as void, at `--complete` of another handover for the same root | not a rival: no refusal, the void one is reported |
 | PKG-53 | `--prepare` of a recovery whose `--signer` is (a) a key at a wrong derivation path, (b) the recovery key of an earlier generation, (c) the right key written with upper-case hex | (a), (b) refused, exit 1: the commitment is not the one in force; (c) the signer string is not canonical: exit 2. Nothing written. The same check refuses a handover whose carried statement fails it, at `--prepare` and at `--complete` |
 | PKG-54 | `--prepare` of a recovery whose successor is (a) a recovery key the identity has used, (b) the key its own next commitment names | refused, exit 1, naming the key; nothing written (RR-31) |
+| PKG-56 | `identity cut --prepare --under` a handover package, naming (a) a grant the recovery voids, (b) a grant the kept prefix keeps, with the handover package not yet signed by the root | (a) refused at prepare, exit 1, nothing written; (b) a package is written: the handover's signature is not needed to prepare a cut |
+| PKG-57 | Three cuts prepared under one handover; the second cut's signature is wrong at the handover's `--complete` | nothing appended; after the second and third are prepared and signed again, one write appends the handover and all three |
 | PKG-55 | `identity cut --prepare --under` a handover package, with the handover never completed | the cut's package and signature change no answer in any store: the new root is no root without the handover |
 
 ### 8.2 KNOWN-LIMITS L-22: end state
@@ -598,8 +611,8 @@ Each point below has a recommendation in the section named; review is asked of e
    prepared recovery per identity and generation, and after a signature by the recovery key is held offers no way
    to prepare a different one. The store checks the recovery key's commitment at `--prepare` (§5.1 step 2). Cuts
    that belong to a recovery are prepared under the handover's package and appended with it in one write (§5.1
-   step 4). Open: where the record of a prepared, unsigned recovery lives (the store's journal, or a file beside
-   the package).
+   step 4). The record of a prepared, unsigned recovery lives in the store; the package file is the transport to
+   the signing machine, not the record.
 9. **Summaries** (§6): one action token per kind of consent, `major` on every `/2` summary, the reviewed tips in a
    key event's summary.
 
