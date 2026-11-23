@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // This file reads the `note` column of the case tables: the column that says which invariant, section or
@@ -241,6 +243,12 @@ func ParseNoteColumn(col, home string) ([]Ref, []string) {
 	var refs []Ref
 	var problems []string
 	cur := home
+	if strings.ContainsAny(col, "“”") {
+		problems = append(problems, "curly quotation marks (“ ”) are not read as a quotation; use straight ones (\")")
+	}
+	if strings.Count(col, `"`)%2 == 1 {
+		problems = append(problems, "an odd number of quotation marks: a quotation is not closed")
+	}
 	for _, m := range pinToken.FindAllStringSubmatch(col, -1) {
 		switch {
 		case strings.HasPrefix(m[0], `"`):
@@ -306,22 +314,58 @@ func fold(s string) string {
 
 var markup = strings.NewReplacer("*", "", "`", "")
 
-// quoted reports whether q is found in body: its parts, split at each "…", in order.
+// MaxOmitted is the most words a "…" in a quotation may stand for. An omission is a few words left out of one
+// sentence; without a limit two words anywhere in a section, in order, would pass as a quotation of it.
+const MaxOmitted = 20
+
+// quoted reports whether q is found in body: its parts, split at each "…", in order, each on word boundaries
+// (a part never starts or ends inside a word of the note), with at most MaxOmitted words between one part and
+// the next. A quotation with an empty part ("…" first, last or doubled) or no words at all is not found.
 func quoted(q, body string) bool {
 	text := fold(body)
-	at := 0
+	var parts []string
 	for _, part := range strings.Split(q, "…") {
 		p := fold(part)
 		if p == "" {
-			continue
+			return false
 		}
+		parts = append(parts, p)
+	}
+	return quotedFrom(text, parts, 0, false)
+}
+
+// quotedFrom tries every place parts[0] is found at or after from. With bounded set, parts[0] must begin within
+// MaxOmitted words of from. Every place is tried because the first one may be the wrong one: the words before
+// an omission can occur earlier in the section too.
+func quotedFrom(text string, parts []string, from int, bounded bool) bool {
+	p := parts[0]
+	for at := from; ; {
 		i := strings.Index(text[at:], p)
 		if i < 0 {
 			return false
 		}
-		at += i + len(p)
+		start, end := at+i, at+i+len(p)
+		if bounded && len(strings.Fields(text[from:start])) > MaxOmitted {
+			return false
+		}
+		if wordEdge(text, start, true) && wordEdge(text, end, false) &&
+			(len(parts) == 1 || quotedFrom(text, parts[1:], end, true)) {
+			return true
+		}
+		at = start + 1
 	}
-	return true
+}
+
+// wordEdge reports whether position i of text does not split a word: at the start of a part, the character
+// before it and the character at it are not both letters or digits; likewise at its end.
+func wordEdge(text string, i int, start bool) bool {
+	if i <= 0 || i >= len(text) {
+		return true
+	}
+	before, _ := utf8.DecodeLastRuneInString(text[:i])
+	after, _ := utf8.DecodeRuneInString(text[i:])
+	word := func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) }
+	return !(word(before) && word(after))
 }
 
 // LintPins checks every case's note column: each section, invariant and worked example named exists, and each
@@ -341,7 +385,7 @@ func LintPins(cases []Case, notes map[string]*Note, home string) []string {
 			}
 			for _, q := range r.Quotes {
 				if !quoted(q, s.Body) {
-					problems = append(problems, fmt.Sprintf("%s: %q is not in %s (a quotation is exact apart from letter case, line breaks and markup; mark omitted words with …, or drop the quotation marks for a paraphrase)", c.ID, q, r))
+					problems = append(problems, fmt.Sprintf("%s: %q is not in %s (a quotation is whole words of the note, exact apart from letter case, line breaks and markup; … stands for at most %d omitted words; drop the quotation marks for a paraphrase)", c.ID, q, r, MaxOmitted))
 				}
 			}
 		}

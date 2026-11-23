@@ -81,8 +81,9 @@ The `note` column names the invariants and sections that state the obligation, a
   returns to the claims-model note. In a profile note's own table, a bare `§n` is a section of that note.
 - `In` is an invariant of the claims-model note (§3) and `appendix (words)` one of its worked examples.
 - Words in double quotation marks are quoted from the section, invariant or example named just before them, and
-  must be found there. Letter case, line breaks, emphasis and code marks are not compared; `…` stands for words
-  left out. A gloss that is not a quotation goes in brackets without quotation marks.
+  must be found there as whole words. Letter case, line breaks, emphasis and code marks are not compared; `…`
+  stands for at most twenty words left out. Quotation marks are the straight ones. A gloss that is not a
+  quotation goes in brackets without quotation marks.
 
 Everything named must exist: a section number the named note lacks, or a quotation the named section does not
 contain, fails the test. The Coverage tables near the end are generated from this column.

@@ -127,7 +127,9 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   note; their `note` cells are corrected, and three rows gain a pin their required outcome already states. No
   scenario or required outcome changed. CONFORMANCE.md now names the fixed-root identity profile, states that a
   case id is never renumbered or reused, and no longer says that nothing is run; `CONTRIBUTING.md` says how a
-  change travels from note to case to test.
+  change travels from note to case to test. A quotation must be whole words of the note, `…` stands for at most
+  twenty omitted words, and curly quotation marks are refused. The task-contracts note writes the case ids it restates
+  in code marks, like every other note that defines no cases, and a test keeps it so.
 
 - Pins two reader behaviours a later identity profile relies on (`TestUnknownInceptionProfile`, `TestUnknownRootKind`): an inception of
   an unknown profile token reads `unsupported` naming the profile and an act under it reads `unknown` with
