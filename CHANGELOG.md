@@ -15,7 +15,8 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   build, and the result of eight fixed steps), generated from one report file per run in `docs/hardware-reports/`. It
   records observations, not support. A test checks every report's fields and verifies the signed line a report may
   carry. An issue form takes reports from people who would rather not open a pull request, and `docs/RELEASING.md`
-  gains step 11: a release that changes a hardware connector runs the drill again. Documentation and a test only: no
+  gains step 11: a release that changes a hardware connector runs the drill again. The test also ties a report's steps
+  to its route and checks its date, commit and the kind of its signed line. Documentation and a test only: no
   command changes.
 - `revoke --ledger --ledger-path <path>` and `rotate --ledger --ledger-path <path>`: a Ledger device signs the key's own
   `revoke_key` or `rotate_key` (EIP-191 `personal_sign` over the PAE, reviewed on the device), so a device-held identity

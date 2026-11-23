@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/conformance"
@@ -83,7 +84,7 @@ func hwList(t *testing.T, file string, o *canon.Object, k string) []string {
 	var out []string
 	for _, e := range a {
 		s, isStr := e.(canon.String)
-		if !isStr || s == "" {
+		if !isStr || strings.TrimSpace(string(s)) == "" {
 			t.Fatalf("%s: %q must be a list of non-empty strings", file, k)
 		}
 		out = append(out, string(s))
@@ -91,7 +92,12 @@ func hwList(t *testing.T, file string, o *canon.Object, k string) []string {
 	return out
 }
 
-var hwID = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]*-\d{4}-\d{2}-\d{2}$`)
+var (
+	hwID     = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]*-\d{4}-\d{2}-\d{2}$`)
+	hwCommit = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
+	// hwConnectors are the vendors whose devices the tool talks to itself. A new connector adds its vendor.
+	hwConnectors = []string{"Ledger"}
+)
 
 func loadHardwareReports(t *testing.T, root string) []hwReport {
 	t.Helper()
@@ -115,7 +121,10 @@ func loadHardwareReports(t *testing.T, root string) []hwReport {
 			t.Fatalf("%s: format must be hardware-report/1", name)
 		}
 		r.id, r.date, r.by, r.source = hwStr(t, name, top, "id"), hwStr(t, name, top, "date"), hwStr(t, name, top, "by"), hwStr(t, name, top, "source")
-		if r.id+".json" != name || !hwID.MatchString(r.id) || !strings.HasSuffix(r.id, r.date) {
+		if _, err := time.Parse("2006-01-02", r.date); err != nil {
+			t.Fatalf("%s: date must be a calendar date, YYYY-MM-DD", name)
+		}
+		if r.id+".json" != name || !hwID.MatchString(r.id) || !strings.HasSuffix(r.id, "-"+r.date) {
 			t.Fatalf("%s: the file name must be <id>.json, and the id lowercase and ending in the report's date", name)
 		}
 		if r.source != "maintainer" && r.source != "contributor" {
@@ -134,6 +143,9 @@ func loadHardwareReports(t *testing.T, root string) []hwReport {
 		r.os, r.arch = hwStr(t, name, h, "os"), hwStr(t, name, h, "arch")
 		tl := hwObj(t, name, top, "tool", "version", "commit")
 		r.toolVersion, r.toolCommit = hwStr(t, name, tl, "version"), hwStr(t, name, tl, "commit")
+		if !hwCommit.MatchString(r.toolCommit) {
+			t.Fatalf("%s: tool.commit must be a git commit id, 7 to 40 lowercase hex digits", name)
+		}
 		r.route, r.alg = hwStr(t, name, top, "route"), hwStr(t, name, top, "alg")
 		if r.route != "connector" && r.route != "package" {
 			t.Fatalf("%s: route must be connector or package", name)
@@ -151,6 +163,27 @@ func loadHardwareReports(t *testing.T, root string) []hwReport {
 				t.Fatalf("%s: a failed step needs a note saying what happened", name)
 			}
 		}
+		// The page's reading rules, checked: which steps a route has.
+		switch r.route {
+		case "connector":
+			if !contains(hwConnectors, r.vendor) {
+				t.Fatalf("%s: route connector is for a device the tool talks to itself (%s); use package", name, strings.Join(hwConnectors, ", "))
+			}
+			for _, k := range []string{"read", "sign"} {
+				if r.steps[k] == "n/a" {
+					t.Fatalf("%s: steps.%s cannot be n/a on the connector route; write not-run", name, k)
+				}
+			}
+		case "package":
+			if r.steps["sign"] == "n/a" {
+				t.Fatalf("%s: steps.sign cannot be n/a", name)
+			}
+			for _, k := range hwSteps {
+				if k != "sign" && k != "size" && r.steps[k] != "n/a" {
+					t.Fatalf("%s: steps.%s must be n/a on the package route: only sign and size apply", name, k)
+				}
+			}
+		}
 		r.notes, r.links = hwList(t, name, top, "notes"), hwList(t, name, top, "links")
 		for _, l := range r.links {
 			if !strings.HasPrefix(l, "https://") {
@@ -163,6 +196,9 @@ func loadHardwareReports(t *testing.T, root string) []hwReport {
 			s, err := wire.ReadStored([]byte(r.evidence))
 			if err != nil || s.Status != wire.Valid || !s.Verified || s.Alg != r.alg {
 				t.Fatalf("%s: evidence.line is not a valid signed statement under %s: %v", name, r.alg, err)
+			}
+			if s.Kind != "identity_inception" || s.Seq != 0 {
+				t.Fatalf("%s: evidence.line must be the identity inception signed in the sign step", name)
 			}
 		}
 		out = append(out, r)
@@ -192,8 +228,19 @@ func TestHardwareReports(t *testing.T) {
 		if r.evidence == "" {
 			continue
 		}
-		bad := strings.Replace(r.evidence, `"seq":0`, `"seq":1`, 1)
-		if s, err := wire.ReadStored([]byte(bad)); bad == r.evidence || (err == nil && s.Verified && s.Status == wire.Valid) {
+		// Change one character of the signature and nothing else, so the line stays well formed and it is the
+		// signature check that must refuse it.
+		i := strings.Index(r.evidence, `"sig":"`)
+		if i < 0 {
+			t.Fatalf("%s: evidence.line has no sig member", r.id)
+		}
+		i += len(`"sig":"`) + 20
+		c := byte('1')
+		if r.evidence[i] == c {
+			c = '2'
+		}
+		bad := r.evidence[:i] + string(c) + r.evidence[i+1:]
+		if s, err := wire.ReadStored([]byte(bad)); err == nil && s.Verified {
 			t.Fatalf("%s: an altered evidence line still verifies", r.id)
 		}
 	}
@@ -224,7 +271,7 @@ func hardwareMarkdown(reports []hwReport) string {
 		}
 		ev := "none"
 		if r.evidence != "" {
-			ev = "signed line, verified"
+			ev = "signed line (shows a key, not a device)"
 		}
 		b.WriteString("| " + dev + " | " + fw + " | " + r.os + " " + r.arch + " | `" + r.alg + "` | " + r.route + " | " + r.toolVersion + " `" + r.toolCommit + "` |")
 		for _, k := range hwSteps {
@@ -261,9 +308,9 @@ How to read a row:
 - **route**: ` + "`connector`" + ` means the tool talked to the device itself (` + "`--ledger`" + `). ` + "`package`" + ` means the tool wrote
   a signing package, something else had the device sign it, and the tool completed it.
 - **by**: "(reported)" marks a report from a contributor that the maintainers have not repeated.
-- **evidence**: "signed line, verified" means the report carries a statement the device signed, and the test
-  behind this page verified its signature. That proves a key signed with the tool's format. It cannot prove
-  which device or firmware held the key: that part is the reporter's word.
+- **evidence**: "signed line" means the report carries the inception signed in the sign step, and the test
+  behind this page checked its signature. That shows a key signed in the tool's format. It cannot show which
+  device or firmware held the key, on an emulator row or a hardware row: that part is the reporter's word.
 - A step that does not apply to a route or a device reads n/a. The notes in the report file say why.
 
 ## Not yet observed
@@ -310,6 +357,16 @@ bytes to sign, your own program has the device sign them, and ` + "`--complete`"
 sign and size steps apply; the others read n/a. Say in the notes what drove the device, and link to the
 script. If the device has no screen, say so: the only review is then ` + "`commons package show`" + ` on the host.
 
+## Limits seen on devices
+
+- **Ledger, Ethereum app:** a message of 7,652 bytes was offered for review and one of 7,653 was refused, on
+  app 1.19.3 (hardware) and 1.23.0 (emulator).
+- **YubiKey, OpenPGP applet, ` + "`ed25519`" + `:** the card signs the message itself and refuses one longer than
+  3,072 bytes (firmware 5.4.3). An edition's signed bytes grow with its member list, about 22 members at that
+  size. So a key that approves the editions of a large collection should not be an ` + "`ed25519`" + ` key on such a
+  card. An ` + "`eip191-secp256k1`" + ` key on the card signs a digest and has no such limit; firmware below 5.7.0
+  carries Yubico advisory YSA-2024-03 for that curve.
+
 ## Sending a report
 
 Copy a file in [` + "`hardware-reports/`" + `](hardware-reports/), change it, and open a pull request with it and
@@ -326,8 +383,8 @@ The fields:
 | ` + "`source`" + ` | ` + "`contributor`" + `; a maintainer changes it to ` + "`maintainer`" + ` only after repeating the run |
 | ` + "`device`" + ` | ` + "`vendor`" + `, ` + "`model`" + `, ` + "`emulator`" + ` (true or false), ` + "`firmware`" + `, ` + "`app`" + `, ` + "`app_version`" + `; write "not recorded" for what you do not know |
 | ` + "`host`" + ` | ` + "`os`" + ` and ` + "`arch`" + ` |
-| ` + "`tool`" + ` | ` + "`version`" + ` and ` + "`commit`" + `, both from ` + "`commons --version`" + ` |
-| ` + "`route`" + `, ` + "`alg`" + ` | ` + "`connector`" + ` or ` + "`package`" + `; ` + "`ed25519`" + ` or ` + "`eip191-secp256k1`" + ` |
+| ` + "`tool`" + ` | ` + "`version`" + ` and ` + "`commit`" + `, both from ` + "`commons --version`" + `. A build from a source archive prints ` + "`commit: unknown`" + `: give the commit of the release or of the checkout (` + "`git rev-parse HEAD`" + `) instead. For a build of a pull request, give its head commit and say so in the notes |
+| ` + "`route`" + `, ` + "`alg`" + ` | ` + "`connector`" + ` or ` + "`package`" + `; ` + "`ed25519`" + ` or ` + "`eip191-secp256k1`" + `. On the connector route, read and sign are never ` + "`n/a`" + `. On the package route, every step but sign and size is ` + "`n/a`" + ` |
 | ` + "`steps`" + ` | one of ` + "`pass`" + `, ` + "`fail`" + `, ` + "`not-run`" + `, ` + "`n/a`" + ` for each of the eight steps |
 | ` + "`notes`" + ` | what differed, sizes, status words. Required when a step failed |
 | ` + "`links`" + ` | an issue or a script, optional |

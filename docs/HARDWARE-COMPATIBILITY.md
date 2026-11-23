@@ -17,10 +17,10 @@ A report that something fails is worth as much as one that it works.
 
 | device | firmware, app | host | key kind | route | tool | read | sign | reject | timeout | disconnect | size | revoke | rotate | evidence | by | report |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Ledger Nano S Plus (emulator) | firmware Speculos emulator; Ethereum 1.23.0 | Ubuntu 24.04 x86_64 | `eip191-secp256k1` | connector | 1.0.0-rc.1 `f48fe26` | pass | pass | pass | pass | pass | pass | pass | pass | signed line, verified | maintainers, 2026-11-21 | [file](hardware-reports/ledger-nanosp-emulator-ethereum-1.23.0-linux-2026-11-21.json) |
+| Ledger Nano S Plus (emulator) | firmware Speculos emulator; Ethereum 1.23.0 | Ubuntu 24.04 x86_64 | `eip191-secp256k1` | connector | 1.0.0-rc.1 `f48fe26` | pass | pass | pass | pass | pass | pass | pass | pass | signed line (shows a key, not a device) | maintainers, 2026-11-21 | [file](hardware-reports/ledger-nanosp-emulator-ethereum-1.23.0-linux-2026-11-21.json) |
 | Ledger Nano X | firmware not recorded; Ethereum 1.19.3 | Ubuntu 24.04 x86_64 | `eip191-secp256k1` | connector | 0.5.0-alpha.7 `6dc5f1e` | pass | pass | pass | not run | not run | pass | not run | not run | none | maintainers, 2026-11-16 | [file](hardware-reports/ledger-nanox-ethereum-1.19.3-linux-2026-11-16.json) |
 | Ledger Nano X | firmware not recorded; Ethereum 1.19.3 | Ubuntu 24.04 x86_64 | `eip191-secp256k1` | connector | 1.0.0-rc.1 `bf563e0` | pass | pass | pass | pass | pass | not run | pass | pass | none | maintainers, 2026-11-20 | [file](hardware-reports/ledger-nanox-ethereum-1.19.3-linux-2026-11-20.json) |
-| Ledger Nano X (emulator) | firmware Speculos emulator; Ethereum 1.23.0 | Ubuntu 24.04 x86_64 | `eip191-secp256k1` | connector | 1.0.0-rc.1 `f48fe26` | pass | pass | pass | pass | pass | pass | pass | pass | signed line, verified | maintainers, 2026-11-21 | [file](hardware-reports/ledger-nanox-emulator-ethereum-1.23.0-linux-2026-11-21.json) |
+| Ledger Nano X (emulator) | firmware Speculos emulator; Ethereum 1.23.0 | Ubuntu 24.04 x86_64 | `eip191-secp256k1` | connector | 1.0.0-rc.1 `f48fe26` | pass | pass | pass | pass | pass | pass | pass | pass | signed line (shows a key, not a device) | maintainers, 2026-11-21 | [file](hardware-reports/ledger-nanox-emulator-ethereum-1.23.0-linux-2026-11-21.json) |
 | Yubico YubiKey 5 (USB-C) | firmware 5.4.3; OpenPGP 3.4 | Ubuntu 24.04 x86_64 | `ed25519` | package | 1.0.0-rc.1 `4ba33cf` | n/a | pass | n/a | n/a | n/a | pass | n/a | n/a | none | maintainers, 2026-11-20 | [file](hardware-reports/yubikey-5-5.4.3-openpgp-ed25519-linux-2026-11-20.json) |
 | Yubico YubiKey 5 (USB-C) | firmware 5.4.3; OpenPGP 3.4 | Ubuntu 24.04 x86_64 | `eip191-secp256k1` | package | 1.0.0-rc.1 `4ba33cf` | n/a | pass | n/a | n/a | n/a | n/a | n/a | n/a | none | maintainers, 2026-11-20 | [file](hardware-reports/yubikey-5-5.4.3-openpgp-secp256k1-linux-2026-11-20.json) |
 | Yubico YubiKey 5C | firmware 5.4.3; OpenPGP not recorded | macOS 27.2 arm64 | `ed25519` | package | 1.0.0-rc.1 `7c3b916` | n/a | pass | n/a | n/a | n/a | pass | n/a | n/a | none | brandon-eigenlabs (reported), 2026-11-18 | [file](hardware-reports/yubikey-5c-5.4.3-openpgp-ed25519-macos-2026-11-18.json) |
@@ -31,9 +31,9 @@ How to read a row:
 - **route**: `connector` means the tool talked to the device itself (`--ledger`). `package` means the tool wrote
   a signing package, something else had the device sign it, and the tool completed it.
 - **by**: "(reported)" marks a report from a contributor that the maintainers have not repeated.
-- **evidence**: "signed line, verified" means the report carries a statement the device signed, and the test
-  behind this page verified its signature. That proves a key signed with the tool's format. It cannot prove
-  which device or firmware held the key: that part is the reporter's word.
+- **evidence**: "signed line" means the report carries the inception signed in the sign step, and the test
+  behind this page checked its signature. That shows a key signed in the tool's format. It cannot show which
+  device or firmware held the key, on an emulator row or a hardware row: that part is the reporter's word.
 - A step that does not apply to a route or a device reads n/a. The notes in the report file say why.
 
 ## Not yet observed
@@ -80,6 +80,16 @@ bytes to sign, your own program has the device sign them, and `--complete` verif
 sign and size steps apply; the others read n/a. Say in the notes what drove the device, and link to the
 script. If the device has no screen, say so: the only review is then `commons package show` on the host.
 
+## Limits seen on devices
+
+- **Ledger, Ethereum app:** a message of 7,652 bytes was offered for review and one of 7,653 was refused, on
+  app 1.19.3 (hardware) and 1.23.0 (emulator).
+- **YubiKey, OpenPGP applet, `ed25519`:** the card signs the message itself and refuses one longer than
+  3,072 bytes (firmware 5.4.3). An edition's signed bytes grow with its member list, about 22 members at that
+  size. So a key that approves the editions of a large collection should not be an `ed25519` key on such a
+  card. An `eip191-secp256k1` key on the card signs a digest and has no such limit; firmware below 5.7.0
+  carries Yubico advisory YSA-2024-03 for that curve.
+
 ## Sending a report
 
 Copy a file in [`hardware-reports/`](hardware-reports/), change it, and open a pull request with it and
@@ -96,8 +106,8 @@ The fields:
 | `source` | `contributor`; a maintainer changes it to `maintainer` only after repeating the run |
 | `device` | `vendor`, `model`, `emulator` (true or false), `firmware`, `app`, `app_version`; write "not recorded" for what you do not know |
 | `host` | `os` and `arch` |
-| `tool` | `version` and `commit`, both from `commons --version` |
-| `route`, `alg` | `connector` or `package`; `ed25519` or `eip191-secp256k1` |
+| `tool` | `version` and `commit`, both from `commons --version`. A build from a source archive prints `commit: unknown`: give the commit of the release or of the checkout (`git rev-parse HEAD`) instead. For a build of a pull request, give its head commit and say so in the notes |
+| `route`, `alg` | `connector` or `package`; `ed25519` or `eip191-secp256k1`. On the connector route, read and sign are never `n/a`. On the package route, every step but sign and size is `n/a` |
 | `steps` | one of `pass`, `fail`, `not-run`, `n/a` for each of the eight steps |
 | `notes` | what differed, sizes, status words. Required when a step failed |
 | `links` | an issue or a script, optional |

@@ -12,6 +12,13 @@ body:
         address or key you use for anything else. A maintainer turns this issue into a report file, marked as
         reported, and credits the name you give.
   - type: input
+    id: date
+    attributes:
+      label: Date of the run
+      placeholder: "2026-11-23"
+    validations:
+      required: true
+  - type: input
     id: device
     attributes:
       label: Device
@@ -39,7 +46,7 @@ body:
     id: tool
     attributes:
       label: Tool build
-      description: The output of `commons --version`.
+      description: "The output of `commons --version`. If it prints an unknown commit, add the release or the output of `git rev-parse HEAD`."
       render: text
     validations:
       required: true
@@ -84,6 +91,13 @@ body:
     attributes:
       label: Notes
       description: What differed from the page, sizes, status words, the exact message and exit code of anything that failed. For the package route, what drove the device, and a link to the script.
+    validations:
+      required: false
+  - type: textarea
+    id: links
+    attributes:
+      label: Links
+      description: An issue, a pull request or a script, one per line.
     validations:
       required: false
   - type: input
