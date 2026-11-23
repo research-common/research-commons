@@ -184,6 +184,9 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   the claims model, with a table mapping the alpha template's fields. Docs only.
 - Documentation: installing from source is `go install ./cmd/commons` from a clone (no branch switch, since `next` is the
   default branch); `go build` stays as the in-place alternative. No byte, identifier or behaviour change.
+- Documentation: `docs/DESIGN-notes-recoverable-root-identity.md`, a **proposal** for an identity profile whose root can be
+  replaced without changing the identity id (a recovery key committed at inception; a recovery needs it and the current
+  root). Not implemented: no reader or writer knows the profile. No byte, identifier or behaviour change.
 - Documentation: KNOWN-LIMITS L-22 records #266: a key held on a device cannot sign a key event or a bare-key statement
   (`revoke` and `rotate` take a key file only; the external-signing package carries identity statements and acts only),
   so a Ledger-held root cannot be revoked from the tool and a device-held controller key cannot approve an edition. The
