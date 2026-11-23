@@ -176,7 +176,7 @@ and refuses unless it is the prepared envelope byte for byte (`stale-prepare`, e
 | bare-key `edition`, `withdraw_approval` | the signer's log is not at `log_head` (as `/1`) | the line is ordinary; its effect does not depend on other branches |
 | key event (`revoke_key`, `rotate_key`) | the tips the store holds now are not `log_tips`, **or** the log is not at `log_head` | a key event cuts every line outside its history (claims-model §4.1): a line or tip that arrived after the review would be cut, or kept, without the holder having seen it (§4.2) |
 | recovery: `identity_succession` | the new root's log is not empty | it must be that key's `seq` 0 |
-| recovery: `identity_recovery` | the recovery key's log is not empty | a recovery key signs one statement; a held line of it is a rival recovery, and an alarm (§5) |
+| recovery: `identity_recovery` | the recovery key's log holds a line other than this statement | a recovery key signs one statement; another line of it is a second recovery, and an alarm (§5.4). The same statement held already is not stale: completing it again changes nothing |
 | recovery: `identity_handover` | never refused for a moved root log; it warns that the handover forks the root's log | a handover is judged by signature, not by its place in the root's log, so a thief extending the root's log must not be able to block a recovery (§5) |
 
 A signature made over a stale package is not destroyed by the refusal: it is a valid signature over valid bytes,
@@ -290,13 +290,21 @@ The commands are the recovery proposal's to name; the package needs only this or
 2. `--prepare` the recovery with `--signer C`, naming the identity, `last_good`, the successor (R′ and D′, which
    must be held) and the next commitment; sign it with C (on its device, or from the typed phrase on an offline
    machine, recovery proposal §7.3); `--complete` it, which commits the recovery statement to the store. Alone it
-   does nothing (rule 2 of that proposal); held, it is the input to step 3. (Alternative left to review: not
-   committing it, and giving step 3 the recovery's package and signature instead. Committing it is simpler: a
-   recovery statement held or published alone changes no answer, since the profile's evaluation collects
-   handovers (its §5). It does reveal the recovery key's public form, which use reveals in any case; and a thief
-   holding R who copies it into a handover of their own completes the owner's recovery, not a rival.)
+   changes no answer (rule 2 of that proposal); held, it is the input to step 3. **From C's signature on, the
+   recovery's effect is fixed:** §5.4 says what the package commands do so that C never signs a second, different
+   one. (Alternative left to review: not committing it, and giving step 3 the recovery's package and signature
+   instead. Committing it is preferred: the store then holds the one signed recovery, which is what lets
+   `--prepare` refuse a second (§5.4), and a thief holding R who copies it into a handover of their own completes
+   the owner's recovery, not a rival. It does reveal the recovery key's public form, which use reveals in any
+   case.)
 3. `--prepare` the handover with `--signer R`, naming the recovery statement held in step 2; sign it with R;
    `--complete` it.
+4. When the recovery keeps grants the owner does not want (the profile's keep-and-cut route, its §7.3 and
+   RR-29), the new root R′ signs the cut of each. A cut is an ordinary identity statement of the new root: a `/1`
+   package, signed by R′, nothing new in this revision. What this note adds is the order of publication: **the
+   cuts are completed before anything is pushed, and the push carries the three recovery statements and the cuts
+   together.** A recovery published without its cuts leaves the unwanted grants counting for every reader until
+   the cuts arrive.
 
 Rejected: one package carrying all three statements. A package carries one statement and one PAE, which is what
 makes the signing side simple and auditable, and the three are signed in a fixed order by three different keys
@@ -305,19 +313,34 @@ on what should be three different machines or devices.
 ### 5.2 What the signing side can check with no store
 
 For the recovery and the succession, the same as for any package: the PAE, the id and the summary are recomputed
-from the envelope. For the handover, more: the carried recovery is a complete signed statement inside the
-envelope, so `package show` and `key sign` verify its signature, check that it names the same identity as the
-handover, and compute **the recovery key's commitment** (the profile's commitment digest of the carried
-statement's signer). The summary carries that commitment, and the review asks the holder to compare it with the
-commitment they recorded at setup (the inception holds it; the signing side cannot read the inception). A carried
-statement whose signature does not verify, or that names another identity, makes the package malformed (exit 2)
-on every command, before any signing.
+from the envelope. One more check needs no store: **a recovery whose signer is the successor it names is refused**
+(malformed, exit 2). The profile voids it (the recovery key is never a root of the identity, RR-30), so signing it
+would spend the recovery key's one signature on nothing.
+
+For the handover, more: the carried recovery is a complete signed statement inside the envelope, so `package show`
+and `key sign` check it in the profile's own order (its §5 step 1):
+
+1. Compute **the recovery key's commitment** (the profile's commitment digest of the carried statement's signer).
+   The summary carries it, and the review asks the holder to compare it with the commitment they recorded at setup
+   (the inception holds it; the signing side cannot read the inception). This comes first because a reader
+   compares the commitment before anything else: a carried statement by any other key is void whatever else is
+   true of it.
+2. If the carried statement's algorithm is one this build cannot verify, `key sign` and `--complete` stop (exit 3,
+   could not check) and nothing is signed; `package show` prints the commitment from step 1, says the carried
+   signature could not be checked, and exits 3 as well. A reader holding such a handover by the committed key
+   reads the identity as unknown, so the root must not sign one blind.
+3. Verify the carried statement's signature, and check that it is an `identity_recovery` at `seq` 0 naming the
+   same identity as the handover. A failure makes the package malformed (exit 2) on every command, before any
+   signing.
+4. Refuse (malformed, exit 2) when the carried statement's signer is the handover's signer or the successor it
+   names (RR-30). Whether that key was an earlier root of the identity needs the store: `--prepare` and
+   `--complete` check it there.
 
 ### 5.3 Staleness for recovery statements
 
 As §3.3 says: the succession and the recovery are `seq` 0 statements of fresh keys, so `--complete` refuses if
-either key's log is not empty here (for C, a line held means a second recovery by the same key exists somewhere,
-which is a rival in the making and reported as such). The handover is **not** refused for a moved root log. The
+the new root's log is not empty here, or if the recovery key's log holds any line other than the statement being
+completed (a second recovery by the same key exists somewhere: §5.4). The handover is **not** refused for a moved root log. The
 profile judges a handover by its signature and the statement it carries, not by its place in R's log, because a
 thief holding R can keep extending R's log; refusing on a moved head would let that thief block the recovery. So:
 
@@ -331,7 +354,41 @@ thief holding R can keep extending R's log; refusing on a moved head would let t
 different effect, appending this one retires the identity for good (profile rule 5). That may be the right move
 (a thief who holds both keys has already published a recovery that hands them the identity, and a rival is the
 only answer left), but it must never happen by accident. Proposed: `--complete` refuses (exit 1, naming the rival)
-unless `--retire-on-rival` is given. The same check runs at `--prepare`.
+unless `--retire-on-rival` is given. The same check runs at `--prepare`. A held handover the profile reads as
+**void** is not a rival and does not trigger this: it is reported and changes nothing.
+
+### 5.4 The recovery key signs once
+
+The profile's RR-27: a recovery statement that C signed and the owner then set aside is, in the hands of whoever
+holds the stolen root, enough to retire the identity for good. They hand it over beside the one the owner
+published, and two different recoveries of one root are rivals (rule 5). No second key has to be stolen. So a
+signed recovery is as sensitive as the recovery key until its handover is published, and the package commands are
+built so that a second, different one is never made by accident:
+
+- **`--prepare` of a recovery refuses what the profile would read as void.** The kept prefix (`last_good` and its
+  ancestors) holds a raw key event of the root or a root line outside the profile's vocabulary (RR-19, RR-25);
+  the successor is or was a root of the identity (RR-26); the signer is or was a root, or is the successor
+  (RR-30); the next commitment repeats one the identity has used. Each is exit 1, naming the line or key, with
+  nothing written. A void recovery is harmless to readers but it is a signed recovery lying in a file, and the
+  next one the owner signs would differ from it.
+- **One prepared recovery per identity and generation.** `--prepare` writes the package and records it in the
+  store. Run again for the same identity and generation, it gives back the same package when the inputs are the
+  same (same successor, `last_good` and next commitment), and refuses when they differ (exit 1, naming the
+  recorded package). Before C has signed, the recorded package can be discarded by an explicit option, since an
+  unsigned package binds nobody.
+- **Once a signature by C is held, nothing discards it.** `--complete` commits the recovery statement, and from
+  then on `--prepare` of a different recovery for that identity and generation is refused, with no option to
+  override: the way forward is the handover of the recovery already signed. The store cannot know whether the
+  offline machine signed a package whose signature never came back, so the review text on the signing side says
+  it: "this key signs one recovery; if you do not complete this one, destroy the signature file and every copy".
+- **Before C signs,** `--prepare` has the holder confirm that the new root and the next recovery key are backed
+  up (the profile's §7.3). After C's signature, losing the new root leaves only bad choices.
+- **Signing the same recovery again is harmless** (RR-07): `key sign` over the same package gives a statement
+  with the same id, and `--complete` of a statement already held changes nothing.
+
+What the commands cannot do is see a store elsewhere. Two stores that each prepare a recovery for the same root
+are not stopped by either; the profile's guidance (one machine, offline, until the recovery is published) is what
+covers that, and `--complete` reports a second line of C if one ever arrives (§5.3).
 
 ## 6. Summary and review for each new action
 
@@ -348,7 +405,7 @@ the envelope's `rc`), because the same kind is a different statement in each maj
 | `revoke` | `major`, `reason`, `reason_class` (`hard` or `soft`, by the wire note's rule: an unknown token is `hard`), `last_good` (`null` when absent), `merges` (the envelope's, `[]` when none), `tips` (= the package's `log_tips`) | "revoke the key S: every line of S outside this revocation's history stops counting, for every reader that holds it; this cannot be undone"; hard: "only last_good and its history keep counting" (`last_good` null: "no line of S counts any more"); soft: "S's history keeps counting" |
 | `rotate` | `major`, `successor`, `merges`, `tips` | "retire the key S and name SUCCESSOR as its successor: S signs nothing more that counts; the successor inherits no claims; this cannot be undone" |
 | `succession` | `identity`, `root` (the signer: the new root R′) | "make S the next root of identity I; this is S's first line, and a key is an identity's root at most once" |
-| `recovery` | `identity`, `last_good`, `successor` (key), `successor_inception` (D′), `next_commitment` (or `null` when the identity is closed) | "as the recovery key of I: replace its root with SUCCESSOR, keep the current root's lines up to LAST_GOOD and void every other one, whenever signed; a recovery key signs once"; `successor` null: "close the identity: its kept history counts; nothing new can be administered" |
+| `recovery` | `identity`, `last_good`, `successor` (key), `successor_inception` (D′), `next_commitment` (or `null` when the identity is closed) | "as the recovery key of I: replace its root with SUCCESSOR, keep the current root's lines up to LAST_GOOD and void every other one, whenever signed"; "this key signs one recovery: if this one is not completed, destroy the signature file and every copy"; `successor` null: "close the identity: its kept history counts; nothing new can be administered" |
 | `handover` | `identity`, `recovery` (the carried statement's id), `recovery_signer`, `recovery_commitment` (computed, §5.2), and the carried statement's `last_good`, `successor`, `successor_inception`, `next_commitment` | "as the current root of I: hand I over under the recovery above"; "compare recovery_commitment with the commitment recorded at setup"; "a second, different recovery of this root retires I for good" |
 
 **Why the tips are in a key event's summary.** On the signing machine, the summary is all the holder sees of the
@@ -451,8 +508,15 @@ commands, with the signing side run on a machine that holds no store (as `TestPa
 | PKG-41 | A handover package whose carried recovery's signature is altered, or which names another identity | malformed, exit 2, on `package show`, `key sign` and `--complete`; nothing signed |
 | PKG-42 | The root's log gains lines (a thief extending it) between preparing and completing the handover | appended as a fork of the root's log, disclosed; not refused |
 | PKG-43 | A rival complete handover with a different effect is held at `--complete` | refused, exit 1, naming the rival; with `--retire-on-rival` appended, and the identity reads retired |
-| PKG-44 | A recovery package whose recovery key already has a line held | `stale-prepare`, exit 1, naming the held line as a possible rival recovery |
+| PKG-44 | A recovery package whose recovery key already has another line held | `stale-prepare`, exit 1, naming the held line as a second recovery by the same key |
 | PKG-45 | `package show` of a handover | prints `recovery_commitment` computed from the carried statement's signer, equal to the inception's commitment |
+| PKG-46 | `--prepare` of a recovery whose kept prefix holds (a) a raw key event of the root, (b) an ordinary statement by the root | refused, exit 1, naming the line; no package written (the profile reads such a recovery as void: RR-19, RR-25) |
+| PKG-47 | `--prepare` of a recovery run twice for one identity and generation: (a) same inputs, (b) another `last_good`, before the recovery key signed, (c) the same after its signature is held | (a) the same package; (b) refused, exit 1, naming the recorded package, until that package is discarded; (c) refused, with no option that overrides |
+| PKG-48 | The same recovery package signed twice and completed twice | one statement, one id; the second `--complete` changes nothing (RR-07) |
+| PKG-49 | A recovery package whose signer is the successor it names; a handover package whose carried statement is signed by the handover's signer | malformed, exit 2, on `package show`, `key sign` and `--complete`; nothing signed (RR-30) |
+| PKG-50 | A handover package whose carried statement is under an algorithm the build cannot verify | exit 3 on `package show`, `key sign` and `--complete`; nothing signed. `package show` still prints `recovery_commitment`, computed first |
+| PKG-51 | A recovery that keeps an unwanted grant, with the new root's cut of it prepared and completed as a `/1` package before the push | the push carries the recovery statements and the cut together; a reader of the pushed set reads the grant cut |
+| PKG-52 | A held handover the profile reads as void, at `--complete` of another handover for the same root | not a rival: no refusal, the void one is reported |
 
 ### 8.2 KNOWN-LIMITS L-22: end state
 
@@ -494,8 +558,12 @@ Each point below has a recommendation in the section named; review is asked of e
 6. **The recovery statements fit the `/2` envelope unchanged, one package per signature, the handover prepared
    after the recovery is signed** (§5). Rejected: a recovery-specific package or member; one package for all three.
 7. **A handover is not refused for a moved root log; a rival recovery held at `--complete` is refused unless
-   `--retire-on-rival`** (§5.3).
-8. **Summaries** (§6): one action token per kind of consent, `major` on every `/2` summary, the reviewed tips in a
+   `--retire-on-rival`** (§5.3). A void handover is not a rival.
+8. **The recovery key signs once** (§5.4): `--prepare` refuses a recovery the profile would read as void, keeps one
+   prepared recovery per identity and generation, and after a signature by the recovery key is held offers no way
+   to prepare a different one. Open: where the record of a prepared, unsigned recovery lives (the store's journal,
+   or a file beside the package), and whether the push of a recovery with its cuts is one command or guidance.
+9. **Summaries** (§6): one action token per kind of consent, `major` on every `/2` summary, the reviewed tips in a
    key event's summary.
 
 **A defect in the `/1` reader, independent of this proposal, fixed by #278** (§2): a `/1` package whose envelope
