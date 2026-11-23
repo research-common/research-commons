@@ -178,6 +178,7 @@ data commits onto it, and push again. Pushing straight to the hub's default bran
 | [`docs/CONFORMANCE.md`](docs/CONFORMANCE.md) | the test plan: every required outcome and what covers it |
 | [`docs/CLI-OUTPUTS.md`](docs/CLI-OUTPUTS.md) | exit codes, state tokens, error shape |
 | [`docs/KNOWN-LIMITS.md`](docs/KNOWN-LIMITS.md) | open gaps, each with a test |
+| [`docs/spec-graph.json`](docs/spec-graph.json) | generated: each conformance case with the note sections it pins, the tokens and exit codes it names, and its tests |
 | [`docs/READER-POLICY.md`](docs/READER-POLICY.md) | the reader policy file (`pull --policy`, `verify --policy`) |
 | [`docs/EXEC-POLICY.md`](docs/EXEC-POLICY.md) | the execution policy file (`verify --rerun`, `run`) |
 | [`docs/KEY-FILES.md`](docs/KEY-FILES.md) | the key file format and how to keep keys |

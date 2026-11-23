@@ -276,6 +276,9 @@ func ParseNoteColumn(col, home string) ([]Ref, []string) {
 	return refs, problems
 }
 
+// ResolveRef finds the section, invariant or worked example a Ref names, or says why it names nothing.
+func ResolveRef(r Ref, notes map[string]*Note) (*Section, string) { return resolve(r, notes) }
+
 // resolve finds what a Ref names, or says why it names nothing.
 func resolve(r Ref, notes map[string]*Note) (*Section, string) {
 	n := notes[r.Note]

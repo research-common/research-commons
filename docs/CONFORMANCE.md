@@ -29,9 +29,17 @@ code, of every view command over a stated universe of refs, under a named policy
 The record states the universe (which ids and digests, including at least one nobody holds), the commands, the
 policy digest and the evaluator version; two readers' view digests are comparable only when all four match.
 
-The reference implementation does not write this record yet. Its harness reports, for each case, the test that
-declares the case covered, or the test that checks part of it and what is left; fixture digests, the policy
-digest, the evaluator context and the invocation are in the tests, not in a report.
+The reference implementation writes part of this record. Each release carries `conformance-report.json`: the
+revision, version, toolchain and platform, and for every case its result in that run (`pass`, `fail`,
+`not run`, `partial` or `pending`), the tests that declare it and what is left. A case passes when a test
+declares it covered and every declaring test passed. Its `not_passed` list is the list this document asks every
+implementation for. The report does not yet hold fixture digests, the policy digest, the evaluator context or
+the invocations: those are in the tests.
+
+`docs/spec-graph.json` is the same information without a run, kept in the tree: each case with the sections,
+invariants and worked examples its row names, the output tokens and exit codes its required outcome names, and
+the tests that declare it. It is generated, and a test fails when it differs from the rows, the notes and the
+tests. Use it to ask what a change to a section touches, or which cases rest on one test.
 
 Tests use **disposable keys** generated for the run and **throwaway roots**; no case touches a live hub or a key
 that signs anything outside the test.

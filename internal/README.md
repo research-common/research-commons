@@ -42,6 +42,7 @@ RC_TEST_IMAGE=alpine:latest go test -tags sandbox_oci -run OCI ./internal/run ./
 | `policy` | the reader's local policy `reader-policy-v1` (`docs/READER-POLICY.md`, provisional; the schema is the identity note's): a strict, closed parser (sorted entries, one selection per content and role, identical trust entries refused, 65,536 canonical bytes) whose every failure is an `*Error` with exit 2; the policy digest and `Diff`; purpose- and target-scoped trust answers; the admission predicate a gate calls for a trust floor (`Admit`: refused, or admitted and labelled). The resolver reads it through `resolve.WithPolicy`: exact pins and key-following selections for authorship, workflow and observation declarations, and the trust filter on corroboration and run attestation (`resolve/policy.go`) |
 | `refusal` | typed refusals (class, reason, detail) of claims-model §11 |
 | `conformance` | the harness: case ids from CONFORMANCE.md and the profile notes (bitcoin-time §14), vectors from the vectors file |
+| `conformance/specgraph` | the generated `docs/spec-graph.json` (case → pinned sections, tokens, exit codes, declaring tests) and the conformance report of a test run; `conformance/report` is the command that writes the report |
 | `conformance/fixture` | seeded generator of abstract statement sets for property tests, with shrinking |
 
 ### Unsupported evidence in resolver views
@@ -131,6 +132,20 @@ invariant or worked example the named note lacks, or quotes words the named sect
 column's grammar is in CONFORMANCE.md under "Core and profiles". `TestCoverageTables` fails when the Coverage
 tables of CONFORMANCE.md are not the ones the rows generate; `RC_UPDATE_DOCS=1 go test -run TestCoverageTables
 ./internal/conformance` rewrites them. A note a row cites must be listed in `conformance.NoteDocs`.
+
+`docs/spec-graph.json` joins the two readings: for each case, what its row pins, the output tokens and exit codes
+its required outcome names in code marks, and the tests that declare it. `TestSpecGraphFile` fails when the file is
+not the one the tree generates (`RC_UPDATE_DOCS=1 go test -run TestSpecGraphFile ./internal/conformance/specgraph`),
+so a new `Covers`, a new case or a moved pin changes it in the same PR. A conformance report adds a run to it:
+
+```bash
+go test -json ./... > run.json
+go run ./internal/conformance/report -revision "$(git rev-parse HEAD)" run.json > conformance-report.json
+```
+
+The command reads several files as one run (add the `sandbox_oci` run and `-tags sandbox_oci`, or C-exec-10 to
+C-exec-12 read `not run`), prints the counts and every case that did not pass to standard error, and exits 1 when a
+case failed or a line of the input is not a test event. A declaring test that skipped leaves its case `not run`.
 
 Cases nobody declares are skipped as pending. A declaration naming an id no case document defines fails
 the build. The scan is static, so arguments must be string literals.

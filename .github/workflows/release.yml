@@ -107,3 +107,64 @@ jobs:
         with:
           name: SHA256SUMS
           path: SHA256SUMS
+
+  conformance:
+    # The conformance report of the tagged revision: the test suite as the required CI jobs run it, then the
+    # sandbox_oci build (the image digest is the one go.yml pins), joined with the case tables by
+    # internal/conformance/report. Read-only token; the report is attached by the next job. It does not gate the
+    # binaries: a report that cannot be made is a finding about the release, not a reason to ship nothing.
+    name: conformance report
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      RC_TEST_IMAGE: alpine@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Run the tests
+        run: |
+          # No pipefail here on purpose: a failing test must still reach the report, which then refuses.
+          docker pull "$RC_TEST_IMAGE"
+          go test -count=1 -json ./... > run-default.json || echo "go test (default build) exited $?"
+          go test -count=1 -json -tags sandbox_oci ./internal/run/... ./internal/clirun/... > run-oci.json \
+            || echo "go test (sandbox_oci) exited $?"
+      - name: Write the report
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          go run ./internal/conformance/report -revision "$SHA" -tags sandbox_oci \
+            run-default.json run-oci.json > conformance-report.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: conformance-report
+          path: conformance-report.json
+          if-no-files-found: error
+
+  attach-report:
+    name: attest and attach the conformance report
+    if: github.event_name == 'release'
+    needs: conformance
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      attestations: write
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: conformance-report
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: conformance-report.json
+      - name: Attach to the release
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" conformance-report.json

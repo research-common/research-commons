@@ -172,6 +172,14 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ### Tests
 
+- `docs/spec-graph.json` (generated, `spec-graph/0`): every conformance case with the note sections, invariants and
+  worked examples its row names, the output tokens and exit codes its required outcome names, and the tests that
+  declare it. `TestSpecGraphFile` fails when the file is not what the case tables, the notes and the tests generate.
+- A conformance report per release (`conformance-report/0`): `go run ./internal/conformance/report` reads `go test
+  -json` output and writes each case's result in that run, with the revision, version, toolchain and platform. The
+  release workflow attaches and attests it. A case whose declaring test skipped or did not run reads `not run`, never
+  `pass`. Neither file is part of any frozen format.
+
 - The `note` column of the conformance case tables is now checked (`TestNoteColumnPins`): every section, invariant
   and worked example a row names must exist in the note it names, and every quotation must be found there. The
   Coverage tables of `docs/CONFORMANCE.md` are generated from that column and a test fails when they drift
