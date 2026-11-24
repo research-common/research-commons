@@ -14,3 +14,16 @@ func InRootVocabulary(e Event) bool {
 	}
 	return false
 }
+
+// InProfileRootVocabulary is InRootVocabulary for a given profile. A recoverable root's vocabulary adds the
+// handover (recoverable-root note §4); the recovery key's statement and a successor's succession are seq-0 lines
+// of other keys and are never in a root's lineage. An unknown profile has no vocabulary: nothing is in it.
+func InProfileRootVocabulary(p Profile, e Event) bool {
+	switch p {
+	case FixedRoot:
+		return InRootVocabulary(e)
+	case RecoverableRoot:
+		return InRootVocabulary(e) || e == HandoverEvent
+	}
+	return false
+}

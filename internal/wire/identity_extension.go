@@ -42,7 +42,8 @@ func identityExtension(env *canon.Object) error {
 	kind, _ := kindV.(canon.String)
 	k := string(kind)
 	_, hasActor := env.Get(ActorField)
-	admin := k == "identity_inception" || k == "identity_grant" || k == "identity_cut"
+	admin := k == "identity_inception" || k == "identity_grant" || k == "identity_cut" ||
+		k == "identity_succession" || k == "identity_recovery" || k == "identity_handover"
 	if hasActor && (admin || k == "genesis" || k == "describes") {
 		return extErr(k + " is a raw-key statement and takes no " + ActorField)
 	}

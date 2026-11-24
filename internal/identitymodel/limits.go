@@ -37,22 +37,29 @@ type Limits struct {
 	Dependencies int
 	PathEdges    int
 	Inspections  int
+	// Generations is how many recoveries of one recoverable-root identity a query follows (recoverable-root note
+	// §4, "Root generations"): every reader follows at least 64, so the default is the floor, and a caller may
+	// raise it. Past the cap the identity reads unknown with the cap as the reason (RR-23), never a guess at the
+	// current root.
+	Generations int
 }
 
 const (
 	DefaultMaxDependencies = 100_000
 	DefaultMaxPathEdges    = 100_000
 	DefaultMaxInspections  = 1_000_000
+	DefaultMaxGenerations  = 64
 
 	// Cap names carried by model_limit reasons.
 	LimitDependencies = "dependencies"
 	LimitPathEdges    = "path_edges"
 	LimitInspections  = "inspections"
+	LimitGenerations  = "generations"
 )
 
 // DefaultLimits returns the profile's evaluation caps.
 func DefaultLimits() Limits {
-	return Limits{DefaultMaxDependencies, DefaultMaxPathEdges, DefaultMaxInspections}
+	return Limits{DefaultMaxDependencies, DefaultMaxPathEdges, DefaultMaxInspections, DefaultMaxGenerations}
 }
 
 func (l Limits) normalized() Limits {
@@ -65,6 +72,9 @@ func (l Limits) normalized() Limits {
 	}
 	if l.Inspections <= 0 {
 		l.Inspections = d.Inspections
+	}
+	if l.Generations <= 0 {
+		l.Generations = d.Generations
 	}
 	return l
 }

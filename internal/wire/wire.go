@@ -86,6 +86,10 @@ type Statement struct {
 	// Actor is the candidate rc/2 signed identity context (identity.go), set only by IdentityReader on a
 	// verified rc/2 line that carries one. It is a claim to be evaluated, never authority. Read never sets it.
 	Actor *Actor
+	// Carried is the signed statement an rc/2 identity_handover carries in its body (recovery.go), read as a
+	// statement of its own: set only by IdentityReader on a Valid handover. Its Verified, Status and Why say
+	// whether its signature verified, its algorithm is supported and its body is a well-formed identity_recovery.
+	Carried *Statement
 
 	env  *canon.Object // the envelope without sig
 	refs []string      // the body's typed references, set when the body schema ran and passed

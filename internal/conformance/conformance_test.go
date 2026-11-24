@@ -1,6 +1,7 @@
 package conformance
 
 import (
+	"fmt"
 	"go/parser"
 	"go/token"
 	"io/fs"
@@ -167,19 +168,13 @@ func TestCaseRowIdentityProfile(t *testing.T) {
 	}
 }
 
-// The identity profile's scenario file (docs/fixed-root-identity.coverage.json) states each handle's case id and
-// harness status and lists its tests. Keep it equal to what the tests declare: handle ID-NN is case C-id-NN, its
-// "conformance" is covers/partial/pending as the scan finds it, and every test declaring the case is listed.
+// The identity profiles' scenario files (docs/fixed-root-identity.coverage.json, docs/recoverable-root-identity.coverage.json)
+// state each handle's case id and harness status and list its tests. Keep each equal to what the tests declare:
+// handle ID-NN is case C-id-NN and handle RR-NN is case C-id-(45+NN), each defined in its own note; a row's
+// "conformance" is covers/partial/pending as the scan finds it; every test declaring the case is listed; and every
+// `id` case has a row in one of the files.
 func TestIdentityCoverageFileMatchesHarness(t *testing.T) {
 	root, err := RepoRoot()
-	if err != nil {
-		t.Fatal(err)
-	}
-	raw, err := os.ReadFile(filepath.Join(root, "docs", "fixed-root-identity.coverage.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	v, err := canon.Parse(raw)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,51 +191,68 @@ func TestIdentityCoverageFileMatchesHarness(t *testing.T) {
 		s, _ := x.(canon.String)
 		return string(s)
 	}
-	top, _ := v.(*canon.Object)
-	sv, _ := top.Get("scenarios")
-	rows, _ := sv.(canon.Array)
 	seen := map[string]bool{}
-	for i, rv := range rows {
-		row, _ := rv.(*canon.Object)
-		handle, id := str(row, "handle"), str(row, "case")
-		if !strings.HasPrefix(handle, "ID-") || id != "C-id-"+strings.TrimPrefix(handle, "ID-") {
-			t.Errorf("row %d: handle %q, case %q", i, handle, id)
-			continue
+	for _, f := range []struct {
+		file, prefix, note string
+		offset             int
+	}{
+		{"fixed-root-identity.coverage.json", "ID-", "docs/DESIGN-notes-fixed-root-identity.md", 0},
+		{"recoverable-root-identity.coverage.json", "RR-", "docs/DESIGN-notes-recoverable-root-identity.md", 45},
+	} {
+		raw, err := os.ReadFile(filepath.Join(root, "docs", f.file))
+		if err != nil {
+			t.Fatal(err)
 		}
-		seen[id] = true
-		if home[id] != "docs/DESIGN-notes-fixed-root-identity.md" {
-			t.Errorf("%s is not defined in the identity profile note", id)
+		v, err := canon.Parse(raw)
+		if err != nil {
+			t.Fatal(err)
 		}
-		want := "pending"
-		if len(cov[id]) > 0 {
-			want = "covers"
-		} else if len(part[id]) > 0 {
-			want = "partial"
-		}
-		if got := str(row, "conformance"); got != want {
-			t.Errorf("%s: coverage file says %q, the harness says %q", id, got, want)
-		}
-		listed := map[string]bool{}
-		tv, _ := row.Get("isolated_tests")
-		ta, _ := tv.(canon.Array)
-		for _, x := range ta {
-			s, _ := x.(canon.String)
-			listed[strings.Replace(string(s), ":", ".", 1)] = true
-		}
-		var decl []string
-		decl = append(decl, cov[id]...)
-		for _, p := range part[id] {
-			decl = append(decl, p[:strings.Index(p, ": ")])
-		}
-		for _, d := range decl {
-			if !listed[d] {
-				t.Errorf("%s: declared by %s, not listed in isolated_tests", id, d)
+		top, _ := v.(*canon.Object)
+		sv, _ := top.Get("scenarios")
+		rows, _ := sv.(canon.Array)
+		for i, rv := range rows {
+			row, _ := rv.(*canon.Object)
+			handle, id := str(row, "handle"), str(row, "case")
+			n, err := strconv.Atoi(strings.TrimPrefix(handle, f.prefix))
+			if !strings.HasPrefix(handle, f.prefix) || err != nil || id != "C-id-"+fmt.Sprintf("%02d", n+f.offset) {
+				t.Errorf("%s row %d: handle %q, case %q", f.file, i, handle, id)
+				continue
+			}
+			seen[id] = true
+			if home[id] != f.note {
+				t.Errorf("%s is not defined in %s", id, f.note)
+			}
+			want := "pending"
+			if len(cov[id]) > 0 {
+				want = "covers"
+			} else if len(part[id]) > 0 {
+				want = "partial"
+			}
+			if got := str(row, "conformance"); got != want {
+				t.Errorf("%s: coverage file says %q, the harness says %q", id, got, want)
+			}
+			listed := map[string]bool{}
+			tv, _ := row.Get("isolated_tests")
+			ta, _ := tv.(canon.Array)
+			for _, x := range ta {
+				s, _ := x.(canon.String)
+				listed[strings.Replace(string(s), ":", ".", 1)] = true
+			}
+			var decl []string
+			decl = append(decl, cov[id]...)
+			for _, p := range part[id] {
+				decl = append(decl, p[:strings.Index(p, ": ")])
+			}
+			for _, d := range decl {
+				if !listed[d] {
+					t.Errorf("%s: declared by %s, not listed in isolated_tests", id, d)
+				}
 			}
 		}
 	}
 	for _, id := range ids {
 		if Profile(id) == "id" && !seen[id] {
-			t.Errorf("%s has no row in the coverage file", id)
+			t.Errorf("%s has no row in a coverage file", id)
 		}
 	}
 }

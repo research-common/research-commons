@@ -97,13 +97,9 @@ func (s *Snapshot) evaluateWithin(e *evaluation, statement ID) Result {
 		e.reasons(authenticationReasons(root))
 		e.reasons(validityReasons(root))
 		e.reasons(shapeReasons(root))
-		if root.Event != IdentityInception || root.Inception == nil || root.Seq != 0 {
-			e.add("invalid_identity_inception", Denied, root.ID, "", "identity must pin the root's own inception")
-		} else if root.Inception.Profile != FixedRoot {
-			e.add("unsupported_identity_profile", Unknown, root.ID, "", "no profile or root migration")
-		}
 		e.proof(e.w.chain(root.ID, root.Signer, root.ID, "root inception"))
 	}
+	gens := s.identityGenerations(e, root, rootHeld)
 	g, grantHeld := e.w.b.read(s, a.Grant)
 	var grant *Grant
 	if !grantHeld {
@@ -124,7 +120,7 @@ func (s *Snapshot) evaluateWithin(e *evaluation, statement ID) Result {
 			if grant.Delegate == "" || grant.Inception == "" || grant.Delegate != st.Signer {
 				e.add("wrong_delegate", Denied, statement, g.ID, "grant pins a key and its exact inception")
 			}
-			if rootHeld && grant.Delegate == root.Signer {
+			if rootHeld && gens.isRoot(grant.Delegate) {
 				e.add("root_is_delegate", Denied, g.ID, root.ID, "dedicated administrative root cannot be its worker")
 			}
 			// Scope is read only from an understood grant: an unsupported grant is unknown (its validity
@@ -181,13 +177,13 @@ func (s *Snapshot) evaluateWithin(e *evaluation, statement ID) Result {
 			}
 		}
 		if rootHeld {
-			e.proof(e.w.chain(g.ID, root.Signer, a.Identity, "grant root ancestry"))
+			s.placeGrant(e, gens, g)
 		}
 	}
 	// Only authenticated issuer evidence can create uncertainty for an identity.
 	// Arbitrary caller affiliation strings and forged root signer claims are ignored.
 	if rootHeld && root.Authentication == Authenticated && root.Event == IdentityInception {
-		s.rootState(e, root, a, grant)
+		s.rootScans(e, gens, a, grant)
 	}
 	if grant != nil {
 		s.delegateWarnings(e, grant)
@@ -195,11 +191,22 @@ func (s *Snapshot) evaluateWithin(e *evaluation, statement ID) Result {
 	return e.finish()
 }
 
-func (s *Snapshot) rootState(e *evaluation, root Fact, actor Actor, grant *Grant) {
+// rootState is the root scan for one generation's root over its pinned lineage. For the current root (a fixed-root
+// identity, or the current generation of a recoverable one; keep == nil) every in-lineage event is read. For a root
+// an earlier recovery replaced (keep != nil, the kept prefix), only lines in the prefix are read, and only for cuts:
+// a key event or an ordinary line there would have made the handover void, and every other line of that root is
+// void and ignored (RR-17d, RR-20).
+func (s *Snapshot) rootState(e *evaluation, root Fact, actor Actor, grant *Grant, profile Profile, keep map[ID]bool) {
 	w := e.w
 	for _, id := range s.bySigner[root.Signer] {
 		f, _ := w.b.read(s, id) // Every authenticated root-signer event is read: one dependency each.
 		if f.ID == root.ID {
+			continue
+		}
+		if keep != nil {
+			if keep[id] && f.Event == CutEvent && f.Cut != nil && f.Cut.Grant == actor.Grant {
+				s.rootCut(e, f, actor, grant, lazyProof{w: w, head: id, key: root.Signer, pin: root.ID, purpose: "root event ancestry", closure: w.closure(id, root.Signer, root.ID).status})
+			}
 			continue
 		}
 		rel := w.rootRelation(id, root.Signer, root.ID)
@@ -231,22 +238,7 @@ func (s *Snapshot) rootState(e *evaluation, root Fact, actor Actor, grant *Grant
 			continue
 		}
 		if targetCut {
-			e.cuts[id] = true
-			e.proof(p.get())
-			e.reasons(validityReasons(f))
-			e.reasons(shapeReasons(f))
-			if f.Cut.Identity != actor.Identity {
-				e.add("wrong_cut_identity", Denied, id, actor.Identity, "cut names this grant under another or unreadable identity")
-				continue
-			}
-			if p.closure != Eligible || f.Validity != Understood || len(shapeReasons(f)) != 0 {
-				continue // Invalid attributable cuts are non-passing, not omitted.
-			}
-			if e.grantCuts != nil {
-				*e.grantCuts = append(*e.grantCuts, f)
-				continue
-			}
-			s.applyCut(e, f, grant)
+			s.rootCut(e, f, actor, grant, p)
 			continue
 		}
 		if f.Event == GrantEvent && f.Grant != nil && (f.Validity == Unsupported || f.Validity == Unchecked) {
@@ -270,7 +262,7 @@ func (s *Snapshot) rootState(e *evaluation, root Fact, actor Actor, grant *Grant
 			e.add("unaddressable_root_cut", Unknown, id, root.ID, "cannot establish affected grant")
 			continue
 		}
-		if !InRootVocabulary(f.Event) {
+		if !InProfileRootVocabulary(profile, f.Event) {
 			// Vocabulary before ancestry: an event outside the closed root vocabulary is uncertainty whatever its
 			// ancestry; a defect in that ancestry must never turn unknown into a silent warning.
 			e.proof(p.get())
@@ -293,10 +285,35 @@ func (s *Snapshot) rootState(e *evaluation, root Fact, actor Actor, grant *Grant
 			// Independent grants coexist; recognized inert events change no authority.
 		case CutEvent:
 			// A fully addressed cut for another grant does not affect this one.
+		case HandoverEvent:
+			// Every handover of this root was judged by the generation walk before the scan (identityGenerations):
+			// a complete one would have ended this generation, an unresolved one already reads unknown, and a void
+			// one is reported there and changes nothing.
 		default:
 			e.add("unsupported_root_event", Unknown, id, root.ID, "not in the closed root vocabulary")
 		}
 	}
+}
+
+// rootCut handles one authenticated cut addressed to the act's grant on a root's lineage: attributable and
+// effective, it is applied (or, for a grant-level query, collected); invalid, it is non-passing, never omitted.
+func (s *Snapshot) rootCut(e *evaluation, f Fact, actor Actor, grant *Grant, p lazyProof) {
+	e.cuts[f.ID] = true
+	e.proof(p.get())
+	e.reasons(validityReasons(f))
+	e.reasons(shapeReasons(f))
+	if f.Cut.Identity != actor.Identity {
+		e.add("wrong_cut_identity", Denied, f.ID, actor.Identity, "cut names this grant under another or unreadable identity")
+		return
+	}
+	if p.closure != Eligible || f.Validity != Understood || len(shapeReasons(f)) != 0 {
+		return
+	}
+	if e.grantCuts != nil {
+		*e.grantCuts = append(*e.grantCuts, f)
+		return
+	}
+	s.applyCut(e, f, grant)
 }
 
 func (s *Snapshot) applyCut(e *evaluation, f Fact, grant *Grant) {
@@ -374,7 +391,8 @@ func (l lazyProof) get() proof { return l.w.chain(l.head, l.key, l.pin, l.purpos
 func shapeReasons(f Fact) []Reason {
 	valid := (f.Inception != nil) == (f.Event == IdentityInception) &&
 		(f.Grant != nil) == (f.Event == GrantEvent) && (f.Cut != nil) == (f.Event == CutEvent) &&
-		(f.Operation != nil) == (f.Event == Data)
+		(f.Operation != nil) == (f.Event == Data) && (f.Succession != nil) == (f.Event == SuccessionEvent) &&
+		(f.Recovery != nil) == (f.Event == RecoveryEvent) && (f.Handover != nil) == (f.Event == HandoverEvent)
 	if f.Event != Data && (f.Actor != nil || f.Binding != NoIdentityContext) {
 		valid = false
 	}

@@ -121,10 +121,26 @@ func (a *Actors) bound(st *wire.Statement) bool {
 		return false
 	}
 	g, ok := a.s.held[gid]
-	if !ok || !a.s.Authenticated(gid) || g.Kind != "identity_grant" || g.Signer != root.Signer || g.Body == nil {
+	if !ok || !a.s.Authenticated(gid) || g.Kind != "identity_grant" || g.Body == nil {
+		return false
+	}
+	if g.Signer != root.Signer && !a.s.successorRoot(id, g.Signer) {
 		return false
 	}
 	return idText(g.Body, "identity") == id && text(object(g.Body, "delegate"), "key") == st.Signer
+}
+
+// successorRoot reports whether key has an authenticated identity_succession for identity at seq 0 in the
+// snapshot: issuer-authenticated evidence that it is, or was named to be, a later root of a recoverable-root
+// identity (recoverable-root note §4). Whether the recovery that named it is complete is the model's answer.
+func (s *Snapshot) successorRoot(identity, key string) bool {
+	for id, st := range s.held {
+		if st.Kind == "identity_succession" && st.Seq == 0 && st.Signer == key && s.Authenticated(id) && st.Body != nil &&
+			idText(st.Body, "identity") == identity {
+			return true
+		}
+	}
+	return false
 }
 
 // NotEstablished is the freshness of every identity answer (the model's word, re-exported: only this adapter

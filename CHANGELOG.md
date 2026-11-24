@@ -11,6 +11,19 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ### Added
 
+- The reader evaluates the recoverable-root identity profile (`recoverable-root-v1` on `rc/2`,
+  `docs/DESIGN-notes-recoverable-root-identity.md` §5): an `identity_inception` that commits to a recovery key, and the
+  kinds `identity_succession`, `identity_recovery` and `identity_handover`. A handover carries the signed recovery
+  statement, and the reader judges it from those bytes in the note's order (the commitment first, then the algorithm,
+  the statement's validity, and that the recovery key is no root of the identity), so a holder of the root alone can
+  only make void handovers. Two complete recoveries of one root that differ retire the identity for good; one sets the
+  kept prefix of the replaced root and the next generation. A delegate's act under a grant outside a replaced root's
+  kept prefix is denied `recovery_voided`; the identity's acts after rival recoveries are denied `retired_for_good`; a
+  recovery naming a line the reader does not hold reads unknown (`recovery_unresolved`); a void handover is a
+  warning (`void_handover`). Readers follow at least 64 recoveries of one identity. The 31 scenarios of the note's §6
+  are registered as conformance cases C-id-46 to C-id-76 and built from signed lines. The evaluator version is
+  `identity-model-4`. **No command writes this profile yet** (KNOWN-LIMITS L-23); `fixed-root-v1` is unchanged.
+
 - `revoke --ledger --ledger-path <path>` and `rotate --ledger --ledger-path <path>`: a Ledger device signs the key's own
   `revoke_key` or `rotate_key` (EIP-191 `personal_sign` over the PAE, reviewed on the device), so a device-held identity
   root can revoke itself, and can sign an escrowed revocation right after inception (#266). The line is byte for byte

@@ -1,0 +1,346 @@
+{
+  "status": "Scenario handles of the recoverable-root identity profile (recoverable-root-v1 on rc/2). Handle RR-NN is the registered conformance case C-id-(45+NN) (profile note §10); 'conformance' is that case's harness status (covers, partial or pending) and a test in internal/conformance keeps it equal to what the tests declare. The reader is active and there is no writer (KNOWN-LIMITS L-23): every case is built from signed lines through the rc/2 reader and the admission adapter (internal/identity, recoverable_cases_test.go), with the reference model's own copies as the oracle. A case is covered only when its whole required outcome is checked end to end with signed evidence; the one partial case waits on the resource layer (issue #285).",
+  "scenarios": [
+    {
+      "handle": "RR-01",
+      "case": "C-id-46",
+      "scenario": "Ordinary use",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/identity:TestRR01OrdinaryUse"
+      ],
+      "conformance": "covers",
+      "remaining": "Covered: the scenario's statements are signed with throwaway keys, read from received bytes by the production reader and admitted by the adapter; the required outcome is checked on the identity evaluation (status, reason, generation)."
+    },
+    {
+      "handle": "RR-02",
+      "case": "C-id-47",
+      "scenario": "R stolen: the thief grants. The owner recovers with `last_good` before the theft, then grants with R′; the thief grants again with R",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/identity:TestRR02And14RecoveryAfterTheft"
+      ],
+      "conformance": "covers",
+      "remaining": "Covered: the scenario's statements are signed with throwaway keys, read from received bytes by the production reader and admitted by the adapter; the required outcome is checked on the identity evaluation (status, reason, generation)."
+    },
+    {
+      "handle": "RR-03",
+      "case": "C-id-48",
+      "scenario": "The thief revokes R. The owner recovers",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/identity:TestRR03ThiefRevokesThenOwnerRecovers"
+      ],
+      "conformance": "covers",
+      "remaining": "Covered: the scenario's statements are signed with throwaway keys, read from received bytes by the production reader and admitted by the adapter; the required outcome is checked on the identity evaluation (status, reason, generation)."
+    },
+    {
+      "handle": "RR-04",
+      "case": "C-id-49",
+      "scenario": "A holder of R alone signs a handover carrying a \"recovery\" by a key of their own",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/identity:TestRR04And05OneKeyAlone"
+      ],
+      "conformance": "covers",
+      "remaining": "Covered: the scenario's statements are signed with throwaway keys, read from received bytes by the production reader and admitted by the adapter; the required outcome is checked on the identity evaluation (status, reason, generation)."
+    },
+    {
+      "handle": "RR-05",
+      "case": "C-id-50",
+      "scenario": "A holder of C alone signs a recovery",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/identity:TestRR04And05OneKeyAlone"
+      ],
+      "conformance": "covers",
+      "remaining": "Covered: the scenario's statements are signed with throwaway keys, read from received bytes by the production reader and admitted by the adapter; the required outcome is checked on the identity evaluation (status, reason, generation)."
+    },
+    {
+      "handle": "RR-06",
+      "case": "C-id-51",
+      "scenario": "Both keys held by two parties; each completes a different recovery",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/identity:TestRR06And07RivalsAndRepeats"
+      ],
+      "conformance": "covers",
+      "remaining": "Covered: the scenario's statements are signed with throwaway keys, read from received bytes by the production reader and admitted by the adapter; the required outcome is checked on the identity evaluation (status, reason, generation)."
+    },
+    {
+      "handle": "RR-07",
+      "case": "C-id-52",
+      "scenario": "The same recovery is signed and handed over twice",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/identity:TestRR06And07RivalsAndRepeats"
+      ],
+      "conformance": "covers",
+      "remaining": "Covered: the scenario's statements are signed with throwaway keys, read from received bytes by the production reader and admitted by the adapter; the required outcome is checked on the identity evaluation (status, reason, generation)."
+    },
+    {
+      "handle": "RR-08",
+      "case": "C-id-53",
+      "scenario": "A holder of R alone signs a root line with a missing ancestor; the owner then recovers",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/identity:TestRR08MissingAncestorThenRecovery"
+      ],
+      "conformance": "covers",
+      "remaining": "Covered: the scenario's statements are signed with throwaway keys, read from received bytes by the production reader and admitted by the adapter; the required outcome is checked on the identity evaluation (status, reason, generation)."
+    },
+    {
+      "handle": "RR-09",
+      "case": "C-id-54",
+      "scenario": "A valid recovery whose `last_good` the reader does not hold",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/identity:TestRR09And22UnresolvedRecoveries"
+      ],
+      "conformance": "covers",
+      "remaining": "Covered: the scenario's statements are signed with throwaway keys, read from received bytes by the production reader and admitted by the adapter; the required outcome is checked on the identity evaluation (status, reason, generation)."
+    },
+    {
+      "handle": "RR-10",
+      "case": "C-id-55",
+      "scenario": "A root revoke signed at the first line and kept offline; the root goes on signing on another branch; the revoke is published; the owner later recovers with `last_good` on the working branch",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/identity:TestRR10EscrowedRevokeThenRecovery"
+      ],
+      "conformance": "covers",
+      "remaining": "Covered: the scenario's statements are signed with throwaway keys, read from received bytes by the production reader and admitted by the adapter; the required outcome is checked on the identity evaluation (status, reason, generation)."
+    },
+    {
+      "handle": "RR-11",
+      "case": "C-id-56",
+      "scenario": "A recovery with no successor",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/identity:TestRR11ClosedIdentity"
+      ],
+      "conformance": "covers",
+      "remaining": "Covered: the scenario's statements are signed with throwaway keys, read from received bytes by the production reader and admitted by the adapter; the required outcome is checked on the identity evaluation (status, reason, generation)."
+    },
+    {
+      "handle": "RR-12",
+      "case": "C-id-57",
+      "scenario": "A second recovery, by R′ and the second recovery key",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/identity:TestRR12And16TwoGenerations"
+      ],
+      "conformance": "covers",
+      "remaining": "Covered: the scenario's statements are signed with throwaway keys, read from received bytes by the production reader and admitted by the adapter; the required outcome is checked on the identity evaluation (status, reason, generation)."
+    },
+    {
+      "handle": "RR-13",
+      "case": "C-id-58",
+      "scenario": "After a recovery, the old R and old C sign another recovery of generation 0",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/identity:TestRR13And20OldPairAfterRecovery"
+      ],
+      "conformance": "covers",
+      "remaining": "Covered: the scenario's statements are signed with throwaway keys, read from received bytes by the production reader and admitted by the adapter; the required outcome is checked on the identity evaluation (status, reason, generation)."
+    },
+    {
+      "handle": "RR-14",
+      "case": "C-id-59",
+      "scenario": "A reader that holds everything but the handover",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/identity:TestRR02And14RecoveryAfterTheft"
+      ],
+      "conformance": "covers",
+      "remaining": "Covered: the scenario's statements are signed with throwaway keys, read from received bytes by the production reader and admitted by the adapter; the required outcome is checked on the identity evaluation (status, reason, generation)."
+    },
+    {
+      "handle": "RR-15",
+      "case": "C-id-60",
+      "scenario": "A recovery whose `next` repeats a commitment already used",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/identity:TestRR15NextRepeatsAUsedCommitment"
+      ],
+      "conformance": "covers",
+      "remaining": "Covered: the scenario's statements are signed with throwaway keys, read from received bytes by the production reader and admitted by the adapter; the required outcome is checked on the identity evaluation (status, reason, generation)."
+    },
+    {
+      "handle": "RR-16",
+      "case": "C-id-61",
+      "scenario": "R′ is revoked by its own key event",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/identity:TestRR12And16TwoGenerations"
+      ],
+      "conformance": "covers",
+      "remaining": "Covered: the scenario's statements are signed with throwaway keys, read from received bytes by the production reader and admitted by the adapter; the required outcome is checked on the identity evaluation (status, reason, generation)."
+    },
+    {
+      "handle": "RR-17",
+      "case": "C-id-62",
+      "scenario": "A delegate's acts across a recovery: (a) under a grant inside the kept prefix; (b) under a grant the recovery voids; (c) the new root cuts a grant the old root issued; (d) the old root signs a cut after the recovery",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/identity:TestRR17And28DelegateActsAcrossARecovery"
+      ],
+      "conformance": "covers",
+      "remaining": "Covered: the scenario's statements are signed with throwaway keys, read from received bytes by the production reader and admitted by the adapter; the required outcome is checked on the identity evaluation (status, reason, generation)."
+    },
+    {
+      "handle": "RR-18",
+      "case": "C-id-63",
+      "scenario": "`last_good: null`",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/identity:TestRR18LastGoodNull"
+      ],
+      "conformance": "covers",
+      "remaining": "Covered: the scenario's statements are signed with throwaway keys, read from received bytes by the production reader and admitted by the adapter; the required outcome is checked on the identity evaluation (status, reason, generation)."
+    },
+    {
+      "handle": "RR-19",
+      "case": "C-id-64",
+      "scenario": "The owner names a `last_good` that has a root key event among its ancestors, then signs a second recovery with a `last_good` before it",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/identity:TestRR19And25VoidPrefixesAreNoRivals"
+      ],
+      "conformance": "covers",
+      "remaining": "Covered: the scenario's statements are signed with throwaway keys, read from received bytes by the production reader and admitted by the adapter; the required outcome is checked on the identity evaluation (status, reason, generation)."
+    },
+    {
+      "handle": "RR-20",
+      "case": "C-id-65",
+      "scenario": "After a recovery, the old R is revoked",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/identity:TestRR13And20OldPairAfterRecovery"
+      ],
+      "conformance": "covers",
+      "remaining": "Covered: the scenario's statements are signed with throwaway keys, read from received bytes by the production reader and admitted by the adapter; the required outcome is checked on the identity evaluation (status, reason, generation)."
+    },
+    {
+      "handle": "RR-21",
+      "case": "C-id-66",
+      "scenario": "Every subset of RR-02's statements",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/identity:TestRR21EverySubset"
+      ],
+      "conformance": "covers",
+      "remaining": "Covered: the scenario's statements are signed with throwaway keys, read from received bytes by the production reader and admitted by the adapter; the required outcome is checked on the identity evaluation (status, reason, generation)."
+    },
+    {
+      "handle": "RR-22",
+      "case": "C-id-67",
+      "scenario": "A complete recovery, plus a second valid one whose `last_good` is not held",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/identity:TestRR09And22UnresolvedRecoveries"
+      ],
+      "conformance": "covers",
+      "remaining": "Covered: the scenario's statements are signed with throwaway keys, read from received bytes by the production reader and admitted by the adapter; the required outcome is checked on the identity evaluation (status, reason, generation)."
+    },
+    {
+      "handle": "RR-23",
+      "case": "C-id-68",
+      "scenario": "More recoveries than the reader's own limit (which is at least 64)",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/identity:TestRR23GenerationCap"
+      ],
+      "conformance": "covers",
+      "remaining": "Covered: the scenario's statements are signed with throwaway keys, read from received bytes by the production reader and admitted by the adapter; the required outcome is checked on the identity evaluation (status, reason, generation)."
+    },
+    {
+      "handle": "RR-24",
+      "case": "C-id-69",
+      "scenario": "A handover whose carried recovery statement (a) is by the committed key and does not verify; (b) is by another key, under an algorithm the reader does not support; (c) is by the committed key, under such an algorithm",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/identity:TestRR24CarriedStatementChecksInOrder"
+      ],
+      "conformance": "covers",
+      "remaining": "Covered: the scenario's statements are signed with throwaway keys, read from received bytes by the production reader and admitted by the adapter; the required outcome is checked on the identity evaluation (status, reason, generation)."
+    },
+    {
+      "handle": "RR-25",
+      "case": "C-id-70",
+      "scenario": "The root signs a statement outside its vocabulary (an ordinary `authored`, say: issue #271). Then (b) the owner recovers with `last_good` before that line, or (c) with `last_good` at or after it",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/identity:TestRR19And25VoidPrefixesAreNoRivals"
+      ],
+      "conformance": "covers",
+      "remaining": "Covered: the scenario's statements are signed with throwaway keys, read from received bytes by the production reader and admitted by the adapter; the required outcome is checked on the identity evaluation (status, reason, generation)."
+    },
+    {
+      "handle": "RR-26",
+      "case": "C-id-71",
+      "scenario": "R is replaced by R′, a thief of R′ grants, R′ is replaced by R″ with `last_good` before that grant. A third recovery then names R′ as the successor",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/identity:TestRR26FormerRootAsSuccessor"
+      ],
+      "conformance": "covers",
+      "remaining": "Covered: the scenario's statements are signed with throwaway keys, read from received bytes by the production reader and admitted by the adapter; the required outcome is checked on the identity evaluation (status, reason, generation)."
+    },
+    {
+      "handle": "RR-27",
+      "case": "C-id-72",
+      "scenario": "The recovery key signs recovery A; the owner abandons it and publishes a different recovery B with a handover. Later a holder of R obtains A's bytes and hands A over",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/identity:TestRR27AbandonedSignedRecovery"
+      ],
+      "conformance": "covers",
+      "remaining": "Covered: the scenario's statements are signed with throwaway keys, read from received bytes by the production reader and admitted by the adapter; the required outcome is checked on the identity evaluation (status, reason, generation)."
+    },
+    {
+      "handle": "RR-28",
+      "case": "C-id-73",
+      "scenario": "An edition approved by a delegate under a grant that a recovery voids; another under a grant the recovery keeps",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/identity:TestRR17And28DelegateActsAcrossARecovery"
+      ],
+      "conformance": "partial",
+      "remaining": "Partial: the approvals' counting at the identity layer; what a collection's view shows for an edition under a voided grant is the resource layer's (issue #285)"
+    },
+    {
+      "handle": "RR-29",
+      "case": "C-id-74",
+      "scenario": "A thief's grant extends the owner's tip; the owner, unaware, issues two grants after it. Route (a): `last_good` before the thief's grant. Route (b): `last_good` at the owner's tip, then the new root cuts the thief's grant",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/identity:TestRR29QuietTheftKeepAndCut"
+      ],
+      "conformance": "covers",
+      "remaining": "Covered: the scenario's statements are signed with throwaway keys, read from received bytes by the production reader and admitted by the adapter; the required outcome is checked on the identity evaluation (status, reason, generation)."
+    },
+    {
+      "handle": "RR-30",
+      "case": "C-id-75",
+      "scenario": "The commitment in force names (a) the root's own key, or (b) the successor root itself; that key signs a recovery and its handover",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/identity:TestRR30And31TheRecoveryKeyIsNoRoot"
+      ],
+      "conformance": "covers",
+      "remaining": "Covered: the scenario's statements are signed with throwaway keys, read from received bytes by the production reader and admitted by the adapter; the required outcome is checked on the identity evaluation (status, reason, generation)."
+    },
+    {
+      "handle": "RR-31",
+      "case": "C-id-76",
+      "scenario": "A handover names as successor (a) a recovery key the identity has already used (generations 0 and 1 recovered with C0 and C1; the third recovery names C1 as the new root), or (b) the key its own `next` commits to",
+      "schema_vectors": [],
+      "isolated_tests": [
+        "internal/identity:TestRR30And31TheRecoveryKeyIsNoRoot"
+      ],
+      "conformance": "covers",
+      "remaining": "Covered: the scenario's statements are signed with throwaway keys, read from received bytes by the production reader and admitted by the adapter; the required outcome is checked on the identity evaluation (status, reason, generation)."
+    }
+  ]
+}

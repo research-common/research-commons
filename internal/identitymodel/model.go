@@ -46,6 +46,12 @@ const (
 	RotateKey
 	RevokeKey
 	Inert // Explicitly recognized inert root metadata/anchors, NOT a default.
+	// The recoverable-root profile's kinds (recoverable-root note §4). A succession is a successor root's seq-0 line
+	// on the identity; a recovery is the recovery key's one statement; a handover is the root's half of a recovery
+	// and carries the signed recovery statement whole, so it is judged from its own bytes (Handover.Carried).
+	SuccessionEvent
+	RecoveryEvent
+	HandoverEvent
 )
 
 type Profile uint8
@@ -53,6 +59,7 @@ type Profile uint8
 const (
 	UnknownProfile Profile = iota
 	FixedRoot
+	RecoverableRoot
 )
 
 type ActorBinding uint8
@@ -85,7 +92,55 @@ type Actor struct {
 	Grant    ID
 }
 
-type Inception struct{ Profile Profile }
+type Inception struct {
+	Profile Profile
+	// Commitment is the recovery commitment a recoverable-root inception makes (recoverable-root note §4): the
+	// adapter's digest of the recovery key's signer string. The model compares commitments for equality only.
+	Commitment string
+}
+
+// Succession is a successor root's first line, pinned by the recovery that names it (recoverable-root note §4).
+type Succession struct{ Identity ID }
+
+// Successor names the next root: its key, its seq-0 succession on the identity, and the adapter's commitment of
+// its signer string, so the reader can refuse a root the identity has committed to as a recovery key (RR-31).
+type Successor struct {
+	Key        Key
+	Inception  ID
+	Commitment string
+}
+
+// Recovery is the recovery key's statement: the last good line of the current root's log ("" is null: only the
+// root's seq-0 line is kept), the successor (nil closes the identity) and the next commitment ("" when closing).
+type Recovery struct {
+	Identity  ID
+	LastGood  ID
+	Successor *Successor
+	Next      string
+}
+
+// Carried is the adapter's reading of the signed recovery statement a handover carries. It is judged from these
+// fields alone (recoverable-root note §4, "a handover is judged by signature"): Commitment is the digest of its
+// signer string; Authentication is Authenticated when its signature verifies, RejectedSignature when it does not,
+// and Unproven when the reader lacks its algorithm; Validity is Understood for a well-formed identity_recovery.
+type Carried struct {
+	ID             ID
+	Signer         Key
+	Commitment     string
+	Authentication Authentication
+	Validity       Validity
+	Seq            uint64
+	Prev           ID
+	Merges         []ID
+	Event          Event
+	Recovery       *Recovery
+}
+
+// Handover is the root's half of a recovery (recoverable-root note §4).
+type Handover struct {
+	Identity ID
+	Carried  Carried
+}
 
 type Grant struct {
 	Identity    ID
@@ -134,6 +189,9 @@ type Fact struct {
 	Actor          *Actor
 	Binding        ActorBinding
 	Operation      *Operation
+	Succession     *Succession
+	Recovery       *Recovery
+	Handover       *Handover
 }
 
 type Status string
@@ -145,7 +203,7 @@ const (
 )
 
 const (
-	EvaluatorVersion = "fixed-root-model-3"
+	EvaluatorVersion = "identity-model-4" // reads fixed-root-v1 and recoverable-root-v1
 	NotEstablished   = "not_established"
 	// MaxDelegateSelfEvents bounds how many of a delegate's own raw key events one
 	// evaluation examines for warnings. Warnings carry no authority, so the limit
@@ -189,6 +247,12 @@ type Result struct {
 	EvidenceDigest    string // Digest of normalized MODEL FACTS, not wire bytes.
 	EvaluatorVersion  string
 	Freshness         string // Always not_established; no completeness/freshness theorem.
+	// Recoverable-root identities (recoverable-root note §5): Generation is the one the identity is read at (0
+	// for a fixed-root identity, or one that was never recovered), Recoveries the complete handovers followed to
+	// reach it, in order, and Closed whether the last recovery named no successor.
+	Generation uint64
+	Recoveries []ID
+	Closed     bool
 }
 
 // Snapshot owns its facts, exposes no mutable internals, and stores no
@@ -270,7 +334,33 @@ func copyFact(f Fact) Fact {
 		slices.Sort(v.Amends)
 		f.Operation = &v
 	}
+	if f.Succession != nil {
+		v := *f.Succession
+		f.Succession = &v
+	}
+	if f.Recovery != nil {
+		f.Recovery = copyRecovery(f.Recovery)
+	}
+	if f.Handover != nil {
+		v := *f.Handover
+		v.Carried.Merges = append([]ID(nil), v.Carried.Merges...)
+		slices.Sort(v.Carried.Merges)
+		v.Carried.Recovery = copyRecovery(v.Carried.Recovery)
+		f.Handover = &v
+	}
 	return f
+}
+
+func copyRecovery(r *Recovery) *Recovery {
+	if r == nil {
+		return nil
+	}
+	v := *r
+	if v.Successor != nil {
+		s := *v.Successor
+		v.Successor = &s
+	}
+	return &v
 }
 
 // index builds the per-signer scan lists. Only authenticated facts are indexed:

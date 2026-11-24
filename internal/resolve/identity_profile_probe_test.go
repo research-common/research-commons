@@ -49,11 +49,11 @@ func unknownProfileOutcome(t *testing.T, profile string, extra bool) (inceptionS
 // extra plain member can never narrow or widen authority for a reader that predates it.
 func TestUnknownInceptionProfile(t *testing.T) {
 	t.Run("unknown profile token", func(t *testing.T) {
-		status, why, state, reasons, refused := unknownProfileOutcome(t, "recoverable-root-v1", true)
+		status, why, state, reasons, refused := unknownProfileOutcome(t, "future-profile-v9", true)
 		if refused != 0 {
 			t.Fatalf("lines refused at delivery: %d (the inception must be stored)", refused)
 		}
-		if status != "unsupported" || !strings.Contains(why, "recoverable-root-v1") {
+		if status != "unsupported" || !strings.Contains(why, "future-profile-v9") {
 			t.Fatalf("inception status=%q note=%q; want unsupported naming the profile", status, why)
 		}
 		if state != policy.ActorUnknown {
@@ -79,7 +79,7 @@ func TestUnknownRootKind(t *testing.T) {
 	w.authored("K0", "K", "K0")
 	i, g := w.identityOf("I", "IR", "K")
 	a := w.signRC2("A", "K", "authored", obj("content", contentOf("Y"), "type", "dataset", "licence", "MIT"), rc2Actor, [2]string{i, g["K"]})
-	h := w.signRC2("H", "IR", "identity_handover", obj("identity", i, "successor", w.signer("C")), rc2MarkerOnly, [2]string{})
+	h := w.signRC2("H", "IR", "identity_future", obj("identity", i, "successor", w.signer("C")), rc2MarkerOnly, [2]string{})
 	s := dualStore()
 	if refused := deliverAll(s, w.lines); refused != 0 {
 		t.Fatalf("refused %d", refused)
@@ -92,8 +92,8 @@ func TestUnknownRootKind(t *testing.T) {
 	ph, _ := r.Statement(h)
 	pa, _ := r.Statement(a)
 	_, state, why := actors.Eligible(pa.St)
-	if string(ph.St.Status) != "unknown kind" || ph.St.Why != "identity_handover" {
-		t.Fatalf("line status=%q why=%q; want unknown kind / identity_handover", ph.St.Status, ph.St.Why)
+	if string(ph.St.Status) != "unknown kind" || ph.St.Why != "identity_future" {
+		t.Fatalf("line status=%q why=%q; want unknown kind / identity_future", ph.St.Status, ph.St.Why)
 	}
 	if state != policy.ActorUnknown || !strings.Contains(strings.Join(why, " "), "unsupported_root_event") {
 		t.Fatalf("earlier act state=%v why=%v; want unknown with unsupported_root_event", state, why)

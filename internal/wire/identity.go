@@ -26,7 +26,7 @@ const (
 	IdentityCrit = "x_identity_v1"
 	// ActorField is the signed envelope member naming the identity and grant a signature acts for.
 	ActorField = "x_actor_v1"
-	// FixedRootProfile is the only identity profile this reader understands.
+	// FixedRootProfile is the first identity profile; RecoverableRootProfile (recovery.go) is the second.
 	FixedRootProfile = "fixed-root-v1"
 
 	maxPermissions = 64
@@ -434,6 +434,12 @@ func (r *IdentityReader) candidateBody(s *Statement, env *canon.Object) (Status,
 		return grantBody(s)
 	case s.Kind == "identity_cut":
 		return cutBody(s)
+	case s.Kind == "identity_succession":
+		return successionBody(s)
+	case s.Kind == "identity_recovery":
+		return recoveryBody(s)
+	case s.Kind == "identity_handover":
+		return r.handoverBody(s)
 	case s.Kind == "rotate_key" || s.Kind == "revoke_key":
 		return Invalid, "raw key events stay rc/1 in this profile"
 	case candidateNotImplemented[s.Kind]:
@@ -474,10 +480,13 @@ func inceptionBody(s *Statement) (Status, string) {
 	if !ok || !isStr || !reProfile.MatchString(string(ps)) {
 		return Invalid, "body.profile is not a profile token"
 	}
-	if string(ps) != FixedRootProfile {
-		return Unsupported, "identity profile " + string(ps)
+	switch string(ps) {
+	case FixedRootProfile:
+		return Valid, ""
+	case RecoverableRootProfile:
+		return recoverableInception(s)
 	}
-	return Valid, ""
+	return Unsupported, "identity profile " + string(ps)
 }
 
 func grantBody(s *Statement) (Status, string) {

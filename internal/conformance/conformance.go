@@ -42,7 +42,8 @@ var caseRow = regexp.MustCompile(`(?m)^\| ((?:C-(?:core|exec|exch|btc|id)-[0-9]+
 
 // ProfileNotes are the design notes, besides CONFORMANCE.md, whose tables define conformance cases: a profile's
 // supplementary regressions stay in its own note. Paths are relative to the repository root.
-var ProfileNotes = []string{"docs/DESIGN-notes-bitcoin-time.md", "docs/DESIGN-notes-fixed-root-identity.md"}
+var ProfileNotes = []string{"docs/DESIGN-notes-bitcoin-time.md", "docs/DESIGN-notes-fixed-root-identity.md",
+	"docs/DESIGN-notes-recoverable-root-identity.md"}
 
 // Doc is one document the case ids are read from.
 type Doc struct {

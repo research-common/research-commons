@@ -516,6 +516,25 @@ var limits = []limit{
 			return ok, rv.stdout + ro.stdout + pb.stdout
 		},
 	},
+	{
+		id:  "L-23",
+		gap: "The recoverable-root identity profile (`recoverable-root-v1`) is read and not written: the reader evaluates such an identity, its recoveries and its generations (`docs/DESIGN-notes-recoverable-root-identity.md` §5, conformance cases C-id-46 to C-id-76), but no command creates a `recoverable-root-v1` inception, a recovery key or its commitment, or any of `identity_succession`, `identity_recovery` and `identity_handover`. `identity new` writes `fixed-root-v1` only. Readers ship one release before writers, as for the fixed-root profile",
+		sources: []limitSource{
+			{file: "docs/DESIGN-notes-recoverable-root-identity.md", says: "No command writes a `recoverable-root-v1` inception"},
+			{file: "CHANGELOG.md", says: "KNOWN-LIMITS L-23"},
+		},
+		probe:  "`identity new --profile recoverable-root-v1` exits 2 (`unknown-option`), writing nothing; the help of `identity new` names `fixed-root-v1` as the profile it signs",
+		closes: "the writer side of the profile: `recovery new`, `identity new --recovery`, and the recovery commands (recoverable-root note §7), with the signing-package revision for their statements (#279)",
+		open: func(t *testing.T) (bool, string) {
+			h := newIDHome(t, wire.AlgEIP191)
+			before := storeBytes(t, h.store)
+			r := h.run("identity", "new", "--profile", wire.RecoverableRootProfile)
+			help := runIn(t.TempDir(), nil, "identity", "new", "--help").stdout
+			ok := r.code == ExitDidNotStart && strings.Contains(r.stdout, "unknown-option") && storeBytes(t, h.store) == before &&
+				strings.Contains(help, wire.FixedRootProfile) && !strings.Contains(help, wire.RecoverableRootProfile)
+			return ok, r.stdout
+		},
+	},
 }
 
 // TestDocumentedLimits: C-core-07.

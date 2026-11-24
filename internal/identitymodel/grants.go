@@ -143,18 +143,14 @@ func (s *Snapshot) grantWithin(e *evaluation, gs *GrantState, cuts *[]Fact) {
 	e.reasons(authenticationReasons(root))
 	e.reasons(validityReasons(root))
 	e.reasons(shapeReasons(root))
-	if root.Event != IdentityInception || root.Inception == nil || root.Seq != 0 {
-		e.add("invalid_identity_inception", Denied, root.ID, "", "identity must pin the root's own inception")
-	} else if root.Inception.Profile != FixedRoot {
-		e.add("unsupported_identity_profile", Unknown, root.ID, "", "no profile or root migration")
-	}
-	if grant.Delegate == root.Signer {
+	e.proof(e.w.chain(root.ID, root.Signer, root.ID, "root inception"))
+	gens := s.identityGenerations(e, root, true)
+	if gens.isRoot(grant.Delegate) {
 		e.add("root_is_delegate", Denied, g.ID, root.ID, "dedicated administrative root cannot be its worker")
 	}
-	e.proof(e.w.chain(root.ID, root.Signer, root.ID, "root inception"))
-	e.proof(e.w.chain(g.ID, root.Signer, grant.Identity, "grant root ancestry"))
+	s.placeGrant(e, gens, g)
 	if root.Authentication == Authenticated && root.Event == IdentityInception {
-		s.rootState(e, root, Actor{Identity: grant.Identity, Grant: gs.Grant}, grant)
+		s.rootScans(e, gens, Actor{Identity: grant.Identity, Grant: gs.Grant}, grant)
 	}
 	for _, f := range *cuts {
 		s.classifyCut(e, gs, f, grant)

@@ -173,7 +173,7 @@ data commits onto it, and push again. Pushing straight to the hub's default bran
 | [`docs/DESIGN-notes-execution.md`](docs/DESIGN-notes-execution.md) | sandboxed re-execution |
 | [`docs/DESIGN-notes-bitcoin-time.md`](docs/DESIGN-notes-bitcoin-time.md) | time evidence from Bitcoin |
 | [`docs/DESIGN-notes-fixed-root-identity.md`](docs/DESIGN-notes-fixed-root-identity.md) | the fixed-root identity profile (`rc/2`; reader and writer active, frozen) |
-| [`docs/DESIGN-notes-recoverable-root-identity.md`](docs/DESIGN-notes-recoverable-root-identity.md) | **proposal, not implemented:** an identity profile whose root can be replaced with a committed cold key |
+| [`docs/DESIGN-notes-recoverable-root-identity.md`](docs/DESIGN-notes-recoverable-root-identity.md) | the recoverable-root identity profile (`rc/2`; reader active, no writer yet): an identity whose root can be replaced with a committed cold key |
 | [`docs/CONFORMANCE.md`](docs/CONFORMANCE.md) | the test plan: every required outcome and what covers it |
 | [`docs/CLI-OUTPUTS.md`](docs/CLI-OUTPUTS.md) | exit codes, state tokens, error shape |
 | [`docs/KNOWN-LIMITS.md`](docs/KNOWN-LIMITS.md) | open gaps, each with a test |

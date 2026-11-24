@@ -461,7 +461,7 @@ func TestRelevantTraversalLimitsCannotYieldPartialPass(t *testing.T) {
 	base := snapshot(t, fixture())
 	requireStatus(t, base, "A", Eligible, "")
 	// The fixture fits easily under small caps; the hits below come from the added evidence alone.
-	if r := base.EvaluateWith("Z", Limits{small, small, 10 * small}); r.Status != Eligible {
+	if r := base.EvaluateWith("Z", Limits{Dependencies: small, PathEdges: small, Inspections: 10 * small}); r.Status != Eligible {
 		t.Fatalf("fixture under small caps: %s %+v", r.Status, r.Reasons)
 	}
 	fs := fixture()

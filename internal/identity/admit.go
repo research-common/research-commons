@@ -12,6 +12,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/identitymodel"
@@ -217,7 +218,8 @@ func translate(st *wire.Statement, vouched bool) identitymodel.Fact {
 		f.Validity = identitymodel.Unsupported
 	}
 	candidate := st.RC == "rc/2"
-	admin := candidate && (st.Kind == "identity_inception" || st.Kind == "identity_grant" || st.Kind == "identity_cut")
+	admin := candidate && (st.Kind == "identity_inception" || st.Kind == "identity_grant" || st.Kind == "identity_cut" ||
+		st.Kind == "identity_succession" || st.Kind == "identity_recovery" || st.Kind == "identity_handover")
 	switch {
 	case admin:
 		administrative(&f, st)
@@ -287,9 +289,20 @@ func administrative(f *identitymodel.Fact, st *wire.Statement) {
 	switch st.Kind {
 	case "identity_inception":
 		f.Event, f.Inception = identitymodel.IdentityInception, &identitymodel.Inception{}
-		if st.Status == wire.Valid && text(b, "profile") == wire.FixedRootProfile {
-			f.Inception.Profile = identitymodel.FixedRoot
+		if st.Status == wire.Valid {
+			switch text(b, "profile") {
+			case wire.FixedRootProfile:
+				f.Inception.Profile = identitymodel.FixedRoot
+			case wire.RecoverableRootProfile:
+				f.Inception.Profile, f.Inception.Commitment = identitymodel.RecoverableRoot, wire.InceptionCommitment(st)
+			}
 		}
+	case "identity_succession":
+		f.Event, f.Succession = identitymodel.SuccessionEvent, &identitymodel.Succession{Identity: identitymodel.ID(idText(b, "identity"))}
+	case "identity_recovery":
+		f.Event, f.Recovery = identitymodel.RecoveryEvent, recovery(b)
+	case "identity_handover":
+		f.Event, f.Handover = identitymodel.HandoverEvent, &identitymodel.Handover{Identity: identitymodel.ID(idText(b, "identity")), Carried: carried(st.Carried)}
 	case "identity_grant":
 		d := object(b, "delegate")
 		g := &identitymodel.Grant{Identity: identitymodel.ID(idText(b, "identity")), Delegate: identitymodel.Key(text(d, "key")),
@@ -321,6 +334,65 @@ func administrative(f *identitymodel.Fact, st *wire.Statement) {
 			f.Validity = identitymodel.Unsupported
 		}
 	}
+}
+
+// recovery reads an identity_recovery body best-effort (recoverable-root note §4): the successor's commitment is
+// computed here from its key's signer string, so the model can refuse a root the identity has committed to as a
+// recovery key (RR-31) without knowing how commitments are made.
+func recovery(b *canon.Object) *identitymodel.Recovery {
+	r := &identitymodel.Recovery{Identity: identitymodel.ID(idText(b, "identity")), LastGood: identitymodel.ID(idText(b, "last_good"))}
+	if so := object(b, "successor"); so != nil {
+		if k := text(so, "key"); k != "" {
+			r.Successor = &identitymodel.Successor{Key: identitymodel.Key(k), Inception: identitymodel.ID(idText(so, "inception")),
+				Commitment: wire.RecoveryCommitment(k)}
+		}
+	}
+	if nv, ok := b.Get("next"); ok {
+		if no, ok := nv.(*canon.Object); ok {
+			if arr, ok := field(no, "commitments").(canon.Array); ok && len(arr) == 1 {
+				if s, ok := arr[0].(canon.String); ok {
+					r.Next = string(s)
+				}
+			}
+		}
+	}
+	return r
+}
+
+// carried is the model's reading of the statement a handover carries: its commitment from its signer string; its
+// authentication from the reader's verification (Authenticated; RejectedSignature; Unproven when the reader lacks
+// the algorithm); its validity from the reader's status. A handover whose carried member did not parse as a
+// statement is Invalid at the reader and never reaches here with a nil statement, but a nil is still read as
+// nothing, never as a statement.
+func carried(c *wire.Statement) identitymodel.Carried {
+	if c == nil {
+		return identitymodel.Carried{Authentication: identitymodel.RejectedSignature, Validity: identitymodel.Invalid}
+	}
+	out := identitymodel.Carried{ID: identitymodel.ID(c.ID), Signer: identitymodel.Key(c.Signer), Commitment: wire.RecoveryCommitment(c.Signer),
+		Seq: uint64(c.Seq), Prev: identitymodel.ID(c.Prev)}
+	for _, m := range c.Merges {
+		out.Merges = append(out.Merges, identitymodel.ID(m))
+	}
+	switch {
+	case c.Verified:
+		out.Authentication = identitymodel.Authenticated
+	case c.Status == wire.Unsupported && strings.HasPrefix(c.Why, "alg "):
+		out.Authentication = identitymodel.Unproven
+	default:
+		out.Authentication = identitymodel.RejectedSignature
+	}
+	switch c.Status {
+	case wire.Valid:
+		out.Validity = identitymodel.Understood
+	case wire.Invalid:
+		out.Validity = identitymodel.Invalid
+	default:
+		out.Validity = identitymodel.Unsupported
+	}
+	if c.RC == "rc/2" && c.Kind == "identity_recovery" && c.Body != nil {
+		out.Event, out.Recovery = identitymodel.RecoveryEvent, recovery(c.Body)
+	}
+	return out
 }
 
 func permission(v canon.Value) (identitymodel.Permission, bool) {

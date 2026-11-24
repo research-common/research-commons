@@ -1,9 +1,12 @@
 # Recoverable-root identity profile (`recoverable-root-v1` on `rc/2`): proposal
 
-**Status: proposal for review. Nothing here is implemented.** No reader or writer knows this profile, no
-bytes are fixed, and every name below (profile token, kinds, members) is a working name. The note is written
-compromise matrix first and scenarios second, and only then the vocabulary, so the rules can be judged
-before their encoding. It builds on the fixed-root profile (`DESIGN-notes-fixed-root-identity.md`, "the
+**Status: the reader is implemented; no writer is.** The reader (`1.0.0-rc.2`, pull request for issue #274)
+evaluates this profile as §5 states it, with the scenarios of §6 as its conformance cases (§10, C-id-46 to
+C-id-76). No command writes a `recoverable-root-v1` inception or any of the three kinds: readers ship one
+release before writers, as they did for the fixed-root profile, so an identity made under this profile today
+would be read everywhere before anything could make one. The names in §4 are the ones the reader uses. The note
+is written compromise matrix first and scenarios second, and only then the vocabulary, so the rules can be
+judged before their encoding. It builds on the fixed-root profile (`DESIGN-notes-fixed-root-identity.md`, "the
 fixed-root note") and changes nothing in it.
 
 ## 1. Why
@@ -82,7 +85,7 @@ published (RR-27, §7.3). Whoever holds it and the stolen root can retire the id
 The standing cost of rule 5, stated once more because it is the design's weakest point: for as long as a
 used recovery key or any copy of it exists, the identity is one theft of that old pair away from retirement.
 
-## 4. Vocabulary (working names)
+## 4. Vocabulary
 
 All are `rc/2` statements with the `x_identity_v1` marker, raw-key signed, and take no actor.
 
@@ -188,8 +191,9 @@ Everything a reader reports today (status, reasons, basis and missing ids, warni
 
 ## 6. Scenarios
 
-These were run through a small reference model of §5 before this note was written. They become signed,
-end-to-end conformance cases when the profile is built; until then they are scenario handles, not cases.
+These were run through a small reference model of §5 before this note was written, and through a second model
+written from the note alone during its review (issue #274). They are registered as conformance cases in §10 and
+built from signed lines there.
 
 | Handle | Scenario | Required outcome |
 |---|---|---|
@@ -379,10 +383,12 @@ holder runs step 1 personally, on a machine they trust, and hands only the commi
 ## 8. Compatibility
 
 - **`rc/2` bytes are unchanged.** The profile adds one inception profile token and three kinds.
-- **Readers that predate the profile fail safe.** Checked on the current reader (`1.0.0-rc.1` plus later
-  documentation commits) with throwaway tests, to be added as permanent cases: an inception with an unknown profile token reads `unsupported`, and an act
-  under it reads `unknown` with `unsupported_identity_profile`; an unknown `rc/2` kind on a `fixed-root-v1`
-  root's log makes that identity's acts `unknown` (`unsupported_root_event`).
+- **Readers that predate the profile fail safe.** Checked on `1.0.0-rc.1`, and kept as permanent tests
+  (`internal/resolve/identity_profile_probe_test.go`, now with a token and a kind that stay unknown): an inception
+  with an unknown profile token reads `unsupported`, and an act under it reads `unknown` with
+  `unsupported_identity_profile`; an unknown `rc/2` kind on a `fixed-root-v1` root's log makes that identity's
+  acts `unknown` (`unsupported_root_event`). A `1.0.0-rc.1` reader therefore reads a `recoverable-root-v1`
+  identity as unsupported and an `identity_handover` on a fixed-root root's log as an unknown kind.
 - **The commitment cannot be an optional member of a `fixed-root-v1` inception.** The same tests show such a
   member is read as valid and ignored, so an older reader would treat the identity as fixed-root and a
   recovery as nothing. A new profile token is the only safe carrier. For the same reason an existing
@@ -463,3 +469,47 @@ on the reference model before it was written in:
 **Open: nothing the maintainer has left undecided.** Every point above has a decision and a reason, and
 each can be reopened by a counterexample. The review asked for is of the whole: the matrix (§3), the rules
 (§2) and the scenarios (§6).
+
+## 10. Conformance cases
+
+The scenarios of §6 as registered conformance cases: handle RR-NN is case C-id-(45+NN), continuing the fixed-root
+profile's numbering (that note's §10 ends at C-id-45), so the harness counts both profiles under `id`. Each case is
+built from signed lines through the production reader and the admission adapter (`internal/identity`,
+`recoverable_cases_test.go`); the model-level copies (`internal/identitymodel/recovery_test.go`) are the oracle the
+signed cases are checked against, and claim no case. The scenario and required outcome columns are the §6 rows,
+word for word. `docs/recoverable-root-identity.coverage.json` lists each handle's case, tests and harness status, kept
+equal to what the tests declare by a test in `internal/conformance`.
+
+| Id | Profile | Scenario | Required outcome |
+|---|---|---|---|
+| C-id-46 | §5, §6 (handle RR-01) | Ordinary use | Current, generation 0; the root's grants count. |
+| C-id-47 | §5, §6 (handle RR-02) | R stolen: the thief grants. The owner recovers with `last_good` before the theft, then grants with R′; the thief grants again with R | Before the recovery is read, the thief's grant counts. After: generation 1, the owner's old and new grants count, both thief grants are void. |
+| C-id-48 | §5, §6 (handle RR-03) | The thief revokes R. The owner recovers | Retired, then current at generation 1. |
+| C-id-49 | §5, §6 (handle RR-04) | A holder of R alone signs a handover carrying a "recovery" by a key of their own | Void; the identity is unchanged. |
+| C-id-50 | §5, §6 (handle RR-05) | A holder of C alone signs a recovery | Nothing: no handover, no effect. |
+| C-id-51 | §5, §6 (handle RR-06) | Both keys held by two parties; each completes a different recovery | Retired for good. |
+| C-id-52 | §5, §6 (handle RR-07) | The same recovery is signed and handed over twice | One recovery. |
+| C-id-53 | §5, §6 (handle RR-08) | A holder of R alone signs a root line with a missing ancestor; the owner then recovers | Unknown, then current: the line is outside the kept prefix. |
+| C-id-54 | §5, §6 (handle RR-09) | A valid recovery whose `last_good` the reader does not hold | Unknown. |
+| C-id-55 | §5, §6 (handle RR-10) | A root revoke signed at the first line and kept offline; the root goes on signing on another branch; the revoke is published; the owner later recovers with `last_good` on the working branch | Retired when the revoke is read; current again after the recovery. A reader that never receives the revoke sees ordinary use. |
+| C-id-56 | §5, §6 (handle RR-11) | A recovery with no successor | Closed: kept history counts; later root lines are void. |
+| C-id-57 | §5, §6 (handle RR-12) | A second recovery, by R′ and the second recovery key | Generation 2; kept grants of all three roots count. |
+| C-id-58 | §5, §6 (handle RR-13) | After a recovery, the old R and old C sign another recovery of generation 0 | Retired for good. |
+| C-id-59 | §5, §6 (handle RR-14) | A reader that holds everything but the handover | The pre-recovery state. |
+| C-id-60 | §5, §6 (handle RR-15) | A recovery whose `next` repeats a commitment already used | Void. |
+| C-id-61 | §5, §6 (handle RR-16) | R′ is revoked by its own key event | Retired at generation 1, recoverable by R′ and the second recovery key. |
+| C-id-62 | §5, §6 (handle RR-17) | A delegate's acts across a recovery: (a) under a grant inside the kept prefix; (b) under a grant the recovery voids; (c) the new root cuts a grant the old root issued; (d) the old root signs a cut after the recovery | (a) Counts before and after. (b) Counted before the recovery is read, counts for nothing after, whenever the act was signed. (c) The grant is cut. (d) Void: the grant still counts. |
+| C-id-63 | §5, §6 (handle RR-18) | `last_good: null` | Only the inception is kept: no earlier grant counts. |
+| C-id-64 | §5, §6 (handle RR-19) | The owner names a `last_good` that has a root key event among its ancestors, then signs a second recovery with a `last_good` before it | The first recovery is void, so the raw event stands: retired, and a recovery can undo it (rule 6). The second is then the only complete one: current at generation 1. A void recovery is no rival. (The first version of this note read the first as retired for good. That made the owner's likeliest mistake permanent and gave a thief nothing they lacked.) |
+| C-id-65 | §5, §6 (handle RR-20) | After a recovery, the old R is revoked | No effect on the identity. |
+| C-id-66 | §5, §6 (handle RR-21) | Every subset of RR-02's statements | No subset reads generation 1 with a thief grant counting. |
+| C-id-67 | §5, §6 (handle RR-22) | A complete recovery, plus a second valid one whose `last_good` is not held | Unknown: a possible rival is never passed over. |
+| C-id-68 | §5, §6 (handle RR-23) | More recoveries than the reader's own limit (which is at least 64) | Unknown, with the limit as the reason. Never a guess at the current root. A chain of 64 recoveries is followed by every reader. |
+| C-id-69 | §5, §6 (handle RR-24) | A handover whose carried recovery statement (a) is by the committed key and does not verify; (b) is by another key, under an algorithm the reader does not support; (c) is by the committed key, under such an algorithm | (a) Void. (b) Void: the commitment is compared first, so a holder of R alone cannot cause unknown. (c) Unknown; it needs both keys. |
+| C-id-70 | §5, §6 (handle RR-25) | The root signs a statement outside its vocabulary (an ordinary `authored`, say: issue #271). Then (b) the owner recovers with `last_good` before that line, or (c) with `last_good` at or after it | Unknown, as in the fixed-root profile. (b) Current at generation 1: the line is outside the kept prefix. (c) That recovery is void, as in RR-19: still unknown, and a second recovery as in (b) clears it. |
+| C-id-71 | §5, §6 (handle RR-26) | R is replaced by R′, a thief of R′ grants, R′ is replaced by R″ with `last_good` before that grant. A third recovery then names R′ as the successor | Void: R″ stays the root, and the thief's grant stays void. Found by the reference model after this note was first posted; the first version of §5 let the grant count again. |
+| C-id-72 | §5, §6 (handle RR-27) | The recovery key signs recovery A; the owner abandons it and publishes a different recovery B with a handover. Later a holder of R obtains A's bytes and hands A over | With A's successor line held: **retired for good**, by R and a file, with no second key stolen. Without that line: unknown. A second signing with the same effect would have been harmless (RR-07). §7.3 says what the tool does about it. |
+| C-id-73 | §5, §6 (handle RR-28) | An edition approved by a delegate under a grant that a recovery voids; another under a grant the recovery keeps | The first counted before the recovery is read and does not count after. The second counts both times. |
+| C-id-74 | §5, §6 (handle RR-29) | A thief's grant extends the owner's tip; the owner, unaware, issues two grants after it. Route (a): `last_good` before the thief's grant. Route (b): `last_good` at the owner's tip, then the new root cuts the thief's grant | (a) The thief's grant is void, and so are the owner's two later grants and every act under them. (b) The owner's grants all count; the thief's counts until the cut is read, and not after. No set of statements that holds the recovery and the cut lets it count. |
+| C-id-75 | §5, §6 (handle RR-30) | The commitment in force names (a) the root's own key, or (b) the successor root itself; that key signs a recovery and its handover | Void in both: the recovery key is no root of the identity. Without the rule, one key would recover alone. (Case (b) cannot arise from a recovery a reader accepts: RR-31 voids the recovery that would set it up.) |
+| C-id-76 | §5, §6 (handle RR-31) | A handover names as successor (a) a recovery key the identity has already used (generations 0 and 1 recovered with C0 and C1; the third recovery names C1 as the new root), or (b) the key its own `next` commits to | Void in both: a key the identity has committed to as a recovery key never becomes its root. Without the rule, (a) makes the root a key whose copies were to be destroyed, with two `seq`-0 lines, and (b) leaves a root with no usable recovery key. An owner's mistake, not an attack: whoever does it holds both keys. |
