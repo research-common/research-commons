@@ -33,6 +33,20 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ### Fixed
 
+- **A delegate key that has been cut can no longer keep a collection from passing `verify`** (#285). An approval that
+  an identity's grant cut leaves out now counts toward nothing without doubt: the edition is `unauthorized` or `pending` (it was
+  `contested`), an edition built on it is an `orphan`, `current` is the last authorized edition and `verify` on the
+  resource exits 0 (it exited 3 for as long as the line was held, and whoever held the cut key could add such a line
+  at will). C-id-30 is rewritten. **This changes what a reader answers for statements that already exist; no
+  statement's bytes or id change.** In its place:
+  - the resource view lists each edition that is not authorized and has an approval a cut leaves out, with the
+    approval, the grant and the cut (`cut_excluded`, in `show`, `verify` and `list`);
+  - `pull`, `hub check` and `push` label an added cut that leaves out such an approval, `cut: editions not counted`,
+    naming each resource, how many editions, and its current edition. No exit changes;
+  - `publish` warns when an edition names a predecessor that is not an authorized edition in the store.
+  An edition a cut leaves out, pinned by id, still does not pass. Identity state the reader cannot resolve still
+  contests. A plain controller key's revocation still contests, and that has the cost this fix removes for
+  identities: KNOWN-LIMITS L-23 (new) records it, with the advice to name identities as controllers.
 - Reading a store is no longer quadratic in the length of one key's log (#291). Every command that reads a store
   delivers each held line into its signer's log, and each delivery rebuilt that log's whole view to read one line's
   verdict; the view's own chaining then looped to a fixed point. A log of 2,000 lines took about 5 s for `status`,

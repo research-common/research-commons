@@ -253,3 +253,69 @@ func TestActorLabels(t *testing.T) {
 		}
 	})
 }
+
+// TestCutEditionsLabel: a change that adds an identity_cut leaving out an approval of an edition is labelled with
+// the resource, the number of editions that are not authorized for it, and the resource's current edition over
+// the evaluated set (C-id-30). The cut is admitted and the exit stays 0: a label only (I8). A cut that leaves out
+// no edition's approval carries no such label.
+func TestCutEditionsLabel(t *testing.T) {
+	build := func(t *testing.T) (*idWorld, *hub, string) {
+		w, h := newIDWorld(), newHub(t, "")
+		w.inception(h)
+		w.workerGenesis(h, "W")
+		p, l := w.put("GEN", "GK", "rc/2", "genesis", obj("type", "collection", "name", "typed",
+			"controllers", canon.Array{obj("identity", w.ids["I"])}, "rule", obj("any_one", true)))
+		h.write(p, l)
+		p, l = w.put("G", "R", "rc/2", "identity_grant", obj("identity", w.ids["I"],
+			"delegate", obj("key", w.s.key("W").Signer(), "inception", w.ids["W.0"]),
+			"permissions", canon.Array{obj("kind", "edition", "targets", obj("resources", canon.Array{canon.String(w.ids["GEN"])}))}))
+		h.write(p, l)
+		return w, h, w.ids["GEN"]
+	}
+	edition := func(w *idWorld, h *hub, g string) {
+		p, l := w.put("E", "W", "rc/2", "edition", obj("resource", g, "predecessors", canon.Array{canon.String(g)}, "contents", obj("members", canon.Array{})), "I", "G")
+		h.write(p, l)
+	}
+	cut := func(w *idWorld, h *hub) string {
+		p, l := w.put("CUT", "R", "rc/2", "identity_cut", obj("identity", w.ids["I"], "grant", w.ids["G"], "last_good", w.ids["W.0"], "reason", "key_compromise"))
+		h.write(p, l)
+		return p
+	}
+
+	t.Run("the cut leaves out an edition's approval", func(t *testing.T) {
+		w, h, g := build(t)
+		edition(w, h, g)
+		h.commit("base: an edition approved under the grant")
+		h.branch("cut")
+		p := cut(w, h)
+		h.commit("the root cuts the grant before the edition")
+		res := h.check("main")
+		r := verdict(t, res, p)
+		if r.Verdict != gate.Admitted || !r.HasLabel(gate.LabelCutEditions) || res.Exit() != 0 {
+			t.Fatalf("cut: %s labels %v exit %d\n%s", r.Verdict, r.Labels, res.Exit(), res.Render())
+		}
+		var detail string
+		for _, l := range r.Labels {
+			if l.Token == gate.LabelCutEditions {
+				detail = l.Detail
+			}
+		}
+		for _, want := range []string{"resource " + g[:12], "1 edition(s) not counted", "current " + g[:12]} {
+			if !strings.Contains(detail, want) {
+				t.Fatalf("label detail %q lacks %q", detail, want)
+			}
+		}
+	})
+
+	t.Run("the cut leaves out nothing", func(t *testing.T) {
+		w, h, _ := build(t)
+		h.commit("base: a grant, no edition under it")
+		h.branch("cut")
+		p := cut(w, h)
+		h.commit("the root cuts the grant")
+		res := h.check("main")
+		if r := verdict(t, res, p); r.Verdict != gate.Admitted || r.HasLabel(gate.LabelCutEditions) || res.Exit() != 0 {
+			t.Fatalf("cut: %s labels %v exit %d", r.Verdict, r.Labels, res.Exit())
+		}
+	})
+}

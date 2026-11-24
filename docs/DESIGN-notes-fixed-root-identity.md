@@ -511,8 +511,38 @@ separate valid raw-key signature may fill that key slot. An I signature requires
 grant for the exact resource and operation; a root's raw signature is not sufficient.
 
 Shared body bytes, predecessor authority and the resource merge DAG remain required.
-Identity cuts that remove necessary approvals propagate contested/unresolved status
-to affected editions and dependants; no silent fallback to a previously convenient tip.
+
+**An approval that a cut leaves out counts toward nothing, and is not doubted.** The
+edition it approved is `unauthorized` (`pending`, when other approvals still count but
+fall short of the rule) unless the remaining counted approvals meet the rule; an
+edition built on it is an `orphan`; `current` is the last authorized edition; `verify`
+on the resource exits 0. The cut is signed by the root, and §1 trusts the root to say
+which of a delegate's lines were its own: that is why a cut can keep a prefix at all. A
+reader that doubted the root's own statement would protect nobody, and would hand the
+resource to the party the cut was meant to stop: whoever still holds the cut key could
+sign one edition and keep the resource from passing `verify`, for as long as readers
+held the line (issue #285; this reverses the rule this note first shipped, which read
+such an edition as `contested`). A plain controller key has no such statement above it
+(KNOWN-LIMITS L-23): its revocation still contests, as the claims-model note §4.1 says.
+
+What replaces the failing token is a disclosure, which changes no exit:
+- the resource view lists every edition that is not authorized and has an approval a
+  cut leaves out, with the approval, the grant and the cut (`cut_excluded`);
+- `pull`, `hub check` and `push` label an added cut that leaves out such an approval
+  (`cut: editions not counted`), naming each resource, how many editions, and the
+  resource's current edition over the evaluated set. A cut already held is not labelled
+  again: the label marks the moment a reader's view changes;
+- the writer warns when an edition names a predecessor that is not an authorized
+  edition in its store.
+
+An edition that a cut leaves out, pinned by id, still does not pass `verify`. An owner's
+own edition that a cut leaves out is restored by another delegate approving the same
+bytes. Identity state the reader cannot resolve (missing evidence, a root event it does
+not support) is still doubted when it would decide a controller slot: there the reader
+cannot tell, and the edition and its dependants are `contested`.
+
+The same rule covers an approval under a grant that a recovery voids (recoverable-root
+note, RR-28): the recovery pair has said which of the old root's lines stand.
 
 Approval withdrawal/reapproval is **key-and-grant-local** (raw-key context has no grant).
 Use existing same-key ordering; one delegate cannot withdraw another delegate's
@@ -1240,7 +1270,7 @@ a scenario.
 | C-id-27 | §2.3, §5.2 (handle ID-27) | Mixed raw/identity slots with same signer | One key's raw approval and its identity approval of the same body are two signatures for two subjects; neither fills both slots. |
 | C-id-28 | §2.1, §5.2 (handle ID-28) | Complete typed controller changes and merges | A controller change must carry complete typed controllers and rule; partial, untyped or duplicate shapes are refused; merges need predecessor authority. |
 | C-id-29 | §5.2 (handle ID-29) | Key-and-grant-local withdrawal / reapproval | Withdrawal/reapproval is key-and-grant-local: one delegate cannot withdraw another's approval; a new grant cannot cancel an approval made under another. |
-| C-id-30 | §5.2 (handle ID-30) | Cut removes required resource approval | A cut that removes a required approval makes the edition and its dependants `contested`/unresolved; no fallback to an older tip without that token: the resource may name its last authorized edition only beside the contested list, and `verify` exits 3 (as C-core-143e for a key revocation). |
+| C-id-30 | §5.2 (handle ID-30) | Cut removes required resource approval | An approval that a cut leaves out counts toward nothing and is not doubted: the edition is `unauthorized` (or `pending`, when other approvals still count but fall short) unless the remaining counted approvals meet the rule, its dependants are `orphan`, `current` is the last authorized edition and `verify` on the resource exits 0. The view lists the edition, the approval, the grant and the cut (`cut_excluded`); an added cut that leaves out such an approval is labelled on `pull` and `hub check`. An edition signed by the cut key after the cut changes none of this. Another delegate approving the same bytes restores an edition. Unresolved identity state that would decide a controller slot still makes the edition and its dependants `contested` (exit 3). The same holds for an approval under a grant a recovery voids. |
 | C-id-31 | §6 (handle ID-31) | Exact pin versus principal-following selection | An exact pin selects that statement only (no alias/successor); a principal selection follows that principal's eligible current claims. |
 | C-id-32 | §6 (handle ID-32) | Invalid/missing exact pin and policy conflicts | A missing or ineligible pinned statement is non-passing (never substituted); conflicting selections for the same content/role fail before evaluation (exit 2). |
 | C-id-33 | §6 (handle ID-33) | Trust purpose boundaries / received policy injection | Trust applies only to the named purpose and targets; a received statement (even root-signed) never installs or changes local policy. |

@@ -155,6 +155,21 @@ type Approval struct {
 	// Withdrawn names the signer's withdraw_approval that took this approval back; "" when none counts.
 	Withdrawn string
 	Why       string // why it is not counted; "" when counted
+	// CutBy lists the held cuts of Grant when the evaluator denies this approval because a cut of its grant leaves
+	// it out (identity profile §4, §5.2). Such an approval counts toward nothing and is not doubted: the root has
+	// said which of the delegate's lines were its own. Nil otherwise.
+	CutBy []string
+}
+
+// CutExcluded is one edition that is not authorized and has an approval a grant cut leaves out: the disclosure a
+// reader gets in place of a failing token (identity profile §5.2, C-id-30). Whether the edition once counted for
+// this reader is not recorded anywhere; the view says what a cut excludes now.
+type CutExcluded struct {
+	Edition  string
+	State    EditionState
+	Approval string
+	Grant    string
+	Cuts     []string
 }
 
 // Edition is one proposal of a resource and what became of it.
@@ -199,6 +214,9 @@ type Resource struct {
 	RevokedControllers map[string]string
 	// Contested lists the contested editions by id. A resource with one does not pass verify.
 	Contested []string
+	// CutExcluded lists the editions that are not authorized and have an approval a grant cut leaves out, by
+	// edition then approval. It never changes VerifyExit.
+	CutExcluded []CutExcluded
 	// GenesisControllers and GenesisK are the genesis's authority: what its first editions are evaluated under.
 	GenesisControllers []Controller
 	GenesisK           int
@@ -261,6 +279,13 @@ func (r *Resolver) Resource(id string) (*Resource, bool) {
 		res.Editions = append(res.Editions, props[eid])
 		if props[eid].State == Contested {
 			res.Contested = append(res.Contested, eid)
+		}
+		if props[eid].State != Authorized {
+			for _, a := range props[eid].Approvals {
+				if len(a.CutBy) > 0 {
+					res.CutExcluded = append(res.CutExcluded, CutExcluded{Edition: eid, State: props[eid].State, Approval: a.Statement, Grant: a.Grant, Cuts: a.CutBy})
+				}
+			}
 		}
 	}
 	res.Tips = dag.Tips(final)
@@ -526,8 +551,14 @@ func (r *Resolver) approval(p *Placed) Approval {
 		a.Subject = Controller{Identity: g.Identity}
 		switch {
 		case g.Counts:
-		case g.State == policy.ActorDenied && !cutExcluded(g.Reasons):
+		case g.State == policy.ActorDenied:
+			// A denial is a decided answer, a cut's exclusion included: the cut is the root's statement about
+			// its own delegate (profile §1), so the reader does not doubt it. Doubting it let the holder of a
+			// cut key keep a resource at exit 3 for ever.
 			a.Counted, a.Why = false, g.Why
+			if cutExcluded(g.Reasons) {
+				a.CutBy = r.cutsOf(g.Identity, a.Grant)
+			}
 		default:
 			a.Counted, a.Doubted, a.Why = false, true, g.Why
 		}
@@ -540,8 +571,8 @@ func (r *Resolver) approval(p *Placed) Approval {
 }
 
 // cutExcluded reports whether an evaluator's denial rests on a grant-history cut that leaves the statement out
-// (identity profile §4, §5.2: a cut that removes a required approval makes the edition contested, as a hard
-// revocation's last_good does for a key, claims-model note §4.1).
+// (identity profile §4). It selects the disclosure only (Approval.CutBy): the approval is not counted and not
+// doubted, like every other denial (§5.2, C-id-30).
 func cutExcluded(reasons []string) bool {
 	for _, x := range reasons {
 		if x == "cut_excluded" || strings.HasPrefix(x, "cut_excluded:") {
@@ -549,6 +580,49 @@ func cutExcluded(reasons []string) bool {
 		}
 	}
 	return false
+}
+
+// cutsOf lists the held, valid identity_cut statements that name identity and grant, sorted. It is display: the
+// evaluator has already decided that a cut excludes the approval, and this names the candidates.
+func (r *Resolver) cutsOf(identity, grant string) []string {
+	var out []string
+	for _, p := range r.byKind["identity_cut"] {
+		if p.St.Status == wire.Valid && str(p.St.Body, "identity") == identity && str(p.St.Body, "grant") == grant {
+			out = append(out, p.St.ID)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// CutEffect is what one cut leaves out of one resource: the editions that are not authorized and have an approval
+// the cut excludes, and the resource's current edition over the same evidence ("" under a FORK).
+type CutEffect struct {
+	Resource string
+	Editions []string
+	Current  string
+}
+
+// CutEffects lists, for one held cut, the resources with an edition it leaves out, by resource id.
+func (r *Resolver) CutEffects(cut string) []CutEffect {
+	var out []CutEffect
+	for _, g := range r.byKind["genesis"] {
+		res, ok := r.Resource(g.St.ID)
+		if !ok {
+			continue
+		}
+		e := CutEffect{Resource: res.ID, Current: res.Current}
+		for _, x := range res.CutExcluded {
+			if slices.Contains(x.Cuts, cut) && !slices.Contains(e.Editions, x.Edition) {
+				e.Editions = append(e.Editions, x.Edition)
+			}
+		}
+		if len(e.Editions) > 0 {
+			out = append(out, e)
+		}
+	}
+	slices.SortFunc(out, func(a, b CutEffect) int { return strings.Compare(a.Resource, b.Resource) })
+	return out
 }
 
 // by is who an approval is from, for display: its signer, and the identity it acts for when it acts for one.
@@ -773,6 +847,9 @@ func (res *Resource) Render() string {
 	}
 	if len(res.Contested) > 0 {
 		fmt.Fprintf(&b, "  contested: %s\n", shorts(res.Contested))
+	}
+	for _, x := range res.CutExcluded {
+		fmt.Fprintf(&b, "  cut excluded: approval %s of %s (%s) is left out by cut %s of grant %s\n", keylog.Short(x.Approval), keylog.Short(x.Edition), x.State, shorts(x.Cuts), keylog.Short(x.Grant))
 	}
 	for _, c := range sortedKeys(res.RevokedControllers) {
 		fmt.Fprintf(&b, "  controller %s revoked by %s\n", shortKey(c), keylog.Short(res.RevokedControllers[c]))

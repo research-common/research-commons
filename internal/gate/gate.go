@@ -162,6 +162,10 @@ const (
 	LabelActorDenied   = "actor: " + policy.ActorDenied
 	LabelActorUnknown  = "actor: " + policy.ActorUnknown
 	LabelUnpinned      = "unpinned"
+	// LabelCutEditions: an admitted identity_cut that leaves out an approval of an edition, so that the edition
+	// is not authorized over the evaluated set (identity profile §5.2, C-id-30). The moment a cut arrives is the
+	// moment a reader's view of the resource changes, and no exit shows it. A label only (I8).
+	LabelCutEditions   = "cut: editions not counted"
 	LabelUnreferenced  = "unreferenced"
 	LabelUnavailable   = "unavailable"
 	LabelNotHeldHere   = "not held here (policy)"
@@ -510,6 +514,29 @@ func Admit(gate string, pkg Package, held Held, pol *Policy, opt Options) (*Repo
 		}
 	}
 
+	// 5a. What an added cut leaves out, over the evaluated set.
+	for _, i := range cands {
+		r := &results[i]
+		// a cut the receiver already holds changes nothing in its view: the label marks the arrival
+		if r.Verdict != Admitted || r.st == nil || r.st.Kind != "identity_cut" || r.st.Status != wire.Valid || r.HasLabel(LabelAlreadyHeld) {
+			continue
+		}
+		if res == nil {
+			res = resolver(evaluated, pol)
+		}
+		var parts []string
+		for _, e := range res.CutEffects(r.ID) {
+			cur := "none (FORK)"
+			if e.Current != "" {
+				cur = keylog.Short(e.Current)
+			}
+			parts = append(parts, fmt.Sprintf("resource %s: %d edition(s) not counted (%s); current %s", keylog.Short(e.Resource), len(e.Editions), shortList(e.Editions), cur))
+		}
+		if len(parts) > 0 {
+			r.label(LabelCutEditions, strings.Join(parts, "; "))
+		}
+	}
+
 	// 6. Blob and statement availability labels, now that the evaluated set is known; and the authorship label of
 	// an admitted `authored` (LabelContested), which needs the resolver only when the package carries one.
 	contested := map[string]bool{}
@@ -825,6 +852,14 @@ func placeLabels(r *Result, v keylog.View) {
 	if len(st.Unpinned) > 0 {
 		r.label(LabelUnpinned, strings.Join(st.Unpinned, ","))
 	}
+}
+
+func shortList(ids []string) string {
+	out := make([]string, len(ids))
+	for i, id := range ids {
+		out[i] = keylog.Short(id)
+	}
+	return strings.Join(out, ", ")
 }
 
 func gapText(g keylog.Gap) string {

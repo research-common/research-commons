@@ -104,6 +104,15 @@ func (v *view) resourceObj(res *resolve.Resource, full bool) *Obj {
 	if len(res.Contested) > 0 {
 		o.set("contested", refs(res.Contested...))
 	}
+	if len(res.CutExcluded) > 0 {
+		// the disclosure in place of a failing token (identity profile §5.2, C-id-30): never changes an exit
+		cl := listV{}
+		for _, x := range res.CutExcluded {
+			cl = append(cl, newObj().set("edition", refV(x.Edition)).set("state", tokV(tok(string(x.State)))).
+				set("approval", refV(x.Approval)).set("grant", refV(x.Grant)).set("cuts", refs(x.Cuts...)))
+		}
+		o.set("cut_excluded", cl).set("cut_excluded_is", textV("approvals a grant cut leaves out: they count toward nothing, and the editions listed are not authorized; an edition restored by another approval is not listed"))
+	}
 	if res.Current != "" {
 		o.set("chain", refs(chain(res)...))
 	}

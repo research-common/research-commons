@@ -761,6 +761,9 @@ func publishCmd(c *Ctx) (*Obj, int, error) {
 	if p.kind == "rotate_key" {
 		warns = append(warns, draftRotateWarning)
 	}
+	if p.kind == "edition" {
+		warns = append(warns, predecessorWarnings(v, body)...)
+	}
 	if len(warns) > 0 {
 		out.set("warnings", texts(warns...))
 	}
@@ -926,6 +929,43 @@ const WithheldWarnBelow = 64
 
 // withheldWarning is the warning for an authored or observed body whose availability is withheld and whose
 // content is shorter than WithheldWarnBelow; "" otherwise.
+// predecessorWarnings warns when an edition names a predecessor that is not an authorized edition of its resource
+// in this store (issue #285): the new edition is then contested or an orphan for every reader holding the same
+// evidence, and the writer used to commit it silently. A warning only: another reader may hold what this store
+// lacks, so the writer does not refuse.
+func predecessorWarnings(v *view, body *canon.Object) []string {
+	rid := bodyString(body, "resource")
+	res, ok := v.r.Resource(rid)
+	if !ok {
+		return nil
+	}
+	pv, _ := body.Get("predecessors")
+	pa, _ := pv.(canon.Array)
+	var out []string
+	for _, x := range pa {
+		pid, _ := x.(canon.String)
+		if string(pid) == rid {
+			continue
+		}
+		state := "not held"
+		for _, e := range res.Editions {
+			if e.ID == string(pid) {
+				state = string(e.State)
+			}
+		}
+		if state == string(resolve.Authorized) {
+			continue
+		}
+		cur := "none (FORK)"
+		if res.Current != "" {
+			cur = res.Current
+		}
+		out = append(out, fmt.Sprintf("predecessor %s is not an authorized edition of %s in this store (%s): this edition will not be current for a reader holding the same evidence. The resource's current edition is %s",
+			string(pid), rid, state, cur))
+	}
+	return out
+}
+
 func withheldWarning(body *canon.Object) string {
 	av, ok := body.Get("availability")
 	ao, _ := av.(*canon.Object)

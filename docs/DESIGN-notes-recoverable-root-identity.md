@@ -228,8 +228,13 @@ end-to-end conformance cases when the profile is built; until then they are scen
 The whole table is in the reference model. RR-25 matters beyond theft: today one mistaken command with the root key ends a
 fixed-root identity (issue #271), and under this profile the owner can recover from it.
 
-Still to write: what a collection's reader shows after RR-28 and RR-29 (an edition that stops counting, and
-the editions built on it).
+What a collection's reader shows after RR-28 and RR-29 is the fixed-root note's rule for a cut (its §5.2,
+C-id-30), since a voided grant and a cut grant remove the same approvals: the edition is `unauthorized`, an
+edition built on it is an `orphan`, `current` is the last authorized edition, and `verify` on the resource
+passes. Nothing is `contested`, so a thief's edition under a voided grant cannot hold the collection. An owner's
+own edition that the recovery voids is restored by a delegate under a kept or new grant approving the same
+bytes. The reader's cases for this profile (the disclosure naming the recovery in place of a cut) are written
+with its evaluation.
 
 ## 7. Setting up and holding the recovery key
 
