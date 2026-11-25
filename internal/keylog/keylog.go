@@ -133,7 +133,14 @@ func (l *Log) Add(line []byte) (*wire.Statement, error) {
 	}
 	l.lines[st.ID] = st
 	l.store.owner[st.ID] = st.Signer
-	if r := l.View().refusalOf(st.ID); r != nil {
+	// Only this line's own log-relative verdict is returned, so only it is computed: relativeRule over the lines
+	// placed right now, which is what View runs for every line. Building the whole View here made delivering a
+	// log of n lines cost n Views (TestAddAgreesWithView holds the two to one answer).
+	nodes := l.lines // with nothing retained, the placed lines are exactly the verified ones (nodes)
+	if len(l.retained) > 0 {
+		nodes = l.nodes()
+	}
+	if r := l.relativeRule(st, nodes); r != nil {
 		return st, r
 	}
 	return st, nil
@@ -206,21 +213,24 @@ func (l *Log) View() View {
 	}
 
 	// Chained-ness is a fixed point: a line is chained when its prev is chained (or it is seq 0) and every
-	// merges entry is chained. Iterate to the fixed point; the graph is acyclic because seq strictly drops.
+	// merges entry is chained. One pass in seq order reaches it: a line that is not refused has its held prev
+	// at seq-1 and its held merges at lower seqs (relativeRule), so everything a line's chained-ness reads is
+	// decided before the line is. A link to a refused or unheld line is never chained, in any order.
 	chained := map[string]bool{}
-	for changed := true; changed; {
-		changed = false
-		for id, st := range nodes {
-			if chained[id] || refused[id] != nil {
-				continue
-			}
-			ok := st.Seq == 0 || chained[st.Prev]
-			for _, m := range st.Merges {
-				ok = ok && chained[m]
-			}
-			if ok {
-				chained[id], changed = true, true
-			}
+	order := make([]*wire.Statement, 0, len(nodes))
+	for id, st := range nodes {
+		if refused[id] == nil {
+			order = append(order, st)
+		}
+	}
+	slices.SortFunc(order, cmpSeqID)
+	for _, st := range order {
+		ok := st.Seq == 0 || chained[st.Prev]
+		for _, m := range st.Merges {
+			ok = ok && chained[m]
+		}
+		if ok {
+			chained[st.ID] = true
 		}
 	}
 
