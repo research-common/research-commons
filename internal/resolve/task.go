@@ -299,8 +299,8 @@ func (r *Resolver) Task(id string) (*Task, bool) {
 	}
 	mine := func(kind string) []*Placed {
 		var out []*Placed
-		for _, p := range r.byKind[kind] {
-			if p.St.Verified && p.St.Status == wire.Valid && str(p.St.Body, "task") == id {
+		for _, p := range r.named(kind, id) {
+			if p.St.Verified && p.St.Status == wire.Valid {
 				out = append(out, p)
 			}
 		}
@@ -383,8 +383,18 @@ func (r *Resolver) earlier(w *wire.Statement, cur string) bool {
 
 // grants reads every held statement through the reader's GrantReader and keeps the grants naming this task.
 func (r *Resolver) grants(t *Task, bind func(string) Binding) {
-	for _, k := range sortedKeys(r.byKind) {
-		for _, p := range r.byKind[k] {
+	kinds := sortedKeys(r.byKind)
+	_, noReader := r.exch.grants.(NoGrantReader)
+	if noReader {
+		// with no grant reading plugged in, only the wire kind can be a grant, and only one naming this task is kept
+		kinds = []string{"grant"}
+	}
+	for _, k := range kinds {
+		all := r.byKind[k]
+		if noReader {
+			all = r.named("grant", t.ID)
+		}
+		for _, p := range all {
 			if !p.EvidenceReady() {
 				continue
 			}
@@ -591,7 +601,29 @@ func (r *Resolver) refutations(t *Task, bind func(string) Binding) {
 			}
 		}
 	}
-	for _, p := range r.byKind["refutes"] {
+	// Only a refutation bound to this task, or naming one of its submissions or a claim of a submitted result,
+	// is read below; the rest of the store's refutations are not looked at. They are visited in the order the
+	// walk over every refutation visited them (place), which the order of s.Refuted follows.
+	cand := map[*Placed]bool{}
+	for _, p := range r.byLink["refutes"]["task:"+t.ID] {
+		cand[p] = true
+	}
+	for id := range subs {
+		for _, p := range r.byLink["refutes"]["of:"+id] {
+			cand[p] = true
+		}
+	}
+	for id := range claimOf {
+		for _, p := range r.byLink["refutes"]["of:"+id] {
+			cand[p] = true
+		}
+	}
+	ordered := make([]*Placed, 0, len(cand))
+	for p := range cand {
+		ordered = append(ordered, p)
+	}
+	slices.SortFunc(ordered, func(a, b *Placed) int { return r.place[a] - r.place[b] })
+	for _, p := range ordered {
 		if !p.EvidenceReady() {
 			continue
 		}

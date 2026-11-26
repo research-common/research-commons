@@ -858,7 +858,7 @@ func (r *Resolver) revision(o *Observation, st *wire.Statement) string {
 	if o.Class == "exact-bytes" {
 		return ""
 	}
-	for _, q := range r.byKind["observed"] {
+	for _, q := range r.byReferent[referentKey(st)] {
 		if !r.counts(q) || q.St.ID == st.ID || contentDigest(q.St.Body) == o.Digest || !sameReferent(st, q.St) {
 			continue
 		}
@@ -974,14 +974,11 @@ func (r *Resolver) comparability(o *Observation, st *wire.Statement) {
 	ed := str(ref, "method_edition")
 	d := r.methodDecl(ed)
 	mine := pinnedKeys(object(ref, "system"))
-	for _, q := range r.byKind["observed"] {
-		if !r.counts(q) || q.St.ID == st.ID || str(q.St.Body, "class") != "method" {
+	for _, q := range r.byMethod[ed] {
+		if !r.counts(q) || q.St.ID == st.ID {
 			continue
 		}
 		qr := object(q.St.Body, "referent")
-		if str(qr, "method_edition") != ed {
-			continue
-		}
 		_, qUnpinned, _ := r.methodPins(q.St)
 		c := Comparability{With: q.St.ID, WithSigner: q.St.Signer, EditionUnread: d.Unread}
 		if len(o.Unpinned)+len(qUnpinned) > 0 {

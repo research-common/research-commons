@@ -48,6 +48,23 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   the same two stores take about 5 s and 6 s, which is the cost of reading the store at all. No output, verdict,
   id or byte changes. Not examined: stores dominated by observations with corroboration, tasks with many
   submissions, and collections with many members.
+- The remaining whole-store walks in the resolver, found by measuring one store shape per kind of statement
+  (#291). Each of these cost the square of the store, or worse, and is now linear in it:
+  - every "does this line precede that one" question walked the signer's whole log (claims and amendments, anchor
+    coverage, submissions). A key's chained lines are now numbered once, and the question is two comparisons;
+  - a statement's time bound and its covering anchors read every `anchors` line in the store, and put each
+    covering line to the time verifier again for every statement it covers. They now read the signer's own
+    `anchors` lines, and a line is verified once per command;
+  - a collection or task with a long chain of editions re-evaluated every open edition in every round;
+  - observations read every other observation to find captures of the same referent, the same method edition,
+    and corroborations naming them;
+  - a task read every `submit`, `decide`, `intent`, `progress`, `withdraw`, `grant` and `refutes` in the store,
+    and every `authored` and `observed` for a `fulfills` naming it.
+
+  1,600 statements with an anchor every ten lines: all time bounds took 4.6 s, now 40 ms. A chain of 1,600
+  editions: 490 ms, now 10 ms. No output, verdict, id or byte changes. Two walks stay proportional to the size
+  of their own answer and are not changed: the pairwise comparability of method observations under one method
+  edition, and the anchors covering a statement when a log holds very many of them.
 
 - `package show`, `key sign --package` and `<command> --complete` refuse an `rc-signing-package/1` package whose envelope
   is not one of the four actions the format carries (an identity's inception, grant or cut, or an act for an identity),

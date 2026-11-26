@@ -107,14 +107,11 @@ func (b Binding) v1() bool { return b.ok() && b.Terms.Profile == TaskContractV1P
 // only). An `authored` an amendment of its signer replaced is no submission: its current claim is read.
 func (r *Resolver) fulfillsSubmissions(t *Task, bind func(string) Binding) {
 	for _, kind := range []string{"authored", "observed"} {
-		for _, p := range r.byKind[kind] {
+		for _, p := range r.byLink[kind]["fulfills:"+t.ID] {
 			if !p.EvidenceReady() {
 				continue
 			}
 			f := object(p.St.Body, "fulfills")
-			if f == nil || str(f, "resource") != t.ID {
-				continue
-			}
 			ed := str(f, "edition")
 			bd := bind(ed)
 			if bd.State == "not held" || bd.State == "genesis" || (bd.Terms != nil && bd.Terms.Provisional) {
@@ -138,8 +135,8 @@ func (r *Resolver) fulfillsSubmissions(t *Task, bind func(string) Binding) {
 func (r *Resolver) amendedBy(p *Placed) string {
 	d := contentDigest(p.St.Body)
 	best := ""
-	for _, q := range r.byKind["authored"] {
-		if q.St.Signer == p.St.Signer && r.countsAsKey(q) && contentDigest(q.St.Body) == d && r.precedes(p.St.Signer, p.St.ID, q.St.ID) && (best == "" || q.St.ID < best) {
+	for _, q := range r.on("authored", d) {
+		if q.St.Signer == p.St.Signer && r.countsAsKey(q) && r.precedes(p.St.Signer, p.St.ID, q.St.ID) && (best == "" || q.St.ID < best) {
 			best = q.St.ID
 		}
 	}
@@ -176,8 +173,8 @@ func (r *Resolver) v1Conditions(t *Task, bind func(string) Binding) {
 		if tm.Pins != nil {
 			c.Pins, c.PinsWhy = pinsCheck(tm.Pins, recs)
 		}
-		for _, q := range r.byKind["retracts"] {
-			if r.gate(q).Counts && str(q.St.Body, "of") == s.Statement {
+		for _, q := range r.named("retracts", s.Statement) {
+			if r.gate(q).Counts {
 				c.Retracted = append(c.Retracted, q.St.ID)
 			}
 		}
@@ -353,8 +350,8 @@ func (r *Resolver) deadlineStatements(s *Submission, p *Placed) (sts []*Placed, 
 	switch s.Kind {
 	case "submit":
 		sts = append(sts, p)
-		for _, q := range r.byKind["authored"] {
-			if q.St.Signer == s.Signer && r.countsAsKey(q) && contentDigest(q.St.Body) == s.Result &&
+		for _, q := range r.on("authored", s.Result) {
+			if q.St.Signer == s.Signer && r.countsAsKey(q) &&
 				str(object(q.St.Body, "availability"), "redistribution") == "withheld" {
 				sts = append(sts, q)
 				commitments = append(commitments, q.St.ID)
@@ -364,8 +361,8 @@ func (r *Resolver) deadlineStatements(s *Submission, p *Placed) (sts []*Placed, 
 		sts = append(sts, p)
 	case "authored":
 		var chain []*Placed
-		for _, q := range r.byKind["authored"] {
-			if q.St.Signer == s.Signer && r.countsAsKey(q) && contentDigest(q.St.Body) == s.Result && (q == p || r.precedes(s.Signer, q.St.ID, p.St.ID)) {
+		for _, q := range r.on("authored", s.Result) {
+			if q.St.Signer == s.Signer && r.countsAsKey(q) && (q == p || r.precedes(s.Signer, q.St.ID, p.St.ID)) {
 				chain = append(chain, q)
 			}
 		}
@@ -456,8 +453,8 @@ func (r *Resolver) resultRecords(s *Submission, p *Placed) []*Placed {
 	}
 	var out []*Placed
 	for _, k := range []string{"authored", "observed"} {
-		for _, q := range r.byKind[k] {
-			if q.EvidenceReady() && contentDigest(q.St.Body) == s.Result {
+		for _, q := range r.on(k, s.Result) {
+			if q.EvidenceReady() {
 				out = append(out, q)
 			}
 		}
@@ -792,8 +789,8 @@ func (s *Submission) renderV1(b *strings.Builder) {
 func (r *Resolver) FulfillsDropWarning(signer, d string, body *canon.Object) string {
 	nf := object(body, "fulfills")
 	var lost []string
-	for _, p := range r.byKind["authored"] {
-		if p.St.Signer != signer || !r.countsAsKey(p) || contentDigest(p.St.Body) != d || r.amendedBy(p) != "" {
+	for _, p := range r.on("authored", d) {
+		if p.St.Signer != signer || !r.countsAsKey(p) || r.amendedBy(p) != "" {
 			continue
 		}
 		f := object(p.St.Body, "fulfills")

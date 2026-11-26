@@ -228,11 +228,8 @@ func (r *Resolver) corroborate(o *Observation, st *wire.Statement, full bool) *C
 		c.Why = "referent unpinned (" + strings.Join(o.Unpinned, ", ") + "): no class-specific agreement model applied"
 	}
 	// corroborates statements about this observation
-	for _, p := range r.byKind["corroborates"] {
+	for _, p := range r.named("corroborates", st.ID) {
 		// A type-checked of associates retained evidence only. It grants no body semantics.
-		if str(p.St.Body, "of") != st.ID {
-			continue
-		}
 		if !p.St.Verified || p.St.Status != wire.Valid {
 			c.Evidence = append(c.Evidence, Evidence{Key: p.St.Signer, Statement: p.St.ID, Via: "corroborates",
 				Origins: r.originsOf(p.St.ID), Cause: "counts toward nothing: " + r.gate(p).Why + "; " + uninterpretedBodyWhy(p.St)})
@@ -302,7 +299,7 @@ func (r *Resolver) corroborate(o *Observation, st *wire.Statement, full bool) *C
 // its comparison data is a disagreement between the two, and counts against both. The tool does not decide which
 // side is wrong (§6). Supports is not mirrored: a check against comparison data says nothing about that data.
 func (r *Resolver) symmetric(c *Corroboration, o *Observation, st *wire.Statement) {
-	for _, p := range r.byKind["corroborates"] {
+	for _, p := range r.byComparison[o.Digest] {
 		b := p.St.Body
 		if !r.gate(p).Counts || str(b, "of") == st.ID || str(b, "verdict") != "contradicts" {
 			continue
@@ -324,7 +321,7 @@ func (r *Resolver) symmetric(c *Corroboration, o *Observation, st *wire.Statemen
 // the reader's finality-aware comparison of captures with different bytes.
 func (r *Resolver) recaptures(c *Corroboration, o *Observation, st *wire.Statement) {
 	myCapture := string(canon.Encode(object(st.Body, "capture")))
-	for _, q := range r.byKind["observed"] {
+	for _, q := range r.byReferent[referentKey(st)] {
 		if !r.gate(q).Counts || q.St.ID == st.ID || !sameReferent(st, q.St) {
 			continue
 		}
@@ -505,18 +502,15 @@ func (r *Resolver) corroborationDetail(e *Evidence, o *Observation) {
 func (r *Resolver) heldAbout(st *wire.Statement) []string {
 	var out []string
 	for _, kind := range []string{"describes", "refutes", "retracts"} {
-		for _, p := range r.byKind[kind] {
+		link := "of:" + st.ID
+		if kind == "describes" {
+			link = "statement:" + st.ID
+		}
+		for _, p := range r.byLink[kind][link] {
 			if !p.Evaluable {
 				continue
 			}
 			b := p.St.Body
-			about := str(b, "of")
-			if kind == "describes" {
-				about = str(object(b, "about"), "statement")
-			}
-			if about != st.ID {
-				continue
-			}
 			line := fmt.Sprintf("held %s %s by %s", kind, keylog.Short(p.St.ID), shortKey(p.St.Signer))
 			switch {
 			case kind == "retracts" && p.St.Signer == st.Signer:

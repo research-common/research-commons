@@ -150,12 +150,37 @@ func fromProof(b Bound) bool {
 
 // anchorBound is the bound anchor a yields, and false when it yields none: an anchor on an incoherent line yields
 // only a bound its proof places.
+//
+// The verifier is asked once per anchors line per snapshot. An anchors line covers every line before it in its
+// signer's log, so asking again for each covered statement made reading n statements under m anchors cost n*m
+// proof verifications. The resolver is one snapshot (New): the verifier's answer for a line does not change
+// within it, as a comparator's does not (cmpRuns).
 func (r *Resolver) anchorBound(a *Placed) (Bound, bool) {
-	b := r.time.Verify(a.St)
-	if a.Incoherent && !fromProof(b) {
-		return Bound{}, false
+	r.timeMu.Lock()
+	v, ok := r.anchorBounds[a.St.ID]
+	r.timeMu.Unlock()
+	if ok {
+		return v.b, v.ok
 	}
-	return b, true
+	// the verifier runs outside the lock, as the comparator does (group.go): two readers may both ask once
+	v = anchorVerdict{ok: true}
+	v.b = r.time.Verify(a.St)
+	if a.Incoherent && !fromProof(v.b) {
+		v = anchorVerdict{}
+	}
+	r.timeMu.Lock()
+	if r.anchorBounds == nil {
+		r.anchorBounds = map[string]anchorVerdict{}
+	}
+	r.anchorBounds[a.St.ID] = v
+	r.timeMu.Unlock()
+	return v.b, v.ok
+}
+
+// anchorVerdict is anchorBound's answer for one anchors line.
+type anchorVerdict struct {
+	b  Bound
+	ok bool
 }
 
 // bounds is every bound the reader derives for statement st from the counting anchors of st's signer whose

@@ -238,68 +238,8 @@ func (r *Resolver) Resource(id string) (*Resource, bool) {
 	genAuth, _ := authorityOf(g.St.Body, majorOf(g.St))
 	res.GenesisControllers, res.GenesisK = genAuth.controllers, genAuth.k
 
-	// Group approvals by raw body. A string resource field associates retained evidence for display only;
-	// unsupported bodies have not passed the kind's schema and must not supply members or predecessor links.
-	props := map[string]*Edition{}
-	understood := map[string]bool{} // at least one verified, valid approval has schema-checked this exact body
-	alias := map[string]string{}    // approval statement id -> edition id
-	for _, p := range r.byKind["edition"] {
-		if str(p.St.Body, "resource") != id {
-			continue
-		}
-		eid := EditionIDOf(p.St)
-		e, ok := props[eid]
-		if !ok {
-			e = &Edition{ID: eid, Resource: id, Body: p.St.Body}
-			props[eid] = e
-		}
-		// Schema validity is separate from chaining: well-formed detached proposals keep their display,
-		// but no approval counts until it is evaluable and its signer's key events let it count.
-		if p.St.Verified && p.St.Status == wire.Valid {
-			understood[eid] = true
-			e.Major = majorOf(p.St)
-		}
-		alias[p.St.ID] = eid
-		e.Approvals = append(e.Approvals, r.approval(p))
-	}
-	// Predecessors are edition ids (or the genesis id) as written: a statement id names no edition (§3).
-	for _, e := range props {
-		slices.SortFunc(e.Approvals, func(a, b Approval) int {
-			return strings.Compare(a.Signer+a.Statement, b.Signer+b.Statement)
-		})
-		if !understood[e.ID] {
-			e.Major = 0
-		}
-		if !understood[e.ID] {
-			continue
-		}
-		if c, ok := e.Body.Get("contents"); ok {
-			if m, ok := c.(*canon.Object).Get("members"); ok {
-				e.Members = m.(canon.Array)
-			}
-		}
-		e.Predecessors = ids(e.Body, "predecessors")
-		slices.Sort(e.Predecessors)
-		e.Predecessors = slices.Compact(e.Predecessors)
-	}
-
-	// Authorization is a fixed point: a proposal can become an edition only once every predecessor is the
-	// genesis or an edition. Predecessor links go strictly backwards in the set of held bodies (a body names its
-	// predecessors' ids, which are hashes over their bodies), so there are no cycles and this terminates.
-	auth := map[string]authority{id: genAuth}
-	contested := map[string]authority{} // the authority a contested edition would have
-	for changed := true; changed; {
-		changed = false
-		for _, eid := range sortedKeys(props) {
-			e := props[eid]
-			if e.State == Authorized || e.State == Invalid || e.State == Contested {
-				continue
-			}
-			if r.evaluate(e, auth, contested, props, alias) {
-				changed = true
-			}
-		}
-	}
+	props, alias := r.proposals(id)
+	auth, _ := r.authorize(id, genAuth, props, alias)
 
 	graph := func() map[string]dag.Node {
 		g := map[string]dag.Node{id: {}}
@@ -341,6 +281,117 @@ func (r *Resolver) Resource(id string) (*Resource, bool) {
 		res.NoController = usable < cur.k
 	}
 	return res, true
+}
+
+// proposals groups the held approvals of resource id by edition body: every proposed edition with its approvals,
+// members and predecessors, not yet decided (authorize), and the edition each approval statement approves.
+//
+// Group approvals by raw body. A string resource field associates retained evidence for display only;
+// unsupported bodies have not passed the kind's schema and must not supply members or predecessor links.
+func (r *Resolver) proposals(id string) (props map[string]*Edition, alias map[string]string) {
+	props = map[string]*Edition{}
+	understood := map[string]bool{} // at least one verified, valid approval has schema-checked this exact body
+	alias = map[string]string{}     // approval statement id -> edition id
+	for _, p := range r.named("edition", id) {
+		eid := EditionIDOf(p.St)
+		e, ok := props[eid]
+		if !ok {
+			e = &Edition{ID: eid, Resource: id, Body: p.St.Body}
+			props[eid] = e
+		}
+		// Schema validity is separate from chaining: well-formed detached proposals keep their display,
+		// but no approval counts until it is evaluable and its signer's key events let it count.
+		if p.St.Verified && p.St.Status == wire.Valid {
+			understood[eid] = true
+			e.Major = majorOf(p.St)
+		}
+		alias[p.St.ID] = eid
+		e.Approvals = append(e.Approvals, r.approval(p))
+	}
+	// Predecessors are edition ids (or the genesis id) as written: a statement id names no edition (§3).
+	for _, e := range props {
+		slices.SortFunc(e.Approvals, func(a, b Approval) int {
+			return strings.Compare(a.Signer+a.Statement, b.Signer+b.Statement)
+		})
+		if !understood[e.ID] {
+			e.Major = 0
+		}
+		if !understood[e.ID] {
+			continue
+		}
+		if c, ok := e.Body.Get("contents"); ok {
+			if m, ok := c.(*canon.Object).Get("members"); ok {
+				e.Members = m.(canon.Array)
+			}
+		}
+		e.Predecessors = ids(e.Body, "predecessors")
+		slices.Sort(e.Predecessors)
+		e.Predecessors = slices.Compact(e.Predecessors)
+	}
+	return props, alias
+}
+
+// authorize decides every proposal of resource id: it sets each one's state and explanation and returns the
+// authority of each edition, and the authority each contested edition would have.
+//
+// Authorization is a fixed point: a proposal can become an edition only once every predecessor is the
+// genesis or an edition. Predecessor links go strictly backwards in the set of held bodies (a body names its
+// predecessors' ids, which are hashes over their bodies), so there are no cycles and this terminates.
+//
+// It runs in rounds. A round evaluates the open proposals in id order against the authority map as it finds
+// it, and the rounds stop after the first in which no proposal reached a terminal state. An evaluation reads
+// only the proposal's own approvals and, for each predecessor, its authority entries and its state (the
+// state is quoted in the explanation of a predecessor that is not an edition). So an evaluation whose
+// predecessors have not changed since the proposal was last evaluated would write what is already there,
+// and is skipped: a round evaluates the proposals one of whose predecessors changed, and the rest keep their
+// last result. Evaluating every open proposal in every round made a chain of n editions cost n rounds of n.
+func (r *Resolver) authorize(id string, genAuth authority, props map[string]*Edition, alias map[string]string) (auth, contested map[string]authority) {
+	auth = map[string]authority{id: genAuth}
+	contested = map[string]authority{}  // the authority a contested edition would have
+	successors := map[string][]string{} // predecessor id -> the proposals naming it
+	due := map[string]bool{}            // the proposals to evaluate in the coming round
+	for eid, e := range props {
+		due[eid] = true
+		for _, p := range e.Predecessors {
+			successors[p] = append(successors[p], eid)
+		}
+	}
+	for {
+		round := sortedKeys(due)
+		next := map[string]bool{}
+		terminal := false
+		for i := 0; i < len(round); i++ {
+			eid := round[i]
+			e := props[eid]
+			if e.State == Authorized || e.State == Invalid || e.State == Contested {
+				continue
+			}
+			before := e.State
+			if r.evaluate(e, auth, contested, props, alias) {
+				terminal = true
+			}
+			if e.State == before {
+				continue // nothing a successor reads has changed
+			}
+			// its successors are evaluated again: one later in id order in this round, after this proposal (a
+			// full sweep would reach it there and see the new state); one earlier in the next round, if any
+			for _, s := range successors[eid] {
+				switch {
+				case s < eid:
+					next[s] = true
+				case !due[s]:
+					due[s] = true
+					at, _ := slices.BinarySearch(round[i+1:], s)
+					round = slices.Insert(round, i+1+at, s)
+				}
+			}
+		}
+		if !terminal {
+			break
+		}
+		due = next
+	}
+	return auth, contested
 }
 
 // evaluate decides one proposal against the authority map. It returns true when the proposal reached a
@@ -526,8 +577,8 @@ func (r *Resolver) withdraw(e *Edition, resource string, auth map[string]authori
 	type ctx struct{ signer, grant string }
 	var ws []*Placed
 	wctx := map[string]ctx{}
-	for _, p := range r.byKind["withdraw_approval"] {
-		if str(p.St.Body, "edition") != e.ID || str(p.St.Body, "resource") != resource {
+	for _, p := range r.named("withdraw_approval", resource) {
+		if str(p.St.Body, "edition") != e.ID {
 			continue
 		}
 		switch {

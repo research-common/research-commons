@@ -5,7 +5,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/research-common/research-commons/internal/canon"
 )
@@ -238,29 +237,18 @@ func TestEveryBlobCostIsLinear(t *testing.T) {
 		t.Skip("signs a few thousand statements")
 	}
 	const keys, small, factor = 40, 10, 4
-	walk := func(r *Resolver, ds []string) time.Duration {
-		best := time.Duration(0)
-		for try := 0; try < 3; try++ { // the best of three: a pause on a busy machine is not a slope
-			start := time.Now()
+	walk := func(r *Resolver, ds []string) func() {
+		return func() {
 			for _, d := range ds {
 				if a := r.Artifact(d); len(a.Claims) != 1 || len(a.Holders) != 1 || len(a.Held) != 1 {
 					t.Fatalf("blob %s: %d claims, %d holders, %d held", d, len(a.Claims), len(a.Holders), len(a.Held))
 				}
 			}
-			if d := time.Since(start); try == 0 || d < best {
-				best = d
-			}
 		}
-		return best
 	}
 	rs, ds := manyBlobs(t, keys, small)
 	rl, dl := manyBlobs(t, keys, small*factor)
-	dSmall, dLarge := walk(rs, ds), walk(rl, dl)
-	ratio := float64(dLarge) / float64(dSmall)
-	t.Logf("%d blobs %s, %d blobs %s: %.1f times", len(ds), dSmall, len(dl), dLarge, ratio)
-	if ratio > 2.5*factor {
-		t.Fatalf("%d blobs took %s and %d blobs took %s (%.1f times): asking about every blob is not linear in the store", len(ds), dSmall, len(dl), dLarge, ratio)
-	}
+	wantLinear(t, factor, walk(rs, ds), walk(rl, dl))
 }
 
 // BenchmarkEveryBlob asks about every blob of a store once: the resolver's share of `list`.

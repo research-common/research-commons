@@ -21,12 +21,9 @@ func (r *Resolver) CoveringAnchors(id string) []string {
 	}
 	signer := p.St.Signer
 	var out []string
-	for _, a := range r.byKind["anchors"] {
-		if a.St.Signer != signer {
-			continue
-		}
+	for _, a := range r.by("anchors", signer) {
 		cov := str(a.St.Body, "covered")
-		if cov == "" || !r.precedes(signer, cov, a.St.ID) || !closure(cov, r.chained[signer])[id] {
+		if cov == "" || !r.precedes(signer, cov, a.St.ID) || !r.inHistory(signer, cov, id) {
 			continue
 		}
 		out = append(out, a.St.ID)
