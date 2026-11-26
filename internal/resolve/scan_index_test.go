@@ -609,8 +609,10 @@ type costShape struct {
 }
 
 func costShapes() []costShape {
-	const keys = 20
-	key := func(i int) string { return fmt.Sprintf("K%02da", i%keys) }
+	// Odd-length names are Ed25519 keys (testKey): cheap to sign and verify, so a store can be large enough for
+	// a quadratic walk to dominate what is measured. Many keys keep each log short.
+	const keys = 64
+	key := func(i int) string { return fmt.Sprintf("K%04d", i%keys) }
 	return []costShape{
 		{"observations, 8 captures per referent", func(t *testing.T, n int) func() {
 			w := newWorld(t)
@@ -641,6 +643,67 @@ func costShapes() []costShape {
 			return func() {
 				for _, d := range ds {
 					_ = r.Observations(d)
+				}
+			}
+		}},
+		{"provisional source captures under a finality rule, 2 per referent", func(t *testing.T, n int) func() {
+			w := newWorld(t)
+			var ds []string
+			for i := 0; i < n; i++ {
+				x := fmt.Sprintf("o%d", i)
+				// the second capture of each referent is at a later state, with other bytes: the first is revised
+				state, at := "SF", "2026-10-16T00:00:00Z"
+				if i%2 == 1 {
+					state, at = "SF+1", "2026-10-17T00:00:00Z"
+				}
+				w.observed("o-"+x, key(i), x, "source", apiRef(fmt.Sprintf("https://api.example/settle/%d", i/2)), "finality", runFinality(state), "at", at)
+				ds = append(ds, dig(x))
+			}
+			r := w.store(nil, WithFinalityRules(settlementRules{}))
+			return func() {
+				revised := 0
+				for _, d := range ds {
+					for _, o := range r.Observations(d) {
+						if strings.HasPrefix(o.ReferentStatus, RefRevised) {
+							revised++
+						}
+					}
+				}
+				if revised == 0 {
+					t.Fatal("no capture read as revised: the shape no longer reaches the revision walk")
+				}
+			}
+		}},
+		{"observations, each named by a corroborates of its own", func(t *testing.T, n int) func() {
+			w := newWorld(t)
+			var ds []string
+			for i := 0; i < n; i++ { // n observations and 2n corroborates: the walk over them is what is measured
+				x := fmt.Sprintf("o%d", i)
+				id := w.observed("o-"+x, key(i), x, "source", apiRef("https://api.example/"+x))
+				w.corroborates("c1-"+x, key(i+1), id, id, "supports")
+				w.corroborates("c2-"+x, key(i+2), id, id, "supports")
+				ds = append(ds, dig(x))
+			}
+			r := w.store(nil)
+			return func() {
+				for _, d := range ds {
+					_ = r.Observations(d)
+				}
+			}
+		}},
+		{"derived blobs in a store holding as many refutations", func(t *testing.T, n int) func() {
+			w := newWorld(t)
+			var ds []string
+			for i := 0; i < n; i++ {
+				x := fmt.Sprintf("b%d", i)
+				a := w.authored("a-"+x, key(i), x, "prov", []string{"WF", "in-" + x})
+				w.sign("f-"+x, key(i+1), "refutes", obj("of", a, "evidence", dig("ev-"+x)))
+				ds = append(ds, dig(x))
+			}
+			r := w.store(nil)
+			return func() {
+				for _, d := range ds {
+					_ = r.Artifact(d)
 				}
 			}
 		}},
@@ -719,7 +782,7 @@ func costShapes() []costShape {
 			w := newWorld(t)
 			var ids []string
 			for k := 0; k < n/8; k++ {
-				name := fmt.Sprintf("N%04da", k)
+				name := fmt.Sprintf("N%04d", k)
 				for i := 0; i < 7; i++ {
 					x := fmt.Sprintf("b%d-%d", k, i)
 					ids = append(ids, w.authored("a-"+x, name, x))
@@ -758,7 +821,7 @@ func costShapes() []costShape {
 			w := newWorld(t)
 			var ids []string
 			for i := 0; i < n; i++ {
-				k := fmt.Sprintf("K%02da", i%4)
+				k := fmt.Sprintf("K%04d", i%4)
 				x := fmt.Sprintf("b%d", i)
 				ids = append(ids, w.authored("a-"+x, k, x))
 				if i%(n/8) == n/8-1 {
@@ -796,8 +859,10 @@ func costRatio(small, large func()) (dSmall, dLarge time.Duration, ratio float64
 }
 
 // wantLinear fails when a walk over a store factor times the size costs more than 2.5*factor times as much, in
-// each of three measurements. A quadratic walk costs factor squared every time; one slow measurement on a busy
-// machine is not a quadratic walk, so a single measurement within the bound passes.
+// each of three measurements. A quadratic walk costs up to factor squared every time; one slow measurement on a
+// busy machine is not a quadratic walk, so a single measurement within the bound passes. The sizes must be far
+// enough apart, and the stores large enough, for the walk under test to dominate the fixed work around it: at
+// a factor of 4 over a few hundred statements a quadratic walk measured between 9 and 11 times, on the bound.
 func wantLinear(t *testing.T, factor int, small, large func()) {
 	t.Helper()
 	var seen []string
@@ -813,13 +878,13 @@ func wantLinear(t *testing.T, factor int, small, large func()) {
 }
 
 // TestReadCostIsLinear: for each store shape the read-cost audit found superlinear (#291), the questions a
-// command asks of a store four times the size cost well under the sixteen times of a quadratic walk. Two sizes
-// are compared, so the test does not depend on the machine. Building the stores is not timed.
+// command asks of a store eight times the size cost well under the sixty-four times of a quadratic walk. Two
+// sizes are compared, so the test does not depend on the machine. Building the stores is not timed.
 func TestReadCostIsLinear(t *testing.T) {
 	if testing.Short() {
 		t.Skip("signs several thousand statements")
 	}
-	const small, factor = 320, 4
+	const small, factor = 200, 8
 	for _, s := range costShapes() {
 		t.Run(s.name, func(t *testing.T) {
 			wantLinear(t, factor, s.build(t, small), s.build(t, small*factor))
