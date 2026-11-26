@@ -119,13 +119,18 @@ pull gate's trust floor over the store plus the package; `Resolver.Counted` is t
 
 Every case id in `docs/CONFORMANCE.md`, and in the profile notes listed in `conformance.ProfileNotes` (today the
 bitcoin-time note's §14 and the fixed-root identity note's §10), is a subtest of `TestConformanceCases`.
-The report counts each profile on its own line; the `id` line belongs to a profile whose reader is active and whose
-writer is not, so quote it separately from the totals of the other profiles. Each id is defined in exactly one table; a note
+The report counts each profile on its own line. Each id is defined in exactly one table; a note
 restating a case defined elsewhere writes its id in backticks. A test declares what it checks:
 
 - `conformance.Covers(t, "C-core-105")`: this test checks the case's whole required outcome. The case passes.
 - `conformance.Partial(t, "C-core-12", "what is still unchecked")`: this test checks part of it, usually the
   layers built so far. The case stays skipped, and the report names both the test and what remains.
+
+The `note` column of a case row is read too (`pins.go`). `TestNoteColumnPins` fails when a row names a section,
+invariant or worked example the named note lacks, or quotes words the named section does not contain; the
+column's grammar is in CONFORMANCE.md under "Core and profiles". `TestCoverageTables` fails when the Coverage
+tables of CONFORMANCE.md are not the ones the rows generate; `RC_UPDATE_DOCS=1 go test -run TestCoverageTables
+./internal/conformance` rewrites them. A note a row cites must be listed in `conformance.NoteDocs`.
 
 Cases nobody declares are skipped as pending. A declaration naming an id no case document defines fails
 the build. The scan is static, so arguments must be string literals.

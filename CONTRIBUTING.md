@@ -58,6 +58,27 @@ The tool is at **1.0.0-rc.1**, a release candidate. The format is frozen, and th
 4. **Documentation in the same change.** If you alter a command's behaviour,
    update `README.md` and the relevant `docs/` file in the same commit.
 
+### Conformance cases
+
+The design notes in `docs/` say what must hold. `docs/CONFORMANCE.md` (and the case tables of the bitcoin-time
+and fixed-root identity notes) turn that into numbered cases, and each case is passed by a test that declares
+it. A change to behaviour travels the same way:
+
+1. **The note first.** If the change alters what the tool must do, the design note changes in the same PR. When a
+   case and its note disagree, the note wins and the case is wrong.
+2. **A case.** Add a row, or extend one, naming the section or invariant it pins in the `note` column. An id is
+   never renumbered or reused; a case added between two others takes a letter (`C-core-104a`). A quotation in
+   the `note` column must be the note's own words.
+3. **A test that declares it.** `conformance.Covers(t, "C-core-105")` in a test that checks the case's whole
+   required outcome; `conformance.Partial(t, id, "what is left")` when it checks part. A `Covers` is a claim a
+   reviewer reads against the row: nothing else checks that the test asserts the outcome.
+4. **The coverage tables.** `RC_UPDATE_DOCS=1 go test -run TestCoverageTables ./internal/conformance` rewrites the
+   index at the end of CONFORMANCE.md from the rows. Do not edit it by hand.
+5. **The changelog**, under `[Unreleased]`.
+
+`go test -run TestConformanceCases -v ./internal/conformance` prints every case with the test that covers it and
+a count per profile. `internal/README.md` ("How tests map to CONFORMANCE.md") has the details.
+
 ### What CI runs (Go implementation, `next`)
 
 `.github/workflows/go.yml` runs on pull requests into `next` (and into the stacked `stage3/*` branches) and on

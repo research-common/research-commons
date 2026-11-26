@@ -694,45 +694,45 @@ specified; the implementation still has to meet it.
 
 | Case | Before this note | With `task-contract-v1` |
 |---|---|---|
-| C-exch-01 | no term needed | unchanged; TC3 restates it |
-| C-exch-02 | the deadline it mentions had no meaning | unblocked: a deadline never expires an intent or extends anything (§4.3) |
-| C-exch-03 | no grant kind; no coordinator field | unblocked by `coordinator` and `grant` (§3.1, §4.1) |
-| C-exch-04, C-exch-05 | beneficiary unreadable | unblocked by `beneficiary` (§3.1) and §5.8 |
-| C-exch-06 | "no quorum" undefined | unblocked: absent `quorum` (§3.1) |
-| C-exch-07 | deadline has no clock | unblocked by §4.3, TC2 |
-| C-exch-08 | per-criterion only; task granularity undefined | unblocked by §5.5, §5.6 |
-| C-exch-09 | independence term unreadable; commit-reveal construction undefined | terms unblocked (§5.4); generator (b) waits on §6 Q4 |
-| C-exch-10 | eligible issuers unreadable | eligibility unblocked; the verifier is an attestation-note matter |
-| C-exch-11 | independence term unreadable | unblocked by `self-declared-accepted` (§5.4) |
-| C-exch-12, C-exch-14 | grouping rule unreadable | unblocked by `quorum.grouping` (§5.2); collecting tasks pinned by C-exch-12a |
-| C-exch-13 | estimand and test unreadable | fields unblocked; the test itself is a comparison-dialect matter |
-| C-exch-15, C-exch-16 | a `fulfills` statement is displayed, never counted | display unchanged; the statement is also a submission of the edition it names (§5.1), pinned by C-exch-15a |
-| C-exch-17 | declared sampling unreadable | unblocked by `sampling` (§3.1) |
-| C-exch-18 | a refutation cannot name a task | unblocked by §4.2 |
-| C-exch-19, C-exch-20 | counts named, not defined | waits on §6 Q5 |
-| C-btc-19 | no term needed | unchanged; §5.4 and §6 Q4 restate it |
+| `C-exch-01` | no term needed | unchanged; TC3 restates it |
+| `C-exch-02` | the deadline it mentions had no meaning | unblocked: a deadline never expires an intent or extends anything (§4.3) |
+| `C-exch-03` | no grant kind; no coordinator field | unblocked by `coordinator` and `grant` (§3.1, §4.1) |
+| `C-exch-04`, `C-exch-05` | beneficiary unreadable | unblocked by `beneficiary` (§3.1) and §5.8 |
+| `C-exch-06` | "no quorum" undefined | unblocked: absent `quorum` (§3.1) |
+| `C-exch-07` | deadline has no clock | unblocked by §4.3, TC2 |
+| `C-exch-08` | per-criterion only; task granularity undefined | unblocked by §5.5, §5.6 |
+| `C-exch-09` | independence term unreadable; commit-reveal construction undefined | terms unblocked (§5.4); generator (b) waits on §6 Q4 |
+| `C-exch-10` | eligible issuers unreadable | eligibility unblocked; the verifier is an attestation-note matter |
+| `C-exch-11` | independence term unreadable | unblocked by `self-declared-accepted` (§5.4) |
+| `C-exch-12`, `C-exch-14` | grouping rule unreadable | unblocked by `quorum.grouping` (§5.2); collecting tasks pinned by C-exch-12a |
+| `C-exch-13` | estimand and test unreadable | fields unblocked; the test itself is a comparison-dialect matter |
+| `C-exch-15`, `C-exch-16` | a `fulfills` statement is displayed, never counted | display unchanged; the statement is also a submission of the edition it names (§5.1), pinned by C-exch-15a |
+| `C-exch-17` | declared sampling unreadable | unblocked by `sampling` (§3.1) |
+| `C-exch-18` | a refutation cannot name a task | unblocked by §4.2 |
+| `C-exch-19`, `C-exch-20` | counts named, not defined | waits on §6 Q5 |
+| `C-btc-19` | no term needed | unchanged; §5.4 and §6 Q4 restate it |
 
 New cases, added with this note to `CONFORMANCE.md` (exchange profile, by section):
 
 | id | pins |
 |---|---|
-| C-exch-03a | §3.3 recognition: unknown profile, unknown field (including `x_`), malformed field, the provisional profile name, a role field in the wrong place for the major; all unread, exit 3, and no submission counted, a `fulfills` one included |
-| C-exch-03b | §4.1 grant scope: coordinator vs other signer, grant naming another edition, grant not carried to a later edition, grant published after the submission still counts, in every delivery order |
-| C-exch-07a | §4.3 deadline outcomes: `ok`, `unchecked` (tip below `h`; pending proof), `not shown` (bound above `h`; `local` only); `ts` before `h` never `ok`; no output says "missed" or "late"; a `fulfills` submission read from its own bound |
-| C-exch-08a | §5.6 bracket and §5.7 exit: `k` passing submissions plus one undecided elsewhere is `ready`, exit 0; `k−1` plus one undecided is `unchecked`, exit 3; `k−1` plus one failing is `not ready`, exit 0 |
-| C-exch-12a | §5.2 `any`: `k` method-class observations of different bytes carrying `fulfills` reach `ready` under `{rule: "any"}` and stay groups of one under byte equality; `any` with a comparator, and `all-pairs` without one, leave the contract unread |
-| C-exch-15a | §5.1 submissions: an `authored` or `observed` carrying `fulfills` is a submission whose result is its content digest; with a `submit` of the same digest it counts once; outside `eligible_issuers` it is not counted, never malformed; a `fulfills` naming no task edition is no submission; the statement's grade is the same with or without the task held; under `results: "observed"` a `submit` of another key's held `observed` counts, and one whose digest has no held record is undecided |
-| C-exch-15b | §5.1 amendments: an amendment that drops `fulfills` withdraws the submission and `publish` warns, naming the edition; re-adding it later gives `not shown` past `h` with `explain` naming the breaking amendment; an `observed` carrying `fulfills` stays a submission after its signer's `retracts`, shown beside it |
-| C-exch-18a | §4.2 binding: bound refutation listed and credited on its own track and never grouped; `task` without `edition` malformed; an unbound refutation of a submission is shown beside it but not listed in the task |
+| `C-exch-03a` | §3.3 recognition: unknown profile, unknown field (including `x_`), malformed field, the provisional profile name, a role field in the wrong place for the major; all unread, exit 3, and no submission counted, a `fulfills` one included |
+| `C-exch-03b` | §4.1 grant scope: coordinator vs other signer, grant naming another edition, grant not carried to a later edition, grant published after the submission still counts, in every delivery order |
+| `C-exch-07a` | §4.3 deadline outcomes: `ok`, `unchecked` (tip below `h`; pending proof), `not shown` (bound above `h`; `local` only); `ts` before `h` never `ok`; no output says "missed" or "late"; a `fulfills` submission read from its own bound |
+| `C-exch-08a` | §5.6 bracket and §5.7 exit: `k` passing submissions plus one undecided elsewhere is `ready`, exit 0; `k−1` plus one undecided is `unchecked`, exit 3; `k−1` plus one failing is `not ready`, exit 0 |
+| `C-exch-12a` | §5.2 `any`: `k` method-class observations of different bytes carrying `fulfills` reach `ready` under `{rule: "any"}` and stay groups of one under byte equality; `any` with a comparator, and `all-pairs` without one, leave the contract unread |
+| `C-exch-15a` | §5.1 submissions: an `authored` or `observed` carrying `fulfills` is a submission whose result is its content digest; with a `submit` of the same digest it counts once; outside `eligible_issuers` it is not counted, never malformed; a `fulfills` naming no task edition is no submission; the statement's grade is the same with or without the task held; under `results: "observed"` a `submit` of another key's held `observed` counts, and one whose digest has no held record is undecided |
+| `C-exch-15b` | §5.1 amendments: an amendment that drops `fulfills` withdraws the submission and `publish` warns, naming the edition; re-adding it later gives `not shown` past `h` with `explain` naming the breaking amendment; an `observed` carrying `fulfills` stays a submission after its signer's `retracts`, shown beside it |
+| `C-exch-18a` | §4.2 binding: bound refutation listed and credited on its own track and never grouped; `task` without `edition` malformed; an unbound refutation of a submission is shown beside it but not listed in the task |
 
 With the §6 decisions, four more cases pin the fields and rules added at acceptance:
 
 | id | pins |
 |---|---|
-| C-exch-08b | §6 Q2: `results` and `min_grade`; a result's kind read from the held record for its digest; terms that can apply to no submission leave the contract unread |
-| C-exch-08c | §6 Q3: `pins` per result kind, `ok` / `fail` / `unchecked`; a pinned member the referent leaves `unpinned` is `unchecked` |
-| C-exch-09a | §6 Q4: the commitment is an `authored` with availability withheld; its bound meets the deadline for a `submit` that names it; possession by T only; `submit.salt` is inert |
-| C-exch-12b | §6 Q1: a unit counts by its current submission in its own log order, whatever the kinds; disagreeing branches of an uncleared fork count in none |
+| `C-exch-08b` | §6 Q2: `results` and `min_grade`; a result's kind read from the held record for its digest; terms that can apply to no submission leave the contract unread |
+| `C-exch-08c` | §6 Q3: `pins` per result kind, `ok` / `fail` / `unchecked`; a pinned member the referent leaves `unpinned` is `unchecked` |
+| `C-exch-09a` | §6 Q4: the commitment is an `authored` with availability withheld; its bound meets the deadline for a `submit` that names it; possession by T only; `submit.salt` is inert |
+| `C-exch-12b` | §6 Q1: a unit counts by its current submission in its own log order, whatever the kinds; disagreeing branches of an uncleared fork count in none |
 
 Counting by a referent member (§6 Q12) is not in v1 and has no case.
 
