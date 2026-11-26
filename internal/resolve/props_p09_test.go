@@ -475,7 +475,7 @@ func TestPropertyUnverifiedGenerated(t *testing.T) {
 			if !ok {
 				continue
 			}
-			if o.Capture.Verified == "device-attested" || o.Capture.Verified == "anchored-at-capture" {
+			if o.Capture.Verified == "device-attested" || o.Capture.Verified == "source-attested" || o.Capture.Verified == "anchored-at-capture" {
 				return "a verified capture level with no verifier"
 			}
 			if o.ReCheck.Outcome != ReUnchecked && o.Class != "none-yet" && o.Class != "phenomenon" && o.Class != "method" {

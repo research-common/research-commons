@@ -121,6 +121,17 @@ func TestSchemaMinimalBodies(t *testing.T) {
 	}
 }
 
+// TestCaptureEvidenceLevels: each of the five capture-evidence levels of §5 is a valid `observed`; the list is
+// closed, so the refusal of any other value is in TestSchemaRules.
+func TestCaptureEvidenceLevels(t *testing.T) {
+	for _, level := range []string{"self-asserted", "anchored-at-capture", "witnessed", "device-attested", "source-attested"} {
+		b := setField(minimal("observed"), "capture", body("at", tTS, "evidence", level))
+		if st, err := readBody(t, "observed", b); err != nil || st.Status != Valid {
+			t.Fatalf("%s: %v", level, err)
+		}
+	}
+}
+
 // TestSchemaMissingRequired: dropping any R field of any kind is a malformed statement naming the field. The
 // one exception (observed referent fields) is TestSchemaUnpinned.
 func TestSchemaMissingRequired(t *testing.T) {
@@ -211,6 +222,7 @@ func TestSchemaRules(t *testing.T) {
 		{"anchors without proof_format", "anchors", body("covered", tID, "proof", tDig), "proof_format is missing"},
 		{"revocation reason outside the token pattern", "revoke_key", setField(m("revoke_key"), "reason", s("Affiliation Changed")), "reason token"},
 		{"successor upper case", "rotate_key", setField(m("rotate_key"), "successor", s("ed25519:"+strings.Repeat("AB", 32))), "is not a key"},
+		{"capture evidence two levels in one string", "observed", setField(m("observed"), "capture", body("at", tTS, "evidence", "device-attested source-attested")), "one of"},
 		{"capture evidence unknown", "observed", setField(m("observed"), "capture", body("at", tTS, "evidence", "notarised")), "one of"},
 		{"class unknown", "observed", setField(m("observed"), "class", s("exact")), "one of"},
 		{"finality on phenomenon", "observed", setField(setField(m("observed"), "class", s("phenomenon")), "finality",

@@ -327,7 +327,7 @@ var (
 		req("state_at_capture", exactlyOne([]field{opt("depth", integer()), opt("run", text()), opt("captured_at", ts())})))
 
 	captureObj = object(req("at", ts()),
-		req("evidence", enum("self-asserted", "anchored-at-capture", "witnessed", "device-attested")),
+		req("evidence", enum("self-asserted", "anchored-at-capture", "witnessed", "device-attested", "source-attested")),
 		opt("operator", text()), opt("instrument", text()), opt("witnesses", list(key())), opt("attestation", anyObject()))
 
 	taskRef = []field{req("task", id()), req("edition", id())}
