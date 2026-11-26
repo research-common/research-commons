@@ -474,8 +474,8 @@ func (r *Resolver) observedOf(d string, counted bool) []*Placed {
 	if d == "" {
 		return out // an absent or malformed content association is not a blob
 	}
-	for _, p := range r.byKind["observed"] {
-		if contentDigest(p.St.Body) == d && (!counted || r.counts(p)) {
+	for _, p := range r.on("observed", d) {
+		if !counted || r.counts(p) {
 			out = append(out, p)
 		}
 	}

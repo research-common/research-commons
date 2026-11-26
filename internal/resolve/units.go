@@ -17,10 +17,7 @@ import (
 // counting gate binds to I and counts (eligible for I).
 func (r *Resolver) identityNodes(identity, kind, content string) []*Placed {
 	var out []*Placed
-	for _, p := range r.byKind[kind] {
-		if contentDigest(p.St.Body) != content {
-			continue
-		}
+	for _, p := range r.on(kind, content) {
 		if g := r.gate(p); g.Counts && g.Identity == identity {
 			out = append(out, p)
 		}

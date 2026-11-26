@@ -39,7 +39,15 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   `list`, `verify` and `fsck` and about 10 s for `pull`; 4,000 lines took half a minute to a minute. Delivery now
   computes only the delivered line's own log-relative rule, and the view chains in one pass in seq order: 2,000
   lines take under half a second, 4,000 under a second. No output, verdict, id or byte changes. `list` over
-  many blobs is still slower than it should be (#291, second cause).
+  many blobs was a second cause (next entry).
+- `list` is no longer quadratic in the number of blobs held (#291, second cause). Every question the resolver
+  answers about one blob read every statement of a kind in the store: its claims, its holders, the statements
+  held about it, its derivation group, and whether a claim was amended. `list` asks about every blob, so 4,000
+  derived blobs took over two minutes and 8,000 plain ones about 50 s. The resolver now files each statement once,
+  by the blob it names, by what it is about, and by its provenance, and each question reads only its own entries:
+  the same two stores take about 5 s and 6 s, which is the cost of reading the store at all. No output, verdict,
+  id or byte changes. Not examined: stores dominated by observations with corroboration, tasks with many
+  submissions, and collections with many members.
 
 - `package show`, `key sign --package` and `<command> --complete` refuse an `rc-signing-package/1` package whose envelope
   is not one of the four actions the format carries (an identity's inception, grant or cut, or an act for an identity),

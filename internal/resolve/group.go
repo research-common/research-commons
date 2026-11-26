@@ -187,12 +187,12 @@ func (r *Resolver) group(p *Provenance, only string) *Group {
 	g := &Group{Provenance: p, Mode: "undeclared", only: only}
 	authored := map[string]bool{}
 	cur := map[string]identityGraph{}
-	for _, q := range r.byKind["authored"] {
+	for _, q := range r.byProv["authored"][p.key()] {
 		// the counting gate (actorgate.go): with no actor evaluator exactly Counts. An identity's claim joins the
 		// group exactly as a key's does (derivation groups never compete on priority); only I's current claims run,
 		// by I's explicit amendments (identity profile §5.1), never by its key's same-key ancestry
 		cg := r.gate(q)
-		if !cg.Counts || provenance(q.St.Body).key() != p.key() {
+		if !cg.Counts {
 			continue
 		}
 		// only the claimant's current claim on that blob runs; an amended statement is history (C-core-11)
@@ -206,8 +206,8 @@ func (r *Resolver) group(p *Provenance, only string) *Group {
 		}
 	}
 	collapsed := oneAuthoredRunPerKey(g)
-	for _, q := range r.byKind["reproduced"] {
-		if r.counts(q) && authored[str(q.St.Body, "of")] && provenance(q.St.Body).key() == p.key() {
+	for _, q := range r.byProv["reproduced"][p.key()] {
+		if r.counts(q) && authored[str(q.St.Body, "of")] {
 			g.Runs = append(g.Runs, Run{Signer: q.St.Signer, Statement: q.St.ID, Kind: "reproduced", Output: contentDigest(q.St.Body),
 				Says: str(q.St.Body, "result"), Env: envOf(q.St.Body)})
 		}
@@ -317,8 +317,8 @@ func preferRun(a, b Run) bool {
 // amended reports whether a later counted `authored` of the same key on the same blob follows q.
 func (r *Resolver) amended(q *Placed) bool {
 	d := contentDigest(q.St.Body)
-	for _, o := range r.byKind["authored"] {
-		if o.St.Signer == q.St.Signer && r.countsAsKey(o) && contentDigest(o.St.Body) == d && r.precedes(q.St.Signer, q.St.ID, o.St.ID) {
+	for _, o := range r.on("authored", d) {
+		if o.St.Signer == q.St.Signer && r.countsAsKey(o) && r.precedes(q.St.Signer, q.St.ID, o.St.ID) {
 			return true
 		}
 	}
@@ -784,8 +784,8 @@ func (r *Resolver) groups(a *Artifact, only string) {
 }
 
 func (r *Resolver) isObservation(d string) bool {
-	for _, p := range r.byKind["observed"] {
-		if r.counts(p) && contentDigest(p.St.Body) == d {
+	for _, p := range r.on("observed", d) {
+		if r.counts(p) {
 			return true
 		}
 	}
