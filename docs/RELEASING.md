@@ -175,6 +175,11 @@ A plan, not a schedule; the maintainers make the final call and may revise this 
     reader reads the new major, and check that it is already tagged and published (a writer major never ships in
     the same release as the first reader of it); (c) bump the hub template pin (step 9) in the same sitting, so
     hub checks read what the tool now writes; (d) state that statements in the old major are written unchanged.
+11. **A release that changes a hardware connector** (the code behind `--ledger`, or a new connector). Before
+    the tag, run the drill in [`HARDWARE-COMPATIBILITY.md`](HARDWARE-COMPATIBILITY.md) with the release's
+    build on the emulator and on each device a maintainer holds, and add one report file per run in the
+    release PR. A step that fails is recorded as failed and decided before the tag; it is not left out. A
+    release that touches no connector needs no new run: the rows keep their dates and builds.
 
 ## Ordering relative to open PRs
 

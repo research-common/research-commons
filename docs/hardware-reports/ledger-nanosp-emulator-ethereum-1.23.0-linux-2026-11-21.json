@@ -1,0 +1,43 @@
+{
+  "format": "hardware-report/1",
+  "id": "ledger-nanosp-emulator-ethereum-1.23.0-linux-2026-11-21",
+  "date": "2026-11-21",
+  "by": "maintainers",
+  "source": "maintainer",
+  "device": {
+    "vendor": "Ledger",
+    "model": "Nano S Plus",
+    "emulator": true,
+    "firmware": "Speculos emulator",
+    "app": "Ethereum",
+    "app_version": "1.23.0"
+  },
+  "host": {
+    "os": "Ubuntu 24.04",
+    "arch": "x86_64"
+  },
+  "tool": {
+    "version": "1.0.0-rc.1",
+    "commit": "f48fe26"
+  },
+  "route": "connector",
+  "alg": "eip191-secp256k1",
+  "steps": {
+    "read": "pass",
+    "sign": "pass",
+    "reject": "pass",
+    "timeout": "pass",
+    "disconnect": "pass",
+    "size": "pass",
+    "revoke": "pass",
+    "rotate": "pass"
+  },
+  "notes": [
+    "The emulator's buttons were pressed by a script; every tool command is the drill's.",
+    "Size: a revoke_key carrying a 7,000-byte note was offered for review; one carrying an 8,000-byte note was refused before any review (status word 0x6a84).",
+    "Disconnect: the emulator was stopped while a review was on its screen."
+  ],
+  "evidence": {
+    "line": "{\"alg\":\"eip191-secp256k1\",\"body\":{\"profile\":\"fixed-root-v1\",\"x_identity_v1\":{}},\"crit\":[\"x_identity_v1\"],\"kind\":\"identity_inception\",\"prev\":null,\"rc\":\"rc/2\",\"seq\":0,\"sig\":\"0xf9047e6ff2ba92e27980aaa26f1e83d4429f8536349af3851178f14917c99c601caaa20f3d5380e93957f7a2210a489d411e7e288eb6645741743322f3a8af871c\",\"signer\":\"0x8bae832c68d7c90c11bca5eb8bd0f14d49bd9e8f\",\"ts\":\"2026-11-21T23:47:33Z\"}"
+  }
+}

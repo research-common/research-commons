@@ -41,6 +41,8 @@ The tool is at **1.0.0-rc.1**, a release candidate. The format is frozen, and th
   `docs/RELEASING.md`). A finding that would change the bytes of a frozen format is the most valuable report: it
   means a new candidate, never a silent change.
 - **Bug reports, unclear documentation and test reports** from using the candidate are welcome as issues.
+- **Hardware test reports** are wanted for any signing device, firmware or host:
+  [`docs/HARDWARE-COMPATIBILITY.md`](docs/HARDWARE-COMPATIBILITY.md) has the steps and the report format.
 - **New features** wait for after 1.0.0; open an issue to discuss them first.
 - **The 0.4 alpha on `main`** is superseded and takes **security fixes only**, made against `main`, where the
   alpha's own suite (`tests/run-all.sh`) lives. Everything below describes `next`.

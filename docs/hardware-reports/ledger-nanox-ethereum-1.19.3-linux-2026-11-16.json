@@ -1,0 +1,40 @@
+{
+  "format": "hardware-report/1",
+  "id": "ledger-nanox-ethereum-1.19.3-linux-2026-11-16",
+  "date": "2026-11-16",
+  "by": "maintainers",
+  "source": "maintainer",
+  "device": {
+    "vendor": "Ledger",
+    "model": "Nano X",
+    "emulator": false,
+    "firmware": "not recorded",
+    "app": "Ethereum",
+    "app_version": "1.19.3"
+  },
+  "host": {
+    "os": "Ubuntu 24.04",
+    "arch": "x86_64"
+  },
+  "tool": {
+    "version": "0.5.0-alpha.7",
+    "commit": "6dc5f1e"
+  },
+  "route": "connector",
+  "alg": "eip191-secp256k1",
+  "steps": {
+    "read": "pass",
+    "sign": "pass",
+    "reject": "pass",
+    "timeout": "not-run",
+    "disconnect": "not-run",
+    "size": "pass",
+    "revoke": "not-run",
+    "rotate": "not-run"
+  },
+  "notes": [
+    "Run before the drill on this page was written; the steps match it. The build was the branch of the pull request that added key sign --ledger, merged the same day as the commit named here.",
+    "Size: a 7,652-byte printable message was offered for review; a 7,653-byte one was refused before any review (status word 0x6a84). The same limit as the emulated app 1.23.0.",
+    "Differs from the emulator: after the signing process was killed with a review pending, the device answered further requests instead of refusing them as busy, the pending review stopped responding to the buttons, and the device switched itself off."
+  ]
+}
