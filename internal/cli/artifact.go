@@ -28,6 +28,11 @@ func (v *view) artifactCore(a *resolve.Artifact) *Obj {
 		o.set("step", tokV(tok(a.Step.Token())))
 	}
 	o.set("disclosures", disclosures(a))
+	if df := declaredFields(a); len(df.keys) > 0 {
+		o.set("declared_fields", df)
+	} else {
+		o.setJSON("declared_fields", df)
+	}
 	if len(a.Incomplete) > 0 {
 		// a traversal stopped by a limit of this reader: operational, the limit and the scope it cut (C-core-131)
 		l := listV{}
@@ -102,9 +107,65 @@ func disclosures(a *resolve.Artifact) *Obj {
 		case name == "licence" && a.Licence != nil:
 			licenceObj(d, a.Licence)
 		}
+		if name == "licence" {
+			// the attribution a licence such as CC-BY requires is printed on the licence's own lines of the human
+			// surface; the JSON carries it in declared_fields only, so the disclosure object keeps its shape
+			if at := a.Field("attribution"); fieldSet(at) {
+				d.setHuman("attribution", declaredField(at))
+			} else if fieldSet(f) {
+				d.setHuman("attribution", textV("not declared"))
+			}
+		}
 		o.set(name, d)
 	}
 	return o
+}
+
+// declaredFieldNames are the signed `authored` fields no disclosure covers: what the blob is (`type`), who is to be
+// credited (`attribution`), what its author says it is (`description`), the comparator a reader may use, and the
+// two lineage links. Each is a single-party field (claims-model note §5.1): the default unit's value with its
+// signers, rivals listed, never dropped. They are a block of their own, not disclosures beside the grade
+// (C-core-66 pins that set). A link is shown on the statement's own blob only; the blob it names is not marked
+// superseded or extended (public issue #8 is undecided).
+var declaredFieldNames = []string{"type", "description", "attribution", "comparator", "supersedes", "extends"}
+
+// declaredFields is the declared_fields block: every one of the six fields some claimant set, in the order above.
+// A field nobody set is left out, so a blob that declares none prints no block on the human surface.
+func declaredFields(a *resolve.Artifact) *Obj {
+	o := newObj()
+	for _, name := range declaredFieldNames {
+		if f := a.Field(name); fieldSet(f) {
+			o.set(name, declaredField(f))
+		}
+	}
+	return o
+}
+
+// fieldSet is whether any claimant signed a value for the field: a state alone (contested authorship) is not one.
+func fieldSet(f resolve.Field) bool { return len(f.From) > 0 || len(f.Rivals) > 0 }
+
+func declaredField(f resolve.Field) *Obj {
+	d := newObj().set("state", tokV(tok(string(f.State))))
+	if val, ok := f.Default(); ok {
+		if cv, err := canon.Parse([]byte(val)); err == nil {
+			d.set("value", rawV{cv})
+		}
+		var by []string
+		for _, s := range f.From {
+			by = append(by, s.Signer)
+		}
+		d.set("signers", refs(by...))
+		if len(f.Rivals) > 0 {
+			d.set("rivals", sources(f.Rivals))
+		}
+	} else {
+		// no default: every signed value, as a disclosure lists them (no value is singled out as the rival)
+		d.set("values", sources(append(slices.Clone(f.From), f.Rivals...)))
+	}
+	if f.Why != "" {
+		d.set("why", textV(f.Why))
+	}
+	return d
 }
 
 // licenceObj adds the reader's reading of a declared licence: whether the expression parses (never whether its

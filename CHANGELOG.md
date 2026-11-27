@@ -11,6 +11,16 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ### Added
 
+- `show`, `list`, `verify` and `explain` now display the signed fields of an `authored` statement that no view showed: `type`,
+  `description`, `attribution`, `comparator`, `supersedes` and `extends` (#288). Each is read like the licence: the
+  default unit's value with its signer and any rival's value with its signer, or every signed value when there is
+  no default (contested authorship). `--json` gains a `declared_fields` member and nothing existing changes. The
+  text output of all four commands prints the block, and prints the attribution on the licence's lines (`not
+  declared` when a licence has none), so a CC-BY licence is no longer shown without the credit its author signed.
+  `publish` signs a `type` on every `authored` statement, so nearly every blob now prints the block. `supersedes`
+  and `extends` appear on the statement's own blob only; the blob they name is not marked superseded (#8 is
+  undecided). New conformance case C-core-149.
+
 - `revoke --ledger --ledger-path <path>` and `rotate --ledger --ledger-path <path>`: a Ledger device signs the key's own
   `revoke_key` or `rotate_key` (EIP-191 `personal_sign` over the PAE, reviewed on the device), so a device-held identity
   root can revoke itself, and can sign an escrowed revocation right after inception (#266). The line is byte for byte
