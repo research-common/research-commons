@@ -693,6 +693,16 @@ func costShapes() []costShape {
 	const keys = 64
 	key := func(i int) string { return fmt.Sprintf("K%04d", i%keys) }
 	return []costShape{
+		{"one key repeatedly merges a wide fork", func(t *testing.T, n int) func() {
+			signer, lines := mergeDenseLines(40, n)
+			s := deliverDense(t, signer, lines)
+			return func() {
+				r := New(s)
+				if len(r.byID) != len(lines) {
+					t.Fatal("lost lines in merge-dense log")
+				}
+			}
+		}},
 		{"observations, 8 captures per referent", func(t *testing.T, n int) func() {
 			w := newWorld(t)
 			var ds []string

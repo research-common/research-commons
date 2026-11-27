@@ -162,19 +162,25 @@ func reduce(g map[string]Node) map[string]Node {
 
 // Forks returns every fork point, sorted by At. Missing links are ignored.
 func Forks(g map[string]Node) []Fork {
-	fs, _ := ForksAndSpans(g)
+	fs, _ := analyze(g, false)
 	return fs
 }
 
 // ForksAndSpans returns Forks(g) and the corresponding Span(g, f) for each fork,
 // sharing the graph preparation instead of repeating it for every span.
 func ForksAndSpans(g map[string]Node) ([]Fork, [][]string) {
+	return analyze(g, true)
+}
+
+func analyze(g map[string]Node, withSpans bool) ([]Fork, [][]string) {
 	x := prepare(g)
 	if x == nil {
 		fs := legacyForks(g)
 		var spans [][]string
-		for _, f := range fs {
-			spans = append(spans, Span(g, f))
+		if withSpans {
+			for _, f := range fs {
+				spans = append(spans, Span(g, f))
+			}
 		}
 		return fs, spans
 	}
@@ -218,7 +224,9 @@ func ForksAndSpans(g map[string]Node) ([]Fork, [][]string) {
 		dead := false
 		for q.Len() > 0 {
 			p := heap.Pop(q).(int)
-			span = append(span, x.ids[p])
+			if withSpans {
+				span = append(span, x.ids[p])
+			}
 			// In the transitive reduction, no edge can bypass a node comparable
 			// with the entire below-set. A singleton frontier, before any sink,
 			// is therefore exactly the first such node.
@@ -240,7 +248,9 @@ func ForksAndSpans(g map[string]Node) ([]Fork, [][]string) {
 		}
 		slices.Sort(span)
 		slices.Sort(fs[fi].Tips)
-		spans = append(spans, span)
+		if withSpans {
+			spans = append(spans, span)
+		}
 	}
 	if !slices.ContainsFunc(cleared, func(p int) bool { return p >= 0 }) {
 		return fs, spans

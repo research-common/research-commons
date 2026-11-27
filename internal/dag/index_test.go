@@ -64,6 +64,9 @@ func checkOriginal(t *testing.T, g map[string]Node) {
 		t.Fatalf("reduction differs for %#v:\ngot %#v\nwant %#v", g, got, want)
 	}
 	fs, spans := ForksAndSpans(g)
+	if got := Forks(g); prepare(g) != nil && !reflect.DeepEqual(got, fs) {
+		t.Fatalf("fork-only differs from combined: %v != %v", got, fs)
+	}
 	wantForks := oldForks(g)
 	// The old cyclic path chooses by map iteration between equally early
 	// candidates in one strongly connected component. Compare that choice's
