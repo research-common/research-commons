@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/decred/dcrd/dcrec/secp256k1/v4"
+
 	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/ledger"
 )
@@ -334,4 +336,33 @@ func TestDeriveDoesNotAliasOrDestroyParent(t *testing.T) {
 		t.Fatal("zeroing an empty-path copy zeroed the parent")
 	}
 	_ = c
+}
+
+// The spec's invalid-key cases cannot be reached through a real seed (probability below 2^-127), so they are
+// tested on the step that handles the HMAC output directly.
+func TestInvalidKeyCases(t *testing.T) {
+	n, _ := hex.DecodeString("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141")
+	i := append(append([]byte(nil), n...), make([]byte, 32)...)
+	if _, err := fromI(i, nil); err != ErrInvalidKey {
+		t.Errorf("IL = n: %v", err)
+	}
+	// IL = n+1 would reduce to the valid key 1 if the overflow were ignored.
+	np1 := append([]byte(nil), n...)
+	np1[31]++
+	if _, err := fromI(append(np1, make([]byte, 32)...), nil); err != ErrInvalidKey {
+		t.Errorf("IL = n+1: %v", err)
+	}
+	if _, err := fromI(make([]byte, 64), nil); err != ErrInvalidKey {
+		t.Errorf("IL = 0 as a master key: %v", err)
+	}
+	// IL = n-1 plus a parent key of 1 gives n = 0 mod n: the child key is zero.
+	nm1 := append([]byte(nil), n...)
+	nm1[31]--
+	var one [32]byte
+	one[31] = 1
+	var par secp256k1.ModNScalar
+	par.SetBytes(&one)
+	if _, err := fromI(append(nm1, make([]byte, 32)...), &par); err != ErrInvalidKey {
+		t.Errorf("child key zero: %v", err)
+	}
 }
