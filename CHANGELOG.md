@@ -43,6 +43,10 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ### Fixed
 
+- Repeated merges of a wide fork no longer trigger an ancestor walk for every pair of links. DAG analysis
+  batches reachability in bounded-memory passes and finds a clearing by walking its frontier once.
+  Forks, tips, clearing nodes and spans are unchanged, including ignored missing links and duplicate links (#291).
+
 - **A delegate key that has been cut can no longer keep a collection from passing `verify`** (#285). An approval that
   an identity's grant cut leaves out now counts toward nothing without doubt: the edition is `unauthorized` or `pending` (it was
   `contested`), an edition built on it is an `orphan`, `current` is the last authorized edition and `verify` on the
@@ -181,6 +185,9 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   `counting_unit: identity` needs an `rc/2` task edition, which `publish task` does not write.
 
 ### Tests
+
+- DAG analysis is compared with its previous implementation on generated graphs, missing and duplicate links,
+  and cyclic examples. A cost test compares a repeated-merge log with eight times as many merge links (#291).
 
 - `docs/spec-graph.json` (generated, `spec-graph/0`): every conformance case with the note sections, invariants and
   worked examples its row names, the output tokens and exit codes its required outcome names, and the tests that

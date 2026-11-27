@@ -43,7 +43,7 @@ func (f Fork) Cleared() bool { return f.ClearedBy != "" }
 
 // Forks returns every fork point of the graph, sorted by At. A link to a node that is not a key of g is
 // ignored (the caller passes only nodes it holds).
-func Forks(g map[string]Node) []Fork {
+func legacyForks(g map[string]Node) []Fork {
 	g = reduce(g)
 	branchSucc := map[string][]string{} // fork structure
 	succ := map[string][]string{}       // reachability, every link
@@ -87,10 +87,15 @@ func Forks(g map[string]Node) []Fork {
 // its clearing are computed over.
 func belowOf(branches []string, succ map[string][]string) map[string]bool {
 	below := map[string]bool{}
-	for _, b := range branches {
-		for n := range descendants(b, succ) {
-			below[n] = true
+	stack := slices.Clone(branches)
+	for len(stack) > 0 {
+		n := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if below[n] {
+			continue
 		}
+		below[n] = true
+		stack = append(stack, succ[n]...)
 	}
 	return below
 }
@@ -175,7 +180,7 @@ func Tips(g map[string]Node) []string {
 // ancestor of another of its link targets: such a link adds no history (a line whose `merges` names an
 // ancestor of its own `prev`, an edition naming a predecessor and that predecessor's ancestor), and as a
 // branching link it would report a fork point that clears the moment it appears.
-func reduce(g map[string]Node) map[string]Node {
+func legacyReduce(g map[string]Node) map[string]Node {
 	held := func(ps []string) []string {
 		var out []string
 		for _, p := range ps {
