@@ -33,6 +33,14 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ### Fixed
 
+- Reading a store is no longer quadratic in the length of one key's log (#291). Every command that reads a store
+  delivers each held line into its signer's log, and each delivery rebuilt that log's whole view to read one line's
+  verdict; the view's own chaining then looped to a fixed point. A log of 2,000 lines took about 5 s for `status`,
+  `list`, `verify` and `fsck` and about 10 s for `pull`; 4,000 lines took half a minute to a minute. Delivery now
+  computes only the delivered line's own log-relative rule, and the view chains in one pass in seq order: 2,000
+  lines take under half a second, 4,000 under a second. No output, verdict, id or byte changes. `list` over
+  many blobs is still slower than it should be (#291, second cause).
+
 - `package show`, `key sign --package` and `<command> --complete` refuse an `rc-signing-package/1` package whose envelope
   is not one of the four actions the format carries (an identity's inception, grant or cut, or an act for an identity),
   exit 2 `malformed-package`, before computing a summary. A package holding a bare key's marker-only `edition` used to
