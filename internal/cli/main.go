@@ -616,6 +616,7 @@ func outputsMarkdown() string {
 	b.WriteString("Errors are RFC 9457 problem-details objects (`type`, `title`, `detail`, `class`, `scope`, `committed`,\n`next`, `exit`; peer-supplied text only in `peer_text`). Types are `" + ProblemTypeBase + "<slug>`.\n\n")
 	b.WriteString("Platforms: Linux and macOS. Windows is not supported: the tool does not build for it.\n\n")
 	b.WriteString("Stability: the `--json` output is not part of the format freeze. It carries no `schema` member yet, and may change when one is added.\n\n")
+	b.WriteString("Signed fields beside the disclosures: `show`, `list`, `verify` and `explain` of a blob add a `declared_fields` member (an object, empty when nothing is declared) with the signed `authored` fields that are not disclosures: `type`, `description`, `attribution`, `comparator`, `supersedes` and `extends`. Each present field has a `state` token, the default `value` and its `signers`, or every `values` entry when contested, and `rivals` (signer, statement and value of a claimant outside the default unit). `show` text prints the block and, on the licence line, the attribution. `supersedes` and `extends` describe the statement's own blob only; the blob they name is not marked superseded. Members were only added.\n\n")
 	b.WriteString("## Exit codes\n\n| exit | name | meaning |\n|---|---|---|\n")
 	for _, r := range ExitRows() {
 		b.WriteString("| " + r[0] + " | " + r[1] + " | " + r[2] + " |\n")

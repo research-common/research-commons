@@ -11,6 +11,8 @@ Platforms: Linux and macOS. Windows is not supported: the tool does not build fo
 
 Stability: the `--json` output is not part of the format freeze. It carries no `schema` member yet, and may change when one is added.
 
+Signed fields beside the disclosures: `show`, `list`, `verify` and `explain` of a blob add a `declared_fields` member (an object, empty when nothing is declared) with the signed `authored` fields that are not disclosures: `type`, `description`, `attribution`, `comparator`, `supersedes` and `extends`. Each present field has a `state` token, the default `value` and its `signers`, or every `values` entry when contested, and `rivals` (signer, statement and value of a claimant outside the default unit). `show` text prints the block and, on the licence line, the attribution. `supersedes` and `extends` describe the statement's own blob only; the blob they name is not marked superseded. Members were only added.
+
 ## Exit codes
 
 | exit | name | meaning |
