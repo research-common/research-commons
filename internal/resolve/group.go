@@ -793,8 +793,8 @@ func (r *Resolver) isObservation(d string) bool {
 }
 
 func (r *Resolver) isRefutation(d string) bool {
-	for _, p := range r.byKind["refutes"] {
-		if r.counts(p) && str(p.St.Body, "evidence") == d {
+	for _, p := range r.byLink["refutes"]["evidence:"+d] {
+		if r.counts(p) {
 			return true
 		}
 	}

@@ -60,6 +60,7 @@ func (p *Placed) Counts() bool { return p.BareKeyEligible() }
 type Resolver struct {
 	logs    *keylog.Store
 	chained map[string]map[string]*wire.Statement // per key: its chained lines by id
+	anc     map[string]*ancestry                  // per key: history questions over its chained lines (ancestry.go)
 	byID    map[string]*Placed
 	byKind  map[string][]*Placed
 	// byContent is byKind split by the blob a statement's body names (contentDigest; "" when it names none): the
@@ -75,7 +76,25 @@ type Resolver struct {
 	// carry one, `authored` and `reproduced`: the runs of one derivation group. A body whose provenance is not an
 	// object is filed nowhere: it is never evidence-ready, and no walk that asks for a provenance reads it.
 	byProv map[string]map[string][]*Placed
-	keys   map[string]keylog.KeyState
+	// bySigner is byKind split by signing key, same statements in the same order: a key's own anchors lines, its
+	// own claims. byField is byKind split by one top-level string member of the body, for the kinds a question
+	// reaches by that member (fieldIndex): an edition by its resource, a submit by its task. A body in which
+	// the member is absent or not a string is filed under "".
+	bySigner map[string]map[string][]*Placed
+	byField  map[string]map[string][]*Placed
+	// byReferent is the `observed` statements split by referent key (referentKey), and byMethod by the method
+	// edition a method-class one names, both in byKind order. Two statements sameReferent calls the same share a
+	// referent key; the walk still asks sameReferent, so the key only has to never separate two that match.
+	byReferent map[string][]*Placed
+	byMethod   map[string][]*Placed
+	// byComparison is the `corroborates` statements split by each blob their `result` lists as an input (the
+	// result being a held `authored` with a provenance), in byKind order: the only ones whose comparison data
+	// can include a given blob (comparisonData). Filled at the end of New, when every result can be looked up.
+	byComparison map[string][]*Placed
+	// place is each placed statement's position in its kind's list (byKind): a walk that gathers statements of
+	// one kind from several index entries sorts by it to visit them in the order a walk of the list would.
+	place map[*Placed]int
+	keys  map[string]keylog.KeyState
 	// time and cmp are the reader's own verifiers (I9): time evidence (§10) and comparator runs (§5.2).
 	time TimeVerifier
 	cmp  Comparator
@@ -102,6 +121,10 @@ type Resolver struct {
 	// provDepth is the bound on how many derivation steps the weakest-link grade follows (provenance.go);
 	// DefaultProvenanceDepth when unset.
 	provDepth int
+	// timeMu guards anchorBounds: the bound each anchors line yields, asked of the reader's time verifier at most
+	// once per snapshot (time.go, anchorBound), however many statements the line covers.
+	timeMu       sync.Mutex
+	anchorBounds map[string]anchorVerdict
 	// sysMu guards the method-edition declaration cache (systemkeys.go), filled lazily from the snapshot.
 	sysMu      sync.Mutex
 	sysDecl    map[string]methodDecl
@@ -111,7 +134,7 @@ type Resolver struct {
 // New indexes every placed line of every log in s. With no options the reader verifies no proof format and
 // runs no comparator, so no bound orders anything and no comparison is made.
 func New(s *keylog.Store, opts ...Option) *Resolver {
-	r := &Resolver{logs: s, chained: map[string]map[string]*wire.Statement{}, byID: map[string]*Placed{}, byKind: map[string][]*Placed{}, byContent: map[string]map[string][]*Placed{}, byLink: map[string]map[string][]*Placed{}, byProv: map[string]map[string][]*Placed{}, keys: map[string]keylog.KeyState{},
+	r := &Resolver{logs: s, chained: map[string]map[string]*wire.Statement{}, anc: map[string]*ancestry{}, byID: map[string]*Placed{}, byKind: map[string][]*Placed{}, byContent: map[string]map[string][]*Placed{}, byLink: map[string]map[string][]*Placed{}, byProv: map[string]map[string][]*Placed{}, bySigner: map[string]map[string][]*Placed{}, byReferent: map[string][]*Placed{}, byComparison: map[string][]*Placed{}, place: map[*Placed]int{}, byMethod: map[string][]*Placed{}, byField: map[string]map[string][]*Placed{}, keys: map[string]keylog.KeyState{},
 		time: NoTimeVerifier{}, cmp: NoComparator{}, cmpRuns: map[[3]string]cmpResult{}, obs: defaultObsConfig(), exch: defaultExchConfig()}
 	for _, o := range opts {
 		o(r)
@@ -127,6 +150,7 @@ func New(s *keylog.Store, opts ...Option) *Resolver {
 			}
 		}
 		r.chained[k] = chained
+		r.anc[k] = newAncestry(chained)
 		// Every in-force key event (rotations included: a rotation retires the old key like a `superseded`
 		// revocation, §4.1) and its history: the event and every chained line it reaches through prev and merges.
 		type event struct {
@@ -164,6 +188,7 @@ func New(s *keylog.Store, opts ...Option) *Resolver {
 				}
 			}
 			r.byID[ln.St.ID] = p
+			r.place[p] = len(r.byKind[ln.St.Kind])
 			r.byKind[ln.St.Kind] = append(r.byKind[ln.St.Kind], p)
 			on := r.byContent[ln.St.Kind]
 			if on == nil {
@@ -172,6 +197,30 @@ func New(s *keylog.Store, opts ...Option) *Resolver {
 			}
 			d := contentDigest(ln.St.Body)
 			on[d] = append(on[d], p)
+			mine := r.bySigner[ln.St.Kind]
+			if mine == nil {
+				mine = map[string][]*Placed{}
+				r.bySigner[ln.St.Kind] = mine
+			}
+			mine[ln.St.Signer] = append(mine[ln.St.Signer], p)
+			if ln.St.Kind == "observed" {
+				if k := referentKey(ln.St); k != "" {
+					r.byReferent[k] = append(r.byReferent[k], p)
+				}
+				if str(ln.St.Body, "class") == "method" {
+					ed := str(object(ln.St.Body, "referent"), "method_edition")
+					r.byMethod[ed] = append(r.byMethod[ed], p)
+				}
+			}
+			if f, ok := fieldIndex[ln.St.Kind]; ok {
+				named := r.byField[ln.St.Kind]
+				if named == nil {
+					named = map[string][]*Placed{}
+					r.byField[ln.St.Kind] = named
+				}
+				v := str(ln.St.Body, f)
+				named[v] = append(named[v], p)
+			}
 			if k, ok := provKey(ln.St); ok {
 				runs := r.byProv[ln.St.Kind]
 				if runs == nil {
@@ -187,6 +236,24 @@ func New(s *keylog.Store, opts ...Option) *Resolver {
 					r.byLink[ln.St.Kind] = about
 				}
 				about[k] = append(about[k], p)
+			}
+		}
+	}
+	// byComparison, now that every result a corroborates names can be looked up. A result that is not a held
+	// `authored` with a provenance object lists nothing, as comparisonData answers for it.
+	for _, p := range r.byKind["corroborates"] {
+		res, ok := r.byID[str(p.St.Body, "result")]
+		if !ok || res.St.Kind != "authored" {
+			continue
+		}
+		if k, filed := provKey(res.St); !filed || k == "" {
+			continue
+		}
+		seen := map[string]bool{}
+		for _, in := range provenance(res.St.Body).Inputs {
+			if !seen[in] {
+				seen[in] = true
+				r.byComparison[in] = append(r.byComparison[in], p)
 			}
 		}
 	}
@@ -214,8 +281,11 @@ func (r *Resolver) retiredKey(key string) (string, bool) {
 
 // precedes reports whether line a is an ancestor of line b in key's log (through prev and merges).
 func (r *Resolver) precedes(key, a, b string) bool {
-	return a != b && closure(b, r.chained[key])[a]
+	return a != b && r.anc[key].reaches(b, a)
 }
+
+// inHistory reports whether line x is line from or in its history in key's log: closure(from)[x].
+func (r *Resolver) inHistory(key, from, x string) bool { return r.anc[key].reaches(from, x) }
 
 // closure returns id and every chained line reachable from it through prev and merges.
 func closure(id string, chained map[string]*wire.Statement) map[string]bool {
@@ -241,8 +311,9 @@ func closure(id string, chained map[string]*wire.Statement) map[string]bool {
 func (r *Resolver) on(kind, d string) []*Placed { return r.byContent[kind][d] }
 
 // linkKeys are the keys a statement is filed under in byLink: "content:<digest>" and "statement:<id>" for what
-// a `describes` is about, "of:<id>" for the claim a `refutes`, `retracts` or `reproduced` names. It reads a
-// body that may be absent or unvalidated (another wire major), and then files nothing.
+// a `describes` is about; "of:<id>" for the claim a `refutes`, `retracts` or `reproduced` names; for a `refutes`
+// also "evidence:<digest>" and "task:<id>"; "fulfills:<task>" for an `authored` or `observed` that submits
+// itself. It reads a body that may be absent or unvalidated (another wire major), and then files nothing.
 func linkKeys(st *wire.Statement) []string {
 	var out []string
 	switch st.Kind {
@@ -257,6 +328,19 @@ func linkKeys(st *wire.Statement) []string {
 	case "refutes", "retracts", "reproduced":
 		if id := str(st.Body, "of"); id != "" {
 			out = append(out, "of:"+id)
+		}
+		if st.Kind == "refutes" {
+			if d := str(st.Body, "evidence"); d != "" {
+				out = append(out, "evidence:"+d)
+			}
+			if t := str(st.Body, "task"); t != "" {
+				out = append(out, "task:"+t)
+			}
+		}
+	case "authored", "observed":
+		// a result submitted through its own `fulfills` (task-contracts note §4.2), under the task it names
+		if t := str(object(st.Body, "fulfills"), "resource"); t != "" {
+			out = append(out, "fulfills:"+t)
 		}
 	}
 	return out
@@ -280,4 +364,52 @@ func provKey(st *wire.Statement) (string, bool) {
 		return "", false
 	}
 	return provenance(st.Body).key(), true
+}
+
+// fieldIndex names, per kind, the top-level string member of the body that byField files the kind under.
+var fieldIndex = map[string]string{
+	"edition":           "resource",
+	"withdraw_approval": "resource",
+	"corroborates":      "of",
+	"submit":            "task",
+	"decide":            "task",
+	"intent":            "task",
+	"progress":          "task",
+	"withdraw":          "task",
+	"grant":             "task",
+	"retracts":          "of",
+}
+
+// by returns the placed statements of kind signed by key, in byKind order.
+func (r *Resolver) by(kind, key string) []*Placed { return r.bySigner[kind][key] }
+
+// named returns the placed statements of kind whose indexed body member (fieldIndex) is v, in byKind order.
+func (r *Resolver) named(kind, v string) []*Placed { return r.byField[kind][v] }
+
+// referentKey is the key an `observed` statement is filed under in byReferent: "" for a statement sameReferent
+// matches with nothing (an unpinned referent, a class it never compares), else a string two statements share
+// whenever sameReferent holds between them. It reads a body that may be unvalidated, and then answers "".
+func referentKey(st *wire.Statement) string {
+	if len(st.Unpinned) > 0 {
+		return ""
+	}
+	ref := object(st.Body, "referent")
+	switch str(st.Body, "class") {
+	case "exact-bytes":
+		return "exact-bytes\x00" + str(ref, "chain_id") + "\x00" + str(ref, "block_hash")
+	case "source":
+		if g, ok := ref.Get("requests"); ok {
+			o, isObj := g.(*canon.Object)
+			if !isObj {
+				return ""
+			}
+			return "source-requests\x00" + str(o, "digest")
+		}
+		p, ok := ref.Get("parameters")
+		if !ok || p == nil {
+			return ""
+		}
+		return "source\x00" + str(ref, "endpoint") + "\x00" + string(canon.Encode(p))
+	}
+	return ""
 }

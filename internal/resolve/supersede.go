@@ -49,12 +49,12 @@ type anchorCand struct {
 // line, st in the head's history), by anchor id.
 func (r *Resolver) anchorCands(st *wire.Statement) []anchorCand {
 	var out []anchorCand
-	for _, a := range r.byKind["anchors"] {
-		if a.St.Signer != st.Signer || !r.anchorCounts(a) {
+	for _, a := range r.by("anchors", st.Signer) {
+		if !r.anchorCounts(a) {
 			continue
 		}
 		cov := str(a.St.Body, "covered")
-		if !r.precedes(st.Signer, cov, a.St.ID) || !closure(cov, r.chained[st.Signer])[st.ID] {
+		if !r.precedes(st.Signer, cov, a.St.ID) || !r.inHistory(st.Signer, cov, st.ID) {
 			continue
 		}
 		b, ok := r.anchorBound(a)

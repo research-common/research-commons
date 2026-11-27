@@ -96,7 +96,7 @@ func (h *opaqueObservationHooks) options() []Option {
 func assertOpaqueObservation(t *testing.T, o *Observation, id string) {
 	t.Helper()
 	if o == nil || o.Statement != id || o.Signer == "" || o.Counts || o.BodyUnderstood || o.Class != "" || len(o.Referent) != 0 || len(o.Unpinned) != 0 || o.Finality != nil ||
-		!reflect.DeepEqual(o.Capture, Capture{}) || len(o.Comparability) != 0 || len(o.Others) != 0 || len(o.ReferentHistory) != 0 {
+		!reflect.DeepEqual(o.Capture, Capture{}) || len(o.Comparability()) != 0 || len(o.Others) != 0 || len(o.ReferentHistory) != 0 {
 		t.Fatalf("opaque observation acquired interpreted fields: %+v", o)
 	}
 	if o.ReCheck.Outcome != ReUnchecked || o.Corroboration == nil || !o.Corroboration.Unchecked || o.Corroboration.Corroborated != 0 || o.Corroboration.Contradicted != 0 || len(o.Corroboration.Evidence) != 0 {
@@ -516,7 +516,7 @@ func TestOpaqueObservationRelatedHelpers(t *testing.T) {
 						t.Fatalf("opaque secondary evidence changed the target:\n%s", o.Render())
 					}
 					p, _ := r.Statement(x)
-					if lite := r.observationLite(p); !reflect.DeepEqual(lite.Corroboration, o.Corroboration) || len(lite.Comparability) != 0 {
+					if lite := r.observationLite(p); !reflect.DeepEqual(lite.Corroboration, o.Corroboration) || len(lite.Comparability()) != 0 {
 						t.Fatal("opaque evidence reached lite helper")
 					}
 				}
