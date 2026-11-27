@@ -92,9 +92,9 @@ func TestMethodSystemKeysMissing(t *testing.T) {
 		t.Fatalf("O2 verify %d", code)
 	}
 	var vs3 *Comparability
-	for i, c := range v2.Comparability {
+	for i, c := range v2.Comparability() {
 		if c.With == o3 {
-			vs3 = &v2.Comparability[i]
+			vs3 = &v2.Comparability()[i]
 		}
 		// O1 lacks the declared routing_era: named once, as unpinned, not again as a key O1 does not pin
 		if c.With == o1 && (c.Comparable || !slices.Equal(c.Unpinned, []string{"referent.system.routing_era"}) || len(c.MissingThere)+len(c.MissingHere) != 0) {
@@ -102,7 +102,7 @@ func TestMethodSystemKeysMissing(t *testing.T) {
 		}
 	}
 	if vs3 == nil || !vs3.Comparable || !slices.Equal(vs3.MissingHere, []string{"system.region"}) {
-		t.Fatalf("O2 vs O3: %+v", v2.Comparability)
+		t.Fatalf("O2 vs O3: %+v", v2.Comparability())
 	}
 	has(t, v2.Render(), "every declared system key pinned on both")
 	has(t, v2.Render(), "this observation does not pin system.region")
@@ -207,8 +207,8 @@ func TestMethodSystemKeysUnread(t *testing.T) {
 				if v.ReferentStatus != RefPinned || len(v.Unpinned) != 0 {
 					t.Fatalf("unpinned on account of a declaration: %s %v", v.ReferentStatus, v.Unpinned)
 				}
-				if len(v.Comparability) != 1 || v.Comparability[0].Comparable || v.Comparability[0].EditionUnread != c.unread {
-					t.Fatalf("comparability %+v", v.Comparability)
+				if len(v.Comparability()) != 1 || v.Comparability()[0].Comparable || v.Comparability()[0].EditionUnread != c.unread {
+					t.Fatalf("comparability %+v", v.Comparability())
 				}
 				has(t, v.Render(), "comparability unchecked (method edition "+c.unread)
 				hasNot(t, v.Render(), "comparable;")
@@ -248,8 +248,8 @@ func TestMethodSystemKeysUnread(t *testing.T) {
 		w.workflow("WA", "W", "bytes", "")
 		w.corroborates("CS", "C", o1, w.result("R", "C", "cmp", "W", "B1", "B2"), "supports")
 		v := obsView(t, w, o1)
-		if len(v.Comparability) != 1 || v.Comparability[0].With != o2 || !v.Comparability[0].Comparable || v.Comparability[0].EditionUnread != "" {
-			t.Fatalf("comparability %+v", v.Comparability)
+		if len(v.Comparability()) != 1 || v.Comparability()[0].With != o2 || !v.Comparability()[0].Comparable || v.Comparability()[0].EditionUnread != "" {
+			t.Fatalf("comparability %+v", v.Comparability())
 		}
 		wantStatus(t, v, "corroborated 1 within statements you hold")
 		// the declaration read and met: verify passes, so the exit 3 in (a) and (b) is the edition's state
@@ -265,8 +265,8 @@ func TestMethodSystemKeysUnread(t *testing.T) {
 		o1 := w.observed("O1", "P1", "B1", "method", methodRef(ms, sys))
 		w.observed("O2", "P2", "B2", "method", methodRef(ms, sys))
 		v := obsView(t, w, o1)
-		if len(v.Comparability) != 1 || v.Comparability[0].Comparable || v.Comparability[0].EditionUnread != DeclNotHeld {
-			t.Fatalf("comparability %+v", v.Comparability)
+		if len(v.Comparability()) != 1 || v.Comparability()[0].Comparable || v.Comparability()[0].EditionUnread != DeclNotHeld {
+			t.Fatalf("comparability %+v", v.Comparability())
 		}
 	})
 }
@@ -319,7 +319,7 @@ func TestMethodSystemKeysEmptyValue(t *testing.T) {
 		}
 		// the unpinned key is named once in a comparison, whether it is missing or empty on the other side
 		v2 := obsView(t, w, o2)
-		for _, c := range v2.Comparability {
+		for _, c := range v2.Comparability() {
 			if (c.With == o1 || c.With == o4) && (c.Comparable || !slices.Equal(c.Unpinned, []string{"referent.system.routing_era"}) || len(c.MissingHere)+len(c.MissingThere) != 0) {
 				t.Fatalf("O2 vs %s: %+v", keylog.Short(c.With), c)
 			}
@@ -339,19 +339,19 @@ func TestMethodSystemKeysEmptyValue(t *testing.T) {
 			t.Fatalf("unpinned %v", v5.Unpinned)
 		}
 		var vs6, vs7 *Comparability
-		for i, c := range v5.Comparability {
+		for i, c := range v5.Comparability() {
 			switch c.With {
 			case o6:
-				vs6 = &v5.Comparability[i]
+				vs6 = &v5.Comparability()[i]
 			case o7:
-				vs7 = &v5.Comparability[i]
+				vs7 = &v5.Comparability()[i]
 			}
 		}
 		if vs6 == nil || !vs6.Comparable || len(vs6.MissingHere)+len(vs6.MissingThere) != 0 {
-			t.Fatalf("O5 vs O6 (an empty member is not a pinned key): %+v", v5.Comparability)
+			t.Fatalf("O5 vs O6 (an empty member is not a pinned key): %+v", v5.Comparability())
 		}
 		if vs7 == nil || vs7.Comparable || !slices.Equal(vs7.MissingThere, []string(nil)) || !slices.Equal(vs7.MissingHere, []string{"system.routing_era"}) {
-			t.Fatalf("O5 vs O7: %+v", v5.Comparability)
+			t.Fatalf("O5 vs O7: %+v", v5.Comparability())
 		}
 		has(t, v5.Render(), "this observation does not pin system.routing_era")
 		// the member is still shown as the observer wrote it

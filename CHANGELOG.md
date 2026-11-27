@@ -62,9 +62,13 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
     and every `authored` and `observed` for a `fulfills` naming it.
 
   1,600 statements with an anchor every ten lines: all time bounds took 4.6 s, now 40 ms. A chain of 1,600
-  editions: 490 ms, now 10 ms. No output, verdict, id or byte changes. Two walks stay proportional to the size
-  of their own answer and are not changed: the pairwise comparability of method observations under one method
-  edition, and the anchors covering a statement when a log holds very many of them.
+  editions: 490 ms, now 10 ms. No output, verdict, id or byte changes. One walk stays proportional to the size
+  of its own answer and is not changed: the anchors covering a statement when a log holds very many of them.
+- Method-class observations no longer compare each one with every other observation of its method edition
+  (#291). The resolver built that whole list for every observation, so 1,600 observations of one method edition
+  took 1.8 s to resolve and now take 11 ms. A corroboration asks only about the observations in its own
+  comparison data, and now makes those comparisons alone. No output, verdict, id or byte changes. For Go
+  callers of `internal/resolve`: `Observation.Comparability` is now a method; it builds the list on first use.
 
 - `package show`, `key sign --package` and `<command> --complete` refuse an `rc-signing-package/1` package whose envelope
   is not one of the four actions the format carries (an identity's inception, grant or cut, or an act for an identity),

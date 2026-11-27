@@ -352,10 +352,8 @@ type Observation struct {
 	Corroboration *Corroboration
 	// Others are the other observations of the same bytes, with how each relates to this one.
 	Others []string
-	// Comparability lists, for a method-class observation, each other method-class observation of the same
-	// method edition and whether the two pin the same clause members (C-core-32). Readers decide from the
-	// structured fields; the display is rendered from them.
-	Comparability []Comparability
+	// cmp computes Comparability() on first use; nil for any class but method.
+	cmp *comparer
 	// PreRegistration is the `fulfills` / `pre_registration` disclosure (prereg.go, claims §9.4).
 	PreRegistration PreRegistration
 	Explain         []string
@@ -421,6 +419,29 @@ type Comparability struct {
 	// set the pair is never comparable (C-core-32d): a declaration the reader cannot read might name a key both
 	// omit. None of the other fields can carry this: it is about the reader's holdings, not either statement.
 	EditionUnread string
+}
+
+// comparer holds what Comparability() needs. The list has one entry per other observation of the method edition,
+// so building it for every observation of an edition is quadratic in the edition's observations. Nothing but a
+// display of the whole list needs the whole list: a corroboration asks about the few observations in its own
+// comparison data (comparableWith). So the list is built when asked for, once.
+type comparer struct {
+	r    *Resolver
+	st   *wire.Statement
+	once sync.Once
+	list []Comparability
+}
+
+// Comparability lists, for a method-class observation, each other counted method-class observation of the same
+// method edition and whether the two pin the same clause members (C-core-32), by the other's statement id.
+// Readers decide from the structured fields; the display is rendered from them. It costs one comparison per
+// observation of the edition, on first use.
+func (o *Observation) Comparability() []Comparability {
+	if o.cmp == nil {
+		return nil
+	}
+	o.cmp.once.Do(func() { o.cmp.list = o.cmp.r.comparability(o, o.cmp.st) })
+	return o.cmp.list
 }
 
 // String renders one comparison for display; it is never read back.
@@ -555,7 +576,7 @@ func (r *Resolver) observation(p *Placed) *Observation {
 	r.referentStatus(o, st)
 	r.others(o, st)
 	if o.Class == "method" {
-		r.comparability(o, st)
+		o.cmp = &comparer{r: r, st: st}
 	}
 	o.Corroboration = r.corroboration(o, st)
 	r.observationSelection(o) // policy.go
@@ -969,52 +990,74 @@ func captureState(st *wire.Statement) State {
 //   - held and authorized, declaring none: comparable only when both pin the same system keys, and the display
 //     names what is missing (the fallback, C-core-32);
 //   - not held, or not authorized: unchecked, naming the edition's state, never comparable (C-core-32d).
-func (r *Resolver) comparability(o *Observation, st *wire.Statement) {
+func (r *Resolver) comparability(o *Observation, st *wire.Statement) []Comparability {
 	ref := object(st.Body, "referent")
 	ed := str(ref, "method_edition")
 	d := r.methodDecl(ed)
 	mine := pinnedKeys(object(ref, "system"))
+	var out []Comparability
 	for _, q := range r.byMethod[ed] {
 		if !r.counts(q) || q.St.ID == st.ID {
 			continue
 		}
-		qr := object(q.St.Body, "referent")
-		_, qUnpinned, _ := r.methodPins(q.St)
-		c := Comparability{With: q.St.ID, WithSigner: q.St.Signer, EditionUnread: d.Unread}
-		if len(o.Unpinned)+len(qUnpinned) > 0 {
-			c.Unpinned = append(slices.Clone(o.Unpinned), qUnpinned...)
-			if d.Keys != nil {
-				// a declared key both lack is one fact, named once
-				slices.Sort(c.Unpinned)
-				c.Unpinned = slices.Compact(c.Unpinned)
-			}
-		}
-		if d.read() {
-			// under a declaration, a declared key one side lacks is already in Unpinned; Missing* list only the
-			// keys outside it, shown and never compared
-			theirs := pinnedKeys(object(qr, "system"))
-			for _, k := range theirs {
-				if !slices.Contains(mine, k) && !slices.Contains(d.Keys, k) {
-					c.MissingHere = append(c.MissingHere, "system."+k)
-				}
-			}
-			for _, k := range mine {
-				if !slices.Contains(theirs, k) && !slices.Contains(d.Keys, k) {
-					c.MissingThere = append(c.MissingThere, "system."+k)
-				}
-			}
-		}
-		switch {
-		case !d.read():
-			c.Comparable = false
-		case d.Keys != nil:
-			c.Comparable = len(c.Unpinned) == 0
-		default:
-			c.Comparable = len(c.MissingHere)+len(c.MissingThere)+len(c.Unpinned) == 0
-		}
-		o.Comparability = append(o.Comparability, c)
+		out = append(out, r.comparePins(o, d, mine, q.St))
 	}
-	slices.SortFunc(o.Comparability, func(a, b Comparability) int { return strings.Compare(a.With, b.With) })
+	slices.SortFunc(out, func(a, b Comparability) int { return strings.Compare(a.With, b.With) })
+	return out
+}
+
+// comparableWith is the one comparison of o against q, when q is another counted method-class observation of
+// the same method edition; ok is false for anything else (o itself included). It is the entry Comparability()
+// would hold for q, without building the list.
+func (r *Resolver) comparableWith(o *Observation, q *Placed) (c Comparability, ok bool) {
+	if o.cmp == nil || q.St.ID == o.Statement || q.St.Kind != "observed" || str(q.St.Body, "class") != "method" || !r.counts(q) {
+		return c, false
+	}
+	ref := object(o.cmp.st.Body, "referent")
+	ed := str(ref, "method_edition")
+	if str(object(q.St.Body, "referent"), "method_edition") != ed {
+		return c, false
+	}
+	return r.comparePins(o, r.methodDecl(ed), pinnedKeys(object(ref, "system")), q.St), true
+}
+
+// comparePins is one comparison: o, whose pinned system keys are mine, against statement q under declaration d.
+func (r *Resolver) comparePins(o *Observation, d methodDecl, mine []string, q *wire.Statement) Comparability {
+	qr := object(q.Body, "referent")
+	_, qUnpinned, _ := r.methodPins(q)
+	c := Comparability{With: q.ID, WithSigner: q.Signer, EditionUnread: d.Unread}
+	if len(o.Unpinned)+len(qUnpinned) > 0 {
+		c.Unpinned = append(slices.Clone(o.Unpinned), qUnpinned...)
+		if d.Keys != nil {
+			// a declared key both lack is one fact, named once
+			slices.Sort(c.Unpinned)
+			c.Unpinned = slices.Compact(c.Unpinned)
+		}
+	}
+	if d.read() {
+		// under a declaration, a declared key one side lacks is already in Unpinned; Missing* list only the
+		// keys outside it, shown and never compared
+		theirs := pinnedKeys(object(qr, "system"))
+		for _, k := range theirs {
+			if !slices.Contains(mine, k) && !slices.Contains(d.Keys, k) {
+				c.MissingHere = append(c.MissingHere, "system."+k)
+			}
+		}
+		for _, k := range mine {
+			if !slices.Contains(theirs, k) && !slices.Contains(d.Keys, k) {
+				c.MissingThere = append(c.MissingThere, "system."+k)
+			}
+		}
+	}
+	switch {
+	case !d.read():
+		c.Comparable = false
+	case d.Keys != nil:
+		c.Comparable = len(c.Unpinned) == 0
+	default:
+		c.Comparable = len(c.MissingHere)+len(c.MissingThere)+len(c.Unpinned) == 0
+	}
+	return c
 }
 
 // pinnedKeys is the sorted keys of a referent.system object that are pinned. A member whose value is the empty
@@ -1104,7 +1147,7 @@ func (o *Observation) Render() string {
 	for _, x := range o.Others {
 		fmt.Fprintf(&b, "  %s\n", x)
 	}
-	for _, x := range o.Comparability {
+	for _, x := range o.Comparability() {
 		fmt.Fprintf(&b, "  comparability %s\n", x)
 	}
 	if o.Corroboration != nil {

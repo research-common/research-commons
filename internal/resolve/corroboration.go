@@ -453,10 +453,8 @@ func (r *Resolver) comparisonData(result, observed string) []string {
 func (r *Resolver) incomparableInput(o *Observation, result string) bool {
 	for _, in := range r.comparisonData(result, o.Digest) {
 		for _, q := range r.observedOf(in, true) {
-			for _, c := range o.Comparability {
-				if c.With == q.St.ID && !c.Comparable {
-					return true
-				}
+			if c, ok := r.comparableWith(o, q); ok && !c.Comparable {
+				return true
 			}
 		}
 	}
@@ -649,7 +647,7 @@ func (r *Resolver) observationLite(p *Placed) *Observation {
 	o.Finality = r.finality(st)
 	r.referentStatus(o, st)
 	if o.Class == "method" {
-		r.comparability(o, st)
+		o.cmp = &comparer{r: r, st: st}
 	}
 	o.Corroboration = r.corroborate(o, st, false)
 	return o

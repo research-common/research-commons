@@ -2,6 +2,7 @@ package resolve
 
 import (
 	"fmt"
+	"reflect"
 	"runtime"
 	"slices"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/research-common/research-commons/internal/canon"
+	"github.com/research-common/research-commons/internal/keylog"
 	"github.com/research-common/research-commons/internal/wire"
 )
 
@@ -602,6 +604,83 @@ func shuffleInts(n int, seed uint64) []int {
 	return out
 }
 
+// TestOneComparisonIsTheListEntry: the single comparison a corroboration asks for (comparableWith) is the entry
+// the whole list (Comparability) holds for that statement, for every pair of held statements; and it answers
+// nothing for a statement the list leaves out. Under a method edition that declares no system_keys, one that
+// declares some, and one the reader does not hold.
+func TestOneComparisonIsTheListEntry(t *testing.T) {
+	w := newWorld(t)
+	g := w.genesis("G", "MA", 1, "MA")
+	body := w.editionBody(g, []string{g}, nil, "system_keys", []string{"model", "routing_era"})
+	declaring := EditionID(body)
+	w.sign("MA1", "MA", "edition", body)
+	plainBody := w.editionBody(g, []string{declaring}, nil)
+	plain := EditionID(plainBody)
+	w.sign("MA2", "MA", "edition", plainBody)
+	unheld := strings.Repeat("cd", 32)
+	i := 0
+	for _, ed := range []string{declaring, plain, unheld} {
+		for _, sys := range []*canon.Object{obj("model", "m", "routing_era", "e"), obj("model", "m"), obj("model", "m", "routing_era", ""),
+			obj("model", "m", "routing_era", "e", "region", "r"), obj("region", "r")} {
+			for _, k := range []string{"Aa", "Ba"} {
+				i++
+				w.observed(fmt.Sprintf("o%d", i), k, fmt.Sprintf("B%d", i), "method", methodRef(ed, sys))
+			}
+		}
+	}
+	w.observed("src", "Aa", "SRC", "source", apiRef("https://api.example/src"))
+	// an observation of another class whose referent happens to carry a method_edition member: not a method
+	// observation, so never compared
+	odd := apiRef("https://api.example/odd")
+	odd.Keys, odd.Members["method_edition"] = append(odd.Keys, "method_edition"), canon.String(declaring)
+	slices.SortFunc(odd.Keys, canon.CompareKeys)
+	oddID := w.observed("odd", "Aa", "ODD", "source", odd)
+	// a method observation that does not count: its key's revocation keeps only the line before it
+	kept := w.authored("kept", "Rv", "kept")
+	notCounted := w.observed("revoked", "Rv", "RVK", "method", methodRef(declaring, obj("model", "m", "routing_era", "e")))
+	w.sign("revoke", "Rv", "revoke_key", obj("reason", "key_compromise", "last_good", kept))
+	r := w.store(nil)
+
+	if p := r.byID[notCounted]; r.counts(p) {
+		t.Fatal("the revoked key's observation counts: the world no longer holds a statement the list leaves out")
+	}
+	if p, ok := r.byID[oddID]; !ok || !r.counts(p) {
+		t.Fatal("the source observation carrying a method_edition member is not held and counted")
+	}
+	lists, pairs, differing := 0, 0, map[string]bool{}
+	for _, p := range r.byKind["observed"] {
+		o := r.observation(p)
+		entries := map[string]Comparability{}
+		for _, c := range o.Comparability() {
+			entries[c.With] = c
+		}
+		if len(entries) != len(o.Comparability()) {
+			t.Fatalf("%s: a statement is listed twice", p.St.ID)
+		}
+		if len(entries) > 0 {
+			lists++
+		}
+		for _, q := range r.All() {
+			got, ok := r.comparableWith(o, q)
+			want, listed := entries[q.St.ID]
+			if ok != listed || !reflect.DeepEqual(got, want) {
+				t.Fatalf("%s against %s:\n one comparison %v %+v\n list entry     %v %+v", keylog.Short(p.St.ID), keylog.Short(q.St.ID), ok, got, listed, want)
+			}
+			if ok {
+				pairs++
+				differing[fmt.Sprint(got.Comparable, got.EditionUnread != "", len(got.Unpinned) > 0, len(got.MissingHere) > 0, len(got.MissingThere) > 0)] = true
+			}
+		}
+		if lite := r.observationLite(p); !reflect.DeepEqual(lite.Comparability(), o.Comparability()) {
+			t.Fatalf("%s: the lite view lists other comparisons", p.St.ID)
+		}
+	}
+	// the world reaches what it is for: three editions' worth of lists, and comparisons of several outcomes
+	if lists < 30 || pairs < 3*10*9 || len(differing) < 5 {
+		t.Fatalf("%d lists, %d pairs, %d distinct outcomes: the world no longer covers the comparison", lists, pairs, len(differing))
+	}
+}
+
 // costShape is one store shape and the questions a command asks of it, for TestReadCostIsLinear.
 type costShape struct {
 	name  string
@@ -643,6 +722,48 @@ func costShapes() []costShape {
 			return func() {
 				for _, d := range ds {
 					_ = r.Observations(d)
+				}
+			}
+		}},
+		{"method observations of one method edition, each corroborated against another", func(t *testing.T, n int) func() {
+			// Every observation pins the same method edition, so each has n-1 others to be compared with; one in
+			// three leaves out a system key, so a third of the corroborations meet an incomparable input. The
+			// corroboration needs one of those comparisons, not the list of them.
+			// The edition is held and authorized and declares no system_keys: unread, every pair would be
+			// unchecked whatever it pins.
+			w := newWorld(t)
+			g := w.genesis("G", "MA", 1, "MA")
+			body := w.editionBody(g, []string{g}, nil)
+			w.sign("MA1", "MA", "edition", body)
+			var ds, ids []string
+			for i := 0; i < n; i++ {
+				x := fmt.Sprintf("m%d", i)
+				sys := obj("model", "m", "routing_era", "e")
+				if i%3 == 0 {
+					sys = obj("model", "m")
+				}
+				ids = append(ids, w.observed("m-"+x, key(i), x, "method", methodRef(EditionID(body), sys)))
+				ds = append(ds, dig(x))
+			}
+			for i := 0; i < n; i++ {
+				x, y := fmt.Sprintf("m%d", i), fmt.Sprintf("m%d", (i+1)%n)
+				res := w.authored("r-"+x, key(i+1), "r-"+x, "prov", []string{"WF", x, y})
+				w.corroborates("c-"+x, key(i+1), ids[i], res, "supports")
+			}
+			r := w.store(nil)
+			return func() {
+				unchecked := 0
+				for _, d := range ds {
+					for _, o := range r.Observations(d) {
+						for _, e := range o.Corroboration.Evidence {
+							if strings.HasPrefix(e.Cause, "comparability unchecked") {
+								unchecked++
+							}
+						}
+					}
+				}
+				if unchecked == 0 || unchecked == len(ds) {
+					t.Fatalf("%d of %d corroborations read comparability unchecked: the shape no longer reaches the comparison", unchecked, len(ds))
 				}
 			}
 		}},

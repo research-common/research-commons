@@ -277,9 +277,9 @@ func TestMethodComparability(t *testing.T) {
 	wantStatus(t, o, "unchecked within statements you hold")
 	hasNot(t, o.Render(), "corroborated")
 	// the decision is structured, keyed by the full statement id, and the display is rendered from it
-	if len(o.Comparability) != 1 || o.Comparability[0].With != part || o.Comparability[0].Comparable || o.Comparability[0].EditionUnread != "" ||
-		!slices.Equal(o.Comparability[0].MissingThere, []string{"system.routing_era"}) {
-		t.Fatalf("comparability: %+v", o.Comparability)
+	if len(o.Comparability()) != 1 || o.Comparability()[0].With != part || o.Comparability()[0].Comparable || o.Comparability()[0].EditionUnread != "" ||
+		!slices.Equal(o.Comparability()[0].MissingThere, []string{"system.routing_era"}) {
+		t.Fatalf("comparability: %+v", o.Comparability())
 	}
 	// with no declaration nothing is unpinned on that account
 	if wantRef(t, o, RefPinned); len(o.Unpinned) != 0 {
@@ -288,8 +288,8 @@ func TestMethodComparability(t *testing.T) {
 	// control: with the routing era pinned on both, the two are comparable and the corroboration counts
 	w2, f2, p2 := setup(true)
 	o2 := obsView(t, w2, f2)
-	if len(o2.Comparability) != 1 || o2.Comparability[0].With != p2 || !o2.Comparability[0].Comparable {
-		t.Fatalf("control comparability: %+v", o2.Comparability)
+	if len(o2.Comparability()) != 1 || o2.Comparability()[0].With != p2 || !o2.Comparability()[0].Comparable {
+		t.Fatalf("control comparability: %+v", o2.Comparability())
 	}
 	has(t, o2.Render(), "same pinned clause members")
 	wantStatus(t, o2, "corroborated 1 within statements you hold")
