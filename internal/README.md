@@ -44,6 +44,7 @@ RC_TEST_IMAGE=alpine:latest go test -tags sandbox_oci -run OCI ./internal/run ./
 | `conformance` | the harness: case ids from CONFORMANCE.md and the profile notes (bitcoin-time §14), vectors from the vectors file |
 | `conformance/specgraph` | the generated `docs/spec-graph.json` (case → pinned sections, tokens, exit codes, declaring tests) and the conformance report of a test run; `conformance/report` is the command that writes the report |
 | `conformance/fixture` | seeded generator of abstract statement sets for property tests, with shrinking |
+| `hdkey` | BIP-39 (English wordlist, entropy and phrase conversion, seed) and BIP-32 (private child keys) written on the module's existing dependencies, plus the Ethereum address of a derived key. A library with no command yet. Checked against the official BIP-39 English vectors and BIP-32 test vectors 1 to 4 (test data in `testdata/`). Refuses non-ASCII phrases and passphrases instead of carrying a Unicode normalisation table; derivation that hits the spec's invalid-key case returns an error instead of moving to the next index |
 
 ### Unsupported evidence in resolver views
 

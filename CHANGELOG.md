@@ -21,6 +21,8 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   and `extends` appear on the statement's own blob only; the blob they name is not marked superseded (#8 is
   undecided). New conformance case C-core-149.
 
+- `internal/hdkey`: BIP-39 and BIP-32 key derivation written on the module's existing dependencies (no new module). It is a library only: no command uses it yet, it reads and writes no key file, and the key and file formats are unchanged. It is checked against the official BIP-39 English vectors, BIP-32 test vectors 1 to 4, and published Ethereum addresses for two well-known test phrases at `m/44'/60'/0'/0/0`; the 24-word vector at `m/44'/60'/1581'/0/0` is computed by this package and cross-checked only against a throwaway second implementation, not a published reference. BIP-32 test vector 5 (invalid serialisations) is not applicable because no extended-key encoding is implemented.
+
 - `revoke --ledger --ledger-path <path>` and `rotate --ledger --ledger-path <path>`: a Ledger device signs the key's own
   `revoke_key` or `rotate_key` (EIP-191 `personal_sign` over the PAE, reviewed on the device), so a device-held identity
   root can revoke itself, and can sign an escrowed revocation right after inception (#266). The line is byte for byte

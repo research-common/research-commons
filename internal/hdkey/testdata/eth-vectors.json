@@ -1,0 +1,9 @@
+{
+ "note": "address vectors. source 'public' = widely published test mnemonics whose addresses appear in public documentation (the all-abandon phrase is in BIP-39 tooling docs; the 'test ... junk' phrase is the Hardhat/Anvil default). source 'self-computed' = produced by this package and not from a published source. It was computed by this package and agrees with a separate throwaway Python implementation of BIP-39, BIP-32 and Keccak written for the check; that is not an independent published reference.",
+ "vectors": [
+  {"mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about", "path": "m/44'/60'/0'/0/0", "address": "9858EfFD232B4033E47d90003D41EC34EcaEda94", "source": "public"},
+  {"mnemonic": "test test test test test test test test test test test junk", "path": "m/44'/60'/0'/0/0", "address": "f39Fd6e51aad88F6F4ce6aB8827279cffFb92266", "source": "public"},
+  {"mnemonic": "test test test test test test test test test test test junk", "path": "m/44'/60'/0'/0/1", "address": "70997970C51812dc3A010C7d01b50e0d17dc79C8", "source": "public"},
+  {"mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art", "path": "m/44'/60'/1581'/0/0", "address": "eace21ca0ee4ac095bd0b94e8c5a4efa35e60f5a", "source": "self-computed"}
+ ]
+}
