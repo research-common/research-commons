@@ -137,6 +137,11 @@ A plan, not a schedule; the maintainers make the final call and may revise this 
    ```
    A dry run (Actions → release → Run workflow) builds and checksums without attesting or
    uploading.
+   The same workflow runs the test suite at the tag (the default build, then the `sandbox_oci` build) and attaches
+   `conformance-report.json`, attested like the archives: every conformance case with its result in that run. It
+   does not hold back the binaries. Read its `total` and `not_passed` before announcing: a case that reads `fail`
+   or `not run` is a finding about the release, and the release notes say so. The job fails, and attaches nothing,
+   when a case failed.
 8. **Python wheels** (built and published by CI; the manual path below is the pre-release check). The Python package in `python/` carries the
    binary in one platform wheel per release archive. Its version must already equal `VERSION` mapped to
    PEP 440 (`1.0.0-rc.1` → `1.0.0rc1`, `1.0.0` → `1.0.0`): set `version` in `python/pyproject.toml` and `__version__` in

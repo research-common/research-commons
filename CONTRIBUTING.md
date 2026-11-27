@@ -72,8 +72,8 @@ it. A change to behaviour travels the same way:
 3. **A test that declares it.** `conformance.Covers(t, "C-core-105")` in a test that checks the case's whole
    required outcome; `conformance.Partial(t, id, "what is left")` when it checks part. A `Covers` is a claim a
    reviewer reads against the row: nothing else checks that the test asserts the outcome.
-4. **The coverage tables.** `RC_UPDATE_DOCS=1 go test -run TestCoverageTables ./internal/conformance` rewrites the
-   index at the end of CONFORMANCE.md from the rows. Do not edit it by hand.
+4. **The generated files.** `RC_UPDATE_DOCS=1 go test ./internal/conformance/...` rewrites the index at the end of
+   CONFORMANCE.md and `docs/spec-graph.json` from the rows and the tests. Do not edit either by hand.
 5. **The changelog**, under `[Unreleased]`.
 
 `go test -run TestConformanceCases -v ./internal/conformance` prints every case with the test that covers it and
