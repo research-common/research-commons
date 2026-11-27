@@ -3,18 +3,11 @@ package hdkey
 import (
 	"crypto/sha256"
 	"crypto/sha512"
-	_ "embed"
 	"errors"
 	"strings"
 
 	"golang.org/x/crypto/pbkdf2"
 )
-
-// english.txt is the official BIP-39 English wordlist: 2048 lowercase ASCII words, one per line. The test
-// checks its SHA-256 against the hash of the published file.
-//
-//go:embed english.txt
-var englishRaw string
 
 var (
 	words   []string

@@ -47,6 +47,13 @@ func TestWordlistHash(t *testing.T) {
 	if got := hex.EncodeToString(sum[:]); got != want {
 		t.Fatalf("wordlist hash %s", got)
 	}
+	file, err := os.ReadFile("testdata/bip39-english.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(file) != englishRaw {
+		t.Fatal("wordlist.go differs from testdata/bip39-english.txt")
+	}
 	for i := 1; i < len(words); i++ {
 		if words[i-1] >= words[i] {
 			t.Fatal("wordlist not strictly sorted")
