@@ -54,8 +54,20 @@ func TestDeclaredFieldsSurfaces(t *testing.T) {
 		t.Fatalf("list --json: blob not listed")
 	}
 
+	// the human surface of every command prints the block too
+	for _, args := range [][]string{{"list"}, {"verify", d}, {"explain", d}} {
+		txt := w.run(args...).stdout
+		if !strings.Contains(txt, "declared fields:") || !strings.Contains(txt, "a rival description") {
+			t.Errorf("%s text lacks the declared fields block:\n%s", args[0], txt)
+		}
+	}
+	// contested authorship: no default, so every signed value is listed under `values`, as a disclosure lists them
+	cj := jsonOf(t, w.run("show", d, "--json")).Members["declared_fields"].(*canon.Object).Members["description"].(*canon.Object)
+	if vs, ok := cj.Members["values"].(canon.Array); !ok || len(vs) != 2 || cj.Members["rivals"] != nil || cj.Members["value"] != nil {
+		t.Errorf("contested description: %s", canon.Encode(cj))
+	}
 	out := w.run("show", d).stdout
-	for _, want := range []string{"a plain description", "Jane Doe, 2026", "rival", "a rival description"} {
+	for _, want := range []string{"a plain description", "Jane Doe, 2026", "a rival description"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("show text lacks %q:\n%s", want, out)
 		}
@@ -71,7 +83,7 @@ func TestDeclaredFieldsSurfaces(t *testing.T) {
 	w.blob("solo", []byte("solo"))
 	w.authored("A:solo", "K3", "solo", "licence", "CC-BY-4.0", "attribution", "Ann Lee")
 	so := w.run("show", w.blobs["solo"]).stdout
-	if !strings.Contains(so, "attribution:\n              state: default") && !strings.Contains(so, "Ann Lee") {
+	if !strings.Contains(so, "Ann Lee") {
 		t.Errorf("sole author attribution missing:\n%s", so)
 	}
 	sj := jsonOf(t, w.run("show", w.blobs["solo"], "--json"))

@@ -155,14 +155,15 @@ func declaredField(f resolve.Field) *Obj {
 			by = append(by, s.Signer)
 		}
 		d.set("signers", refs(by...))
-	} else if len(f.From) > 0 {
-		d.set("values", sources(f.From))
+		if len(f.Rivals) > 0 {
+			d.set("rivals", sources(f.Rivals))
+		}
+	} else {
+		// no default: every signed value, as a disclosure lists them (no value is singled out as the rival)
+		d.set("values", sources(append(slices.Clone(f.From), f.Rivals...)))
 	}
 	if f.Why != "" {
 		d.set("why", textV(f.Why))
-	}
-	if len(f.Rivals) > 0 {
-		d.set("rivals", sources(f.Rivals))
 	}
 	return d
 }
