@@ -41,10 +41,7 @@ func (r *Resolver) CoveringAnchors(id string) []string {
 func (r *Resolver) WithheldBy(digest string) []string {
 	var out []string
 	for _, k := range []string{"authored", "observed"} {
-		for _, p := range r.byKind[k] {
-			if contentDigest(p.St.Body) != digest {
-				continue
-			}
+		for _, p := range r.on(k, digest) {
 			if str(object(p.St.Body, "availability"), "redistribution") == "withheld" {
 				out = append(out, p.St.ID)
 			}

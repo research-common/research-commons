@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/research-common/research-commons/internal/canon"
 	"github.com/research-common/research-commons/internal/keylog"
 	"github.com/research-common/research-commons/internal/policy"
 	"github.com/research-common/research-commons/internal/wire"
@@ -61,7 +62,20 @@ type Resolver struct {
 	chained map[string]map[string]*wire.Statement // per key: its chained lines by id
 	byID    map[string]*Placed
 	byKind  map[string][]*Placed
-	keys    map[string]keylog.KeyState
+	// byContent is byKind split by the blob a statement's body names (contentDigest; "" when it names none): the
+	// same statements in the same order, so a walk of on(kind, d) visits exactly what a walk of byKind[kind] that
+	// skips other digests visits. Without it every question about one blob read every statement of the kind, and
+	// `list`, which asks about every blob, cost the square of the store (#291).
+	byContent map[string]map[string][]*Placed
+	// byLink is byKind split by what a statement is about, for the kinds that are about something other than
+	// their own content (linkKeys): a `describes` under its about.content and about.statement, a `refutes`,
+	// `retracts` or `reproduced` under its `of`. Same statements, same order within a key.
+	byLink map[string]map[string][]*Placed
+	// byProv is byKind split by provenance key (Provenance.key; "" for a body with none) for the two kinds that
+	// carry one, `authored` and `reproduced`: the runs of one derivation group. A body whose provenance is not an
+	// object is filed nowhere: it is never evidence-ready, and no walk that asks for a provenance reads it.
+	byProv map[string]map[string][]*Placed
+	keys   map[string]keylog.KeyState
 	// time and cmp are the reader's own verifiers (I9): time evidence (§10) and comparator runs (§5.2).
 	time TimeVerifier
 	cmp  Comparator
@@ -97,7 +111,7 @@ type Resolver struct {
 // New indexes every placed line of every log in s. With no options the reader verifies no proof format and
 // runs no comparator, so no bound orders anything and no comparison is made.
 func New(s *keylog.Store, opts ...Option) *Resolver {
-	r := &Resolver{logs: s, chained: map[string]map[string]*wire.Statement{}, byID: map[string]*Placed{}, byKind: map[string][]*Placed{}, keys: map[string]keylog.KeyState{},
+	r := &Resolver{logs: s, chained: map[string]map[string]*wire.Statement{}, byID: map[string]*Placed{}, byKind: map[string][]*Placed{}, byContent: map[string]map[string][]*Placed{}, byLink: map[string]map[string][]*Placed{}, byProv: map[string]map[string][]*Placed{}, keys: map[string]keylog.KeyState{},
 		time: NoTimeVerifier{}, cmp: NoComparator{}, cmpRuns: map[[3]string]cmpResult{}, obs: defaultObsConfig(), exch: defaultExchConfig()}
 	for _, o := range opts {
 		o(r)
@@ -151,6 +165,29 @@ func New(s *keylog.Store, opts ...Option) *Resolver {
 			}
 			r.byID[ln.St.ID] = p
 			r.byKind[ln.St.Kind] = append(r.byKind[ln.St.Kind], p)
+			on := r.byContent[ln.St.Kind]
+			if on == nil {
+				on = map[string][]*Placed{}
+				r.byContent[ln.St.Kind] = on
+			}
+			d := contentDigest(ln.St.Body)
+			on[d] = append(on[d], p)
+			if k, ok := provKey(ln.St); ok {
+				runs := r.byProv[ln.St.Kind]
+				if runs == nil {
+					runs = map[string][]*Placed{}
+					r.byProv[ln.St.Kind] = runs
+				}
+				runs[k] = append(runs[k], p)
+			}
+			for _, k := range linkKeys(ln.St) {
+				about := r.byLink[ln.St.Kind]
+				if about == nil {
+					about = map[string][]*Placed{}
+					r.byLink[ln.St.Kind] = about
+				}
+				about[k] = append(about[k], p)
+			}
 		}
 	}
 	return r
@@ -198,4 +235,49 @@ func closure(id string, chained map[string]*wire.Statement) map[string]bool {
 		stack = append(stack, st.Merges...)
 	}
 	return seen
+}
+
+// on returns the placed statements of kind whose body names blob d, in byKind order.
+func (r *Resolver) on(kind, d string) []*Placed { return r.byContent[kind][d] }
+
+// linkKeys are the keys a statement is filed under in byLink: "content:<digest>" and "statement:<id>" for what
+// a `describes` is about, "of:<id>" for the claim a `refutes`, `retracts` or `reproduced` names. It reads a
+// body that may be absent or unvalidated (another wire major), and then files nothing.
+func linkKeys(st *wire.Statement) []string {
+	var out []string
+	switch st.Kind {
+	case "describes":
+		about := object(st.Body, "about")
+		// filed under its content even when it names none (the empty digest): the scan this index replaces
+		// compared the two as written, and the index answers exactly what the scan answered
+		out = append(out, "content:"+str(about, "content"))
+		if id := str(about, "statement"); id != "" {
+			out = append(out, "statement:"+id)
+		}
+	case "refutes", "retracts", "reproduced":
+		if id := str(st.Body, "of"); id != "" {
+			out = append(out, "of:"+id)
+		}
+	}
+	return out
+}
+
+// provKey is the provenance key an `authored` or `reproduced` statement is filed under in byProv, and whether
+// it is filed at all. It reads a body that may be absent or unvalidated: a provenance that is present and not
+// an object files nothing.
+func provKey(st *wire.Statement) (string, bool) {
+	if st.Kind != "authored" && st.Kind != "reproduced" {
+		return "", false
+	}
+	if st.Body == nil {
+		return "", false
+	}
+	v, ok := st.Body.Get("provenance")
+	if !ok {
+		return "", true
+	}
+	if _, ok := v.(*canon.Object); !ok {
+		return "", false
+	}
+	return provenance(st.Body).key(), true
 }

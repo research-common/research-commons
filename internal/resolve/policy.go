@@ -197,8 +197,8 @@ func (r *Resolver) followIdentity(s *Selected, identity, content, role string) {
 	name := "following identity " + keylog.Short(identity)
 	var nodes []*Placed
 	var undecided []string
-	for _, p := range r.byKind[kind] {
-		if !p.EvidenceReady() || contentDigest(p.St.Body) != content || r.shapeIneligible(p, role) != "" {
+	for _, p := range r.on(kind, content) {
+		if !p.EvidenceReady() || r.shapeIneligible(p, role) != "" {
 			continue
 		}
 		id, state, _ := r.actors.Eligible(p.St)
@@ -252,8 +252,8 @@ func (r *Resolver) currentOf(k, content, role string) []*wire.Statement {
 		kind = "observed"
 	}
 	var mine []*Placed
-	for _, p := range r.byKind[kind] {
-		if p.St.Signer == k && r.countsAsKey(p) && contentDigest(p.St.Body) == content {
+	for _, p := range r.on(kind, content) {
+		if p.St.Signer == k && r.countsAsKey(p) {
 			mine = append(mine, p)
 		}
 	}

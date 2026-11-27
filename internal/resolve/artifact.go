@@ -269,10 +269,7 @@ func (r *Resolver) authorship(d string) *Artifact {
 	a := &Artifact{Digest: d}
 	byKey := map[string][]*Placed{}
 	byIdentity := map[string][]*Placed{}
-	for _, p := range r.byKind["authored"] {
-		if contentDigest(p.St.Body) != d {
-			continue
-		}
+	for _, p := range r.on("authored", d) {
 		// the counting gate: with no actor evaluator (a reader holding no rc/2 line) exactly Counts, and the evaluator
 		// is never asked; with one, a statement it binds to an identity counts for that identity (actorgate.go)
 		g := r.gate(p)
@@ -565,8 +562,8 @@ func (a *Artifact) Field(name string) Field {
 // uncleared fork two current statements may disagree; the key is listed if either serves.
 func (r *Resolver) holders(d string) []string {
 	byKey := map[string][]*Placed{}
-	for _, p := range r.byKind["holds"] {
-		if r.counts(p) && contentDigest(p.St.Body) == d {
+	for _, p := range r.on("holds", d) {
+		if r.counts(p) {
 			byKey[p.St.Signer] = append(byKey[p.St.Signer], p)
 		}
 	}
@@ -595,28 +592,34 @@ func (r *Resolver) held(a *Artifact) []*Placed {
 			claimIDs[id] = c
 		}
 	}
+	// Only the statements filed under this blob or under one of its claims can match (byLink), so those are the
+	// ones read: a describes of the blob or of a claim, and a refutes, retracts or reproduced naming a claim.
 	var out []*Placed
-	for _, kind := range []string{"describes", "refutes", "retracts", "reproduced"} {
-		for _, p := range r.byKind[kind] {
-			if !p.EvidenceReady() {
-				continue
+	seen := map[*Placed]bool{}
+	add := func(p *Placed) {
+		if p.EvidenceReady() && !seen[p] {
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
+	for _, p := range r.byLink["describes"]["content:"+a.Digest] {
+		add(p)
+	}
+	for _, id := range sortedKeys(claimIDs) {
+		c := claimIDs[id]
+		for _, p := range r.byLink["describes"]["statement:"+id] {
+			add(p)
+		}
+		for _, kind := range []string{"refutes", "retracts"} {
+			for _, p := range r.byLink[kind]["of:"+id] {
+				add(p)
 			}
-			b := p.St.Body
-			switch kind {
-			case "describes":
-				about, _ := b.Get("about")
-				ao := about.(*canon.Object)
-				if str(ao, "content") == a.Digest || claimIDs[str(ao, "statement")] != nil {
-					out = append(out, p)
-				}
-			case "refutes", "retracts":
-				if claimIDs[str(b, "of")] != nil {
-					out = append(out, p)
-				}
-			case "reproduced":
-				if c := claimIDs[str(b, "of")]; c != nil && provenance(b).key() != c.Provenance.key() {
-					out = append(out, p)
-				}
+		}
+		for _, p := range r.byLink["reproduced"]["of:"+id] {
+			// evidence-ready first: a body this reader could not validate is never read (its provenance may be
+			// anything), exactly as the scan skipped it before looking
+			if p.EvidenceReady() && provenance(p.St.Body).key() != c.Provenance.key() {
+				add(p)
 			}
 		}
 	}

@@ -585,8 +585,8 @@ func (r *Resolver) refutations(t *Task, bind func(string) Binding) {
 	// the counting gate, an identity's)
 	claimOf := map[string]*Submission{}
 	for _, s := range t.Submissions {
-		for _, p := range r.byKind["authored"] {
-			if r.counts(p) && contentDigest(p.St.Body) == s.Result {
+		for _, p := range r.on("authored", s.Result) {
+			if r.counts(p) {
 				claimOf[p.St.ID] = s
 			}
 		}
