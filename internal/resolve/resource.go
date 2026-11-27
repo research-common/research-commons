@@ -155,9 +155,10 @@ type Approval struct {
 	// Withdrawn names the signer's withdraw_approval that took this approval back; "" when none counts.
 	Withdrawn string
 	Why       string // why it is not counted; "" when counted
-	// CutBy lists the held cuts of Grant when the evaluator denies this approval because a cut of its grant leaves
-	// it out (identity profile §4, §5.2). Such an approval counts toward nothing and is not doubted: the root has
-	// said which of the delegate's lines were its own. Nil otherwise.
+	// CutBy lists the cuts of Grant that leave this approval out, when the evaluator denies it for that (identity
+	// profile §4, §5.2): the cuts the evaluator applied when it names them (policy.ActorReasoner), else every held
+	// cut of the grant. Such an approval counts toward nothing and is not doubted: the root has said which of the
+	// delegate's lines were its own. Nil otherwise.
 	CutBy []string
 }
 
@@ -557,7 +558,7 @@ func (r *Resolver) approval(p *Placed) Approval {
 			// cut key keep a resource at exit 3 for ever.
 			a.Counted, a.Why = false, g.Why
 			if cutExcluded(g.Reasons) {
-				a.CutBy = r.cutsOf(g.Identity, a.Grant)
+				a.CutBy = r.cutsApplied(p, g.Identity, a.Grant)
 			}
 		default:
 			a.Counted, a.Doubted, a.Why = false, true, g.Why
@@ -582,8 +583,25 @@ func cutExcluded(reasons []string) bool {
 	return false
 }
 
-// cutsOf lists the held, valid identity_cut statements that name identity and grant, sorted. It is display: the
-// evaluator has already decided that a cut excludes the approval, and this names the candidates.
+// cutsApplied names the cuts that leave p out: the statements the evaluator's cut_excluded reasons rest on, sorted.
+// An evaluator that does not name them (it is not a policy.ActorReasoner) gets every held cut of the grant.
+func (r *Resolver) cutsApplied(p *Placed, identity, grant string) []string {
+	rr, ok := r.actors.(policy.ActorReasoner)
+	if !ok {
+		return r.cutsOf(identity, grant)
+	}
+	var out []string
+	for _, x := range rr.Reasons(p.St) {
+		if x.Code == "cut_excluded" {
+			out = append(out, x.Related)
+		}
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
+// cutsOf lists the held, valid identity_cut statements that name identity and grant, sorted: the candidates, for
+// an evaluator that does not say which cut it applied.
 func (r *Resolver) cutsOf(identity, grant string) []string {
 	var out []string
 	for _, p := range r.byKind["identity_cut"] {

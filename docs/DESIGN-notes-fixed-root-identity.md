@@ -527,10 +527,14 @@ such an edition as `contested`). A plain controller key has no such statement ab
 
 What replaces the failing token is a disclosure, which changes no exit:
 - the resource view lists every edition that is not authorized and has an approval a
-  cut leaves out, with the approval, the grant and the cut (`cut_excluded`);
+  cut leaves out, with the approval, the grant and the cut that leaves it out
+  (`cut_excluded`): the cut the evaluator applied, not every cut of the grant;
 - `pull`, `hub check` and `push` label an added cut that leaves out such an approval
-  (`cut: editions not counted`), naming each resource, how many editions, and the
-  resource's current edition over the evaluated set. A cut already held is not labelled
+  (`cut: editions not counted`), naming each resource, how many editions, the
+  resource's current edition over the evaluated set, and whether the delivery moved
+  it. The count includes editions the cut key signed after the cut, which never
+  counted for anyone and which no evidence tells apart from the others; whether
+  `current` moved is the fact a receiver acts on. A cut already held is not labelled
   again: the label marks the moment a reader's view changes;
 - the writer warns when an edition names a predecessor that is not an authorized
   edition in its store.
@@ -1270,7 +1274,7 @@ a scenario.
 | C-id-27 | §2.3, §5.2 (handle ID-27) | Mixed raw/identity slots with same signer | One key's raw approval and its identity approval of the same body are two signatures for two subjects; neither fills both slots. |
 | C-id-28 | §2.1, §5.2 (handle ID-28) | Complete typed controller changes and merges | A controller change must carry complete typed controllers and rule; partial, untyped or duplicate shapes are refused; merges need predecessor authority. |
 | C-id-29 | §5.2 (handle ID-29) | Key-and-grant-local withdrawal / reapproval | Withdrawal/reapproval is key-and-grant-local: one delegate cannot withdraw another's approval; a new grant cannot cancel an approval made under another. |
-| C-id-30 | §5.2 (handle ID-30) | Cut removes required resource approval | An approval that a cut leaves out counts toward nothing and is not doubted: the edition is `unauthorized` (or `pending`, when other approvals still count but fall short) unless the remaining counted approvals meet the rule, its dependants are `orphan`, `current` is the last authorized edition and `verify` on the resource exits 0. The view lists the edition, the approval, the grant and the cut (`cut_excluded`); an added cut that leaves out such an approval is labelled on `pull` and `hub check`. An edition signed by the cut key after the cut changes none of this. Another delegate approving the same bytes restores an edition. Unresolved identity state that would decide a controller slot still makes the edition and its dependants `contested` (exit 3). The same holds for an approval under a grant a recovery voids. |
+| C-id-30 | §5.2 (handle ID-30) | Cut removes required resource approval | An approval that a cut leaves out counts toward nothing and is not doubted: the edition is `unauthorized` (or `pending`, when other approvals still count but fall short) unless the remaining counted approvals meet the rule, its dependants are `orphan`, `current` is the last authorized edition and `verify` on the resource exits 0. The view lists the edition, the approval, the grant and the cut that leaves it out (`cut_excluded`), which is the cut the evaluator applied when a grant has several; an added cut that leaves out such an approval is labelled on `pull` and `hub check`, with whether the current edition moved. A cut whose `last_good` keeps the approval changes nothing; a cut with `last_good: null` leaves out every approval under the grant. An edition signed by the cut key after the cut changes none of this. Another delegate approving the same bytes restores an edition. Unresolved identity state that would decide a controller slot still makes the edition and its dependants `contested` (exit 3). The same holds for an approval under a grant a recovery voids. |
 | C-id-31 | §6 (handle ID-31) | Exact pin versus principal-following selection | An exact pin selects that statement only (no alias/successor); a principal selection follows that principal's eligible current claims. |
 | C-id-32 | §6 (handle ID-32) | Invalid/missing exact pin and policy conflicts | A missing or ineligible pinned statement is non-passing (never substituted); conflicting selections for the same content/role fail before evaluation (exit 2). |
 | C-id-33 | §6 (handle ID-33) | Trust purpose boundaries / received policy injection | Trust applies only to the named purpose and targets; a received statement (even root-signed) never installs or changes local policy. |

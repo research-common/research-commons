@@ -443,6 +443,7 @@ func TestTypedControllerCutDenies(t *testing.T) {
 	if eff := w.cutEffects(cut); len(eff) != 1 || eff[0].Resource != g || !slices.Equal(eff[0].Editions, []string{tid}) || eff[0].Current != nid {
 		t.Fatalf("cut effects %+v", eff)
 	}
+	cutCases(t)
 	// Unresolved identity state (an authenticated root-lineage event this reader does not understand): every act
 	// for I reads unknown, and an edition that needs one is contested.
 	u := newCtrlWorld(t, "K1")
@@ -460,4 +461,82 @@ func TestTypedControllerCutDenies(t *testing.T) {
 			t.Fatal("contested resource passed verify")
 		}
 	})
+}
+
+// cutCases are the edges of the cut rule (C-id-30): the rule bites only an approval the cut leaves out, a cut that
+// preserves nothing leaves out every approval under the grant, and the disclosure names the cut the evaluator
+// applied, not every cut of the grant.
+func cutCases(t *testing.T) {
+	t.Helper()
+	build := func() (w *ctrlWorld, g, g1 string, eid, a1 string) {
+		w = newCtrlWorld(t, "K1")
+		g = w.genesis2("G", "GK", 1, "I")
+		g1 = w.grant("G1", "K1", g, "edition")
+		b := body2(g, []string{g}, obj("members", canon.Array{}))
+		return w, g, g1, edID2(b), w.approve("A1", "K1", b, g1)
+	}
+	cut := func(w *ctrlWorld, name, grant string, lastGood canon.Value) string {
+		return w.signRC2(name, "IR", "identity_cut", obj("identity", w.I, "grant", grant, "last_good", lastGood, "reason", "key_compromise"), rc2MarkerOnly, [2]string{})
+	}
+
+	// a cut whose last_good keeps the approval: it still counts, and nothing is disclosed
+	w, g, g1, eid, a1 := build()
+	keeping := cut(w, "CUT", g1, canon.String(a1))
+	w.resolveCtrl(g, true, func(res *Resource) {
+		e := edState(t, res, eid, Authorized, "")
+		if x := approvalOf(t, e, a1); !x.Counted || x.Doubted || len(x.CutBy) != 0 {
+			t.Fatalf("kept approval %+v", x)
+		}
+		if res.Current != eid || res.VerifyExit() != 0 || len(res.CutExcluded) != 0 {
+			t.Fatalf("kept: current %s exit %d cut excluded %+v\n%s", res.Current, res.VerifyExit(), res.CutExcluded, res.Render())
+		}
+	})
+	if eff := w.cutEffects(keeping); len(eff) != 0 {
+		t.Fatalf("a cut that keeps the approval has effects %+v", eff)
+	}
+	// the key signs on after that cut: only the later approval is left out
+	nb := body2(g, []string{eid}, obj("members", canon.Array{}, "note", "after the cut"))
+	na := w.approve("N", "K1", nb, g1)
+	w.resolveCtrl(g, true, func(res *Resource) {
+		edState(t, res, eid, Authorized, "")
+		e := edState(t, res, edID2(nb), Unauthorized, "")
+		if x := approvalOf(t, e, na); x.Counted || x.Doubted || !slices.Equal(x.CutBy, []string{keeping}) {
+			t.Fatalf("later approval %+v", x)
+		}
+		if res.Current != eid || res.VerifyExit() != 0 {
+			t.Fatalf("current %s exit %d\n%s", res.Current, res.VerifyExit(), res.Render())
+		}
+	})
+
+	// a cut with last_good null: every approval under the grant is left out, the resource is back at its genesis
+	w, g, g1, eid, a1 = build()
+	none := cut(w, "CUT", g1, canon.Null{})
+	w.resolveCtrl(g, true, func(res *Resource) {
+		e := edState(t, res, eid, Unauthorized, "")
+		if x := approvalOf(t, e, a1); x.Counted || x.Doubted || !slices.Equal(x.CutBy, []string{none}) {
+			t.Fatalf("approval under a null cut %+v", x)
+		}
+		if res.Current != g || res.VerifyExit() != 0 || len(res.Contested) != 0 {
+			t.Fatalf("null cut: current %s exit %d contested %v\n%s", res.Current, res.VerifyExit(), res.Contested, res.Render())
+		}
+	})
+
+	// two cuts of one grant, one keeping the approval and one not: the disclosure names the one that excludes it
+	w, g, g1, eid, a1 = build()
+	zero := w.firstLine("K1")
+	keeps := cut(w, "KEEPS", g1, canon.String(a1))
+	drops := cut(w, "DROPS", g1, canon.String(zero))
+	w.resolveCtrl(g, true, func(res *Resource) {
+		e := edState(t, res, eid, Unauthorized, "")
+		x := approvalOf(t, e, a1)
+		if x.Counted || x.Doubted || !slices.Equal(x.CutBy, []string{drops}) {
+			t.Fatalf("approval under two cuts %+v (keeps %s, drops %s)", x, keylog.Short(keeps), keylog.Short(drops))
+		}
+	})
+	if eff := w.cutEffects(keeps); len(eff) != 0 {
+		t.Fatalf("the keeping cut is shown as leaving the edition out: %+v", eff)
+	}
+	if eff := w.cutEffects(drops); len(eff) != 1 || !slices.Equal(eff[0].Editions, []string{eid}) {
+		t.Fatalf("the excluding cut's effects %+v", eff)
+	}
 }

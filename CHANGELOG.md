@@ -40,9 +40,11 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   at will). C-id-30 is rewritten. **This changes what a reader answers for statements that already exist; no
   statement's bytes or id change.** In its place:
   - the resource view lists each edition that is not authorized and has an approval a cut leaves out, with the
-    approval, the grant and the cut (`cut_excluded`, in `show`, `verify` and `list`);
+    approval, the grant and the cut that leaves it out (`cut_excluded`, in `show`, `verify` and `list`). With
+    several cuts of one grant it names the one the evaluator applied;
   - `pull`, `hub check` and `push` label an added cut that leaves out such an approval, `cut: editions not counted`,
-    naming each resource, how many editions, and its current edition. No exit changes;
+    naming each resource, how many editions, its current edition and whether the delivery moved it (the count
+    includes editions the cut key signed after the cut). No exit changes;
   - `publish` warns when an edition names a predecessor that is not an authorized edition in the store.
   An edition a cut leaves out, pinned by id, still does not pass. Identity state the reader cannot resolve still
   contests. A plain controller key's revocation still contests, and that has the cost this fix removes for

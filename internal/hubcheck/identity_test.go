@@ -300,10 +300,32 @@ func TestCutEditionsLabel(t *testing.T) {
 				detail = l.Detail
 			}
 		}
-		for _, want := range []string{"resource " + g[:12], "1 edition(s) not counted", "current " + g[:12]} {
+		for _, want := range []string{"resource " + g[:12], "1 edition(s) not counted", "current " + g[:12] + ", was ", " before this delivery"} {
 			if !strings.Contains(detail, want) {
 				t.Fatalf("label detail %q lacks %q", detail, want)
 			}
+		}
+	})
+
+	// The count includes an edition the cut key signs after the cut, which never counted for anyone: the label
+	// says the current edition did not move.
+	t.Run("an edition signed after the cut moves nothing", func(t *testing.T) {
+		w, h, g := build(t)
+		h.commit("base: a grant, no edition under it")
+		h.branch("cut")
+		p := cut(w, h)
+		edition(w, h, g)
+		h.commit("the root cuts the grant; the cut key signs an edition")
+		res := h.check("main")
+		r := verdict(t, res, p)
+		var detail string
+		for _, l := range r.Labels {
+			if l.Token == gate.LabelCutEditions {
+				detail = l.Detail
+			}
+		}
+		if r.Verdict != gate.Admitted || res.Exit() != 0 || !strings.Contains(detail, "current "+g[:12]+", unchanged by this delivery") {
+			t.Fatalf("cut: %s exit %d detail %q", r.Verdict, res.Exit(), detail)
 		}
 	})
 

@@ -514,7 +514,9 @@ func Admit(gate string, pkg Package, held Held, pol *Policy, opt Options) (*Repo
 		}
 	}
 
-	// 5a. What an added cut leaves out, over the evaluated set.
+	// 5a. What an added cut leaves out, over the evaluated set. before is the resolver over what the receiver
+	// holds now, built only when a cut leaves something out.
+	var before *resolve.Resolver
 	for _, i := range cands {
 		r := &results[i]
 		// a cut the receiver already holds changes nothing in its view: the label marks the arrival
@@ -526,11 +528,28 @@ func Admit(gate string, pkg Package, held Held, pol *Policy, opt Options) (*Repo
 		}
 		var parts []string
 		for _, e := range res.CutEffects(r.ID) {
+			// The count includes editions the cut key signed after the cut, which never counted for anyone.
+			// Whether the current edition moved is the fact a receiver acts on, so it is said beside the count:
+			// the resource as the receiver holds it now, against the evaluated set.
+			if before == nil {
+				before = resolver(heldLines, pol)
+			}
+			was := "the resource is not held before this delivery"
+			if b, ok := before.Resource(e.Resource); ok {
+				switch {
+				case b.Current == e.Current:
+					was = "unchanged by this delivery"
+				case b.Current == "":
+					was = "was none (FORK) before this delivery"
+				default:
+					was = "was " + keylog.Short(b.Current) + " before this delivery"
+				}
+			}
 			cur := "none (FORK)"
 			if e.Current != "" {
 				cur = keylog.Short(e.Current)
 			}
-			parts = append(parts, fmt.Sprintf("resource %s: %d edition(s) not counted (%s); current %s", keylog.Short(e.Resource), len(e.Editions), shortList(e.Editions), cur))
+			parts = append(parts, fmt.Sprintf("resource %s: %d edition(s) not counted (%s); current %s, %s", keylog.Short(e.Resource), len(e.Editions), shortList(e.Editions), cur, was))
 		}
 		if len(parts) > 0 {
 			r.label(LabelCutEditions, strings.Join(parts, "; "))
