@@ -61,6 +61,20 @@ type ActorEvaluator interface {
 	Evaluator() string
 }
 
+// ActorReason is one reason of an evaluator's answer that names a second statement: its code and the statement
+// the reason rests on (for cut_excluded, the cut that leaves the act out).
+type ActorReason struct {
+	Code    string
+	Related string
+}
+
+// ActorReasoner is optionally implemented by an ActorEligibility that can say which statement each of its reasons
+// rests on. It is disclosure only: a consumer shows the statement the evaluator applied in place of guessing it
+// from the bodies it holds. The answer itself is Eligible's.
+type ActorReasoner interface {
+	Reasons(st *wire.Statement) []ActorReason
+}
+
 func evaluatorOf(a ActorEligibility) string {
 	if e, ok := a.(ActorEvaluator); ok {
 		return e.Evaluator()

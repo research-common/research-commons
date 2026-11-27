@@ -474,10 +474,11 @@
       "scenario": "Cut removes required resource approval",
       "schema_vectors": [],
       "isolated_tests": [
-        "internal/resolve:TestTypedControllerCutContests"
+        "internal/resolve:TestTypedControllerCutDenies",
+        "internal/cli:TestCutKeyCannotHoldResource"
       ],
       "conformance": "covers",
-      "remaining": "Covered by internal/resolve:TestTypedControllerCutContests: a signed grant-history cut whose last_good excludes a required approval, and an unsupported root event, make the edition and its dependants contested (verify exit 3); the last authorized edition is named only beside the contested list, as for a key revocation (C-core-143e)."
+      "remaining": "Covered by internal/resolve:TestTypedControllerCutDenies (a cut whose last_good excludes a required approval leaves the edition unauthorized and its dependant an orphan, verify exit 0, with the edition, approval, grant and cut listed; another delegate's approval of the same bytes restores it; an edition by the cut key afterwards changes nothing; an unsupported root event still contests, exit 3) and internal/cli:TestCutKeyCannotHoldResource (the same through the commands on five stores, with the pull label and the writer's warning)."
     },
     {
       "handle": "ID-31",

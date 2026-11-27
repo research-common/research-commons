@@ -217,6 +217,13 @@ read from the key's own log (wire-format note §7). It is in force once it chain
   event stopped counting an approver's line is shown `contested`, naming the key event, and so is every
   edition built on it (C-core-143e). This is visible, never a silent fallback to an older tip, and building on
   an edition does not protect it from a revocation (it does protect it from a withdrawal, §8).
+  That doubt has a cost for a plain controller key: whoever holds the key after its revocation can approve an
+  edition on any edition where the key was a controller, it is `contested` for every reader that receives it,
+  and the other controllers cannot clear it short of approving it (KNOWN-LIMITS L-23). The rule stays, because
+  the reader cannot tell the key's two holders apart. An identity's delegate is different: a cut is the root's
+  own statement about which of the delegate's lines count, so an approval a cut leaves out counts toward
+  nothing without doubt, and the edition is `unauthorized`, not `contested` (fixed-root identity note §5.2,
+  C-id-30). A resource that must not be held this way names identities as its controllers.
 
 Restoring what a revocation cut is not possible in-band, because the two holders of a key are
 indistinguishable. There is no in-band recovery for a bare key in 1.0. A recovery commitment made when the key

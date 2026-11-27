@@ -680,6 +680,9 @@ func (v *view) resourceRows() listV {
 		if len(res.Contested) > 0 {
 			row.set("contested", intV(int64(len(res.Contested))))
 		}
+		if len(res.CutExcluded) > 0 {
+			row.set("cut_excluded", intV(int64(len(res.CutExcluded))))
+		}
 		l = append(l, row)
 	}
 	return l

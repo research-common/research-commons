@@ -516,6 +516,62 @@ var limits = []limit{
 			return ok, rv.stdout + ro.stdout + pb.stdout
 		},
 	},
+	{
+		id:  "L-23",
+		gap: "Whoever holds a plain controller key after its hard revocation can keep the resource from passing `verify`: an edition they approve on any edition where the key was a controller is `contested` for every reader that receives it, and nothing the other controllers publish clears it short of approving that edition. A reader cannot tell the key's two holders apart, so it does not choose. A resource whose controllers are identities does not have this: a delegate key that is cut counts toward nothing, without doubt (C-id-30). Until then, name identities as controllers, and pin an edition where a consumer needs a stable answer.",
+		sources: []limitSource{
+			{file: "docs/DESIGN-notes-claims-model.md", says: "That doubt has a cost for a plain controller key"},
+			{file: "docs/DESIGN-notes-fixed-root-identity.md", says: "A plain controller key has no such statement above it (KNOWN-LIMITS L-23)"},
+			{file: "CHANGELOG.md", says: "KNOWN-LIMITS L-23"},
+		},
+		probe:  "controllers `{K, M}` under any one; `K` is hard-revoked with `last_good` at its first edition; a copy of `K`'s key file in a store without the revocation approves an edition on that first edition; a reader holding everything shows it `contested` and `verify` on the resource exits 3, also after `M` publishes on the current edition",
+		closes: "a statement by which a resource's controllers dismiss a contested edition (after 1.0), or plain controller keys no longer written",
+		open: func(t *testing.T) (bool, string) {
+			k, m, reader := newIDHome(t, wire.AlgEd25519), newIDHome(t, wire.AlgEd25519), newIDHome(t, wire.AlgEd25519)
+			ctrl := []string{`"` + k.signer + `"`, `"` + m.signer + `"`}
+			slices.Sort(ctrl)
+			g := firstID(t, m.ok("publish", "--draft", m.file("g.json", `{"kind":"genesis","body":{"type":"collection","name":"c","controllers":[`+strings.Join(ctrl, ",")+`],"rule":{"any_one":true}}}`)))
+			edition := func(h *idHome, pred, note string) string {
+				return firstID(t, h.ok("publish", "--draft", h.file("e.json", `{"kind":"edition","body":{"resource":"`+g+`","predecessors":["`+pred+`"],"contents":{"members":[],"note":"`+note+`"}}}`)))
+			}
+			editionOf := func(h *idHome, approval string) string {
+				for _, e := range member(jsonOf(t, h.read("show", g)), "resource_view", "editions").(canon.Array) {
+					if strings.Contains(string(canon.Encode(e.(*canon.Object).Members["approvals"])), approval) {
+						return string(e.(*canon.Object).Members["edition"].(canon.String))
+					}
+				}
+				t.Fatalf("no edition holds %s", approval)
+				return ""
+			}
+			k.pullFrom(m)
+			a1 := edition(k, g, "one")
+			e1 := editionOf(k, a1)
+			// a copy of K's key file, on a machine whose store never takes the revocation
+			copyK := &idHome{t: t, store: drillStore(t), key: k.file("copy.key", ""), signer: k.signer}
+			kb, _ := os.ReadFile(k.key)
+			os.WriteFile(copyK.key, kb, 0o600)
+			os.Chmod(copyK.key, 0o600)
+			copyK.pullFrom(m)
+			copyK.pullFrom(k)
+			k.ok("revoke", "--reason", "key_compromise", "--last-good", a1)
+			m.pullFrom(k)
+			e2 := editionOf(m, edition(m, e1, "two"))
+			for _, h := range []*idHome{k, m} {
+				reader.pullFrom(h)
+			}
+			clean := reader.read("verify", g)
+			edition(copyK, e1, "by the revoked key")
+			reader.pullFrom(copyK)
+			held := reader.read("verify", g)
+			m.pullFrom(copyK)
+			edition(m, e2, "three")
+			reader.pullFrom(m)
+			after := reader.read("verify", g)
+			ok := clean.code == ExitOK && held.code == ExitCouldNot && after.code == ExitCouldNot &&
+				member(jsonOf(t, after), "resource_view", "contested") != nil
+			return ok, held.stdout
+		},
+	},
 }
 
 // TestDocumentedLimits: C-core-07.

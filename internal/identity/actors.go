@@ -109,6 +109,24 @@ func (a *Actors) Eligible(st *wire.Statement) (identity, state string, why []str
 	return string(r.Actor.Identity), state, why
 }
 
+// Reasons implements policy.ActorReasoner: each reason of the model's answer for st that rests on a second
+// statement, in the model's order. Nil for a statement the snapshot does not hold.
+func (a *Actors) Reasons(st *wire.Statement) []policy.ActorReason {
+	if st == nil {
+		return nil
+	}
+	if _, ok := a.s.held[st.ID]; !ok {
+		return nil
+	}
+	var out []policy.ActorReason
+	for _, x := range a.s.model.EvaluateWith(identitymodel.ID(st.ID), a.lim).Reasons {
+		if x.Related != "" {
+			out = append(out, policy.ActorReason{Code: x.Code, Related: string(x.Related)})
+		}
+	}
+	return out
+}
+
 // bound reports whether the actor's grant is issuer-authenticated evidence that connects this signer to the
 // identity it names: the identity's inception and the grant are both held and authenticated, the grant is signed
 // by the inception's (root) key, and it names this identity and this signer as delegate. Whether the grant is in
