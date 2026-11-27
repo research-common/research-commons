@@ -47,7 +47,9 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   batches reachability in bounded-memory passes and finds a clearing by walking its frontier once.
   Forks, tips, clearing nodes and spans are unchanged, including ignored missing links and duplicate links (#291).
   Key-log views share that analysis across their spans, and line displays search sorted spans rather than
-  scanning each entire span. Cost tests cover repeated merges, consecutive cleared forks and span membership.
+  scanning each entire span. Key-event ancestry also uses batched propagation instead of a history walk
+  for every line, so appending a revocation does not restore the merge-log bottleneck. Cost tests cover
+  repeated merges, consecutive cleared forks, event ancestry and span membership.
 
 - **A delegate key that has been cut can no longer keep a collection from passing `verify`** (#285). An approval that
   an identity's grant cut leaves out now counts toward nothing without doubt: the edition is `unauthorized` or `pending` (it was

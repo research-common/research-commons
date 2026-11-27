@@ -2,6 +2,7 @@ package keylog
 
 import (
 	"fmt"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -117,4 +118,113 @@ func logCostRatio(t *testing.T, small, large func()) {
 		}
 	}
 	t.Fatal("eight times the input took more than twenty times the work")
+}
+
+// denseEventView is a wide fork repeatedly merged by one chain, with an event
+// at the root. KeyState must mark every other line after that event.
+func denseEventView(n, m int) View {
+	v := View{Key: "key"}
+	add := func(id, prev string, seq int64, merges []string) {
+		v.Lines = append(v.Lines, Line{State: Chained, St: &wire.Statement{ID: id, Signer: "key", Kind: "holds", Verified: true, Status: wire.Valid, Seq: seq, Prev: prev, Merges: merges}})
+	}
+	add("root", "", 0, nil)
+	v.Lines[0].St.Kind = "revoke_key"
+	v.Lines[0].St.Body = obj("reason", "superseded")
+	forks := make([]string, n)
+	for i := range forks {
+		forks[i] = fmt.Sprintf("f%06d", i)
+		add(forks[i], "root", 1, nil)
+	}
+	prev := forks[0]
+	for i := 0; i < m; i++ {
+		id := fmt.Sprintf("m%06d", i)
+		add(id, prev, int64(i+2), forks[1:])
+		prev = id
+	}
+	return v
+}
+
+func BenchmarkDenseKeyEvents(b *testing.B) {
+	for _, size := range [][2]int{{40, 100}, {40, 800}, {900, 1300}} {
+		b.Run(fmt.Sprintf("%d-forks-%d-merges", size[0], size[1]), func(b *testing.B) {
+			v := denseEventView(size[0], size[1])
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				v.KeyState()
+			}
+		})
+	}
+}
+
+func TestKeyEventReachabilityMatchesWalk(t *testing.T) {
+	v := diamondLog(80).View()
+	for i := range v.Lines {
+		// Enough events to cross several word boundaries, on sibling branches
+		// as well as merged continuations. Detached events never seed ancestry.
+		if i%2 == 0 {
+			v.Lines[i].St.Kind = "revoke_key"
+			v.Lines[i].St.Body = obj("reason", "superseded")
+		}
+		if i%17 == 0 {
+			v.Lines[i].State = Detached
+		}
+	}
+	chained := map[string]*wire.Statement{}
+	for _, ln := range v.Lines {
+		if ln.State == Chained {
+			chained[ln.St.ID] = ln.St
+		}
+	}
+	want := map[string][]string{}
+	for id := range chained {
+		for a := range ancestorsOf(id, chained) {
+			if _, ok := keyEvent(chained[a]); ok {
+				want[id] = append(want[id], a)
+			}
+		}
+		if len(want[id]) > 0 {
+			slices.Sort(want[id])
+		}
+	}
+	if got := v.KeyState().After; !reflect.DeepEqual(got, want) {
+		t.Fatal("event ancestry differs from the original walk")
+	}
+}
+
+func TestDenseKeyEventCost(t *testing.T) {
+	if testing.Short() {
+		t.Skip("cost measurement")
+	}
+	build := func(m int) func() {
+		v := denseEventView(40, m)
+		return func() {
+			ks := v.KeyState()
+			if len(ks.After) != len(v.Lines)-1 {
+				t.Fatal("missing event descendants")
+			}
+		}
+	}
+	logCostRatio(t, build(100), build(800))
+}
+
+// Removing the first line makes the same dense log detached. Gap explanations
+// are a separate, still walk-based path; keep a reproducible residual benchmark.
+func BenchmarkDetachedDenseView(b *testing.B) {
+	for _, m := range []int{100, 800} {
+		b.Run(fmt.Sprintf("40-forks-%d-merges", m), func(b *testing.B) {
+			v := denseEventView(40, m)
+			s := NewStore()
+			l := s.Log("key")
+			for _, ln := range v.Lines[1:] {
+				l.lines[ln.St.ID] = ln.St
+				s.owner[ln.St.ID] = "key"
+			}
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				l.View()
+			}
+		})
+	}
 }

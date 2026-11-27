@@ -81,3 +81,26 @@ func BenchmarkMergeDensePipeline(b *testing.B) {
 		})
 	}
 }
+
+func BenchmarkMergeDenseRevocation(b *testing.B) {
+	for _, size := range [][2]int{{100, 100}, {200, 200}, {20, 2000}, {900, 1300}} {
+		b.Run(fmt.Sprintf("%d-forks-%d-merges", size[0], size[1]), func(b *testing.B) {
+			signer, lines := mergeDenseLines(size[0], size[1])
+			last, err := wire.ReadStored(lines[len(lines)-1])
+			if err != nil {
+				b.Fatal(err)
+			}
+			rev, _ := wire.Sign(wire.Draft{Kind: "revoke_key", Seq: last.Seq + 1, Prev: last.ID, TS: "2026-10-16T03:00:00Z", Body: obj("reason", "superseded")}, testKey("K01"))
+			lines = append(lines, rev)
+			s := deliverDense(b, signer, lines)
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				r := New(s)
+				if len(r.byID) != len(lines) {
+					b.Fatal("lost lines")
+				}
+			}
+		})
+	}
+}

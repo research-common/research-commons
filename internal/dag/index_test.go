@@ -49,6 +49,8 @@ func TestIndexedDAGAgreesWithOriginal(t *testing.T) {
 	}
 	for _, g := range []map[string]Node{
 		denseLog(12, 17),
+		denseLog(130, 8), // more than two reachability words
+		manySinkGraph(),
 		g("R", "A<R", "B<R", "C+A+B", "D+C", "E+C", "F+D+E"),
 		g("A<A", "B<A", "C<A"),
 		g("A<B", "B<A", "C<A", "D<A"),
@@ -150,4 +152,37 @@ func BenchmarkOriginalDenseDAG(b *testing.B) {
 			}
 		})
 	}
+}
+
+// Sparse redundant links show the remaining query-count term. Per-line merge
+// limits do not bound it: this graph has only one join per node.
+func BenchmarkSparseRedundantChain(b *testing.B) {
+	for _, n := range []int{1000, 8000, 64000} {
+		b.Run(fmt.Sprint(n), func(b *testing.B) {
+			g := make(map[string]Node, n)
+			for i := 0; i < n; i++ {
+				var nd Node
+				if i > 0 {
+					nd.Branch = []string{fmt.Sprint(i - 1)}
+				}
+				if i > 1 {
+					nd.Join = []string{fmt.Sprint(i - 2)}
+				}
+				g[fmt.Sprint(i)] = nd
+			}
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				Forks(g)
+			}
+		})
+	}
+}
+
+func manySinkGraph() map[string]Node {
+	graph := g("R", "A<R", "B<R", "C+A+B")
+	for i := 0; i < 130; i++ {
+		graph[fmt.Sprintf("tip%03d", i)] = Node{Branch: []string{"C"}}
+	}
+	return graph
 }
