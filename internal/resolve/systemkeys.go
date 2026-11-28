@@ -63,43 +63,39 @@ func (d methodDecl) history(missing []string) string {
 // methodDecl resolves the declaration of edition id ed, once per resolver.
 func (r *Resolver) methodDecl(ed string) methodDecl {
 	r.sysMu.Lock()
+	defer r.sysMu.Unlock()
 	if d, ok := r.sysDecl[ed]; ok {
-		r.sysMu.Unlock()
 		return d
 	}
+	if r.sysDecl == nil {
+		r.sysDecl = map[string]methodDecl{}
+	}
 	if r.edResource == nil {
-		// edition id -> resource, over every held edition body. An edition id is a digest of the whole body,
-		// resource included, so it names at most one resource.
 		r.edResource = map[string]string{}
 		for _, p := range r.byKind["edition"] {
 			r.edResource[EditionIDOf(p.St)] = str(p.St.Body, "resource")
 		}
 	}
-	res := r.edResource[ed]
-	r.sysMu.Unlock()
-
 	d := methodDecl{Edition: ed, Unread: DeclNotHeld}
-	if res != "" {
-		if rs, ok := r.Resource(res); ok {
+	if resource := r.edResource[ed]; resource != "" {
+		// Resolving one pinned edition also determines every other held edition of the same
+		// resource. Cache all those declarations, rather than resolve a long chain per pin.
+		if rs, ok := r.Resource(resource); ok {
 			for _, e := range rs.Editions {
-				if e.ID != ed { // an approval's statement id names no edition (wire §3)
-					continue
-				}
-				d.Unread = ""
+				declaration := methodDecl{Edition: e.ID}
 				if e.State != Authorized {
-					d.Unread = string(e.State)
-					break
+					declaration.Unread = string(e.State)
+				} else {
+					declaration.Keys = declaredSystemKeys(e.Body)
 				}
-				d.Keys = declaredSystemKeys(e.Body)
+				r.sysDecl[e.ID] = declaration
 			}
 		}
 	}
-	r.sysMu.Lock()
-	if r.sysDecl == nil {
-		r.sysDecl = map[string]methodDecl{}
+	if cached, ok := r.sysDecl[ed]; ok {
+		return cached
 	}
 	r.sysDecl[ed] = d
-	r.sysMu.Unlock()
 	return d
 }
 

@@ -69,7 +69,7 @@ type Resolver struct {
 	// `list`, which asks about every blob, cost the square of the store (#291).
 	byContent map[string]map[string][]*Placed
 	// byLink is byKind split by what a statement is about, for the kinds that are about something other than
-	// their own content (linkKeys): a `describes` under its about.content and about.statement, a `refutes`,
+	// their own content (linkKeys): a `describes` under its about.content, about.statement and about.resource, a `refutes`,
 	// `retracts` or `reproduced` under its `of`. Same statements, same order within a key.
 	byLink map[string]map[string][]*Placed
 	// byProv is byKind split by provenance key (Provenance.key; "" for a body with none) for the two kinds that
@@ -129,6 +129,13 @@ type Resolver struct {
 	sysMu      sync.Mutex
 	sysDecl    map[string]methodDecl
 	edResource map[string]string
+	// Cut disclosures are derived once from this immutable resolver snapshot.
+	cutEffectsOnce sync.Once
+	cutEffects     map[string][]CutEffect
+	// Observations indexed by class and source for completeness-scope checks.
+	completenessOnce    sync.Once
+	completenessSources map[[2]string][]*Placed
+	completenessUnknown map[string][]*Placed
 }
 
 // New indexes every placed line of every log in s. With no options the reader verifies no proof format and
@@ -310,7 +317,7 @@ func closure(id string, chained map[string]*wire.Statement) map[string]bool {
 // on returns the placed statements of kind whose body names blob d, in byKind order.
 func (r *Resolver) on(kind, d string) []*Placed { return r.byContent[kind][d] }
 
-// linkKeys are the keys a statement is filed under in byLink: "content:<digest>" and "statement:<id>" for what
+// linkKeys are the keys a statement is filed under in byLink: "content:<digest>", "statement:<id>" and "resource:<id>" for what
 // a `describes` is about; "of:<id>" for the claim a `refutes`, `retracts` or `reproduced` names; for a `refutes`
 // also "evidence:<digest>" and "task:<id>"; "fulfills:<task>" for an `authored` or `observed` that submits
 // itself. It reads a body that may be absent or unvalidated (another wire major), and then files nothing.
@@ -324,6 +331,9 @@ func linkKeys(st *wire.Statement) []string {
 		out = append(out, "content:"+str(about, "content"))
 		if id := str(about, "statement"); id != "" {
 			out = append(out, "statement:"+id)
+		}
+		if id := str(about, "resource"); id != "" {
+			out = append(out, "resource:"+id)
 		}
 	case "refutes", "retracts", "reproduced":
 		if id := str(st.Body, "of"); id != "" {

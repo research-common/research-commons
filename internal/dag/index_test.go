@@ -110,7 +110,7 @@ func TestDenseDAGCostIsLinear(t *testing.T) {
 	}
 	measure := func(g map[string]Node) time.Duration {
 		best := time.Duration(1<<63 - 1)
-		for i := 0; i < 3; i++ {
+		for i := 0; i < 15; i++ {
 			start := time.Now()
 			fs, spans := ForksAndSpans(g)
 			elapsed := time.Since(start)
@@ -121,11 +121,16 @@ func TestDenseDAGCostIsLinear(t *testing.T) {
 		}
 		return best
 	}
-	small, large := measure(denseLog(40, 100)), measure(denseLog(40, 800))
-	t.Logf("100 merges: %s; 800 merges: %s; ratio %.2f", small, large, float64(large)/float64(small))
-	if large > 20*small {
-		t.Fatalf("eight times the merge links took %.2f times as long", float64(large)/float64(small))
+	// One slow measurement on a busy machine is not a quadratic walk: the old walk measured above 90 every time.
+	gs, gl := denseLog(40, 100), denseLog(40, 800)
+	for attempt := 0; attempt < 5; attempt++ {
+		small, large := measure(gs), measure(gl)
+		t.Logf("100 merges: %s; 800 merges: %s; ratio %.2f", small, large, float64(large)/float64(small))
+		if large <= 20*small {
+			return
+		}
 	}
+	t.Fatal("eight times the merge links took more than 20 times as long in each of five measurements")
 }
 
 func BenchmarkDenseDAG(b *testing.B) {
