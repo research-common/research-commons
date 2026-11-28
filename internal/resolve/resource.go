@@ -623,24 +623,45 @@ type CutEffect struct {
 
 // CutEffects lists, for one held cut, the resources with an edition it leaves out, by resource id.
 func (r *Resolver) CutEffects(cut string) []CutEffect {
-	var out []CutEffect
+	r.cutEffectsOnce.Do(r.indexCutEffects)
+	// These slices used to be freshly allocated for every query; do not expose the memo to callers.
+	out := slices.Clone(r.cutEffects[cut])
+	for i := range out {
+		out[i].Editions = slices.Clone(out[i].Editions)
+	}
+	return out
+}
+
+// indexCutEffects transposes resource disclosures into cut disclosures. Each resource is resolved
+// once even when a delivered package carries many cuts; editions retain their former traversal order.
+func (r *Resolver) indexCutEffects() {
+	r.cutEffects = map[string][]CutEffect{}
 	for _, g := range r.byKind["genesis"] {
 		res, ok := r.Resource(g.St.ID)
 		if !ok {
 			continue
 		}
-		e := CutEffect{Resource: res.ID, Current: res.Current}
+		byCut := map[string]*CutEffect{}
+		seen := map[string]map[string]bool{}
 		for _, x := range res.CutExcluded {
-			if slices.Contains(x.Cuts, cut) && !slices.Contains(e.Editions, x.Edition) {
-				e.Editions = append(e.Editions, x.Edition)
+			for _, cut := range x.Cuts {
+				if byCut[cut] == nil {
+					byCut[cut] = &CutEffect{Resource: res.ID, Current: res.Current}
+					seen[cut] = map[string]bool{}
+				}
+				if !seen[cut][x.Edition] {
+					byCut[cut].Editions = append(byCut[cut].Editions, x.Edition)
+					seen[cut][x.Edition] = true
+				}
 			}
 		}
-		if len(e.Editions) > 0 {
-			out = append(out, e)
+		for cut, e := range byCut {
+			r.cutEffects[cut] = append(r.cutEffects[cut], *e)
 		}
 	}
-	slices.SortFunc(out, func(a, b CutEffect) int { return strings.Compare(a.Resource, b.Resource) })
-	return out
+	for _, effects := range r.cutEffects {
+		slices.SortFunc(effects, func(a, b CutEffect) int { return strings.Compare(a.Resource, b.Resource) })
+	}
 }
 
 // by is who an approval is from, for display: its signer, and the identity it acts for when it acts for one.

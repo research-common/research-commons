@@ -126,7 +126,21 @@ func (m *Membership) Render() string {
 // partOfClaims lists counted `describes` statements whose `about` names key and whose `links` name resource.
 func (r *Resolver) partOfClaims(resource, key string) []*Placed {
 	var out []*Placed
-	for _, p := range r.byKind["describes"] {
+	candidates := r.byKind["describes"]
+	if key != "" {
+		candidates = nil
+		seen := map[*Placed]bool{}
+		for _, prefix := range []string{"content:", "statement:", "resource:"} {
+			for _, p := range r.byLink["describes"][prefix+key] {
+				if !seen[p] {
+					seen[p] = true
+					candidates = append(candidates, p)
+				}
+			}
+		}
+	}
+	// An empty key preserves the old scan's absent-field comparisons.
+	for _, p := range candidates {
 		if !r.counts(p) {
 			continue
 		}

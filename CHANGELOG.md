@@ -45,6 +45,21 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ### Fixed
 
+- Six more places where the reader's work grew with the square of the store now grow with the store (#291). None
+  changes an output, a verdict, an id or a byte: each is compared with the walk it replaces, and `hub check`, `pull`
+  and `push` print the same bytes before and after on five store shapes at two sizes.
+  - The admission gate (`pull`, `push`, `hub check`) looked through a key's whole log once for every statement
+    delivered, to find its placement, its refusal and its open fork. It now reads the log once.
+  - A gate checking several grant cuts resolved every collection again for each cut. With 32 cuts, `hub check` took
+    0.6 s and now takes 35 ms.
+  - Reading who says a blob or statement is part of a collection, a collection's completeness claim, the method
+    edition a method observation pins, and a key's credit on a task with many settled submissions each scanned
+    every statement of a kind, or resolved a whole edition chain, once per item. At 512 items these took between
+    11 ms and 7.9 s and now take under 6 ms.
+
+  Measured and not fixed: a run that carries many identity attestations still costs more than linear (0.29 s at
+  512). Not measured: remote hubs over a network, and a delivery that grows together with the store.
+
 - A key's log with many forks that later lines merge again and again no longer makes every command slow (#291).
   For each line, the reader asked of every pair of the lines it links to whether one was already in the other's
   history, and walked the whole graph for each answer. A log of 200 forks at one seq followed by 200 lines that
@@ -196,6 +211,11 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
   `counting_unit: identity` needs an `rc/2` task edition, which `publish task` does not write.
 
 ### Tests
+
+- `RC_GATE_COST=<n> go test ./internal/cli -run '^TestGateCommandCost$' -v` times `hub check --base`,
+  `pull --from-checkout` and `push` to a local directory hub at a size and eight times that size, on stores with one
+  long key log, many keys, many blobs, grant cuts of one identity, and a small delivery onto held history. It is not
+  part of the default run.
 
 - `docs/spec-graph.json` (generated, `spec-graph/0`): every conformance case with the note sections, invariants and
   worked examples its row names, the output tokens and exit codes its required outcome names, and the tests that

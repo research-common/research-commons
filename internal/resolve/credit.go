@@ -142,33 +142,7 @@ func (r *Resolver) Credit(key string, rule *CreditRule) *Credit {
 		}
 	}
 	for _, t := range tasks {
-		mine := map[string]bool{}
-		for _, s := range t.Submissions {
-			mine[s.Statement] = s.Signer == key
-		}
-		for _, d := range t.Decisions {
-			if d.Counts {
-				counted[d.Statement] = true
-			}
-			if d.Counts && d.SupersededBy != "" {
-				for _, s := range d.Submissions {
-					if !mine[s] {
-						continue
-					}
-					c.Explain = append(c.Explain, fmt.Sprintf("decision %s (%s %s) superseded by %s: kept in the log, no longer counted", keylog.Short(d.Statement), d.Verdict, keylog.Short(s), keylog.Short(d.SupersededBy)))
-				}
-			}
-		}
-		for _, s := range t.Submissions {
-			if s.Signer == key && s.Counts && s.Verdict != "" {
-				verdict[s.Statement] = s.Verdict
-				for _, d := range t.Decisions {
-					if d.Counts && d.SupersededBy == "" && slices.Contains(d.Submissions, s.Statement) {
-						c.Explain = append(c.Explain, fmt.Sprintf("submission %s: %s by decision %s", keylog.Short(s.Statement), d.Verdict, keylog.Short(d.Statement)))
-					}
-				}
-			}
-		}
+		c.taskCredit(key, t, counted, verdict)
 	}
 	authoredByKey := map[string]bool{}
 	for _, p := range r.byKind["authored"] {
@@ -296,4 +270,39 @@ func (c *Credit) Render() string {
 		fmt.Fprintf(&b, "  explain: %s\n", x)
 	}
 	return b.String()
+}
+
+// taskCredit indexes settled decisions by the submissions they name, retaining decision order.
+func (c *Credit) taskCredit(key string, t *Task, counted map[string]bool, verdict map[string]string) {
+	mine := map[string]bool{}
+	for _, s := range t.Submissions {
+		mine[s.Statement] = s.Signer == key
+	}
+	settled := map[string][]*Decision{}
+	for _, d := range t.Decisions {
+		if d.Counts {
+			counted[d.Statement] = true
+			if d.SupersededBy == "" {
+				for _, submission := range d.Submissions {
+					settled[submission] = append(settled[submission], d)
+				}
+			}
+		}
+		if d.Counts && d.SupersededBy != "" {
+			for _, s := range d.Submissions {
+				if !mine[s] {
+					continue
+				}
+				c.Explain = append(c.Explain, fmt.Sprintf("decision %s (%s %s) superseded by %s: kept in the log, no longer counted", keylog.Short(d.Statement), d.Verdict, keylog.Short(s), keylog.Short(d.SupersededBy)))
+			}
+		}
+	}
+	for _, s := range t.Submissions {
+		if s.Signer == key && s.Counts && s.Verdict != "" {
+			verdict[s.Statement] = s.Verdict
+			for _, d := range settled[s.Statement] {
+				c.Explain = append(c.Explain, fmt.Sprintf("submission %s: %s by decision %s", keylog.Short(s.Statement), d.Verdict, keylog.Short(d.Statement)))
+			}
+		}
+	}
 }

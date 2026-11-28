@@ -94,7 +94,7 @@ func (r *Resolver) Completeness(id, edition string) (*Completeness, bool) {
 			listed[m.Digest] = true
 		}
 	}
-	for _, p := range r.byKind["observed"] {
+	for _, p := range r.completenessCandidates(c.Class, c.Source) {
 		if !r.counts(p) || str(p.St.Body, "class") != c.Class {
 			continue
 		}
@@ -208,4 +208,46 @@ func (c *Completeness) Render() string {
 		fmt.Fprintf(&b, "  %s\n", x)
 	}
 	return b.String()
+}
+
+// A source key is deliberately coarser than compareSource: normalized URI aliases and
+// potentially-equal trailing-slash/escaped forms share a bucket. inScope still makes
+// the final comparison. Missing sources remain candidates for every scope of that class.
+func completenessSourceKey(source string) string {
+	if normalized, ok := normURI(source); ok {
+		return "uri:" + looseURI(normalized)
+	}
+	return "text:" + source
+}
+
+func observationSource(p *Placed) string {
+	class := str(p.St.Body, "class")
+	ref := object(p.St.Body, "referent")
+	source := str(ref, sourceField[class])
+	if source == "" && class == "source" {
+		source = str(object(ref, "requests"), "endpoint")
+	}
+	return source
+}
+
+func (r *Resolver) completenessCandidates(class, source string) []*Placed {
+	r.completenessOnce.Do(func() {
+		r.completenessSources = map[[2]string][]*Placed{}
+		r.completenessUnknown = map[string][]*Placed{}
+		for _, p := range r.byKind["observed"] {
+			class := str(p.St.Body, "class")
+			source := observationSource(p)
+			if source == "" {
+				r.completenessUnknown[class] = append(r.completenessUnknown[class], p)
+				continue
+			}
+			key := [2]string{class, completenessSourceKey(source)}
+			r.completenessSources[key] = append(r.completenessSources[key], p)
+		}
+	})
+	candidates := r.completenessSources[[2]string{class, completenessSourceKey(source)}]
+	// Never append into the indexed slice: several concurrent readers may use it.
+	out := make([]*Placed, 0, len(candidates)+len(r.completenessUnknown[class]))
+	out = append(out, candidates...)
+	return append(out, r.completenessUnknown[class]...)
 }

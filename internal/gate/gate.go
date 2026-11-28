@@ -449,9 +449,9 @@ func Admit(gate string, pkg Package, held Held, pol *Policy, opt Options) (*Repo
 			// A log-relative refusal is decided below from the view, which every order reaches alike.
 		}
 	}
-	views := map[string]keylog.View{}
+	views := map[string]placement{}
 	for _, k := range logs.Keys() {
-		views[k] = logs.Log(k).View()
+		views[k] = indexPlacement(logs.Log(k).View())
 	}
 	for _, i := range cands {
 		r := &results[i]
@@ -459,7 +459,7 @@ func Admit(gate string, pkg Package, held Held, pol *Policy, opt Options) (*Repo
 			continue
 		}
 		v := views[r.st.Signer]
-		if rf := refusedIn(v, r.ID); rf != nil {
+		if rf := v.refused[r.ID]; rf != nil {
 			r.refuse(rf, "object "+r.Path)
 			continue
 		}
@@ -827,23 +827,44 @@ func notServedDetail(d, reason string) string {
 	return s
 }
 
-func refusedIn(v keylog.View, id string) *refusal.Refusal {
+// placement indexes the facts needed for every candidate in a key's view. Building this once
+// avoids scanning the whole log (or the same fork's branches) for each delivered statement.
+type placement struct {
+	lines   map[string]keylog.Line
+	refused map[string]*refusal.Refusal
+	forkAt  map[string]string
+}
+
+func indexPlacement(v keylog.View) placement {
+	p := placement{lines: make(map[string]keylog.Line, len(v.Lines)), refused: make(map[string]*refusal.Refusal, len(v.Refused)), forkAt: map[string]string{}}
+	for _, ln := range v.Lines {
+		p.lines[ln.St.ID] = ln
+	}
 	for _, x := range v.Refused {
-		if x.St.ID == id {
-			return x.Reason
+		if _, seen := p.refused[x.St.ID]; !seen { // the first entry, as the walk this replaces returned
+			p.refused[x.St.ID] = x.Reason
 		}
 	}
-	return nil
+	for _, f := range v.Forks {
+		if f.ClearedBy != "" {
+			continue
+		}
+		for _, ids := range [][]string{f.Branches, f.Tips} {
+			for _, id := range ids {
+				if _, seen := p.forkAt[id]; !seen {
+					p.forkAt[id] = f.At
+				}
+			}
+		}
+	}
+	return p
 }
 
 // placeLabels adds the labels a placed line carries: detached with its gap, FORK, incoherent, and what the
 // reader could not interpret. None of them refuses (claims-model note §12; wire §6, §7).
-func placeLabels(r *Result, v keylog.View) {
+func placeLabels(r *Result, v placement) {
 	st := r.st
-	for _, ln := range v.Lines {
-		if ln.St.ID != st.ID {
-			continue
-		}
+	if ln, ok := v.lines[st.ID]; ok {
 		if ln.State == keylog.Detached {
 			r.label(LabelDetached, "waiting for "+gapText(ln.Waiting))
 		}
@@ -851,11 +872,8 @@ func placeLabels(r *Result, v keylog.View) {
 			r.label(LabelIncoherent, "ts earlier than its predecessor's")
 		}
 	}
-	for _, f := range v.Forks {
-		if f.ClearedBy == "" && (slices.Contains(f.Branches, st.ID) || slices.Contains(f.Tips, st.ID)) {
-			r.label(LabelFork, "at "+keylog.Short(f.At))
-			break
-		}
+	if at, ok := v.forkAt[st.ID]; ok {
+		r.label(LabelFork, "at "+keylog.Short(at))
 	}
 	switch st.Status {
 	case wire.Unsupported:

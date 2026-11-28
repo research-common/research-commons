@@ -187,3 +187,35 @@ A crash test re-executes the test binary (`-test.run=^TestPublishCrashHelper$`, 
 no deferred function or abort path runs and the kernel releases the writer lock: a process crash, not a returned
 error. The parent checks the marker and the exit code (the point was reached), then reads the store
 (`internal/cli/crash_test.go`). The store package's own tests use an unexported error-returning hook instead.
+
+### Admission and transport cost audit
+
+`RC_GATE_COST=200 go test ./internal/cli -run '^TestGateCommandCost$' -count=1 -v`
+measures `hub check --base`, `pull --from-checkout` and `push` to a disposable local directory hub
+at the specified size and eight times that size. Fixtures cover one key, many keys, blobs, grants
+and cuts of one identity, and 32 new lines delivered onto held history. Each measurement is the
+best of three runs; fixture construction and receiver restoration are outside the timer. These
+are command timings, not a bound on every possible store shape. Set `RC_GATE_COST_OUTPUT` to a
+directory to save human and JSON output with temporary paths normalized for before/after comparisons.
+
+The gate's placement lookup is built once per key view, including refusal reasons and the first
+open fork that names a line. `TestPlacementIndexMatchesWalk` compares the labels against the
+previous walk, and `TestPlacementCostIsLinear` isolates lookups from signature checking and IO
+so those costs cannot hide a per-candidate scan.
+
+Cut disclosures are transposed once from resource to cut within a resolver snapshot. Query results
+are cloned so a caller cannot alter a later query. The cut cost guard includes cold construction;
+its slow-walk comparison covers real signed grants, repeated approvals, preserving and excluding cuts.
+
+`RC_REMAINING_COST=64 go test ./internal/resolve -run '^TestRemainingReadCostAudit$' -count=1 -v`
+measures membership annotations, completeness scopes, many pinned method editions of one resource,
+settled-submission credit, and identity run attestations. The default additional-read cost guards
+cover the indexed paths. Completeness uses a deliberately coarse normalized source index: ambiguous
+URI matches and readings with no readable source must still reach the existing scope check. A scope
+with many potentially matching or unreadable readings can still require work proportional to that
+output. Pinned method declarations share the resolved resource's edition states within the snapshot.
+These measurements are not a claim that every resolver or identity-model path is linear.
+
+Credit projections index settled decisions by submission once per task. The isolated credit cost
+regression includes constructing that index and emitting explanations, while a slow-walk oracle
+checks counts, verdicts, supersession messages and message order.
