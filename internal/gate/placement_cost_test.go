@@ -55,7 +55,7 @@ func TestPlacementCostIsLinear(t *testing.T) {
 			best := func(f func()) time.Duration {
 				runtime.GC()
 				var d time.Duration
-				for i := 0; i < 3; i++ {
+				for i := 0; i < 15; i++ { // the large run takes ~10 ms: on a busy machine most samples are preempted
 					start := time.Now()
 					f()
 					x := time.Since(start)
@@ -65,7 +65,7 @@ func TestPlacementCostIsLinear(t *testing.T) {
 				}
 				return d
 			}
-			for attempt := 0; attempt < 3; attempt++ {
+			for attempt := 0; attempt < 5; attempt++ {
 				a, b := best(small), best(large)
 				ratio := float64(b) / float64(a)
 				t.Logf("2000=%s 16000=%s ratio=%.2f", a, b, ratio)

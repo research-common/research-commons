@@ -830,15 +830,16 @@ func notServedDetail(d, reason string) string {
 // placement indexes the facts needed for every candidate in a key's view. Building this once
 // avoids scanning the whole log (or the same fork's branches) for each delivered statement.
 type placement struct {
-	lines   map[string]keylog.Line
+	view    keylog.View
+	lines   map[string]int // a line's index in view.Lines
 	refused map[string]*refusal.Refusal
 	forkAt  map[string]string
 }
 
 func indexPlacement(v keylog.View) placement {
-	p := placement{lines: make(map[string]keylog.Line, len(v.Lines)), refused: make(map[string]*refusal.Refusal, len(v.Refused)), forkAt: map[string]string{}}
-	for _, ln := range v.Lines {
-		p.lines[ln.St.ID] = ln
+	p := placement{view: v, lines: make(map[string]int, len(v.Lines)), refused: make(map[string]*refusal.Refusal, len(v.Refused)), forkAt: map[string]string{}}
+	for i, ln := range v.Lines {
+		p.lines[ln.St.ID] = i
 	}
 	for _, x := range v.Refused {
 		if _, seen := p.refused[x.St.ID]; !seen { // the first entry, as the walk this replaces returned
@@ -864,7 +865,8 @@ func indexPlacement(v keylog.View) placement {
 // reader could not interpret. None of them refuses (claims-model note §12; wire §6, §7).
 func placeLabels(r *Result, v placement) {
 	st := r.st
-	if ln, ok := v.lines[st.ID]; ok {
+	if i, ok := v.lines[st.ID]; ok {
+		ln := v.view.Lines[i]
 		if ln.State == keylog.Detached {
 			r.label(LabelDetached, "waiting for "+gapText(ln.Waiting))
 		}
