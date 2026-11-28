@@ -266,10 +266,7 @@ func (l *Log) View() View {
 		}
 	}
 	slices.SortFunc(v.Retained, func(a, b *wire.Statement) int { return strings.Compare(a.ID+a.Why, b.ID+b.Why) })
-	v.Forks = dag.Forks(graph)
-	for _, f := range v.Forks {
-		v.Spans = append(v.Spans, dag.Span(graph, f))
-	}
+	v.Forks, v.Spans = dag.ForksAndSpans(graph)
 	v.Tips = dag.Tips(graph)
 	return v
 }
@@ -279,8 +276,10 @@ func (l *Log) View() View {
 func (v View) ForksOn(id string) []dag.Fork {
 	var out []dag.Fork
 	for i, f := range v.Forks {
-		if i < len(v.Spans) && slices.Contains(v.Spans[i], id) {
-			out = append(out, f)
+		if i < len(v.Spans) {
+			if _, found := slices.BinarySearch(v.Spans[i], id); found {
+				out = append(out, f)
+			}
 		}
 	}
 	return out

@@ -2,6 +2,7 @@ package keylog
 
 import (
 	"fmt"
+	"math/bits"
 	"slices"
 	"strings"
 
@@ -88,16 +89,38 @@ func (v View) KeyState() KeyState {
 	if len(inForce) == 0 {
 		return ks
 	}
-	for id := range chained {
-		var after []string
-		for a := range ancestorsOf(id, chained) {
-			if inForce[a] {
-				after = append(after, a)
-			}
+	// In sequence order every held ancestor has already been visited. Propagate
+	// strict event ancestry 64 events at a time, instead of walking the whole
+	// history for each line. The workspace is linear; After itself is output.
+	order := make([]*wire.Statement, 0, len(chained))
+	for _, st := range chained {
+		order = append(order, st)
+	}
+	slices.SortFunc(order, cmpSeqID)
+	events := make([]string, 0, len(inForce))
+	for id := range inForce {
+		events = append(events, id)
+	}
+	slices.Sort(events)
+	for start := 0; start < len(events); start += 64 {
+		chunk := events[start:min(start+64, len(events))]
+		seed := make(map[string]uint64, len(chunk))
+		for i, id := range chunk {
+			seed[id] = uint64(1) << i
 		}
-		if len(after) > 0 {
-			slices.Sort(after)
-			ks.After[id] = after
+		reach := make(map[string]uint64, len(chained))
+		for _, st := range order {
+			word := reach[st.Prev] | seed[st.Prev]
+			for _, m := range st.Merges {
+				word |= reach[m] | seed[m]
+			}
+			if word == 0 {
+				continue
+			}
+			reach[st.ID] = word
+			for rest := word; rest != 0; rest &= rest - 1 {
+				ks.After[st.ID] = append(ks.After[st.ID], chunk[bits.TrailingZeros64(rest)])
+			}
 		}
 	}
 	return ks

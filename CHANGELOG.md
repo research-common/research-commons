@@ -43,6 +43,19 @@ effect until 1.0.0. See `docs/RELEASING.md` for the bump rules and release steps
 
 ### Fixed
 
+- A key's log with many forks that later lines merge again and again no longer makes every command slow (#291).
+  For each line, the reader asked of every pair of the lines it links to whether one was already in the other's
+  history, and walked the whole graph for each answer. A log of 200 forks at one seq followed by 200 lines that
+  each merge all of them took 15 s to analyse, and one of 900 forks and 1,300 merging lines did not finish in 15
+  minutes; anyone with a key can write such a log, and a store that holds it pays the cost on every command. The
+  reader now answers those questions for a whole log in a few passes: the two logs take under 20 ms and 0.4 s (with
+  about 1.2 million links, the second is near the largest such log the line size limit allows). The key-event
+  view walked every line's history as soon as the log held one revocation or rotation, and no longer does.
+  Forks, clearing lines, tips and spans are unchanged: the new analysis is compared with the old one on generated
+  graphs, including missing and duplicate links. No output, verdict, id or byte changes. Still slower than linear,
+  and not changed: a log with lines waiting on a missing line (each one's explanation is computed separately), and
+  a long chain in which every line also merges a much older line.
+
 - **A delegate key that has been cut can no longer keep a collection from passing `verify`** (#285). An approval that
   an identity's grant cut leaves out now counts toward nothing without doubt: the edition is `unauthorized` or `pending` (it was
   `contested`), an edition built on it is an `orphan`, `current` is the last authorized edition and `verify` on the
