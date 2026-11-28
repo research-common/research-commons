@@ -267,13 +267,6 @@ the key's revocation (§4.1), which cuts the branch it leaves out; until then th
 key's fields `contested`, never win them. Clearing the fork with `merges` does not choose between values: an
 `authored` whose history includes both branches amends both (C-core-16a).
 
-The reader computes the same fork relation using a topological index. It batches strict-ancestor queries in
-groups of 64 with one word per node, rather than constructing a quadratic reachability table. A forward
-frontier over the reduced graph stops at the first clearing node; spans and tip sets share that preparation.
-General DAG reachability is not claimed to have linear worst-case cost: the passes depend on the number
-of distinct queried targets and sinks, and overlapping open-fork spans can themselves have quadratic size.
-Cyclic inputs use the previous walk-based calculation; signed log links decrease in sequence number.
-
 ### 5.2 Constructions: first to publish
 
 1. **Sole author.** Exactly one key has a verified `authored` statement for the blob, so its single-party
